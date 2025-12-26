@@ -64,7 +64,7 @@ export default function GoalsPage() {
   };
 
   const addGoal = async (content: string, priority?: string, quadrant?: string) => {
-    if (!content.trim() || !context) return;
+    if (!content.trim() || (!context.user_id && !context.session_id)) return;
     const { data, error } = await supabase.from('goals').insert({ ...context, content: content.trim(), framework, priority: priority || null, eisenhower_quadrant: quadrant || null, date: format(new Date(), 'yyyy-MM-dd') } as any).select().single();
     if (!error && data) setGoals([...goals, data]);
   };

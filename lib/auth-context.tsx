@@ -27,19 +27,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
+      
       if (!session?.user) {
-        const anonSession = getOrCreateSession();
+        // Create and register anonymous session
+        const anonSession = await getOrCreateSession();
         setSessionId(anonSession);
       }
+      
       setLoading(false);
-    });
+    };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
+      
       if (!session?.user) {
-        const anonSession = getOrCreateSession();
+        const anonSession = await getOrCreateSession();
         setSessionId(anonSession);
       } else {
         setSessionId(null);
