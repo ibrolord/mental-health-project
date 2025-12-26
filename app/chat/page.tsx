@@ -1,205 +1,149 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
+import { format, subDays } from 'date-fns';
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
+interface Message { role: 'user' | 'assistant'; content: string; }
+interface UserContext {
+  recentMoods?: Array<{ emoji: string; note: string; created_at: string }>;
+  assessments?: Array<{ type: string; score: number; interpretation: string; created_at: string }>;
+  goals?: Array<{ content: string; status: string; reflection?: string; date: string }>;
+  habits?: Array<{ name: string; current_streak: number }>;
 }
 
-const quickPrompts = [
-  'I feel anxious',
-  'Help me reframe a negative thought',
-  'Ground me',
-  'I need to talk',
-];
+const quickPrompts = ['I feel anxious', 'Help me reframe a negative thought', 'Ground me', 'I need to talk'];
 
 export default function ChatPage() {
-  const { context } = useDataContext();
+  const { context, query, loading: authLoading } = useDataContext();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSave, setShowSave] = useState(false);
+  const [personalized, setPersonalized] = useState(false);
+  const [userContext, setUserContext] = useState<UserContext | null>(null);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fetchedRef = useRef(false);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (!personalized) { setUserContext(null); setStatus('idle'); fetchedRef.current = false; return; }
+    if (authLoading || !query || fetchedRef.current) return;
+    
+    fetchedRef.current = true;
+    setStatus('loading');
+    
+    (async () => {
+      try {
+        const ago = format(subDays(new Date(), 7), 'yyyy-MM-dd');
+        const [m, a, g, h] = await Promise.all([
+          supabase.from('moods').select('emoji, note, created_at').eq(query.column, query.value).gte('created_at', ago).order('created_at', { ascending: false }).limit(10),
+          supabase.from('assessments').select('type, score, interpretation, created_at').eq(query.column, query.value).order('created_at', { ascending: false }).limit(5),
+          // Fetch goals with reflections from last 7 days
+          supabase.from('goals').select('content, status, reflection, date').eq(query.column, query.value).gte('date', ago).order('date', { ascending: false }),
+          supabase.from('habits').select('name, current_streak').eq(query.column, query.value).eq('is_active', true),
+        ]);
+        setUserContext({ recentMoods: m.data || [], assessments: a.data || [], goals: g.data || [], habits: h.data || [] });
+      } catch (e) { console.error(e); }
+      setStatus('done');
+    })();
+  }, [personalized, authLoading, query]);
 
-  const sendMessage = async (content: string) => {
-    if (!content.trim()) return;
-
-    const newMessage: Message = { role: 'user', content };
-    const updatedMessages = [...messages, newMessage];
-    setMessages(updatedMessages);
-    setInput('');
-    setLoading(true);
-
+  const send = async (text: string) => {
+    if (!text.trim()) return;
+    const newMsg: Message = { role: 'user', content: text };
+    const msgs = [...messages, newMsg];
+    setMessages(msgs); setInput(''); setLoading(true);
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: updatedMessages }),
-      });
-
-      const data = await response.json();
-
-      if (data.response) {
-        setMessages([...updatedMessages, { role: 'assistant', content: data.response }]);
-        setShowSave(true);
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setMessages([
-        ...updatedMessages,
-        {
-          role: 'assistant',
-          content: 'I apologize, but I encountered an error. Please try again.',
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: msgs, userContext: personalized ? userContext : undefined }) });
+      const d = await res.json();
+      if (d.response) { setMessages([...msgs, { role: 'assistant', content: d.response }]); setShowSave(true); }
+    } catch { setMessages([...msgs, { role: 'assistant', content: 'Sorry, something went wrong.' }]); }
+    setLoading(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    sendMessage(input);
-  };
+  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); send(input); };
+  const save = async () => { if (context) { await supabase.from('chat_history').insert({ ...context, messages, saved: true } as any); alert('Saved!'); } };
 
-  const handleQuickPrompt = (prompt: string) => {
-    sendMessage(prompt);
-  };
+  const hasData = userContext && ((userContext.recentMoods?.length || 0) + (userContext.assessments?.length || 0) + (userContext.goals?.length || 0) + (userContext.habits?.length || 0) > 0);
+  const summary = [
+    userContext?.recentMoods?.length ? userContext.recentMoods.length + ' moods' : null,
+    userContext?.assessments?.length ? userContext.assessments.length + ' assessments' : null,
+    userContext?.goals?.length ? userContext.goals.length + ' goals' : null,
+    userContext?.habits?.length ? userContext.habits.length + ' habits' : null,
+  ].filter(Boolean).join(', ');
 
-  const saveConversation = async () => {
-    try {
-      await supabase.from('chat_history').insert({
-        ...context,
-        messages,
-        saved: true,
-      } as any);
-      alert('Conversation saved!');
-    } catch (error) {
-      console.error('Error saving conversation:', error);
-    }
-  };
+  const toggle = () => { setPersonalized(p => !p); fetchedRef.current = false; };
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-6 flex justify-between items-center">
-          <div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-2">AI Support</h1>
-            <p className="text-slate-600">Talk through what's on your mind</p>
-          </div>
-          {showSave && (
-            <Button variant="outline" onClick={saveConversation}>
-              Save Conversation
-            </Button>
-          )}
+        <div className="mb-6 flex justify-between items-start">
+          <div><h1 className="text-4xl font-bold text-slate-900 mb-2">💬 Mental Health Chat</h1><p className="text-slate-600">Talk through what's on your mind</p></div>
+          {showSave && <Button variant="outline" onClick={save}>Save</Button>}
         </div>
 
-        <Card className="mb-4 h-[60vh] flex flex-col">
+        <Card className="mb-4">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <button type="button" onClick={toggle} className="flex items-center gap-3 text-left">
+                <span className={`relative inline-flex w-11 h-6 rounded-full transition-colors ${personalized ? 'bg-blue-500' : 'bg-slate-300'}`}>
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${personalized ? 'translate-x-5' : ''}`} />
+                </span>
+                <span><p className="font-medium text-sm">🔒 Personalized Responses</p><p className="text-xs text-slate-500">Use my data for context</p></span>
+              </button>
+              {personalized && (
+                <span className={`text-xs px-2 py-1 rounded ${status === 'loading' ? 'bg-slate-100 text-slate-500' : hasData ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
+                  {status === 'loading' ? '⏳ Loading...' : hasData ? '✓ ' + summary : 'No data yet'}
+                </span>
+              )}
+            </div>
+            {personalized && <p className="text-xs text-slate-400 mt-3 pt-3 border-t">🛡️ Data stays private, only for this chat.</p>}
+          </CardContent>
+        </Card>
+
+        <Card className="mb-4 h-[55vh] flex flex-col">
           <CardContent className="flex-1 overflow-y-auto pt-6">
             {messages.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4">💬</div>
                 <h2 className="text-2xl font-semibold mb-2">How can I help?</h2>
-                <p className="text-slate-600 mb-6">
-                  I'm here to listen and support you. Choose a prompt below or start typing.
-                </p>
+                <p className="text-slate-600 mb-6">{personalized && hasData ? "I can see your recent activity." : "I'm here to listen."}</p>
                 <div className="grid grid-cols-2 gap-3 max-w-md mx-auto">
-                  {quickPrompts.map((prompt) => (
-                    <Button
-                      key={prompt}
-                      variant="outline"
-                      onClick={() => handleQuickPrompt(prompt)}
-                    >
-                      {prompt}
-                    </Button>
-                  ))}
+                  {quickPrompts.map(p => <Button key={p} variant="outline" onClick={() => send(p)}>{p}</Button>)}
                 </div>
               </div>
             ) : (
               <div className="space-y-4">
-                {messages.map((message, i) => (
-                  <div
-                    key={i}
-                    className={`flex ${
-                      message.role === 'user' ? 'justify-end' : 'justify-start'
-                    }`}
-                  >
-                    <div
-                      className={`max-w-[80%] rounded-lg p-4 ${
-                        message.role === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-slate-200 text-slate-900'
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap">{message.content}</p>
+                {messages.map((m, i) => (
+                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-lg p-4 ${m.role === 'user' ? 'bg-blue-500 text-white' : 'bg-slate-200'}`}>
+                      <p className="whitespace-pre-wrap">{m.content}</p>
                     </div>
                   </div>
                 ))}
-                {loading && (
-                  <div className="flex justify-start">
-                    <div className="bg-slate-200 rounded-lg p-4">
-                      <div className="flex gap-2">
-                        <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-100"></div>
-                        <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-200"></div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {loading && <div className="flex justify-start"><div className="bg-slate-200 rounded-lg p-4 flex gap-1"><span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" /><span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{animationDelay:'0.1s'}} /><span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{animationDelay:'0.2s'}} /></div></div>}
                 <div ref={messagesEndRef} />
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <form onSubmit={handleSubmit} className="flex gap-2">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="What's on your mind?"
-                className="flex-1"
-                rows={2}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit(e);
-                  }
-                }}
-              />
-              <Button type="submit" disabled={!input.trim() || loading}>
-                Send
-              </Button>
-            </form>
-            <p className="text-xs text-slate-500 mt-2">
-              Press Enter to send, Shift+Enter for new line
-            </p>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="pt-6">
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <Textarea value={input} onChange={e => setInput(e.target.value)} placeholder="What's on your mind?" className="flex-1" rows={2} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); }}} />
+            <Button type="submit" disabled={!input.trim() || loading}>Send</Button>
+          </form>
+        </CardContent></Card>
 
-        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-slate-700">
-            ⚠️ This AI is not a replacement for professional therapy. If you're in crisis, call{' '}
-            <strong>988</strong> or text <strong>HELLO</strong> to <strong>741741</strong>.
-          </p>
-        </div>
+        <p className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-slate-700">⚠️ Not a replacement for therapy. Crisis? Call <strong>988</strong></p>
       </div>
     </main>
   );
 }
-

@@ -17,7 +17,7 @@ export function Navigation() {
     { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
     { href: '/tracker', label: 'Mood', icon: '📊' },
     { href: '/goals', label: 'Goals', icon: '✅' },
-    { href: '/chat', label: 'AI Chat', icon: '💬' },
+    { href: '/chat', label: 'Mental Health Chat', icon: '💬' },
     { href: '/assessments', label: 'Assess', icon: '📋' },
     { href: '/habits', label: 'Habits', icon: '🎯' },
     { href: '/library', label: 'Library', icon: '📚' },

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { chat, Message } from '@/lib/ai/claude';
+import { chat, Message, UserContext } from '@/lib/ai/claude';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { messages } = body as { messages: Message[] };
+    const { messages, userContext } = body as { 
+      messages: Message[]; 
+      userContext?: UserContext;
+    };
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -13,7 +16,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await chat(messages);
+    const response = await chat(messages, userContext);
 
     return NextResponse.json({ response });
   } catch (error) {
@@ -24,4 +27,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
