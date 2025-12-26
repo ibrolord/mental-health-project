@@ -43,7 +43,7 @@ export default function TrackerPage() {
 
   useEffect(() => {
     loadMoods();
-  }, [selectedDate, filterTag]);
+  }, [query, selectedDate, filterTag]);
 
   const loadMoods = async () => {
     if (!query) return;
