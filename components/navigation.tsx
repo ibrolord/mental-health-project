@@ -17,7 +17,7 @@ export function Navigation() {
     { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
     { href: '/tracker', label: 'Mood', icon: '📊' },
     { href: '/goals', label: 'Goals', icon: '✅' },
-    { href: '/chat', label: 'Mental Health Chat', icon: '💬' },
+    { href: '/chat', label: 'AI Chat', icon: '💬' },
     { href: '/assessments', label: 'Assess', icon: '📋' },
     { href: '/habits', label: 'Habits', icon: '🎯' },
     { href: '/library', label: 'Library', icon: '📚' },
@@ -30,7 +30,7 @@ export function Navigation() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <Link href="/dashboard" className="text-xl font-bold text-primary">
-            Mental Health
+            MHtoolkit
           </Link>
 
           <div className="hidden md:flex items-center gap-1">
@@ -82,4 +82,7 @@ export function Navigation() {
     </nav>
   );
 }
+
+
+
 

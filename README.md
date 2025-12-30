@@ -1,4 +1,4 @@
-# Mental Health Support Platform
+# MHtoolkit
 
 A privacy-first mental health support platform offering mood tracking, CBT-informed AI chat, assessments, goal setting with prioritization frameworks, habit tracking, and more.
 

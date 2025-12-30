@@ -134,7 +134,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {[
                 { label: '📊 Track Mood', href: '/tracker' },
-                { label: '💬 Mental Health Chat', href: '/chat' },
+                { label: '💬 AI Chat', href: '/chat' },
                 { label: '📋 Assessments', href: '/assessments' },
                 { label: '🎯 Habits', href: '/habits' },
                 { label: '✅ Goals', href: '/goals' },

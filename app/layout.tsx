@@ -7,7 +7,7 @@ import { Navigation } from "@/components/navigation";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Mental Health Support - Private, Simple, Always Here",
+  title: "MHtoolkit - Your Mental Health Companion",
   description: "Your free mental health support space. Private. Simple. Always here.",
 };
 

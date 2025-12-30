@@ -85,7 +85,7 @@ export default function ChatPage() {
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6 flex justify-between items-start">
-          <div><h1 className="text-4xl font-bold text-slate-900 mb-2">💬 Mental Health Chat</h1><p className="text-slate-600">Talk through what's on your mind</p></div>
+          <div><h1 className="text-4xl font-bold text-slate-900 mb-2">💬 AI Chat</h1><p className="text-slate-600">Talk through what's on your mind</p></div>
           {showSave && <Button variant="outline" onClick={save}>Save</Button>}
         </div>
 
