@@ -20,6 +20,7 @@ A privacy-first mental health support platform offering mood tracking, CBT-infor
 - **UI Components**: shadcn/ui
 - **Backend**: Supabase (PostgreSQL, Auth, RLS)
 - **AI**: Hybrid (Google Gemini 1.5 Flash [free] + Claude 3.5 Sonnet for complex cases)
+- **Voice Therapy**: OpenAI-powered natural voice conversations
 - **Charts**: Recharts
 - **Deployment**: Vercel
 
