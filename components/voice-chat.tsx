@@ -5,16 +5,19 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface VoiceChatProps {
-  onTranscript?: (text: string) => void;
+  userContext?: any;
   onClose?: () => void;
 }
 
-export function VoiceChat({ onTranscript, onClose }: VoiceChatProps) {
+export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState('');
+  const [aiResponse, setAiResponse] = useState('');
   const [error, setError] = useState('');
   const [volume, setVolume] = useState(0);
+  const [messages, setMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([]);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -22,7 +25,6 @@ export function VoiceChat({ onTranscript, onClose }: VoiceChatProps) {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number>();
 
-  // Initialize audio visualization
   const setupAudioVisualization = async (stream: MediaStream) => {
     const audioContext = new AudioContext();
     const analyser = audioContext.createAnalyser();
@@ -67,7 +69,7 @@ export function VoiceChat({ onTranscript, onClose }: VoiceChatProps) {
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await transcribeAudio(audioBlob);
+        await processVoiceInput(audioBlob);
         
         stream.getTracks().forEach(track => track.stop());
         if (audioContextRef.current) {
@@ -95,28 +97,55 @@ export function VoiceChat({ onTranscript, onClose }: VoiceChatProps) {
     }
   };
 
-  const transcribeAudio = async (audioBlob: Blob) => {
+  const processVoiceInput = async (audioBlob: Blob) => {
     try {
+      setIsProcessing(true);
+      
+      // Step 1: Transcribe audio
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
 
-      const response = await fetch('/api/voice', {
+      const transcribeResponse = await fetch('/api/voice', {
         method: 'POST',
         body: formData,
       });
 
-      if (!response.ok) {
+      if (!transcribeResponse.ok) {
         throw new Error('Transcription failed');
       }
 
-      const data = await response.json();
-      setTranscript(data.transcription);
-      if (onTranscript) {
-        onTranscript(data.transcription);
+      const { transcription } = await transcribeResponse.json();
+      setTranscript(transcription);
+      
+      // Step 2: Get AI response
+      const newMessages = [...messages, { role: 'user' as const, content: transcription }];
+      setMessages(newMessages);
+      
+      const chatResponse = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          messages: newMessages,
+          userContext 
+        }),
+      });
+
+      if (!chatResponse.ok) {
+        throw new Error('AI response failed');
       }
+
+      const { response } = await chatResponse.json();
+      setAiResponse(response);
+      setMessages([...newMessages, { role: 'assistant', content: response }]);
+      
+      // Step 3: Speak the response
+      await speakResponse(response);
+      
+      setIsProcessing(false);
     } catch (err) {
-      console.error('Transcription error:', err);
-      setError('Failed to transcribe audio. Please try again.');
+      console.error('Voice processing error:', err);
+      setError('Failed to process your voice. Please try again.');
+      setIsProcessing(false);
     }
   };
 
@@ -164,6 +193,20 @@ export function VoiceChat({ onTranscript, onClose }: VoiceChatProps) {
     };
   }, []);
 
+  const getStatusText = () => {
+    if (isListening) return 'Listening...';
+    if (isProcessing) return 'Processing...';
+    if (isSpeaking) return 'AI is speaking...';
+    return 'Voice Therapy Session';
+  };
+
+  const getSubText = () => {
+    if (isListening) return 'Speak naturally, I\'m here to listen';
+    if (isProcessing) return 'Transcribing and thinking...';
+    if (isSpeaking) return 'AI therapist is responding';
+    return 'Click the microphone to start talking';
+  };
+
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardContent className="p-8">
@@ -173,7 +216,7 @@ export function VoiceChat({ onTranscript, onClose }: VoiceChatProps) {
             <div className="absolute inset-0 flex items-center justify-center">
               <div
                 className={`rounded-full transition-all duration-300 ${
-                  isListening ? 'bg-blue-500' : isSpeaking ? 'bg-green-500' : 'bg-gray-300'
+                  isListening ? 'bg-blue-500' : isSpeaking ? 'bg-green-500' : isProcessing ? 'bg-yellow-500' : 'bg-gray-300'
                 }`}
                 style={{
                   width: `${100 + volume * 150}px`,
@@ -185,34 +228,32 @@ export function VoiceChat({ onTranscript, onClose }: VoiceChatProps) {
             
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-6xl">
-                {isListening ? '🎤' : isSpeaking ? '🔊' : '💬'}
+                {isListening ? '🎤' : isSpeaking ? '🔊' : isProcessing ? '⏳' : '💬'}
               </div>
             </div>
           </div>
 
           {/* Status Text */}
           <div className="text-center">
-            <h3 className="text-xl font-semibold mb-2">
-              {isListening
-                ? 'Listening...'
-                : isSpeaking
-                ? 'AI is speaking...'
-                : 'Voice Therapy Session'}
-            </h3>
-            <p className="text-sm text-slate-600">
-              {isListening
-                ? 'Speak naturally, I\'m here to listen'
-                : isSpeaking
-                ? 'AI therapist is responding'
-                : 'Click the microphone to start talking'}
-            </p>
+            <h3 className="text-xl font-semibold mb-2">{getStatusText()}</h3>
+            <p className="text-sm text-slate-600">{getSubText()}</p>
           </div>
 
-          {/* Transcript Display */}
-          {transcript && (
-            <div className="w-full p-4 bg-slate-50 rounded-lg">
-              <p className="text-sm font-medium text-slate-700 mb-1">You said:</p>
-              <p className="text-slate-900">{transcript}</p>
+          {/* Conversation Display */}
+          {(transcript || aiResponse) && (
+            <div className="w-full space-y-3">
+              {transcript && (
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm font-medium text-blue-700 mb-1">You said:</p>
+                  <p className="text-slate-900">{transcript}</p>
+                </div>
+              )}
+              {aiResponse && (
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <p className="text-sm font-medium text-green-700 mb-1">AI Therapist:</p>
+                  <p className="text-slate-900">{aiResponse}</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -228,7 +269,7 @@ export function VoiceChat({ onTranscript, onClose }: VoiceChatProps) {
             {!isListening ? (
               <Button
                 onClick={startListening}
-                disabled={isSpeaking}
+                disabled={isSpeaking || isProcessing}
                 size="lg"
                 className="gap-2"
               >
@@ -252,7 +293,7 @@ export function VoiceChat({ onTranscript, onClose }: VoiceChatProps) {
                 onClick={onClose}
                 variant="outline"
                 size="lg"
-                disabled={isListening || isSpeaking}
+                disabled={isListening || isSpeaking || isProcessing}
               >
                 Close
               </Button>

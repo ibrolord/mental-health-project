@@ -96,7 +96,7 @@ export default function ChatPage() {
               Back to Text
             </Button>
           </div>
-          <VoiceChat onTranscript={handleVoiceTranscript} onClose={() => setVoiceMode(false)} />
+          <VoiceChat userContext={personalized ? userContext : undefined} onClose={() => setVoiceMode(false)} />
         </div>
       </main>
     );
