@@ -113,8 +113,7 @@ function buildContextualPrompt(userContext?: UserContext): string {
 
 --- USER CONTEXT (shared with consent) ---
 
-${parts.join('
-')}
+${parts.join('\n')}
 
 --- END USER CONTEXT ---
 
