@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { chat, Message, UserContext } from '@/lib/ai/claude';
+import { chat } from '@/lib/ai/model-router';
+import { Message, UserContext } from '@/lib/ai/claude';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,9 +17,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await chat(messages, userContext);
+    const { response, model } = await chat(messages, userContext);
 
-    return NextResponse.json({ response });
+    return NextResponse.json({ response, model });
   } catch (error) {
     console.error('Chat API error:', error);
     return NextResponse.json(

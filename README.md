@@ -19,7 +19,7 @@ A privacy-first mental health support platform offering mood tracking, CBT-infor
 - **Frontend**: Next.js 15 with App Router, TypeScript, Tailwind CSS
 - **UI Components**: shadcn/ui
 - **Backend**: Supabase (PostgreSQL, Auth, RLS)
-- **AI**: Anthropic Claude 3.5 Sonnet
+- **AI**: Hybrid (Google Gemini 1.5 Flash [free] + Claude 3.5 Sonnet for complex cases)
 - **Charts**: Recharts
 - **Deployment**: Vercel
 
@@ -30,7 +30,8 @@ A privacy-first mental health support platform offering mood tracking, CBT-infor
 - Node.js 18+
 - npm or yarn
 - Supabase account ([supabase.com](https://supabase.com))
-- Anthropic API key ([console.anthropic.com](https://console.anthropic.com))
+- Google AI API key (free at ai.google.dev)
+- Anthropic API key (optional, only for complex/crisis cases) ([console.anthropic.com](https://console.anthropic.com))
 
 ### Installation
 
