@@ -143,3 +143,4 @@ export async function chat(messages: Message[], userContext?: UserContext): Prom
     throw new Error('Failed to get AI response');
   }
 }
+

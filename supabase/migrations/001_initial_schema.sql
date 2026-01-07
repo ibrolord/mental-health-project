@@ -212,3 +212,4 @@ CREATE INDEX idx_affirmations_category ON affirmations(category);
 CREATE INDEX idx_anonymous_sessions_session_id ON anonymous_sessions(session_id);
 CREATE INDEX idx_anonymous_sessions_last_active ON anonymous_sessions(last_active_at DESC);
 
+

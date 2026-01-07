@@ -264,3 +264,4 @@ CREATE POLICY "Users can insert their own migration records"
   ON user_data_migration FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+

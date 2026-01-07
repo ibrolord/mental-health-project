@@ -48,3 +48,4 @@ export function clearSession(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(SESSION_KEY);
 }
+
