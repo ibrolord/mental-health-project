@@ -20,7 +20,7 @@ interface UserContext {
 const quickPrompts = ['I feel anxious', 'Help me reframe a negative thought', 'Ground me', 'I need to talk'];
 
 export default function ChatPage() {
-  const { context, query, loading: authLoading } = useDataContext();
+  const { context, query, authLoading } = useDataContext();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
