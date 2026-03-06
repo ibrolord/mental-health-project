@@ -1,0 +1,26 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="50%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <!-- Brain-heart icon scaled to fill 200x200 -->
+  <!-- Left hemisphere -->
+  <path d="M 78 30 C 55 30, 36 49, 36 68 C 36 78, 40 86, 48 92 C 43 96, 40 103, 40 110 C 40 125, 52 137, 68 137 L 97 137 L 97 30 C 88 30, 83 30, 78 30 Z" fill="white" opacity="0.95"/>
+  <!-- Right hemisphere -->
+  <path d="M 122 30 C 145 30, 164 49, 164 68 C 164 78, 160 86, 152 92 C 157 96, 160 103, 160 110 C 160 125, 148 137, 132 137 L 103 137 L 103 30 C 112 30, 117 30, 122 30 Z" fill="white" opacity="0.95"/>
+  <!-- Brain folds left -->
+  <path d="M 55 55 C 68 52, 80 60, 92 55" stroke="url(#bg)" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <path d="M 50 78 C 63 75, 75 83, 92 78" stroke="url(#bg)" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <path d="M 55 100 C 68 97, 80 105, 92 100" stroke="url(#bg)" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <path d="M 60 122 C 72 119, 80 125, 92 122" stroke="url(#bg)" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <!-- Brain folds right -->
+  <path d="M 108 55 C 121 52, 133 60, 145 55" stroke="url(#bg)" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <path d="M 108 78 C 121 75, 133 83, 150 78" stroke="url(#bg)" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <path d="M 108 100 C 121 97, 133 105, 145 100" stroke="url(#bg)" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <path d="M 108 122 C 120 119, 128 125, 140 122" stroke="url(#bg)" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <!-- Heart at top center -->
+  <path d="M 100 38 C 100 35, 96 31, 92 31 C 87 31, 84 35, 84 39 C 84 45, 100 52, 100 52 C 100 52, 116 45, 116 39 C 116 35, 113 31, 108 31 C 104 31, 100 35, 100 38 Z" fill="#f472b6"/>
+</svg>

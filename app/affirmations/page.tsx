@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
+import { apiRequest } from '@/lib/api/client';
 import { subDays } from 'date-fns';
 
 interface Affirmation {
@@ -148,17 +149,11 @@ export default function AffirmationsPage() {
         .limit(5);
 
       // Call API to generate personalized affirmation
-      const response = await fetch('/api/affirmations/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          moods,
-          assessments,
-          goals,
-        }),
+      const data = await apiRequest('/api/affirmations/generate', {
+        moods,
+        assessments,
+        goals,
       });
-
-      const data = await response.json();
 
       if (data.affirmation) {
         setCurrentAffirmation({
