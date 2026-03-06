@@ -30,9 +30,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "APPLE_ID_HERE",
+        "appleId": "princebolajibreeze@gmail.com",
         "ascAppId": "ASC_APP_ID_HERE",
-        "appleTeamId": "APPLE_TEAM_ID_HERE"
+        "appleTeamId": "3NSJ73VV26"
       }
     }
   }
