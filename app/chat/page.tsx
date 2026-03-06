@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { VoiceChat } from '@/components/voice-chat';
 import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
+import { apiRequest } from '@/lib/api/client';
 import { format, subDays } from 'date-fns';
 
 interface Message { role: 'user' | 'assistant'; content: string; }
@@ -62,8 +63,7 @@ export default function ChatPage() {
     const msgs = [...messages, newMsg];
     setMessages(msgs); setInput(''); setLoading(true);
     try {
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: msgs, userContext: personalized ? userContext : undefined }) });
-      const d = await res.json();
+      const d = await apiRequest('/api/chat', { messages: msgs, userContext: personalized ? userContext : undefined });
       if (d.response) { setMessages([...msgs, { role: 'assistant', content: d.response }]); setShowSave(true); }
     } catch { setMessages([...msgs, { role: 'assistant', content: 'Sorry, something went wrong.' }]); }
     setLoading(false);

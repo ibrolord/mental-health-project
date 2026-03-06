@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateVoiceResponse, transcribeAudio } from '@/lib/ai/voice-chat';
+import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await verifyAuth(request);
+    if (!auth.valid) return unauthorizedResponse();
+
     const contentType = request.headers.get('content-type') || '';
     
     // Handle text-to-speech

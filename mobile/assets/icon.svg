@@ -1,0 +1,32 @@
+<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="50%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="heart" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#e0e7ff"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <!-- Brain-heart icon: a stylized combination -->
+  <!-- Left brain hemisphere -->
+  <path d="M 400 340 C 340 340, 290 390, 290 450 C 290 490, 310 520, 340 540 C 320 560, 310 590, 310 620 C 310 680, 360 730, 420 730 L 500 730 L 500 340 C 460 340, 430 340, 400 340 Z" fill="white" opacity="0.95"/>
+  <!-- Right brain hemisphere -->
+  <path d="M 624 340 C 684 340, 734 390, 734 450 C 734 490, 714 520, 684 540 C 704 560, 714 590, 714 620 C 714 680, 664 730, 604 730 L 524 730 L 524 340 C 564 340, 594 340, 624 340 Z" fill="white" opacity="0.95"/>
+  <!-- Brain fold lines left -->
+  <path d="M 360 420 C 400 410, 440 440, 480 420" stroke="url(#bg)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 340 500 C 380 490, 420 520, 480 500" stroke="url(#bg)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 360 580 C 400 570, 440 600, 480 580" stroke="url(#bg)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 380 660 C 410 650, 440 670, 480 660" stroke="url(#bg)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <!-- Brain fold lines right -->
+  <path d="M 544 420 C 584 410, 624 440, 664 420" stroke="url(#bg)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 544 500 C 584 490, 624 520, 684 500" stroke="url(#bg)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 544 580 C 584 570, 624 600, 664 580" stroke="url(#bg)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 544 660 C 574 650, 604 670, 644 660" stroke="url(#bg)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <!-- Small heart at top center where hemispheres meet -->
+  <path d="M 512 370 C 512 360, 500 345, 488 345 C 472 345, 462 360, 462 372 C 462 395, 512 420, 512 420 C 512 420, 562 395, 562 372 C 562 360, 552 345, 536 345 C 524 345, 512 360, 512 370 Z" fill="#f472b6"/>
+</svg>
