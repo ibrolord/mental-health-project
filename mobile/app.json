@@ -7,18 +7,31 @@
     "icon": "./assets/icon.png",
     "scheme": "mhtoolkit",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#3b82f6"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
+      "requireFullScreen": true,
       "bundleIdentifier": "com.mhtoolkit.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "MHtoolkit needs microphone access for voice therapy sessions.",
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          }
+        ]
       }
     },
     "android": {
