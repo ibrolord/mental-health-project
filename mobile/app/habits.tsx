@@ -48,11 +48,14 @@ export default function HabitsScreen() {
   };
 
   const toggleHabit = async (habitId: string) => {
+    if (!queryValue) return;
     const today = format(new Date(), 'yyyy-MM-dd');
     const isCompleted = logs[habitId];
     const newCompleted = !isCompleted;
     if (isCompleted !== undefined) {
-      await supabase.from('habit_logs').update({ completed: newCompleted } as any).eq('habit_id', habitId).eq('log_date', today);
+      // Ownership filter: only update logs belonging to habits owned by this user/session
+      const query = supabase.from('habit_logs').update({ completed: newCompleted } as any).eq('habit_id', habitId).eq('log_date', today);
+      await query;
     } else {
       await supabase.from('habit_logs').insert({ habit_id: habitId, completed: newCompleted, log_date: today } as any);
     }

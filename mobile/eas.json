@@ -33,6 +33,10 @@
         "appleId": "princebolajibreeze@gmail.com",
         "ascAppId": "6760159800",
         "appleTeamId": "3NSJ73VV26"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal"
       }
     }
   }

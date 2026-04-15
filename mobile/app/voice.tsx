@@ -36,6 +36,8 @@ export default function VoiceTherapyScreen() {
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch(() => {});
       }
+      // Reset audio mode so iOS system audio is not blocked
+      Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
     };
   }, []);
 
@@ -138,7 +140,11 @@ export default function VoiceTherapyScreen() {
 
       const transcribeRes = await fetch(`${API_URL}/api/voice`, {
         method: 'POST',
-        headers: authHeaders,
+        headers: {
+          ...authHeaders,
+          // Let fetch set the multipart Content-Type with boundary automatically
+          'Accept': 'application/json',
+        },
         body: formData,
       });
 
@@ -189,7 +195,13 @@ export default function VoiceTherapyScreen() {
 
       // Save audio to temp file and play
       const audioData = await res.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(audioData)));
+      const bytes = new Uint8Array(audioData);
+      const CHUNK = 8192;
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+      }
+      const base64 = btoa(binary);
       const tempPath = `${FileSystem.cacheDirectory}tts_response.mp3`;
       await FileSystem.writeAsStringAsync(tempPath, base64, {
         encoding: FileSystem.EncodingType.Base64,

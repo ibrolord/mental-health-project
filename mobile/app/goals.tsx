@@ -60,13 +60,15 @@ export default function GoalsScreen() {
   };
 
   const toggleGoal = async (id: string, status: string) => {
+    if (!query) return;
     const newStatus = status === 'completed' ? 'pending' : 'completed';
-    await supabase.from('goals').update({ status: newStatus, completed_at: newStatus === 'completed' ? new Date().toISOString() : null } as any).eq('id', id);
+    await supabase.from('goals').update({ status: newStatus, completed_at: newStatus === 'completed' ? new Date().toISOString() : null } as any).eq('id', id).eq(query.column, query.value);
     setGoals(goals.map((g) => (g.id === id ? { ...g, status: newStatus as any } : g)));
   };
 
   const deleteGoal = async (id: string) => {
-    await supabase.from('goals').delete().eq('id', id);
+    if (!query) return;
+    await supabase.from('goals').delete().eq('id', id).eq(query.column, query.value);
     setGoals(goals.filter((g) => g.id !== id));
   };
 

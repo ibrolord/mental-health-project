@@ -41,8 +41,8 @@ export default function DashboardScreen() {
   }, [queryColumn, queryValue]);
 
   const saveMood = async (mood: MoodEmoji) => {
-    if (!queryValue) return;
-    await supabase.from('moods').insert({ ...context, emoji: mood } as any);
+    if (!queryValue || (!user?.id && !sessionId)) return;
+    await supabase.from('moods').insert({ ...context, emoji: mood });
     setTodayMood(mood);
   };
 
