@@ -1,0 +1,20 @@
+app_identifier("com.mhtoolkit.app")
+username("princebolajibreeze@gmail.com")
+app(6760159800)
+
+# Skip binary upload - we already uploaded via EAS
+skip_binary_upload(true)
+
+# Skip metadata - already uploaded
+skip_metadata(true)
+
+# Just upload screenshots
+skip_screenshots(false)
+overwrite_screenshots(true)
+
+# Don't submit for review yet
+submit_for_review(false)
+automatic_release(false)
+
+# Force - don't ask for confirmation
+force(true)

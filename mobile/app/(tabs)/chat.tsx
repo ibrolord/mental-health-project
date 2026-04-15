@@ -76,7 +76,7 @@ export default function ChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' && (Platform as any).isPad ? 110 : 90}>
       {/* Voice Mode Button */}
       <TouchableOpacity style={s.voiceBar} onPress={() => router.push('/voice')}>
         <Text style={s.voiceBarText}>🎙️  Switch to Voice Mode</Text>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
 import { useDataContext } from '@/lib/hooks/use-data-context';
@@ -142,42 +142,44 @@ export default function SettingsScreen() {
         )}
       </View>
 
-      {/* Notifications */}
-      <View style={s.card}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <Text style={s.cardTitle}>Mood Reminders</Text>
-          <Switch
-            value={remindersOn}
-            onValueChange={toggleReminders}
-            trackColor={{ false: '#d1d5db', true: Colors.primary }}
-            thumbColor="#fff"
-          />
-        </View>
-        <Text style={s.bodyText}>Get gentle reminders to check in with your mood throughout the day.</Text>
-
-        {remindersOn && (
-          <View style={{ marginTop: 14 }}>
-            <Text style={[s.bodyText, { fontWeight: '500', marginBottom: 8 }]}>Reminder times:</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {HOUR_OPTIONS.map((opt) => {
-                const selected = selectedTimes.includes(opt.value);
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    onPress={() => toggleTime(opt.value)}
-                    style={[
-                      s.timePill,
-                      selected && { backgroundColor: Colors.primary, borderColor: Colors.primary },
-                    ]}
-                  >
-                    <Text style={[s.timePillText, selected && { color: '#fff' }]}>{opt.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+      {/* Notifications — hidden on iOS where the native module is excluded */}
+      {Platform.OS !== 'ios' && (
+        <View style={s.card}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <Text style={s.cardTitle}>Mood Reminders</Text>
+            <Switch
+              value={remindersOn}
+              onValueChange={toggleReminders}
+              trackColor={{ false: '#d1d5db', true: Colors.primary }}
+              thumbColor="#fff"
+            />
           </View>
-        )}
-      </View>
+          <Text style={s.bodyText}>Get gentle reminders to check in with your mood throughout the day.</Text>
+
+          {remindersOn && (
+            <View style={{ marginTop: 14 }}>
+              <Text style={[s.bodyText, { fontWeight: '500', marginBottom: 8 }]}>Reminder times:</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {HOUR_OPTIONS.map((opt) => {
+                  const selected = selectedTimes.includes(opt.value);
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      onPress={() => toggleTime(opt.value)}
+                      style={[
+                        s.timePill,
+                        selected && { backgroundColor: Colors.primary, borderColor: Colors.primary },
+                      ]}
+                    >
+                      <Text style={[s.timePillText, selected && { color: '#fff' }]}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Export */}
       <View style={s.card}>

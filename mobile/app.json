@@ -46,14 +46,9 @@
       ]
     },
     "plugins": [
+      "./plugins/exclude-notifications-ios",
       "expo-router",
       "expo-secure-store",
-      [
-        "expo-notifications",
-        {
-          "sounds": []
-        }
-      ],
       [
         "expo-av",
         {

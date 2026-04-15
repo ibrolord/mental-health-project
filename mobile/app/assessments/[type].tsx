@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ASSESSMENTS } from '@/lib/assessments/definitions';
 import { supabase } from '@/lib/supabase';
@@ -67,15 +67,27 @@ export default function AssessmentTakeScreen() {
 
           <View style={s.suggestionsBox}>
             <Text style={s.suggestionsTitle}>What to do next:</Text>
-            {result.suggestions.map((s: string, i: number) => (
-              <Text key={i} style={styles.suggestion}>• {s}</Text>
+            {result.suggestions.map((item: string, i: number) => (
+              <Text key={i} style={s.suggestion}>• {item}</Text>
             ))}
           </View>
 
           <TouchableOpacity style={s.btn} onPress={handleSave} disabled={saving}>
             <Text style={s.btnText}>{saving ? 'Saving...' : 'Save Result'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.btnOutline} onPress={() => router.replace('/(tabs)')}>
+          <TouchableOpacity
+            style={s.btnOutline}
+            onPress={() => {
+              Alert.alert(
+                'Unsaved Result',
+                'Your assessment result has not been saved. Leave anyway?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Leave', style: 'destructive', onPress: () => router.replace('/(tabs)') },
+                ]
+              );
+            }}
+          >
             <Text style={s.btnOutlineText}>Go to Dashboard</Text>
           </TouchableOpacity>
         </View>
@@ -121,11 +133,8 @@ export default function AssessmentTakeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  suggestion: { fontSize: 14, color: Colors.text, marginBottom: 6, lineHeight: 20 },
-});
-
 const s = StyleSheet.create({
+  suggestion: { fontSize: 14, color: Colors.text, marginBottom: 6, lineHeight: 20 },
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: 16, paddingBottom: 40 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
