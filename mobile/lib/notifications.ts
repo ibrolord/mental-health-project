@@ -2,11 +2,10 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // NOTE: expo-notifications and expo-device are loaded LAZILY (see getNotifications
-// and getDevice below). In the old architecture (newArchEnabled: false), a static
-// import can trigger native-module init at app launch. Production build 16 was
-// rejected by App Review because that path crashed on iPad Air / iPadOS 26.4 with
-// SIGABRT from an ObjC exception on a dispatch worker queue. All access is now
-// routed through the lazy getters, which short-circuit on iPad entirely.
+// and getDevice below). On iOS the native modules are excluded from the binary,
+// and importing expo-notifications JS is still unsafe because it eagerly loads
+// ExpoPushTokenManager at module evaluation time. All notification access is
+// therefore Android-only and the lazy getters short-circuit on every iOS device.
 
 type ExpoNotifications = typeof import('expo-notifications');
 type ExpoDevice = typeof import('expo-device');
@@ -30,17 +29,17 @@ let _Notifications: ExpoNotifications | null = null;
 let _handlerConfigured = false;
 let _Device: ExpoDevice | null = null;
 
-function isIPad(): boolean {
-  return Platform.OS === 'ios' && Platform.isPad;
+function isIOS(): boolean {
+  return Platform.OS === 'ios';
 }
 
 /**
- * Lazily loads expo-notifications. Returns null on iPad (hard skip, see notes
+ * Lazily loads expo-notifications. Returns null on iOS (hard skip, see notes
  * above) or if the native module fails to load. First successful load also
  * configures the foreground notification handler once.
  */
 function getNotifications(): ExpoNotifications | null {
-  if (isIPad()) return null;
+  if (isIOS()) return null;
 
   if (!_Notifications) {
     try {
@@ -76,7 +75,7 @@ function getNotifications(): ExpoNotifications | null {
 }
 
 function getDevice(): ExpoDevice | null {
-  if (isIPad()) return null;
+  if (isIOS()) return null;
   if (_Device) return _Device;
   try {
     _Device = require('expo-device') as ExpoDevice;
