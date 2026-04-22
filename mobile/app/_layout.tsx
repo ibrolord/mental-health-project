@@ -7,11 +7,11 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // NOTE: Intentionally NOT importing expo-notifications or '@/lib/notifications'
 // at module scope. In the old architecture (newArchEnabled: false), a static
-// import can trigger native-module init before React mounts. Production build 16
-// was rejected by App Review because this path crashed on iPad Air (iPadOS 26.4)
-// with SIGABRT from an ObjC exception on a dispatch worker queue — JS try/catch
-// cannot catch that. The entire notification subsystem is now loaded lazily,
-// AFTER first paint, AND never on iPad. See also lib/notifications.ts.
+// import can trigger native-module init before React mounts. Production builds
+// were rejected by App Review because the iOS binary excludes expo-notifications,
+// but importing the JS package still executes push-token setup and crashes with
+// "Cannot find native module 'ExpoPushTokenManager'". The entire notification
+// subsystem is Android-only now. See also lib/notifications.ts.
 
 type NotificationSubscription = { remove: () => void };
 
@@ -20,9 +20,9 @@ export default function RootLayout() {
   const routerRef = useRef<ReturnType<typeof useRouter>>(undefined);
 
   useEffect(() => {
-    // Hard-skip iPad entirely. Apple reviews iPhone-only apps on iPad in
-    // compat mode and the expo-notifications native init crashes there.
-    if (Platform.OS === 'ios' && Platform.isPad) {
+    // The iOS binary excludes expo-notifications, so importing its JS package
+    // still crashes on launch when it tries to load ExpoPushTokenManager.
+    if (Platform.OS === 'ios') {
       return;
     }
 
