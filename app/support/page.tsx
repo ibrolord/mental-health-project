@@ -34,10 +34,10 @@ export default function SupportPage() {
             <li>
               <strong>Email:</strong>{" "}
               <a
-                href="mailto:support@mhtoolkit.com"
+                href="mailto:bolajiag10@gmail.com"
                 className="text-blue-600 hover:underline"
               >
-                support@mhtoolkit.com
+                bolajiag10@gmail.com
               </a>
             </li>
             <li>
@@ -95,10 +95,10 @@ export default function SupportPage() {
                 Go to Settings in the app and select &quot;Delete Account&quot;
                 to permanently remove all your data. You can also email us at{" "}
                 <a
-                  href="mailto:support@mhtoolkit.com"
+                  href="mailto:bolajiag10@gmail.com"
                   className="text-blue-600 hover:underline"
                 >
-                  support@mhtoolkit.com
+                  bolajiag10@gmail.com
                 </a>{" "}
                 to request data deletion.
               </p>
@@ -126,10 +126,10 @@ export default function SupportPage() {
             If you encounter a bug or the app isn&apos;t working as expected,
             please email us at{" "}
             <a
-              href="mailto:support@mhtoolkit.com"
+              href="mailto:bolajiag10@gmail.com"
               className="text-blue-600 hover:underline"
             >
-              support@mhtoolkit.com
+              bolajiag10@gmail.com
             </a>{" "}
             with a description of the issue, the device you&apos;re using, and
             any screenshots if possible.
