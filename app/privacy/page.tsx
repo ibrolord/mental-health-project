@@ -294,10 +294,10 @@ export default function PrivacyPolicyPage() {
             <p>
               Email:{" "}
               <a
-                href="mailto:princebolajibreeze@gmail.com"
+                href="mailto:bolajiag10@gmail.com"
                 className="text-blue-600 hover:text-blue-800 underline"
               >
-                princebolajibreeze@gmail.com
+                bolajiag10@gmail.com
               </a>
             </p>
           </div>
