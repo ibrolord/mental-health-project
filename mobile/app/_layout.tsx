@@ -4,24 +4,21 @@ import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider } from '@/lib/auth-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { loadNotificationsBundle } from '@/lib/notifications-runtime';
+import type {
+  NotificationResponseLike,
+  NotificationSubscription,
+} from '@/lib/notifications-types';
 
-// NOTE: Intentionally NOT importing expo-notifications or '@/lib/notifications'
-// at module scope. In the old architecture (newArchEnabled: false), a static
-// import can trigger native-module init before React mounts. Production builds
-// were rejected by App Review because the iOS binary excludes expo-notifications,
-// but importing the JS package still executes push-token setup and crashes with
-// "Cannot find native module 'ExpoPushTokenManager'". The entire notification
-// subsystem is Android-only now. See also lib/notifications.ts.
-
-type NotificationSubscription = { remove: () => void };
+// NOTE: Shared iOS-loaded files must not reference expo-notifications or
+// expo-device at all. Those modules are resolved through platform-specific
+// files so the iOS JS bundle does not carry notification-module load paths.
 
 export default function RootLayout() {
   const notificationResponseRef = useRef<NotificationSubscription | null>(null);
   const routerRef = useRef<ReturnType<typeof useRouter>>(undefined);
 
   useEffect(() => {
-    // The iOS binary excludes expo-notifications, so importing its JS package
-    // still crashes on launch when it tries to load ExpoPushTokenManager.
     if (Platform.OS === 'ios') {
       return;
     }
@@ -39,17 +36,11 @@ export default function RootLayout() {
         pendingTimer = null;
         if (cancelled) return;
 
-        // Lazy-load. This require() is the first time the expo-notifications
-        // native module is touched in the whole app lifecycle on iPhone.
-        let Notifications: typeof import('expo-notifications');
-        let notificationsHelper: typeof import('@/lib/notifications');
-        try {
-          Notifications = require('expo-notifications');
-          notificationsHelper = require('@/lib/notifications');
-        } catch (e) {
-          console.warn('Failed to load notifications modules:', e);
+        const notificationBundle = loadNotificationsBundle();
+        if (!notificationBundle) {
           return;
         }
+        const { Notifications, notificationsHelper } = notificationBundle;
 
         (async () => {
           try {
@@ -79,7 +70,9 @@ export default function RootLayout() {
 
         try {
           notificationResponseRef.current =
-            Notifications.addNotificationResponseReceivedListener((response) => {
+            Notifications.addNotificationResponseReceivedListener((
+              response: NotificationResponseLike
+            ) => {
               const screen = response.notification.request.content.data?.screen;
               if (screen && routerRef.current) {
                 routerRef.current.push(screen as any);
