@@ -13,7 +13,7 @@ interface Message {
   content: string;
 }
 
-export default function VoiceTherapyScreen() {
+export default function VoiceSupportScreen() {
   const router = useRouter();
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -61,7 +61,7 @@ export default function VoiceTherapyScreen() {
       setError('');
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
-        setError('Microphone permission is required for voice therapy.');
+        setError('Microphone permission is required for voice support.');
         return;
       }
 
@@ -243,13 +243,13 @@ export default function VoiceTherapyScreen() {
     if (isListening) return 'Listening...';
     if (isProcessing) return 'Processing...';
     if (isSpeaking) return 'AI is speaking...';
-    return 'Voice Therapy Session';
+    return 'Voice Support Session';
   };
 
   const getSubText = () => {
     if (isListening) return "Speak naturally, I'm here to listen";
     if (isProcessing) return 'Transcribing and thinking...';
-    if (isSpeaking) return 'AI therapist is responding';
+    if (isSpeaking) return 'AI companion is responding';
     return 'Tap the microphone to start talking';
   };
 
@@ -289,7 +289,7 @@ export default function VoiceTherapyScreen() {
           ) : null}
           {aiResponse ? (
             <View style={s.bubbleAi}>
-              <Text style={[s.bubbleLabel, { color: Colors.success }]}>AI Therapist:</Text>
+              <Text style={[s.bubbleLabel, { color: Colors.success }]}>AI Companion:</Text>
               <Text style={s.bubbleText}>{aiResponse}</Text>
             </View>
           ) : null}

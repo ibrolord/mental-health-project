@@ -20,6 +20,7 @@ export default function AssessmentTakePage() {
   const [responses, setResponses] = useState<Record<string, number>>({});
   const [result, setResult] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const showCrisisSupport = assessment?.type === 'PHQ9' && (responses.q9 ?? 0) > 0;
 
   if (!assessment) {
     return (
@@ -35,11 +36,18 @@ export default function AssessmentTakePage() {
   }
 
   const handleAnswer = (value: number) => {
+    const activeQuestion = assessment.questions[currentQuestion];
     const newResponses = {
       ...responses,
-      [assessment.questions[currentQuestion].id]: value,
+      [activeQuestion.id]: value,
     };
     setResponses(newResponses);
+
+    if (assessment.type === 'PHQ9' && activeQuestion.id === 'q9' && value > 0) {
+      window.alert(
+        'Immediate Support Available\n\nIf you might hurt yourself or are in immediate danger, call emergency services now. You can call or text 988 in the U.S. or Canada, or text HOME to 741741 for Crisis Text Line.'
+      );
+    }
 
     if (currentQuestion < assessment.questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
@@ -94,6 +102,17 @@ export default function AssessmentTakePage() {
                 <div className="text-2xl font-semibold mb-4">{result.level}</div>
                 <p className="text-slate-700 mb-6">{result.message}</p>
               </div>
+
+              {showCrisisSupport && (
+                <div className="bg-red-50 border-l-4 border-red-600 p-4 mb-6 rounded-r-lg">
+                  <h3 className="font-semibold mb-2 text-red-900">Immediate Support Available</h3>
+                  <p className="text-sm text-red-900">
+                    Because you endorsed thoughts of self-harm, please reach out now if you feel unsafe.
+                    Call or text 988 in the U.S. or Canada, text HOME to 741741 for Crisis Text Line,
+                    or contact local emergency services.
+                  </p>
+                </div>
+              )}
 
               <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
                 <h3 className="font-semibold mb-2">What to do next:</h3>
@@ -180,4 +199,3 @@ export default function AssessmentTakePage() {
     </main>
   );
 }
-

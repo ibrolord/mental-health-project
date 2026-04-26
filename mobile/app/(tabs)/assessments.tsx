@@ -16,7 +16,7 @@ export default function AssessmentsScreen() {
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <Text style={s.title}>Self-Assessments</Text>
-      <Text style={s.subtitle}>Quick, clinically-backed assessments to help you understand where you are</Text>
+      <Text style={s.subtitle}>Quick, validated screening tools to help you reflect on how you are doing</Text>
 
       {assessmentList.map((a) => (
         <TouchableOpacity

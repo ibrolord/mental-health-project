@@ -18,6 +18,7 @@ export default function AssessmentTakeScreen() {
   const [responses, setResponses] = useState<Record<string, number>>({});
   const [result, setResult] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const showCrisisSupport = assessment?.type === 'PHQ9' && (responses.q9 ?? 0) > 0;
 
   if (!assessment) {
     return (
@@ -31,8 +32,17 @@ export default function AssessmentTakeScreen() {
   }
 
   const handleAnswer = (value: number) => {
-    const newResponses = { ...responses, [assessment.questions[currentQuestion].id]: value };
+    const activeQuestion = assessment.questions[currentQuestion];
+    const newResponses = { ...responses, [activeQuestion.id]: value };
     setResponses(newResponses);
+
+    if (assessment.type === 'PHQ9' && activeQuestion.id === 'q9' && value > 0) {
+      Alert.alert(
+        'Immediate Support Available',
+        'If you might hurt yourself or are in immediate danger, call emergency services now. You can call or text 988 in the U.S. or Canada, or text HOME to 741741 for Crisis Text Line.',
+        [{ text: 'OK' }]
+      );
+    }
 
     if (currentQuestion < assessment.questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
@@ -64,6 +74,17 @@ export default function AssessmentTakeScreen() {
           <Text style={s.resultScore}>{result.score}/{assessment.maxScore}</Text>
           <Text style={s.resultLevel}>{result.level}</Text>
           <Text style={s.resultMessage}>{result.message}</Text>
+
+          {showCrisisSupport && (
+            <View style={s.crisisBox}>
+              <Text style={s.crisisTitle}>Immediate Support Available</Text>
+              <Text style={s.crisisText}>
+                Because you endorsed thoughts of self-harm, please reach out now if you feel unsafe.
+                Call or text 988 in the U.S. or Canada, text HOME to 741741 for Crisis Text Line,
+                or contact local emergency services.
+              </Text>
+            </View>
+          )}
 
           <View style={s.suggestionsBox}>
             <Text style={s.suggestionsTitle}>What to do next:</Text>
@@ -151,6 +172,9 @@ const s = StyleSheet.create({
   resultScore: { fontSize: 48, fontWeight: '700', color: Colors.primary, textAlign: 'center', marginBottom: 8 },
   resultLevel: { fontSize: 22, fontWeight: '600', color: Colors.text, textAlign: 'center', marginBottom: 12 },
   resultMessage: { fontSize: 15, color: Colors.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 22 },
+  crisisBox: { backgroundColor: '#fef2f2', borderLeftWidth: 4, borderLeftColor: '#dc2626', padding: 16, borderRadius: 8, marginBottom: 24 },
+  crisisTitle: { fontSize: 16, fontWeight: '700', color: '#991b1b', marginBottom: 8 },
+  crisisText: { fontSize: 14, color: '#7f1d1d', lineHeight: 20 },
   suggestionsBox: { backgroundColor: '#eff6ff', borderLeftWidth: 4, borderLeftColor: Colors.primary, padding: 16, borderRadius: 8, marginBottom: 24 },
   suggestionsTitle: { fontSize: 16, fontWeight: '600', color: Colors.text, marginBottom: 10 },
   btn: { backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 10 },

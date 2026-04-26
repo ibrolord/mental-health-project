@@ -197,13 +197,13 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
     if (isListening) return 'Listening...';
     if (isProcessing) return 'Processing...';
     if (isSpeaking) return 'AI is speaking...';
-    return 'Voice Therapy Session';
+    return 'Voice Support Session';
   };
 
   const getSubText = () => {
     if (isListening) return 'Speak naturally, I\'m here to listen';
     if (isProcessing) return 'Transcribing and thinking...';
-    if (isSpeaking) return 'AI therapist is responding';
+    if (isSpeaking) return 'AI companion is responding';
     return 'Click the microphone to start talking';
   };
 
@@ -250,7 +250,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
               )}
               {aiResponse && (
                 <div className="p-4 bg-green-50 rounded-lg">
-                  <p className="text-sm font-medium text-green-700 mb-1">AI Therapist:</p>
+                  <p className="text-sm font-medium text-green-700 mb-1">AI Companion:</p>
                   <p className="text-slate-900">{aiResponse}</p>
                 </div>
               )}

@@ -1,12 +1,12 @@
 Welcome to MHtoolkit v1.0.0!
 
 - AI chat companion with personalized, context-aware responses
-- Voice therapy — speak naturally and hear responses aloud
+- Voice support with clearer microphone and self-help guidance
 - Mood tracking with emoji check-ins and trend charts
 - Validated assessments: PHQ-9, GAD-7, PSS-4, and CBI
 - Goal setting with 5 proven frameworks
 - Habit tracking with daily streaks
 - AI-generated affirmations based on your data
 - Mental health resource library
-- Full data export and deletion
+- Full data export, in-app data deletion, and account deletion
 - Anonymous use — no account required

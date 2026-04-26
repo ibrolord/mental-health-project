@@ -56,7 +56,7 @@ export default function PrivacyPolicyPage() {
             </li>
             <li>
               <strong>Voice recordings:</strong> Audio recorded during voice
-              therapy sessions, used temporarily for transcription and then
+              support conversations, used temporarily for transcription and then
               discarded.
             </li>
             <li>
@@ -239,7 +239,8 @@ export default function PrivacyPolicyPage() {
             </li>
             <li>
               <strong>Deletion:</strong> You can permanently delete all your data
-              from the Settings page. This action is irreversible.
+              or your full account from the Settings page. This action is
+              irreversible.
             </li>
             <li>
               <strong>Correction:</strong> You can edit or update your entries

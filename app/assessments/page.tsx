@@ -37,7 +37,7 @@ export default function AssessmentsPage() {
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-slate-900 mb-2">Self-Assessments</h1>
           <p className="text-slate-600">
-            Quick, clinically-backed assessments to help you understand where you are
+            Quick, validated screening tools to help you reflect on how you are doing
           </p>
         </div>
 
@@ -84,5 +84,4 @@ export default function AssessmentsPage() {
     </main>
   );
 }
-
 
