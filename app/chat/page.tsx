@@ -89,8 +89,8 @@ export default function ChatPage() {
         <div className="max-w-4xl mx-auto">
           <div className="mb-6 flex justify-between items-start">
             <div>
-              <h1 className="text-4xl font-bold text-slate-900 mb-2">🎙️ Voice Therapy</h1>
-              <p className="text-slate-600">Have a natural voice conversation with your AI therapist</p>
+              <h1 className="text-4xl font-bold text-slate-900 mb-2">🎙️ Voice Support</h1>
+              <p className="text-slate-600">Have a natural voice conversation with your AI companion</p>
             </div>
             <Button variant="outline" onClick={() => setVoiceMode(false)}>
               Back to Text

@@ -1,14 +1,14 @@
-MHtoolkit is a free, private mental health companion that gives you clinical-grade self-assessment tools, AI-powered conversation therapy, mood tracking, and daily habit-building features — all in one app. No subscriptions. No ads. No data sold. Ever.
+MHtoolkit is a free, private mental health companion with validated self-assessment screeners, AI-powered conversation support, mood tracking, and daily habit-building features - all in one app. No subscriptions. No ads. No data sold. Ever.
 
 MENTAL HEALTH SUPPORT SHOULD BE ACCESSIBLE TO EVERYONE
 
-Whether you're between therapy sessions, on a waitlist, managing day-to-day stress, or simply want better tools for self-awareness, MHtoolkit meets you where you are.
+Whether you're between care options, on a waitlist, managing day-to-day stress, or simply want better tools for self-awareness, MHtoolkit meets you where you are.
 
-AI CHAT THERAPIST
-Have a conversation with an AI companion that remembers your mood patterns, assessment history, and personal context. Voice therapy mode lets you speak naturally and hear responses aloud.
+AI CHAT COMPANION
+Have a conversation with an AI companion that can use your mood patterns, assessment history, and personal context when you choose personalized responses. Voice support mode lets you speak naturally and hear responses aloud.
 
 VALIDATED MENTAL HEALTH ASSESSMENTS
-Track your mental health over time with clinician-grade screening tools:
+Track your mental health over time with widely used screening questionnaires:
 - PHQ-9 — Depression severity screening
 - GAD-7 — Generalized anxiety assessment
 - PSS-4 — Perceived stress scale
@@ -32,4 +32,4 @@ PRIVACY BY DESIGN
 - Delete everything with one tap
 - No data sold to third parties
 
-MHtoolkit is not a replacement for professional care. It's a free daily toolkit that helps you understand yourself better. If you're in crisis, MHtoolkit connects you with emergency resources including the 988 Suicide & Crisis Lifeline.
+MHtoolkit is not a replacement for professional care, diagnosis, or treatment. It's a free daily toolkit that helps you understand yourself better. If you're in crisis, MHtoolkit connects you with emergency resources including the 988 Suicide & Crisis Lifeline.

@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IPA_PATH=""
 EXPECTED_BUILD=""
 RUN_ISOLATED_DOCTOR=1
+MIC_PERMISSION="MHtoolkit uses the microphone only when you tap the mic button in Voice Support to record what you say so it can be transcribed and answered."
 
 usage() {
   cat <<'USAGE'
@@ -147,6 +148,57 @@ else
   pass "Support/privacy pages omit stale support emails"
 fi
 
+ACCOUNT_DELETE_ROUTE="$ROOT_DIR/../app/api/account/delete/route.ts"
+if [ -f "$ACCOUNT_DELETE_ROUTE" ] &&
+  grep -q 'deleteUser' "$ACCOUNT_DELETE_ROUTE" &&
+  grep -q 'Delete Account' "$ROOT_DIR/app/settings.tsx" &&
+  grep -q 'result?.deleted' "$ROOT_DIR/lib/auth-context.tsx"; then
+  pass "Mobile app exposes verified server-side account deletion"
+else
+  fail "Mobile verified server-side account deletion path is missing"
+fi
+
+if grep -Fq "$MIC_PERMISSION" "$ROOT_DIR/app.json"; then
+  pass "Microphone permission purpose string is specific"
+else
+  fail "Microphone permission purpose string is missing or too generic"
+fi
+
+if [ -f "$ROOT_DIR/fastlane/screenshots/en-US/02_mood.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/06_goals.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/07_habits.png" ]; then
+  pass "Fastlane screenshots cover mood, goals, and habits"
+else
+  fail "Fastlane screenshots are missing mood, goals, or habits coverage"
+fi
+
+promo_chars="$(wc -m < "$ROOT_DIR/fastlane/metadata/en-US/promotional_text.txt" | tr -d ' ')"
+if [ "$promo_chars" -le 170 ]; then
+  pass "Promotional text is within App Store length limit"
+else
+  fail "Promotional text is $promo_chars characters, over the 170-character App Store limit"
+fi
+
+if grep -q 'Immediate Support Available' "$ROOT_DIR/app/assessments/[type].tsx" &&
+  grep -q 'Immediate Support Available' "$ROOT_DIR/../app/assessments/[type]/page.tsx"; then
+  pass "PHQ-9 self-harm response shows immediate crisis support"
+else
+  fail "PHQ-9 self-harm response does not show immediate crisis support"
+fi
+
+if grep -R -i -E 'AI CHAT THERAPIST|clinical-grade|clinician-grade|voice therapy|conversation therapy' "$ROOT_DIR/fastlane/metadata/en-US" >/dev/null 2>&1; then
+  fail "App Store metadata contains high-risk therapy/clinical overclaim wording"
+else
+  pass "App Store metadata avoids high-risk therapy/clinical overclaim wording"
+fi
+
+if grep -R -i -E 'CBT-informed|Use Cognitive Behavioral Therapy \(CBT\) techniques|AI therapist|voice therapy|conversation therapy|clinical-grade|clinician-grade|Text HELLO|HELLO to 741741' \
+  "$ROOT_DIR/../app" "$ROOT_DIR/../components" "$ROOT_DIR/../lib/ai" "$ROOT_DIR/app" "$ROOT_DIR/lib" >/dev/null 2>&1; then
+  fail "App source contains high-risk therapy/clinical overclaim wording"
+else
+  pass "App source avoids high-risk therapy/clinical overclaim wording"
+fi
+
 if [ -n "$IPA_PATH" ]; then
   if require_file "$IPA_PATH" "IPA"; then
     IPA_TMP="$(mktemp -d /tmp/mhtoolkit-ipa-review.XXXXXX)"
@@ -160,6 +212,7 @@ if [ -n "$IPA_PATH" ]; then
     full_screen="$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' "$APP_DIR/Info.plist")"
     encryption="$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$APP_DIR/Info.plist")"
     device_family="$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily' "$APP_DIR/Info.plist")"
+    mic_description="$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$APP_DIR/Info.plist")"
 
     if [ "$bundle_id" = "com.mhtoolkit.app" ]; then
       pass "IPA bundle identifier is com.mhtoolkit.app"
@@ -191,6 +244,12 @@ if [ -n "$IPA_PATH" ]; then
       fail "IPA encryption flag is $encryption"
     fi
 
+    if [ "$mic_description" = "$MIC_PERMISSION" ]; then
+      pass "IPA microphone permission string is specific"
+    else
+      fail "IPA microphone permission string is not the expected specific text"
+    fi
+
     if [ -n "$BUNDLE_PATH" ] && grep -aFq '.supabase.co' "$BUNDLE_PATH"; then
       pass "IPA bundle embeds production Supabase URL"
     else
@@ -204,6 +263,20 @@ if [ -n "$IPA_PATH" ]; then
       fail "IPA still contains excluded notifications/device native symbols"
     else
       pass "IPA omits excluded notifications/device native symbols"
+    fi
+
+    if grep -aFq 'Delete Account' "$BUNDLE_PATH" &&
+      grep -aFq '/api/account/delete' "$BUNDLE_PATH" &&
+      grep -aFq 'Immediate Support Available' "$BUNDLE_PATH"; then
+      pass "IPA includes account deletion and PHQ-9 crisis UI"
+    else
+      fail "IPA does not include account deletion and PHQ-9 crisis UI"
+    fi
+
+    if grep -aEiq 'CBT-informed|Use Cognitive Behavioral Therapy \(CBT\) techniques|AI Therapist|Voice Therapy|voice therapy|clinical-grade|clinician-grade|conversation therapy|Text HELLO|HELLO to 741741' "$BUNDLE_PATH"; then
+      fail "IPA bundle contains high-risk therapy/clinical overclaim wording"
+    else
+      pass "IPA bundle avoids high-risk therapy/clinical overclaim wording"
     fi
 
     if grep -aEq 'support@mhtoolkit\.com|princebolajibreeze@gmail\.com' "$BUNDLE_PATH"; then

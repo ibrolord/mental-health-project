@@ -89,7 +89,7 @@ export default function Home() {
           <div className="text-center">
             <div className="text-3xl mb-2">💬</div>
             <h3 className="font-semibold mb-1">AI Support</h3>
-            <p className="text-sm text-slate-600">CBT-informed guidance</p>
+            <p className="text-sm text-slate-600">Evidence-informed reflection prompts</p>
           </div>
           <div className="text-center">
             <div className="text-3xl mb-2">✅</div>
@@ -106,4 +106,3 @@ export default function Home() {
     </main>
   );
 }
-

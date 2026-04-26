@@ -28,7 +28,7 @@ const HOUR_OPTIONS = [
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, signOut, isAnonymous } = useAuth();
+  const { user, signOut, isAnonymous, deleteAccount } = useAuth();
   const { query } = useDataContext();
   const [loading, setLoading] = useState(false);
   const [remindersOn, setRemindersOn] = useState(true);
@@ -62,12 +62,13 @@ export default function SettingsScreen() {
     if (!query) return;
     setLoading(true);
     try {
-      const [moods, assessments, goals, habits, chatHistory] = await Promise.all([
+      const [moods, assessments, goals, habits, chatHistory, bookFavorites] = await Promise.all([
         supabase.from('moods').select('*').eq(query.column, query.value),
         supabase.from('assessments').select('*').eq(query.column, query.value),
         supabase.from('goals').select('*').eq(query.column, query.value),
         supabase.from('habits').select('*').eq(query.column, query.value),
         supabase.from('chat_history').select('*').eq(query.column, query.value),
+        supabase.from('user_book_favorites').select('*').eq(query.column, query.value),
       ]);
 
       const data = JSON.stringify({
@@ -78,6 +79,7 @@ export default function SettingsScreen() {
         goals: goals.data || [],
         habits: habits.data || [],
         chat_history: chatHistory.data || [],
+        book_favorites: bookFavorites.data || [],
       }, null, 2);
 
       const path = `${FileSystem.documentDirectory}mental-health-data.json`;
@@ -110,9 +112,37 @@ export default function SettingsScreen() {
               supabase.from('habits').delete().eq(query.column, query.value),
               supabase.from('chat_history').delete().eq(query.column, query.value),
               supabase.from('user_affirmation_history').delete().eq(query.column, query.value),
+              supabase.from('user_book_favorites').delete().eq(query.column, query.value),
             ]);
             Alert.alert('Done', 'All data deleted.');
             setLoading(false);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteAccount = async () => {
+    if (isAnonymous || !user) return;
+
+    Alert.alert(
+      'Delete Account?',
+      'This will permanently delete your account and all associated data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              await deleteAccount();
+              Alert.alert('Account Deleted', 'Your account and associated data have been deleted.');
+            } catch (e) {
+              Alert.alert('Error', 'Failed to delete account. Please try again or contact support.');
+            } finally {
+              setLoading(false);
+            }
           },
         },
       ]
@@ -206,6 +236,16 @@ export default function SettingsScreen() {
         <TouchableOpacity style={s.dangerBtn} onPress={handleDeleteAll} disabled={loading}>
           <Text style={s.dangerBtnText}>Delete All Data</Text>
         </TouchableOpacity>
+        {!isAnonymous && (
+          <>
+            <Text style={[s.bodyText, { color: '#991b1b', marginTop: 16 }]}>
+              Permanently delete your account and all associated data.
+            </Text>
+            <TouchableOpacity style={s.dangerBtnOutline} onPress={handleDeleteAccount} disabled={loading}>
+              <Text style={s.dangerBtnOutlineText}>Delete Account</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* Disclaimer */}
@@ -231,6 +271,8 @@ const s = StyleSheet.create({
   btnOutlineText: { color: Colors.text, fontWeight: '500', fontSize: 15 },
   dangerBtn: { backgroundColor: Colors.danger, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
   dangerBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  dangerBtnOutline: { borderWidth: 1, borderColor: Colors.danger, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
+  dangerBtnOutlineText: { color: Colors.danger, fontWeight: '600', fontSize: 15 },
   timePill: { borderWidth: 1, borderColor: Colors.border, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
   timePillText: { fontSize: 13, fontWeight: '500', color: Colors.text },
 });

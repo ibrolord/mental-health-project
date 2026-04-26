@@ -108,7 +108,7 @@ export default function RootLayout() {
           <Stack.Screen name="affirmations" options={{ headerShown: true, title: 'Affirmations' }} />
           <Stack.Screen name="library" options={{ headerShown: true, title: 'Book Library' }} />
           <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings' }} />
-          <Stack.Screen name="voice" options={{ headerShown: true, title: 'Voice Therapy' }} />
+          <Stack.Screen name="voice" options={{ headerShown: true, title: 'Voice Support' }} />
         </Stack>
       </AuthProvider>
     </ErrorBoundary>

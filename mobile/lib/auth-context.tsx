@@ -4,6 +4,7 @@ import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import type { User } from '@supabase/supabase-js';
+import { apiRequest } from './api';
 
 const SESSION_KEY = 'anonymous_session_id';
 
@@ -16,6 +17,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -27,6 +29,7 @@ const AuthContext = createContext<AuthContextType>({
   signIn: async () => {},
   signUp: async () => {},
   signOut: async () => {},
+  deleteAccount: async () => {},
 });
 
 async function getOrCreateSession(): Promise<string> {
@@ -111,6 +114,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
+  const deleteAccount = async () => {
+    if (!user) {
+      throw new Error('No authenticated account to delete');
+    }
+
+    const result = await apiRequest('/api/account/delete', {});
+    if (!result?.deleted) {
+      throw new Error(result?.error || 'Failed to delete account');
+    }
+
+    await supabase.auth.signOut().catch(() => {});
+    setUser(null);
+    const anonSession = await getOrCreateSession();
+    setSessionId(anonSession);
+  };
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -121,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, sessionId, loading, isAuthenticated, isAnonymous, signIn, signUp, signOut }}
+      value={{ user, sessionId, loading, isAuthenticated, isAnonymous, signIn, signUp, signOut, deleteAccount }}
     >
       {children}
     </AuthContext.Provider>

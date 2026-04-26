@@ -1,12 +1,12 @@
 # MHtoolkit
 
-A privacy-first mental health support platform offering mood tracking, CBT-informed AI chat, assessments, goal setting with prioritization frameworks, habit tracking, and more.
+A privacy-first mental health support platform offering mood tracking, AI-guided self-reflection, assessments, goal setting with prioritization frameworks, habit tracking, and more.
 
 ## ✨ Features
 
 - **🎭 Mood Tracking**: Daily check-ins with trend visualization and tagging
 - **📋 Self-Assessments**: GAD-7, PHQ-9, CBI, PSS-4 assessments with interpretations
-- **💬 AI Chat**: CBT-informed conversational support powered by Claude 3.5 Sonnet
+- **💬 AI Chat**: Evidence-informed self-reflection support powered by Claude
 - **✅ Life Organizer**: Goal setting with Eisenhower Matrix, Ivy Lee, 1-3-5, ABCDE frameworks
 - **📚 Book Library**: Curated mental health book summaries with key takeaways
 - **🎯 Habit Tracker**: Build and track daily habits with streak counting
@@ -20,7 +20,7 @@ A privacy-first mental health support platform offering mood tracking, CBT-infor
 - **UI Components**: shadcn/ui
 - **Backend**: Supabase (PostgreSQL, Auth, RLS)
 - **AI**: Hybrid (Google Gemini 1.5 Flash [free] + Claude 3.5 Sonnet for complex cases)
-- **Voice Therapy**: OpenAI-powered natural voice conversations
+- **Voice Support**: OpenAI-powered natural voice conversations
 - **Charts**: Recharts
 - **Deployment**: Vercel
 
@@ -167,8 +167,8 @@ ANTHROPIC_API_KEY
 
 - The app works fully offline-first with anonymous sessions
 - Data migration happens automatically on signup
-- All assessments use clinically-validated scales
-- AI responses use CBT techniques and crisis detection
+- Assessments use widely used screening questionnaires
+- AI responses provide self-reflection prompts and crisis resource routing
 - Affirmations are personalized based on mood trends
 
 ## 🤝 Contributing
@@ -180,10 +180,9 @@ This is a personal mental health project. If you'd like to contribute or suggest
 This app is a self-help tool and **not a replacement for professional therapy**. If you're in crisis:
 
 - 🆘 Call **988** (Suicide & Crisis Lifeline)
-- 💬 Text **HELLO** to **741741** (Crisis Text Line)
+- 💬 Text **HOME** to **741741** (Crisis Text Line)
 - 🌍 Visit [findahelpline.com](https://findahelpline.com)
 
 ## 📄 License
 
 MIT
-

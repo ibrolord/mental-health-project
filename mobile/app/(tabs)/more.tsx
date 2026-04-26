@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { Colors } from '@/lib/constants';
 
 const menuItems = [
-  { label: 'Voice Therapy', icon: '🎙️', desc: 'Talk to your AI therapist', route: '/voice' as const },
+  { label: 'Voice Support', icon: '🎙️', desc: 'Talk to your AI companion', route: '/voice' as const },
   { label: 'Goals', icon: '✅', desc: 'Plan your day with intention', route: '/goals' as const },
   { label: 'Habits', icon: '🎯', desc: 'Build positive habits', route: '/habits' as const },
   { label: 'Affirmations', icon: '✨', desc: 'Daily affirmations', route: '/affirmations' as const },

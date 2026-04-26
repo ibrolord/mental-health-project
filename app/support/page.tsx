@@ -89,11 +89,12 @@ export default function SupportPage() {
 
             <div>
               <h3 className="font-medium text-gray-900">
-                How do I delete my data?
+                How do I delete my data or account?
               </h3>
               <p className="text-gray-700 mt-1">
-                Go to Settings in the app and select &quot;Delete Account&quot;
-                to permanently remove all your data. You can also email us at{" "}
+                Go to Settings in the app and select &quot;Delete All Data&quot;
+                or, if you created an account, &quot;Delete Account&quot; to
+                permanently remove your account and associated data. You can also email us at{" "}
                 <a
                   href="mailto:bolajiag10@gmail.com"
                   className="text-blue-600 hover:underline"

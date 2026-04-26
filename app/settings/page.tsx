@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
+import { apiRequest } from '@/lib/api/client';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -137,13 +138,13 @@ export default function SettingsPage() {
     try {
       setLoading(true);
 
-      // Delete all data first
-      await handleDeleteAllData();
+      const result = await apiRequest('/api/account/delete', {});
+      if (!result?.deleted) {
+        throw new Error(result?.error || 'Failed to delete account');
+      }
 
-      // Delete user account (requires admin API)
-      // For now, just sign out - actual deletion would need backend endpoint
-      await signOut();
-      alert('Account deletion initiated. Please contact support if you need further assistance.');
+      await signOut().catch(() => {});
+      alert('Your account and associated data have been deleted.');
       router.push('/');
     } catch (error) {
       console.error('Error deleting account:', error);
@@ -301,5 +302,3 @@ export default function SettingsPage() {
     </main>
   );
 }
-
-

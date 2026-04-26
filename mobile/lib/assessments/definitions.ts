@@ -117,7 +117,7 @@ export const GAD7: Assessment = {
         suggestions: [
           'We strongly recommend consulting a mental health professional',
           'Crisis resources: 988 Suicide & Crisis Lifeline',
-          'Use our AI for immediate emotional support',
+          'Use the app for grounding and coping ideas while you arrange support',
           'Focus on basic self-care: sleep, nutrition, gentle movement',
         ],
       };
@@ -250,7 +250,7 @@ export const PHQ9: Assessment = {
         message: 'You are likely experiencing moderate depression.',
         suggestions: [
           'Consider consulting a mental health professional',
-          'Use our AI for daily emotional support',
+          'Use chat for daily emotional reflection and coping ideas',
           'Focus on one small positive action per day',
           'Track mood patterns to understand triggers',
         ],
@@ -262,7 +262,7 @@ export const PHQ9: Assessment = {
         suggestions: [
           'We strongly recommend speaking with a mental health professional',
           'Crisis Line: 988 Suicide & Crisis Lifeline',
-          'Talk to our AI when you need immediate support',
+          'Use grounding tools while you arrange professional or trusted-person support',
           'Prioritize basic needs: sleep, food, safety',
         ],
       };
@@ -272,9 +272,9 @@ export const PHQ9: Assessment = {
         message: 'You may be experiencing severe depression symptoms.',
         suggestions: [
           'Please reach out to a mental health professional immediately',
-          'Crisis resources: 988 Suicide & Crisis Lifeline or text "HELLO" to 741741',
+          'Crisis resources: 988 Suicide & Crisis Lifeline or text "HOME" to 741741',
           'You are not alone - support is available',
-          'Use our AI for emotional support while seeking professional help',
+          'Use the app for grounding while seeking professional help',
         ],
       };
     }
@@ -481,4 +481,3 @@ export const ASSESSMENTS = {
   CBI,
   PSS4,
 };
-

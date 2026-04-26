@@ -1,14 +1,14 @@
-# 🎙️ Voice Therapy Setup Guide
+# Voice Support Setup Guide
 
 ## Overview
 
-MHtoolkit now includes **AI Voice Therapy** - have natural voice conversations with an empathetic AI therapist powered by OpenAI.
+MHtoolkit includes **AI Voice Support** - have natural voice conversations with an empathetic AI companion powered by OpenAI.
 
 ## Features
 
-✅ **Natural voice conversations** - Speak and listen like talking to a real therapist  
+✅ **Natural voice conversations** - Speak and listen with a supportive AI companion
 ✅ **Real-time transcription** - Powered by OpenAI Whisper  
-✅ **Therapeutic voice** - Warm, empathetic "Nova" voice  
+✅ **Supportive voice** - Warm, empathetic "Nova" voice
 ✅ **Audio visualization** - See your voice as you speak  
 ✅ **Privacy-focused** - Audio processed securely, not stored  
 
@@ -44,7 +44,7 @@ npm run dev
 - AI response generated (text)
 - Converted to speech by **OpenAI TTS-HD**
 - "Nova" voice (warm, empathetic female voice)
-- Slightly slower speed for therapeutic pacing
+- Slightly slower speed for a calmer support tone
 
 ## Usage
 
@@ -63,7 +63,7 @@ OpenAI charges for voice features:
 | Speech-to-Text | Whisper | $0.006/minute |
 | Text-to-Speech | TTS-HD | $0.030/1K chars |
 
-**Example:** 10-minute therapy session ≈ $0.30
+**Example:** 10-minute voice support session is about $0.30
 
 ### Cost-Saving Tips:
 - Use text mode for casual conversations
@@ -72,7 +72,7 @@ OpenAI charges for voice features:
 
 ## Voice Selection
 
-Available therapeutic voices:
+Available support voices:
 - **Nova** (default) - Warm, empathetic female
 - **Alloy** - Neutral, calm
 - **Echo** - Male, supportive
