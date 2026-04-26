@@ -6,7 +6,8 @@
     "start": "expo start",
     "ios": "expo run:ios",
     "android": "expo run:android",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "review:ios": "bash scripts/verify-ios-review-build.sh"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
