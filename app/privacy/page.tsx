@@ -13,7 +13,7 @@ export default function PrivacyPolicyPage() {
           Privacy Policy
         </h1>
         <p className="text-sm text-gray-500 mb-8">
-          Effective date: March 5, 2026
+          Effective date: May 6, 2026
         </p>
 
         <p className="text-gray-700 mb-6 leading-relaxed">
@@ -55,9 +55,15 @@ export default function PrivacyPolicyPage() {
               feature.
             </li>
             <li>
-              <strong>Voice recordings:</strong> Audio recorded during voice
-              support conversations, used temporarily for transcription and then
-              discarded.
+              <strong>Voice recordings and transcripts:</strong> Audio recorded
+              during voice support conversations and the resulting transcript,
+              used to provide transcription, AI responses, and spoken playback.
+            </li>
+            <li>
+              <strong>AI personalization context:</strong> If you turn on
+              personalized AI features, recent mood notes, assessment scores,
+              goals, habits, and related timestamps may be included with your AI
+              request.
             </li>
             <li>
               <strong>Anonymous page view analytics:</strong> Collected via
@@ -77,7 +83,10 @@ export default function PrivacyPolicyPage() {
           </p>
           <ul className="list-disc list-inside text-gray-700 space-y-2 ml-2">
             <li>Displaying your mood history, trends, and progress.</li>
-            <li>Powering AI chat conversations and generating affirmations.</li>
+            <li>
+              Powering AI chat conversations and generating affirmations after
+              you consent to AI data sharing in the App.
+            </li>
             <li>
               Transcribing voice recordings and generating spoken responses.
             </li>
@@ -93,7 +102,9 @@ export default function PrivacyPolicyPage() {
           <p className="text-gray-700 mt-3 leading-relaxed">
             We do <strong>not</strong> sell, rent, or share your personal data
             with third parties for advertising or marketing purposes. The App
-            contains no ads.
+            contains no ads. Third-party AI sharing is limited to the optional
+            AI features described below and requires in-app consent before data
+            is sent.
           </p>
         </section>
 
@@ -103,14 +114,16 @@ export default function PrivacyPolicyPage() {
             3. AI Processing
           </h2>
           <p className="text-gray-700 mb-3 leading-relaxed">
-            The App uses third-party AI services to power its features. When you
-            interact with these features, relevant data is sent to the following
-            providers for processing:
+            The App uses third-party AI services to power optional AI features.
+            Before your first AI request, the App asks for permission to send
+            selected data to AI providers through the MHtoolkit backend. If you
+            decline, chat messages, voice recordings/transcripts, and
+            personalized context are not sent for AI processing.
           </p>
           <ul className="list-disc list-inside text-gray-700 space-y-2 ml-2">
             <li>
               <strong>Google Gemini:</strong> Processes standard chat messages
-              and generates affirmations.
+              and may generate personalized affirmations.
             </li>
             <li>
               <strong>Anthropic Claude:</strong> Handles complex or
@@ -123,11 +136,12 @@ export default function PrivacyPolicyPage() {
             </li>
           </ul>
           <p className="text-gray-700 mt-3 leading-relaxed">
-            Data sent to these providers is used only to generate responses and
-            is subject to each provider&apos;s respective data processing
-            policies. We do not send your email address or account identifiers to
-            AI providers. Voice recordings are processed in real time and are not
-            stored permanently by us or the AI providers.
+            Data sent to these providers can include the message or audio you
+            submit, the generated transcript, and optional recent moods,
+            assessment scores, goals, and habits if you enable personalized AI
+            features. We do not intentionally send your email address or account
+            identifiers to AI providers. AI providers process data according to
+            their own data processing terms and privacy policies.
           </p>
         </section>
 
@@ -207,7 +221,11 @@ export default function PrivacyPolicyPage() {
             </li>
             <li>
               Voice recordings are processed in real time for transcription and
-              are not permanently stored.
+              are not permanently stored by MHtoolkit.
+            </li>
+            <li>
+              AI provider retention is governed by each provider&apos;s data
+              processing terms and privacy policy.
             </li>
             <li>
               When you delete your data (see Section 7), it is permanently
@@ -241,6 +259,11 @@ export default function PrivacyPolicyPage() {
               <strong>Deletion:</strong> You can permanently delete all your data
               or your full account from the Settings page. This action is
               irreversible.
+            </li>
+            <li>
+              <strong>AI consent:</strong> You can decline AI data sharing before
+              using AI features, and you can revoke prior AI consent from the
+              Settings page. AI features will ask again before sending data.
             </li>
             <li>
               <strong>Correction:</strong> You can edit or update your entries

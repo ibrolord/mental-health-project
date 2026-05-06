@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 
 interface VoiceChatProps {
   userContext?: any;
@@ -53,6 +54,8 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
 
   const startListening = async () => {
     try {
+      if (!ensureAiDataSharingConsent()) return;
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
       await setupAudioVisualization(stream);
@@ -239,6 +242,15 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
             <p className="text-sm text-slate-600">{getSubText()}</p>
           </div>
 
+          <div className="w-full p-4 bg-orange-50 border border-orange-200 rounded-lg">
+            <p className="text-sm font-semibold text-orange-900 mb-1">Voice AI data sharing</p>
+            <p className="text-xs text-orange-900">
+              Voice Support sends your recording to OpenAI through MHtoolkit for
+              transcription. The transcript is then sent to an AI provider to generate a
+              response, and the response may be sent to OpenAI for speech playback.
+            </p>
+          </div>
+
           {/* Conversation Display */}
           {(transcript || aiResponse) && (
             <div className="w-full space-y-3">
@@ -302,7 +314,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
 
           {/* Privacy Notice */}
           <div className="text-xs text-slate-500 text-center max-w-md">
-            🔒 Your voice is processed securely. Audio is transcribed and not stored permanently.
+            Use Voice Support only if you agree to this AI processing. MHtoolkit does not sell your data or share it for advertising.
           </div>
         </div>
       </CardContent>

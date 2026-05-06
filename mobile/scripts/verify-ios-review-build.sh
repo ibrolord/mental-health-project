@@ -6,6 +6,8 @@ IPA_PATH=""
 EXPECTED_BUILD=""
 RUN_ISOLATED_DOCTOR=1
 MIC_PERMISSION="MHtoolkit uses the microphone only when you tap the mic button in Voice Support to record what you say so it can be transcribed and answered."
+AI_CONSENT_TITLE="AI Data Sharing Consent"
+AI_PROVIDER_COPY="Google Gemini, Anthropic Claude, or OpenAI"
 
 usage() {
   cat <<'USAGE'
@@ -78,6 +80,12 @@ check_command unzip
 check_command grep
 check_command /usr/libexec/PlistBuddy
 
+if command -v eas >/dev/null 2>&1; then
+  EAS_CMD=(eas)
+else
+  EAS_CMD=(npx --yes eas-cli)
+fi
+
 cd "$ROOT_DIR"
 
 if npx tsc --noEmit; then
@@ -107,9 +115,10 @@ if [ "$RUN_ISOLATED_DOCTOR" -eq 1 ]; then
   fi
 fi
 
-if npx eas env:list --environment production --non-interactive 2>/tmp/mhtoolkit-eas-env.err | grep -Eq 'EXPO_PUBLIC_SUPABASE_URL|EXPO_PUBLIC_SUPABASE_ANON_KEY'; then
-  if npx eas env:list --environment production --non-interactive 2>/dev/null | grep -q 'EXPO_PUBLIC_SUPABASE_URL' &&
-    npx eas env:list --environment production --non-interactive 2>/dev/null | grep -q 'EXPO_PUBLIC_SUPABASE_ANON_KEY'; then
+EAS_ENV_OUTPUT="$(CI=1 "${EAS_CMD[@]}" env:list --environment production 2>/tmp/mhtoolkit-eas-env.err || true)"
+if printf '%s\n' "$EAS_ENV_OUTPUT" | grep -Eq 'EXPO_PUBLIC_SUPABASE_URL|EXPO_PUBLIC_SUPABASE_ANON_KEY'; then
+  if printf '%s\n' "$EAS_ENV_OUTPUT" | grep -q 'EXPO_PUBLIC_SUPABASE_URL' &&
+    printf '%s\n' "$EAS_ENV_OUTPUT" | grep -q 'EXPO_PUBLIC_SUPABASE_ANON_KEY'; then
     pass "EAS production Supabase env names are present"
   else
     fail "EAS production Supabase env names are incomplete"
@@ -162,6 +171,54 @@ if grep -Fq "$MIC_PERMISSION" "$ROOT_DIR/app.json"; then
   pass "Microphone permission purpose string is specific"
 else
   fail "Microphone permission purpose string is missing or too generic"
+fi
+
+if grep -Fq "$AI_CONSENT_TITLE" "$ROOT_DIR/lib/ai-consent.ts" &&
+  grep -Fq "$AI_PROVIDER_COPY" "$ROOT_DIR/app/settings.tsx" &&
+  grep -Fq 'ensureAiDataSharingConsent' "$ROOT_DIR/app/(tabs)/chat.tsx" &&
+  grep -Fq 'ensureAiDataSharingConsent' "$ROOT_DIR/app/voice.tsx" &&
+  grep -Fq 'ensureAiDataSharingConsent' "$ROOT_DIR/app/affirmations.tsx"; then
+  pass "Mobile AI features require explicit data-sharing consent"
+else
+  fail "Mobile AI consent gate is missing from one or more AI features"
+fi
+
+if grep -Fq 'AI data sharing consent' "$ROOT_DIR/app/settings.tsx" &&
+  grep -Fq 'Revoke AI Consent' "$ROOT_DIR/app/settings.tsx"; then
+  pass "Mobile Settings exposes AI consent status and revocation"
+else
+  fail "Mobile Settings does not expose AI consent status and revocation"
+fi
+
+if grep -Fq 'Before your first AI request' "$ROOT_DIR/../app/privacy/page.tsx" &&
+  grep -Fq 'Google Gemini' "$ROOT_DIR/../app/privacy/page.tsx" &&
+  grep -Fq 'Anthropic Claude' "$ROOT_DIR/../app/privacy/page.tsx" &&
+  grep -Fq 'OpenAI' "$ROOT_DIR/../app/privacy/page.tsx" &&
+  grep -Fq 'AI consent' "$ROOT_DIR/../app/privacy/page.tsx"; then
+  pass "Privacy policy source explains AI providers, data categories, and consent"
+else
+  fail "Privacy policy source does not fully explain AI data sharing and consent"
+fi
+
+if grep -R -F 'AI Data Sharing Consent' "$ROOT_DIR/../lib/ai-consent.ts" >/dev/null 2>&1 &&
+  grep -R -F 'Google Gemini, Anthropic Claude, and OpenAI' "$ROOT_DIR/../lib/ai-consent.ts" >/dev/null 2>&1; then
+  pass "Web AI consent source names consent and AI providers"
+else
+  fail "Web AI consent source does not name consent and AI providers"
+fi
+
+COPY_PATHS=(
+  "$ROOT_DIR/app"
+  "$ROOT_DIR/lib"
+  "$ROOT_DIR/../app"
+  "$ROOT_DIR/../components"
+  "$ROOT_DIR/../lib"
+)
+if grep -R -F 'We never sell or share your data' "${COPY_PATHS[@]}" >/dev/null 2>&1 ||
+  grep -R -F 'We never sell or share your personal data' "${COPY_PATHS[@]}" >/dev/null 2>&1; then
+  fail "App/support/privacy copy still contains absolute no-sharing wording"
+else
+  pass "App/support/privacy copy avoids absolute no-sharing wording"
 fi
 
 if [ -f "$ROOT_DIR/fastlane/screenshots/en-US/02_mood.png" ] &&
@@ -271,6 +328,14 @@ if [ -n "$IPA_PATH" ]; then
       pass "IPA includes account deletion and PHQ-9 crisis UI"
     else
       fail "IPA does not include account deletion and PHQ-9 crisis UI"
+    fi
+
+    if grep -aFq "$AI_CONSENT_TITLE" "$BUNDLE_PATH" &&
+      grep -aFq "$AI_PROVIDER_COPY" "$BUNDLE_PATH" &&
+      grep -aFq 'Revoke AI Consent' "$BUNDLE_PATH"; then
+      pass "IPA includes explicit AI data-sharing consent and revocation UI"
+    else
+      fail "IPA does not include explicit AI data-sharing consent and revocation UI"
     fi
 
     if grep -aEiq 'CBT-informed|Use Cognitive Behavioral Therapy \(CBT\) techniques|AI Therapist|Voice Therapy|voice therapy|clinical-grade|clinician-grade|conversation therapy|Text HELLO|HELLO to 741741' "$BUNDLE_PATH"; then

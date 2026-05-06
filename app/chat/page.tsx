@@ -8,6 +8,7 @@ import { VoiceChat } from '@/components/voice-chat';
 import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { apiRequest } from '@/lib/api/client';
+import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import { format, subDays } from 'date-fns';
 
 interface Message { role: 'user' | 'assistant'; content: string; }
@@ -59,6 +60,8 @@ export default function ChatPage() {
 
   const send = async (text: string) => {
     if (!text.trim()) return;
+    if (!ensureAiDataSharingConsent()) return;
+
     const newMsg: Message = { role: 'user', content: text };
     const msgs = [...messages, newMsg];
     setMessages(msgs); setInput(''); setLoading(true);
@@ -81,7 +84,11 @@ export default function ChatPage() {
     userContext?.habits?.length ? userContext.habits.length + ' habits' : null,
   ].filter(Boolean).join(', ');
 
-  const toggle = () => { setPersonalized(p => !p); fetchedRef.current = false; };
+  const toggle = () => {
+    if (!personalized && !ensureAiDataSharingConsent()) return;
+    setPersonalized(p => !p);
+    fetchedRef.current = false;
+  };
 
   if (voiceMode) {
     return (
@@ -115,7 +122,9 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <Card className="mb-4"><CardContent className="pt-4"><div className="flex items-center justify-between"><button type="button" onClick={toggle} className="flex items-center gap-3 text-left"><div className={`relative w-11 h-6 rounded-full transition-colors ${personalized ? 'bg-blue-500' : 'bg-gray-300'}`}><div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${personalized ? 'translate-x-5' : ''}`} /></div><div><p className="font-medium">🔒 Personalized Responses</p><p className="text-sm text-slate-600">Use my data for context</p></div></button></div>{personalized && <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg"><p className="text-sm text-slate-700 mb-2">{status === 'loading' ? '⏳ Loading context...' : hasData ? `📊 Using: ${summary}` : '📭 No data yet'}</p><p className="text-xs text-slate-600">Your moods, assessments, goals, and habits help me provide better support. Turn off anytime for standard responses.</p></div>}</CardContent></Card>
+        <Card className="mb-4 border-orange-200 bg-orange-50"><CardContent className="pt-4"><p className="font-semibold text-orange-900 mb-1">AI data sharing</p><p className="text-sm text-orange-900">Chat sends your messages to Google Gemini, Anthropic Claude, or OpenAI through MHtoolkit to generate responses. Personalized Responses also include recent moods, assessments, goals, and habits if you turn it on.</p></CardContent></Card>
+
+        <Card className="mb-4"><CardContent className="pt-4"><div className="flex items-center justify-between"><button type="button" onClick={toggle} className="flex items-center gap-3 text-left"><div className={`relative w-11 h-6 rounded-full transition-colors ${personalized ? 'bg-blue-500' : 'bg-gray-300'}`}><div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${personalized ? 'translate-x-5' : ''}`} /></div><div><p className="font-medium">🔒 Personalized Responses</p><p className="text-sm text-slate-600">Include recent moods, assessments, goals, and habits in AI requests</p></div></button></div>{personalized && <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg"><p className="text-sm text-slate-700 mb-2">{status === 'loading' ? '⏳ Loading context...' : hasData ? `📊 Using: ${summary}` : '📭 No data yet'}</p><p className="text-xs text-slate-600">Your moods, assessments, goals, and habits help me provide better support. Turn off anytime for standard responses.</p></div>}</CardContent></Card>
 
         <Card className="mb-4 h-[550px] flex flex-col"><CardContent className="flex-1 overflow-y-auto pt-6">{messages.length === 0 ? (<div className="text-center py-12"><div><h2 className="text-2xl font-semibold mb-2">How can I help?</h2><p className="text-slate-600 mb-6">I'm here to listen.</p><div className="grid grid-cols-2 gap-3 max-w-md mx-auto">{quickPrompts.map(p => <Button key={p} variant="outline" onClick={() => send(p)}>{p}</Button>)}</div></div></div>) : (<div className="space-y-4">{messages.map((msg, idx) => <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[80%] p-4 rounded-lg ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-white text-slate-900 border border-slate-200'}`}><p className="text-sm whitespace-pre-wrap">{msg.content}</p></div></div>)}{loading && <div className="flex justify-start"><div className="max-w-[80%] p-4 rounded-lg bg-white border border-slate-200"><p className="text-sm text-slate-600">Thinking...</p></div></div>}<div ref={messagesEndRef} /></div>)}</CardContent></Card>
 
