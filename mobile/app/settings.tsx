@@ -13,6 +13,7 @@ import {
   getReminderTimes,
   setReminderTimes,
 } from '@/lib/notifications';
+import { hasAiDataSharingConsent, resetAiDataSharingConsent } from '@/lib/ai-consent';
 
 const HOUR_OPTIONS = [
   { label: '7 AM', value: 7 },
@@ -33,11 +34,13 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(false);
   const [remindersOn, setRemindersOn] = useState(true);
   const [selectedTimes, setSelectedTimes] = useState<number[]>([9, 14, 20]);
+  const [aiConsentGranted, setAiConsentGranted] = useState(false);
 
   useEffect(() => {
     (async () => {
       setRemindersOn(await areRemindersEnabled());
       setSelectedTimes(await getReminderTimes());
+      setAiConsentGranted(await hasAiDataSharingConsent());
     })();
   }, []);
 
@@ -149,6 +152,25 @@ export default function SettingsScreen() {
     );
   };
 
+  const handleRevokeAiConsent = () => {
+    Alert.alert(
+      'Revoke AI Consent?',
+      'AI chat, voice support, and AI affirmations will ask for consent again before sending text, audio, or personal context to third-party AI providers.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Revoke Consent',
+          style: 'destructive',
+          onPress: async () => {
+            await resetAiDataSharingConsent();
+            setAiConsentGranted(false);
+            Alert.alert('Done', 'AI data sharing consent was revoked.');
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       {/* Account */}
@@ -224,9 +246,18 @@ export default function SettingsScreen() {
       <View style={s.card}>
         <Text style={s.cardTitle}>Privacy & Data Protection</Text>
         <Text style={s.privacyItem}>All data is encrypted at rest</Text>
-        <Text style={s.privacyItem}>We never sell or share your data</Text>
+        <Text style={s.privacyItem}>We never sell your data or share it for advertising</Text>
+        <Text style={s.privacyItem}>AI features ask before sending chat text, voice audio/transcripts, or optional mood and goal context to Google Gemini, Anthropic Claude, or OpenAI through MHtoolkit</Text>
         <Text style={s.privacyItem}>Anonymous usage requires no personal info</Text>
         <Text style={s.privacyItem}>Export or delete your data anytime</Text>
+        <Text style={[s.privacyItem, { marginTop: 6 }]}>
+          AI data sharing consent: {aiConsentGranted ? 'Granted' : 'Not granted yet'}
+        </Text>
+        {aiConsentGranted && (
+          <TouchableOpacity style={s.btnOutline} onPress={handleRevokeAiConsent}>
+            <Text style={s.btnOutlineText}>Revoke AI Consent</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Danger Zone */}

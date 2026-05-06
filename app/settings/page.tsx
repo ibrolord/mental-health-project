@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,12 +8,18 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { apiRequest } from '@/lib/api/client';
+import { hasAiDataSharingConsent, resetAiDataSharingConsent } from '@/lib/ai-consent';
 
 export default function SettingsPage() {
   const router = useRouter();
   const { user, signOut, isAnonymous } = useAuth();
   const { query } = useDataContext();
   const [loading, setLoading] = useState(false);
+  const [aiConsentGranted, setAiConsentGranted] = useState(false);
+
+  useEffect(() => {
+    setAiConsentGranted(hasAiDataSharingConsent());
+  }, []);
 
   const handleExportData = async () => {
     if (!query) return;
@@ -154,6 +160,16 @@ export default function SettingsPage() {
     }
   };
 
+  const handleRevokeAiConsent = () => {
+    const confirmed = confirm(
+      'Revoke AI consent? AI chat, voice support, and AI affirmations will ask again before sending text, audio, or personal context to third-party AI providers.'
+    );
+    if (!confirmed) return;
+    resetAiDataSharingConsent();
+    setAiConsentGranted(false);
+    alert('AI data sharing consent was revoked.');
+  };
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4">
       <div className="max-w-4xl mx-auto">
@@ -221,10 +237,21 @@ export default function SettingsPage() {
               <h3 className="font-semibold mb-2">🔒 Your Privacy Matters</h3>
               <ul className="list-disc list-inside space-y-1">
                 <li>All data is encrypted at rest using industry-standard encryption</li>
-                <li>We never sell or share your personal data with third parties</li>
+                <li>We never sell your data or share it for advertising</li>
+                <li>Optional AI features send selected chat, voice, and personalization data to AI providers only after consent</li>
                 <li>No tracking pixels or unnecessary analytics</li>
                 <li>Anonymous usage requires no personal information</li>
               </ul>
+              <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3">
+                <p className="font-medium text-orange-900">
+                  AI data sharing consent: {aiConsentGranted ? 'Granted' : 'Not granted yet'}
+                </p>
+                {aiConsentGranted && (
+                  <Button className="mt-3" variant="outline" onClick={handleRevokeAiConsent}>
+                    Revoke AI Consent
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div>

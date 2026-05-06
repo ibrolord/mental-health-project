@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { apiRequest } from '@/lib/api/client';
+import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import { subDays } from 'date-fns';
 
 interface Affirmation {
@@ -118,6 +119,7 @@ export default function AffirmationsPage() {
 
   const generatePersonalizedAffirmation = async () => {
     if (!query) return;
+    if (!ensureAiDataSharingConsent()) return;
 
     try {
       setGenerating(true);
@@ -227,9 +229,20 @@ export default function AffirmationsPage() {
             onClick={generatePersonalizedAffirmation}
             disabled={generating}
           >
-            {generating ? 'Generating...' : 'Generate Personalized Affirmation (AI)'}
+            {generating ? 'Generating...' : 'Generate AI Affirmation with My Data'}
           </Button>
         </div>
+
+        <Card className="mt-4 bg-orange-50 border-orange-200">
+          <CardContent className="pt-6">
+            <h3 className="font-semibold mb-2 text-orange-900">AI data sharing</h3>
+            <p className="text-sm text-orange-900">
+              AI affirmations send recent moods, assessment scores, and goals to Google
+              Gemini through MHtoolkit to generate a personalized affirmation. You will be
+              asked for consent before this data is sent.
+            </p>
+          </CardContent>
+        </Card>
 
         <Card className="mt-8 bg-blue-50 border-blue-200">
           <CardContent className="pt-6">
@@ -245,4 +258,3 @@ export default function AffirmationsPage() {
     </main>
   );
 }
-

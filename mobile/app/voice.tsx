@@ -5,6 +5,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/lib/constants';
 import { apiRequest } from '@/lib/api';
+import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 
@@ -59,6 +60,9 @@ export default function VoiceSupportScreen() {
   const startListening = async () => {
     try {
       setError('');
+      const consented = await ensureAiDataSharingConsent();
+      if (!consented) return;
+
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
         setError('Microphone permission is required for voice support.');
@@ -278,6 +282,13 @@ export default function VoiceSupportScreen() {
       <Text style={s.statusText}>{getStatusText()}</Text>
       <Text style={s.subText}>{getSubText()}</Text>
 
+      <View style={s.aiDisclosure}>
+        <Text style={s.aiDisclosureTitle}>Voice AI data sharing</Text>
+        <Text style={s.aiDisclosureText}>
+          Voice Support sends your recording to OpenAI through MHtoolkit for transcription. The transcript is then sent to an AI provider to generate a response, and the response may be sent to OpenAI for speech playback.
+        </Text>
+      </View>
+
       {/* Conversation display */}
       {(transcript || aiResponse) && (
         <View style={{ marginTop: 24, width: '100%' }}>
@@ -323,7 +334,7 @@ export default function VoiceSupportScreen() {
       </View>
 
       <Text style={s.privacyNote}>
-        Your voice is processed securely. Audio is transcribed and not stored permanently.
+        Use Voice Support only if you agree to this AI processing. MHtoolkit does not sell your data or share it for advertising.
       </Text>
     </ScrollView>
   );
@@ -337,6 +348,9 @@ const s = StyleSheet.create({
   vizIcon: { fontSize: 56 },
   statusText: { fontSize: 22, fontWeight: '600', color: Colors.text, marginTop: 16 },
   subText: { fontSize: 14, color: Colors.textSecondary, marginTop: 6, textAlign: 'center' },
+  aiDisclosure: { backgroundColor: '#fff7ed', borderWidth: 1, borderColor: '#fed7aa', borderRadius: 12, padding: 14, marginTop: 18, width: '100%' },
+  aiDisclosureTitle: { fontSize: 13, fontWeight: '700', color: '#9a3412', marginBottom: 4 },
+  aiDisclosureText: { fontSize: 12, color: '#9a3412', lineHeight: 18 },
   bubbleUser: { backgroundColor: '#eff6ff', borderRadius: 12, padding: 14, marginBottom: 10 },
   bubbleAi: { backgroundColor: '#f0fdf4', borderRadius: 12, padding: 14, marginBottom: 10 },
   bubbleLabel: { fontSize: 12, fontWeight: '600', color: Colors.primary, marginBottom: 4 },

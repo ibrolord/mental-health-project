@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
 import { apiRequest } from '@/lib/api';
+import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import { subDays } from 'date-fns';
 
 interface Affirmation { id: string; content: string; category: string; }
@@ -62,15 +63,18 @@ export default function AffirmationsScreen() {
 
   const generateAI = async () => {
     if (!query) return;
-    setGenerating(true);
-    const sevenDaysAgo = subDays(new Date(), 7).toISOString();
-    const [m, a, g] = await Promise.all([
-      supabase.from('moods').select('emoji, note').eq(query.column, query.value).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }).limit(7),
-      supabase.from('assessments').select('type, score, max_score').eq(query.column, query.value).order('created_at', { ascending: false }).limit(3),
-      supabase.from('goals').select('content, status').eq(query.column, query.value).order('created_at', { ascending: false }).limit(5),
-    ]);
+    const consented = await ensureAiDataSharingConsent();
+    if (!consented) return;
 
+    setGenerating(true);
     try {
+      const sevenDaysAgo = subDays(new Date(), 7).toISOString();
+      const [m, a, g] = await Promise.all([
+        supabase.from('moods').select('emoji, note').eq(query.column, query.value).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }).limit(7),
+        supabase.from('assessments').select('type, score, max_score').eq(query.column, query.value).order('created_at', { ascending: false }).limit(3),
+        supabase.from('goals').select('content, status').eq(query.column, query.value).order('created_at', { ascending: false }).limit(5),
+      ]);
+
       const data = await apiRequest('/api/affirmations/generate', {
         moods: m.data,
         assessments: a.data,
@@ -81,8 +85,9 @@ export default function AffirmationsScreen() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setGenerating(false);
     }
-    setGenerating(false);
   };
 
   if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
@@ -109,8 +114,15 @@ export default function AffirmationsScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity style={s.btnOutline} onPress={generateAI} disabled={generating}>
-        <Text style={s.btnOutlineText}>{generating ? 'Generating...' : 'Generate Personalized Affirmation (AI)'}</Text>
+        <Text style={s.btnOutlineText}>{generating ? 'Generating...' : 'Generate AI Affirmation with My Data'}</Text>
       </TouchableOpacity>
+
+      <View style={s.aiDisclosure}>
+        <Text style={s.aiDisclosureTitle}>AI data sharing</Text>
+        <Text style={s.aiDisclosureText}>
+          AI affirmations send recent moods, assessment scores, and goals to Google Gemini through MHtoolkit to generate a personalized affirmation. You will be asked for consent before this data is sent.
+        </Text>
+      </View>
 
       <View style={[s.card, { backgroundColor: '#eff6ff', marginTop: 24 }]}>
         <Text style={{ fontWeight: '600', color: Colors.text, marginBottom: 8 }}>Why limit affirmations?</Text>
@@ -136,4 +148,7 @@ const s = StyleSheet.create({
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   btnOutline: { borderWidth: 1, borderColor: Colors.border, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
   btnOutlineText: { color: Colors.text, fontWeight: '500', fontSize: 15 },
+  aiDisclosure: { backgroundColor: '#fff7ed', borderWidth: 1, borderColor: '#fed7aa', borderRadius: 12, padding: 14, marginTop: 12 },
+  aiDisclosureTitle: { fontSize: 13, fontWeight: '700', color: '#9a3412', marginBottom: 4 },
+  aiDisclosureText: { fontSize: 12, color: '#9a3412', lineHeight: 18 },
 });

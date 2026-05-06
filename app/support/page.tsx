@@ -67,9 +67,11 @@ export default function SupportPage() {
                 Is my data private?
               </h3>
               <p className="text-gray-700 mt-1">
-                Absolutely. Your mood entries, journal notes, and personal data
-                are private. We do not sell or share your data with third
-                parties. See our{" "}
+                Your mood entries, journal notes, and personal data are private.
+                We do not sell your data or share it for advertising. Optional
+                AI features ask for consent before sending chat text, voice
+                audio/transcripts, or personalized context to AI providers. See
+                our{" "}
                 <a href="/privacy" className="text-blue-600 hover:underline">
                   Privacy Policy
                 </a>{" "}

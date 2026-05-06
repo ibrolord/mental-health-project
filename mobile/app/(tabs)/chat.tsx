@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
 import { apiRequest } from '@/lib/api';
+import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import { format, subDays } from 'date-fns';
 
 interface Message { role: 'user' | 'assistant'; content: string; }
@@ -50,6 +51,9 @@ export default function ChatScreen() {
 
   const send = async (text: string) => {
     if (!text.trim()) return;
+    const consented = await ensureAiDataSharingConsent();
+    if (!consented) return;
+
     const newMsg: Message = { role: 'user', content: text };
     const msgs = [...messages, newMsg];
     setMessages(msgs);
@@ -75,6 +79,19 @@ export default function ChatScreen() {
     }
   };
 
+  const togglePersonalized = async () => {
+    if (personalized) {
+      setPersonalized(false);
+      fetchedRef.current = false;
+      return;
+    }
+
+    const consented = await ensureAiDataSharingConsent();
+    if (!consented) return;
+    setPersonalized(true);
+    fetchedRef.current = false;
+  };
+
   return (
     <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' && (Platform as any).isPad ? 110 : 90}>
       {/* Voice Mode Button */}
@@ -82,14 +99,22 @@ export default function ChatScreen() {
         <Text style={s.voiceBarText}>🎙️  Switch to Voice Mode</Text>
       </TouchableOpacity>
 
+      <View style={s.aiDisclosure}>
+        <Text style={s.aiDisclosureTitle}>AI data sharing</Text>
+        <Text style={s.aiDisclosureText}>
+          Chat sends your messages to Google Gemini, Anthropic Claude, or OpenAI through MHtoolkit to generate responses.
+          Personalized Responses also include recent moods, assessments, goals, and habits if you turn it on.
+        </Text>
+      </View>
+
       {/* Personalized Toggle */}
-      <TouchableOpacity style={s.toggleRow} onPress={() => { setPersonalized((p) => !p); fetchedRef.current = false; }}>
+      <TouchableOpacity style={s.toggleRow} onPress={togglePersonalized}>
         <View style={[s.toggleTrack, personalized && s.toggleTrackOn]}>
           <View style={[s.toggleThumb, personalized && s.toggleThumbOn]} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={s.toggleLabel}>Personalized Responses</Text>
-          <Text style={s.toggleSub}>Use my data for context</Text>
+          <Text style={s.toggleSub}>Include recent moods, assessments, goals, and habits in AI requests</Text>
         </View>
       </TouchableOpacity>
 
@@ -163,6 +188,9 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   voiceBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 10, backgroundColor: '#eff6ff', borderBottomWidth: 1, borderBottomColor: Colors.border },
   voiceBarText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
+  aiDisclosure: { padding: 12, backgroundColor: '#fff7ed', borderBottomWidth: 1, borderBottomColor: '#fed7aa' },
+  aiDisclosureTitle: { fontSize: 13, fontWeight: '700', color: '#9a3412', marginBottom: 4 },
+  aiDisclosureText: { fontSize: 12, color: '#9a3412', lineHeight: 18 },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, backgroundColor: Colors.card, borderBottomWidth: 1, borderBottomColor: Colors.border },
   toggleTrack: { width: 44, height: 24, borderRadius: 12, backgroundColor: '#d1d5db', justifyContent: 'center', paddingHorizontal: 2 },
   toggleTrackOn: { backgroundColor: Colors.primary },
