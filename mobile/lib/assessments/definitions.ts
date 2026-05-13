@@ -2,8 +2,10 @@ import { Assessment } from './types';
 
 export const GAD7: Assessment = {
   type: 'GAD7',
-  name: 'GAD-7 Anxiety Assessment',
-  description: 'Generalized Anxiety Disorder 7-item scale',
+  name: 'GAD-7 Anxiety Symptom Screener',
+  description: '7-item anxiety symptom screening tool',
+  source: 'Spitzer RL, Kroenke K, Williams JB, Lowe B. A brief measure for assessing generalized anxiety disorder: the GAD-7. Arch Intern Med. 2006.',
+  citationUrl: 'https://pubmed.ncbi.nlm.nih.gov/16717171/',
   maxScore: 21,
   questions: [
     {
@@ -80,8 +82,8 @@ export const GAD7: Assessment = {
   interpret: (score) => {
     if (score <= 4) {
       return {
-        level: 'Minimal Anxiety',
-        message: 'Your anxiety levels appear to be minimal.',
+        level: 'Minimal Anxiety Symptom Range',
+        message: 'Your responses fall in the minimal range for anxiety symptoms on this screener.',
         suggestions: [
           'Continue with your current self-care practices',
           'Use the mood tracker to monitor changes',
@@ -90,8 +92,8 @@ export const GAD7: Assessment = {
       };
     } else if (score <= 9) {
       return {
-        level: 'Mild Anxiety',
-        message: 'You may be experiencing mild anxiety symptoms.',
+        level: 'Mild Anxiety Symptom Range',
+        message: 'Your responses fall in the mild range for anxiety symptoms on this screener.',
         suggestions: [
           'Talk to our AI about anxiety management techniques',
           'Try daily relaxation exercises or meditation',
@@ -101,8 +103,8 @@ export const GAD7: Assessment = {
       };
     } else if (score <= 14) {
       return {
-        level: 'Moderate Anxiety',
-        message: 'You are likely experiencing moderate anxiety.',
+        level: 'Moderate Anxiety Symptom Range',
+        message: 'Your responses fall in the moderate range for anxiety symptoms on this screener.',
         suggestions: [
           'Consider speaking with a mental health professional',
           'Talk to our AI about cognitive reframing techniques',
@@ -112,8 +114,8 @@ export const GAD7: Assessment = {
       };
     } else {
       return {
-        level: 'Severe Anxiety',
-        message: 'You may be experiencing severe anxiety symptoms.',
+        level: 'Severe Anxiety Symptom Range',
+        message: 'Your responses fall in the severe range for anxiety symptoms on this screener.',
         suggestions: [
           'We strongly recommend consulting a mental health professional',
           'Crisis resources: 988 Suicide & Crisis Lifeline',
@@ -127,8 +129,10 @@ export const GAD7: Assessment = {
 
 export const PHQ9: Assessment = {
   type: 'PHQ9',
-  name: 'PHQ-9 Depression Assessment',
-  description: 'Patient Health Questionnaire-9',
+  name: 'PHQ-9 Depression Symptom Screener',
+  description: '9-item depression symptom screening tool',
+  source: 'Kroenke K, Spitzer RL, Williams JB. The PHQ-9: validity of a brief depression severity measure. J Gen Intern Med. 2001.',
+  citationUrl: 'https://pubmed.ncbi.nlm.nih.gov/11556941/',
   maxScore: 27,
   questions: [
     {
@@ -225,8 +229,8 @@ export const PHQ9: Assessment = {
   interpret: (score) => {
     if (score <= 4) {
       return {
-        level: 'Minimal Depression',
-        message: 'Your depression symptoms appear to be minimal.',
+        level: 'Minimal Depression Symptom Range',
+        message: 'Your responses fall in the minimal range for depression symptoms on this screener.',
         suggestions: [
           'Maintain healthy routines and self-care',
           'Track your mood to notice early changes',
@@ -235,8 +239,8 @@ export const PHQ9: Assessment = {
       };
     } else if (score <= 9) {
       return {
-        level: 'Mild Depression',
-        message: 'You may be experiencing mild depression symptoms.',
+        level: 'Mild Depression Symptom Range',
+        message: 'Your responses fall in the mild range for depression symptoms on this screener.',
         suggestions: [
           'Read "Feeling Good" in our library (CBT techniques)',
           'Talk to our AI about thought patterns',
@@ -246,8 +250,8 @@ export const PHQ9: Assessment = {
       };
     } else if (score <= 14) {
       return {
-        level: 'Moderate Depression',
-        message: 'You are likely experiencing moderate depression.',
+        level: 'Moderate Depression Symptom Range',
+        message: 'Your responses fall in the moderate range for depression symptoms on this screener.',
         suggestions: [
           'Consider consulting a mental health professional',
           'Use chat for daily emotional reflection and coping ideas',
@@ -257,8 +261,8 @@ export const PHQ9: Assessment = {
       };
     } else if (score <= 19) {
       return {
-        level: 'Moderately Severe Depression',
-        message: 'You may be experiencing moderately severe depression.',
+        level: 'Moderately Severe Depression Symptom Range',
+        message: 'Your responses fall in the moderately severe range for depression symptoms on this screener.',
         suggestions: [
           'We strongly recommend speaking with a mental health professional',
           'Crisis Line: 988 Suicide & Crisis Lifeline',
@@ -268,8 +272,8 @@ export const PHQ9: Assessment = {
       };
     } else {
       return {
-        level: 'Severe Depression',
-        message: 'You may be experiencing severe depression symptoms.',
+        level: 'Severe Depression Symptom Range',
+        message: 'Your responses fall in the severe range for depression symptoms on this screener.',
         suggestions: [
           'Please reach out to a mental health professional immediately',
           'Crisis resources: 988 Suicide & Crisis Lifeline or text "HOME" to 741741',
@@ -284,7 +288,9 @@ export const PHQ9: Assessment = {
 export const CBI: Assessment = {
   type: 'CBI',
   name: 'Copenhagen Burnout Inventory',
-  description: 'Short burnout assessment',
+  description: 'Short personal burnout screening tool',
+  source: 'Kristensen TS, Borritz M, Villadsen E, Christensen KB. The Copenhagen Burnout Inventory: A new tool for the assessment of burnout. Work & Stress. 2005.',
+  citationUrl: 'https://doi.org/10.1080/02678370500297720',
   maxScore: 24,
   questions: [
     {
@@ -351,8 +357,8 @@ export const CBI: Assessment = {
   interpret: (score) => {
     if (score <= 8) {
       return {
-        level: 'Low Burnout',
-        message: 'Your burnout levels appear to be low.',
+        level: 'Low Burnout Range',
+        message: 'Your responses fall in the low range for burnout symptoms on this screener.',
         suggestions: [
           'Maintain work-life boundaries',
           'Continue your current self-care practices',
@@ -361,8 +367,8 @@ export const CBI: Assessment = {
       };
     } else if (score <= 16) {
       return {
-        level: 'Moderate Burnout',
-        message: 'You are experiencing moderate burnout symptoms.',
+        level: 'Moderate Burnout Range',
+        message: 'Your responses fall in the moderate range for burnout symptoms on this screener.',
         suggestions: [
           'Read "Burnout" by Nagoski in our library',
           'Set clear boundaries around work and rest',
@@ -372,8 +378,8 @@ export const CBI: Assessment = {
       };
     } else {
       return {
-        level: 'High Burnout',
-        message: 'You are experiencing high levels of burnout.',
+        level: 'High Burnout Range',
+        message: 'Your responses fall in the high range for burnout symptoms on this screener.',
         suggestions: [
           'Consider taking time off if possible',
           'Speak with a mental health professional or doctor',
@@ -389,7 +395,9 @@ export const CBI: Assessment = {
 export const PSS4: Assessment = {
   type: 'PSS4',
   name: 'Perceived Stress Scale',
-  description: '4-item stress assessment',
+  description: '4-item perceived stress screening tool',
+  source: 'Cohen S, Kamarck T, Mermelstein R. A global measure of perceived stress. J Health Soc Behav. 1983.',
+  citationUrl: 'https://cancercontrol.cancer.gov/brp/research/group-evaluated-measures/adopt/perceived-stress-scale',
   maxScore: 16,
   questions: [
     {
@@ -440,8 +448,8 @@ export const PSS4: Assessment = {
   interpret: (score) => {
     if (score <= 5) {
       return {
-        level: 'Low Stress',
-        message: 'Your perceived stress levels are low.',
+        level: 'Low Perceived Stress Range',
+        message: 'Your responses fall in the low range for perceived stress on this screener.',
         suggestions: [
           'Continue managing stress effectively',
           'Maintain healthy coping strategies',
@@ -450,8 +458,8 @@ export const PSS4: Assessment = {
       };
     } else if (score <= 10) {
       return {
-        level: 'Moderate Stress',
-        message: 'You are experiencing moderate stress levels.',
+        level: 'Moderate Perceived Stress Range',
+        message: 'Your responses fall in the moderate range for perceived stress on this screener.',
         suggestions: [
           'Talk to our AI about stress reduction techniques',
           'Use the life organizer to prioritize and reduce overwhelm',
@@ -461,8 +469,8 @@ export const PSS4: Assessment = {
       };
     } else {
       return {
-        level: 'High Stress',
-        message: 'You are experiencing high perceived stress.',
+        level: 'High Perceived Stress Range',
+        message: 'Your responses fall in the high range for perceived stress on this screener.',
         suggestions: [
           'Consider speaking with a mental health professional',
           'Read "Burnout" in our library about completing the stress cycle',

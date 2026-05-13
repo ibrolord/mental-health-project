@@ -54,6 +54,15 @@ export default function AssessmentsPage() {
                 <CardDescription>{assessment.description}</CardDescription>
               </CardHeader>
               <CardContent>
+                <a
+                  href={assessment.citationUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(event) => event.stopPropagation()}
+                  className="mb-4 block text-xs leading-relaxed text-primary hover:underline"
+                >
+                  Source: {assessment.source}
+                </a>
                 <p className="text-sm text-slate-600 mb-4">
                   {assessment.questions.length} questions • {Math.ceil(assessment.questions.length * 0.5)} min
                 </p>
@@ -73,8 +82,9 @@ export default function AssessmentsPage() {
                 <h3 className="font-semibold mb-2">About These Assessments</h3>
                 <p className="text-sm text-slate-700">
                   These assessments are screening tools, not diagnostic instruments. They can help
-                  you understand your symptoms, but they don't replace professional evaluation. If
-                  you're concerned about your mental health, please consult a healthcare provider.
+                  you reflect on symptoms, but they do not diagnose, treat, or replace professional
+                  evaluation. Seek advice from a doctor or licensed mental health professional in
+                  addition to using this app and before making medical decisions.
                 </p>
               </div>
             </div>
@@ -84,4 +94,3 @@ export default function AssessmentsPage() {
     </main>
   );
 }
-

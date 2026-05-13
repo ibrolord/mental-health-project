@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Linking, View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ASSESSMENTS } from '@/lib/assessments/definitions';
 import { Colors } from '@/lib/constants';
@@ -27,6 +27,9 @@ export default function AssessmentsScreen() {
           <Text style={s.cardIcon}>{a.icon}</Text>
           <Text style={s.cardTitle}>{a.name}</Text>
           <Text style={s.cardDesc}>{a.description}</Text>
+          <TouchableOpacity onPress={() => Linking.openURL(a.citationUrl)}>
+            <Text style={s.sourceLink}>Source: {a.source}</Text>
+          </TouchableOpacity>
           <Text style={s.cardMeta}>
             {a.questions.length} questions · {Math.ceil(a.questions.length * 0.5)} min
           </Text>
@@ -43,7 +46,9 @@ export default function AssessmentsScreen() {
             <Text style={[s.cardTitle, { marginBottom: 8 }]}>About These Assessments</Text>
             <Text style={s.infoText}>
               These assessments are screening tools, not diagnostic instruments. They can help you
-              understand your symptoms, but they don't replace professional evaluation.
+              reflect on symptoms, but they do not diagnose, treat, or replace professional
+              evaluation. Seek advice from a doctor or licensed mental health professional in
+              addition to using this app and before making medical decisions.
             </Text>
           </View>
         </View>
@@ -61,6 +66,7 @@ const s = StyleSheet.create({
   cardIcon: { fontSize: 36, marginBottom: 12 },
   cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 4 },
   cardDesc: { fontSize: 14, color: Colors.textSecondary, marginBottom: 12 },
+  sourceLink: { fontSize: 12, color: Colors.primary, lineHeight: 18, marginBottom: 12 },
   cardMeta: { fontSize: 13, color: Colors.textSecondary, marginBottom: 16 },
   takeBtn: { backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   takeBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
