@@ -3,7 +3,8 @@ Welcome to MHtoolkit v1.0.0!
 - AI chat companion with explicit AI data-sharing consent
 - Voice support with clearer microphone, AI processing, and self-help guidance
 - Mood tracking with emoji check-ins and trend charts
-- Validated assessments: PHQ-9, GAD-7, PSS-4, and CBI
+- Published-source assessments with in-app citations: PHQ-9, GAD-7, PSS-4, and CBI
+- Clear medical disclaimer reminding users to seek a doctor's advice before medical decisions
 - Goal setting with 5 proven frameworks
 - Habit tracking with daily streaks
 - AI-generated affirmations based on your data after consent

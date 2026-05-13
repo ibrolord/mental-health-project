@@ -11,6 +11,8 @@ export interface Assessment {
   type: 'GAD7' | 'PHQ9' | 'CBI' | 'PSS4';
   name: string;
   description: string;
+  source: string;
+  citationUrl: string;
   questions: AssessmentQuestion[];
   maxScore: number;
   interpret: (score: number) => {

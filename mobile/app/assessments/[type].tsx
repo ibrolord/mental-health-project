@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { Alert, Linking, View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ASSESSMENTS } from '@/lib/assessments/definitions';
 import { supabase } from '@/lib/supabase';
@@ -75,6 +75,15 @@ export default function AssessmentTakeScreen() {
           <Text style={s.resultLevel}>{result.level}</Text>
           <Text style={s.resultMessage}>{result.message}</Text>
 
+          <View style={s.disclaimerBox}>
+            <Text style={s.disclaimerTitle}>Medical disclaimer</Text>
+            <Text style={s.disclaimerText}>
+              This screener is for self-reflection only. It does not diagnose, treat, or replace
+              professional evaluation. Seek advice from a doctor or licensed mental health
+              professional in addition to using this app and before making medical decisions.
+            </Text>
+          </View>
+
           {showCrisisSupport && (
             <View style={s.crisisBox}>
               <Text style={s.crisisTitle}>Immediate Support Available</Text>
@@ -91,6 +100,14 @@ export default function AssessmentTakeScreen() {
             {result.suggestions.map((item: string, i: number) => (
               <Text key={i} style={s.suggestion}>• {item}</Text>
             ))}
+          </View>
+
+          <View style={s.sourceBox}>
+            <Text style={s.sourceTitle}>Clinical source</Text>
+            <Text style={s.sourceText}>{assessment.source}</Text>
+            <TouchableOpacity onPress={() => Linking.openURL(assessment.citationUrl)}>
+              <Text style={s.sourceLink}>{assessment.citationUrl}</Text>
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity style={s.btn} onPress={handleSave} disabled={saving}>
@@ -132,6 +149,17 @@ export default function AssessmentTakeScreen() {
 
       <View style={s.card}>
         <Text style={s.questionTitle}>{assessment.name}</Text>
+        <View style={s.disclaimerBox}>
+          <Text style={s.disclaimerTitle}>Before you begin</Text>
+          <Text style={s.disclaimerText}>
+            This is a screening tool, not a diagnosis or treatment. Seek advice from a doctor or
+            licensed mental health professional in addition to using this app and before making
+            medical decisions.
+          </Text>
+        </View>
+        <TouchableOpacity style={s.inlineSource} onPress={() => Linking.openURL(assessment.citationUrl)}>
+          <Text style={s.sourceLink}>Source: {assessment.source}</Text>
+        </TouchableOpacity>
         <Text style={s.questionText}>{question.text}</Text>
 
         {question.options.map((option) => (
@@ -172,11 +200,19 @@ const s = StyleSheet.create({
   resultScore: { fontSize: 48, fontWeight: '700', color: Colors.primary, textAlign: 'center', marginBottom: 8 },
   resultLevel: { fontSize: 22, fontWeight: '600', color: Colors.text, textAlign: 'center', marginBottom: 12 },
   resultMessage: { fontSize: 15, color: Colors.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 22 },
+  disclaimerBox: { backgroundColor: '#fff7ed', borderLeftWidth: 4, borderLeftColor: '#f97316', padding: 14, borderRadius: 8, marginBottom: 18 },
+  disclaimerTitle: { fontSize: 15, fontWeight: '700', color: '#9a3412', marginBottom: 6 },
+  disclaimerText: { fontSize: 13, color: '#7c2d12', lineHeight: 19 },
   crisisBox: { backgroundColor: '#fef2f2', borderLeftWidth: 4, borderLeftColor: '#dc2626', padding: 16, borderRadius: 8, marginBottom: 24 },
   crisisTitle: { fontSize: 16, fontWeight: '700', color: '#991b1b', marginBottom: 8 },
   crisisText: { fontSize: 14, color: '#7f1d1d', lineHeight: 20 },
   suggestionsBox: { backgroundColor: '#eff6ff', borderLeftWidth: 4, borderLeftColor: Colors.primary, padding: 16, borderRadius: 8, marginBottom: 24 },
   suggestionsTitle: { fontSize: 16, fontWeight: '600', color: Colors.text, marginBottom: 10 },
+  sourceBox: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: Colors.border, padding: 14, borderRadius: 8, marginBottom: 24 },
+  sourceTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, marginBottom: 6 },
+  sourceText: { fontSize: 12, color: Colors.textSecondary, lineHeight: 18, marginBottom: 6 },
+  sourceLink: { fontSize: 12, color: Colors.primary, lineHeight: 18 },
+  inlineSource: { marginBottom: 18 },
   btn: { backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 10 },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   btnOutline: { borderWidth: 1, borderColor: Colors.border, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 10 },

@@ -103,6 +103,16 @@ export default function AssessmentTakePage() {
                 <p className="text-slate-700 mb-6">{result.message}</p>
               </div>
 
+              <div className="bg-orange-50 border-l-4 border-orange-500 p-4 mb-6 rounded-r-lg">
+                <h3 className="font-semibold mb-2 text-orange-950">Medical disclaimer</h3>
+                <p className="text-sm text-orange-950">
+                  This screener is for self-reflection only. It does not diagnose, treat, or
+                  replace professional evaluation. Seek advice from a doctor or licensed mental
+                  health professional in addition to using this app and before making medical
+                  decisions.
+                </p>
+              </div>
+
               {showCrisisSupport && (
                 <div className="bg-red-50 border-l-4 border-red-600 p-4 mb-6 rounded-r-lg">
                   <h3 className="font-semibold mb-2 text-red-900">Immediate Support Available</h3>
@@ -123,6 +133,19 @@ export default function AssessmentTakePage() {
                     </li>
                   ))}
                 </ul>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-lg mb-6">
+                <h3 className="font-semibold mb-2">Clinical source</h3>
+                <p className="text-sm text-slate-700 mb-2">{assessment.source}</p>
+                <a
+                  href={assessment.citationUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-primary hover:underline break-words"
+                >
+                  {assessment.citationUrl}
+                </a>
               </div>
 
               <div className="space-y-3">
@@ -170,6 +193,22 @@ export default function AssessmentTakePage() {
             <CardTitle>{assessment.name}</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="bg-orange-50 border-l-4 border-orange-500 p-4 mb-6 rounded-r-lg">
+              <h3 className="font-semibold mb-2 text-orange-950">Before you begin</h3>
+              <p className="text-sm text-orange-950">
+                This is a screening tool, not a diagnosis or treatment. Seek advice from a doctor
+                or licensed mental health professional in addition to using this app and before
+                making medical decisions.
+              </p>
+            </div>
+            <a
+              href={assessment.citationUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mb-6 block text-sm leading-relaxed text-primary hover:underline"
+            >
+              Source: {assessment.source}
+            </a>
             <p className="text-lg mb-6 font-medium">{question.text}</p>
 
             <div className="space-y-3">

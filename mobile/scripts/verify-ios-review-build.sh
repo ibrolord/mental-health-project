@@ -249,11 +249,52 @@ else
   pass "App Store metadata avoids high-risk therapy/clinical overclaim wording"
 fi
 
+if grep -Fq "Seek a doctor's advice" "$ROOT_DIR/fastlane/metadata/en-US/description.txt" &&
+  grep -Fq "before making medical decisions" "$ROOT_DIR/fastlane/metadata/en-US/description.txt"; then
+  pass "App Store description includes required medical decision disclaimer"
+else
+  fail "App Store description does not include the required doctor/medical decision disclaimer"
+fi
+
 if grep -R -i -E 'CBT-informed|Use Cognitive Behavioral Therapy \(CBT\) techniques|AI therapist|voice therapy|conversation therapy|clinical-grade|clinician-grade|Text HELLO|HELLO to 741741' \
   "$ROOT_DIR/../app" "$ROOT_DIR/../components" "$ROOT_DIR/../lib/ai" "$ROOT_DIR/app" "$ROOT_DIR/lib" >/dev/null 2>&1; then
   fail "App source contains high-risk therapy/clinical overclaim wording"
 else
   pass "App source avoids high-risk therapy/clinical overclaim wording"
+fi
+
+if grep -Fq 'https://pubmed.ncbi.nlm.nih.gov/11556941/' "$ROOT_DIR/lib/assessments/definitions.ts" &&
+  grep -Fq 'https://pubmed.ncbi.nlm.nih.gov/16717171/' "$ROOT_DIR/lib/assessments/definitions.ts" &&
+  grep -Fq 'https://doi.org/10.1080/02678370500297720' "$ROOT_DIR/lib/assessments/definitions.ts" &&
+  grep -Fq 'https://cancercontrol.cancer.gov/brp/research/group-evaluated-measures/adopt/perceived-stress-scale' "$ROOT_DIR/lib/assessments/definitions.ts" &&
+  grep -Fq 'https://pubmed.ncbi.nlm.nih.gov/11556941/' "$ROOT_DIR/../lib/assessments/definitions.ts" &&
+  grep -Fq 'https://pubmed.ncbi.nlm.nih.gov/16717171/' "$ROOT_DIR/../lib/assessments/definitions.ts" &&
+  grep -Fq 'https://doi.org/10.1080/02678370500297720' "$ROOT_DIR/../lib/assessments/definitions.ts" &&
+  grep -Fq 'https://cancercontrol.cancer.gov/brp/research/group-evaluated-measures/adopt/perceived-stress-scale' "$ROOT_DIR/../lib/assessments/definitions.ts"; then
+  pass "Assessment definitions include clinical source citations"
+else
+  fail "Assessment definitions are missing clinical source citations"
+fi
+
+if grep -Fq 'Medical disclaimer' "$ROOT_DIR/app/assessments/[type].tsx" &&
+  grep -Fq 'Clinical source' "$ROOT_DIR/app/assessments/[type].tsx"; then
+  pass "Mobile assessment screens render medical disclaimer and citations"
+else
+  fail "Mobile assessment screens do not render medical disclaimer and citations"
+fi
+
+if grep -Fq 'Medical disclaimer' "$ROOT_DIR/../app/assessments/[type]/page.tsx" &&
+  grep -Fq 'Clinical source' "$ROOT_DIR/../app/assessments/[type]/page.tsx"; then
+  pass "Web assessment screens render medical disclaimer and citations"
+else
+  fail "Web assessment screens do not render medical disclaimer and citations"
+fi
+
+if grep -R -E "level: '(Minimal|Mild|Moderate|Moderately Severe|Severe) (Anxiety|Depression|Stress|Burnout)'" \
+  "$ROOT_DIR/lib/assessments/definitions.ts" "$ROOT_DIR/../lib/assessments/definitions.ts" >/dev/null 2>&1; then
+  fail "Assessment levels still read like diagnostic labels instead of symptom ranges"
+else
+  pass "Assessment levels use non-diagnostic symptom/range wording"
 fi
 
 if [ -n "$IPA_PATH" ]; then
@@ -342,6 +383,17 @@ if [ -n "$IPA_PATH" ]; then
       fail "IPA bundle contains high-risk therapy/clinical overclaim wording"
     else
       pass "IPA bundle avoids high-risk therapy/clinical overclaim wording"
+    fi
+
+    if grep -aFq 'Medical disclaimer' "$BUNDLE_PATH" &&
+      grep -aFq 'Clinical source' "$BUNDLE_PATH" &&
+      grep -aFq "before making medical decisions" "$BUNDLE_PATH" &&
+      grep -aFq 'https://pubmed.ncbi.nlm.nih.gov/11556941/' "$BUNDLE_PATH" &&
+      grep -aFq 'https://pubmed.ncbi.nlm.nih.gov/16717171/' "$BUNDLE_PATH" &&
+      grep -aFq 'https://doi.org/10.1080/02678370500297720' "$BUNDLE_PATH"; then
+      pass "IPA includes Guideline 1.4.1 medical disclaimer and assessment citations"
+    else
+      fail "IPA does not include Guideline 1.4.1 medical disclaimer and assessment citations"
     fi
 
     if grep -aEq 'support@mhtoolkit\.com|princebolajibreeze@gmail\.com' "$BUNDLE_PATH"; then
