@@ -84,8 +84,10 @@ export default function SupportPage() {
                 Can I use MHtoolkit without creating an account?
               </h3>
               <p className="text-gray-700 mt-1">
-                Yes. You can use most features anonymously. Creating an account
-                lets you sync data across devices and access additional features.
+                Yes. You can use most features anonymously without providing an
+                email address. Existing account holders can still sign in; new
+                account creation is temporarily unavailable while we upgrade the
+                verification flow.
               </p>
             </div>
 

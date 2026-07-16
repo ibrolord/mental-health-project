@@ -34,9 +34,9 @@ export default function PrivacyPolicyPage() {
           </p>
           <ul className="list-disc list-inside text-gray-700 space-y-2 ml-2">
             <li>
-              <strong>Account information:</strong> Email address (only if you
-              choose to create an account). Anonymous sessions are supported and
-              require no personal information.
+              <strong>Account information:</strong> Email address for existing
+              account holders who sign in. New account creation is temporarily
+              unavailable. Anonymous sessions require no personal information.
             </li>
             <li>
               <strong>Mood entries:</strong> Mood ratings, notes, and timestamps
