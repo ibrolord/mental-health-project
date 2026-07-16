@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase/server';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -26,10 +27,10 @@ export async function verifyAuth(request: NextRequest): Promise<{ valid: boolean
     }
   }
 
-  // 2. Check anonymous session ID (validated against DB)
+  // 2. LEGACY COMPATIBILITY ONLY: service-role lookup avoids exposing the
+  // anonymous_sessions registry through public RLS.
   if (sessionIdHeader) {
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('anonymous_sessions')
       .select('session_id')
       .eq('session_id', sessionIdHeader)

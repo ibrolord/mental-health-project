@@ -1,6 +1,9 @@
 import * as gemini from './gemini';
 import * as claude from './claude';
 import { Message, UserContext } from './claude';
+import { containsExplicitCrisis, CRISIS_RESPONSE } from './crisis';
+
+export type ChatModel = 'gemini' | 'claude' | 'safety';
 
 /**
  * Detects if a conversation requires the more sophisticated Claude model
@@ -58,7 +61,12 @@ function requiresClaudeModel(messages: Message[]): boolean {
 /**
  * Routes chat requests to the appropriate AI model based on conversation complexity
  */
-export async function chat(messages: Message[], userContext?: UserContext): Promise<{ response: string; model: 'gemini' | 'claude' }> {
+export async function chat(messages: Message[], userContext?: UserContext): Promise<{ response: string; model: ChatModel }> {
+  if (containsExplicitCrisis(messages)) {
+    console.warn('[Model Router] Explicit crisis detected; returning deterministic safety response');
+    return { response: CRISIS_RESPONSE, model: 'safety' };
+  }
+
   const useClaude = requiresClaudeModel(messages);
   
   try {

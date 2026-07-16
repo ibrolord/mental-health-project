@@ -66,6 +66,12 @@ export default function PrivacyPolicyPage() {
               request.
             </li>
             <li>
+              <strong>AI response reports:</strong> If you report an AI response,
+              we collect that response, your selected reason, app version, and
+              platform. We do not attach the rest of your conversation or your
+              optional personalization context to the report.
+            </li>
+            <li>
               <strong>Anonymous page view analytics:</strong> Collected via
               Vercel Analytics (no cookies, no personal identifiers).
             </li>
@@ -98,6 +104,7 @@ export default function PrivacyPolicyPage() {
               Understanding aggregate, anonymous usage patterns to improve the
               App.
             </li>
+            <li>Reviewing user-reported AI responses for safety and quality.</li>
           </ul>
           <p className="text-gray-700 mt-3 leading-relaxed">
             We do <strong>not</strong> sell, rent, or share your personal data
@@ -166,9 +173,10 @@ export default function PrivacyPolicyPage() {
               their own data.
             </li>
             <li>
-              Anonymous sessions use a locally generated identifier stored on
-              your device. No server-side personal data is associated with
-              anonymous sessions beyond what you explicitly enter.
+              Anonymous use is assigned a random Supabase Auth user ID without
+              requiring an email address or other direct identifier. On the
+              mobile app, its session credential is stored using the device&apos;s
+              protected credential storage.
             </li>
           </ul>
         </section>
@@ -226,6 +234,10 @@ export default function PrivacyPolicyPage() {
             <li>
               AI provider retention is governed by each provider&apos;s data
               processing terms and privacy policy.
+            </li>
+            <li>
+              User-submitted AI response reports are retained for safety review
+              for up to 90 days, unless you delete your data sooner.
             </li>
             <li>
               When you delete your data (see Section 7), it is permanently

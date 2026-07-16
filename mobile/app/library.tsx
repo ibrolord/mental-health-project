@@ -73,7 +73,7 @@ export default function LibraryScreen() {
 
           {selected.quote && (
             <View style={s.quoteBox}>
-              <Text style={s.quoteText}>"{selected.quote}"</Text>
+              <Text style={s.quoteText}>{`"${selected.quote}"`}</Text>
             </View>
           )}
 

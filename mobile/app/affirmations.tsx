@@ -101,7 +101,7 @@ export default function AffirmationsScreen() {
         {current ? (
           <View style={{ alignItems: 'center', paddingVertical: 40 }}>
             <Text style={{ fontSize: 48, marginBottom: 20 }}>✨</Text>
-            <Text style={s.affirmation}>"{current.content}"</Text>
+            <Text style={s.affirmation}>{`"${current.content}"`}</Text>
             <Text style={s.category}>{current.category}</Text>
           </View>
         ) : (

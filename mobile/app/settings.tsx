@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch, Platform, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { Colors } from '@/lib/constants';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -13,7 +14,7 @@ import {
   getReminderTimes,
   setReminderTimes,
 } from '@/lib/notifications';
-import { hasAiDataSharingConsent, resetAiDataSharingConsent } from '@/lib/ai-consent';
+import { hasAiDataSharingConsent, resetAiDataSharingConsent, PRIVACY_POLICY_URL } from '@/lib/ai-consent';
 
 const HOUR_OPTIONS = [
   { label: '7 AM', value: 7 },
@@ -108,17 +109,15 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             setLoading(true);
-            await Promise.all([
-              supabase.from('moods').delete().eq(query.column, query.value),
-              supabase.from('assessments').delete().eq(query.column, query.value),
-              supabase.from('goals').delete().eq(query.column, query.value),
-              supabase.from('habits').delete().eq(query.column, query.value),
-              supabase.from('chat_history').delete().eq(query.column, query.value),
-              supabase.from('user_affirmation_history').delete().eq(query.column, query.value),
-              supabase.from('user_book_favorites').delete().eq(query.column, query.value),
-            ]);
-            Alert.alert('Done', 'All data deleted.');
-            setLoading(false);
+            try {
+              const result = await apiRequest('/api/data/delete', {});
+              if (!result?.deleted) throw new Error(result?.error || 'Deletion failed');
+              Alert.alert('Done', 'All data deleted.');
+            } catch {
+              Alert.alert('Error', 'Data could not be fully deleted. Please try again or contact support.');
+            } finally {
+              setLoading(false);
+            }
           },
         },
       ]
@@ -142,7 +141,10 @@ export default function SettingsScreen() {
               await deleteAccount();
               Alert.alert('Account Deleted', 'Your account and associated data have been deleted.');
             } catch (e) {
-              Alert.alert('Error', 'Failed to delete account. Please try again or contact support.');
+              Alert.alert(
+                'Error',
+                e instanceof Error ? e.message : 'Failed to delete account. Please try again or contact support.'
+              );
             } finally {
               setLoading(false);
             }
@@ -179,8 +181,9 @@ export default function SettingsScreen() {
         {isAnonymous ? (
           <>
             <Text style={s.bodyText}>You are using the app anonymously.</Text>
-            <TouchableOpacity style={s.btn} onPress={() => router.push('/auth/signup')}>
-              <Text style={s.btnText}>Create Account to Sync Data</Text>
+            <Text style={[s.bodyText, { marginTop: 4 }]}>New account creation is temporarily unavailable while email verification is upgraded.</Text>
+            <TouchableOpacity style={s.btnOutline} onPress={() => router.push('/auth/login')}>
+              <Text style={s.btnOutlineText}>Sign In to an Existing Account</Text>
             </TouchableOpacity>
           </>
         ) : (
@@ -258,6 +261,14 @@ export default function SettingsScreen() {
             <Text style={s.btnOutlineText}>Revoke AI Consent</Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          style={s.btnOutline}
+          onPress={() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {
+            Alert.alert('Unable to Open Privacy Policy', PRIVACY_POLICY_URL);
+          })}
+        >
+          <Text style={s.btnOutlineText}>View Privacy Policy</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Danger Zone */}
@@ -282,7 +293,7 @@ export default function SettingsScreen() {
       {/* Disclaimer */}
       <View style={[s.card, { backgroundColor: '#eff6ff' }]}>
         <Text style={{ fontSize: 13, color: Colors.textSecondary, lineHeight: 20, textAlign: 'center' }}>
-          This app is a self-help tool, not a replacement for professional therapy. If you're in crisis, call 988.
+          {"This app is a self-help tool, not a replacement for professional therapy. If you're in crisis, call 988."}
         </Text>
       </View>
     </ScrollView>
