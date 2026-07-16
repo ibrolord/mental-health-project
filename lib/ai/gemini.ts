@@ -56,7 +56,8 @@ function buildContextualPrompt(userContext?: UserContext): string {
     parts.push('Assessment Results:');
     userContext.assessments.forEach(a => {
       const date = new Date(a.created_at).toLocaleDateString();
-      parts.push(`- ${a.type.toUpperCase()} (${date}): Score ${a.score} - ${a.interpretation}`);
+      const percentage = a.max_score > 0 ? Math.round((a.score / a.max_score) * 100) : null;
+      parts.push(`- ${a.type.toUpperCase()} (${date}): Score ${a.score}/${a.max_score}${percentage === null ? '' : ` (${percentage}%)`}`);
     });
   }
   
@@ -88,7 +89,7 @@ function buildContextualPrompt(userContext?: UserContext): string {
     parts.push('');
     parts.push('Habit Tracking:');
     userContext.habits.forEach(h => {
-      parts.push(`- ${h.name}: ${h.current_streak} day streak`);
+      parts.push(`- ${h.name}: ${h.streak_count} day streak`);
     });
   }
 

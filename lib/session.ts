@@ -1,51 +1,39 @@
 'use client';
 
-import { v4 as uuidv4 } from 'uuid';
 import { supabase } from './supabase/client';
+import type { Session } from '@supabase/supabase-js';
 
 const SESSION_KEY = 'anonymous_session_id';
+let anonymousSignIn: Promise<Session> | null = null;
 
-export async function getOrCreateSession(): Promise<string> {
-  if (typeof window === 'undefined') return '';
-  
-  let sessionId = localStorage.getItem(SESSION_KEY);
-  
-  if (!sessionId) {
-    sessionId = uuidv4();
-    localStorage.setItem(SESSION_KEY, sessionId);
+export async function ensureAnonymousSession(): Promise<Session> {
+  const { data: current, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (current.session) return current.session;
+
+  if (!anonymousSignIn) {
+    anonymousSignIn = supabase.auth.signInAnonymously().then(({ data, error }) => {
+      if (error) throw error;
+      if (!data.session) throw new Error('Anonymous sign-in did not return a session');
+      return data.session;
+    }).finally(() => {
+      anonymousSignIn = null;
+    });
   }
-  
-  // Always try to upsert the session - this handles both new sessions
-  // and ensures existing sessions are registered in the database
-  try {
-    const { error } = await supabase
-      .from('anonymous_sessions')
-      .upsert({ 
-        session_id: sessionId,
-        device_fingerprint: navigator.userAgent,
-        last_active_at: new Date().toISOString()
-      }, { 
-        onConflict: 'session_id',
-        ignoreDuplicates: false 
-      });
-    
-    if (error) {
-      console.error('Session registration error:', error);
-    }
-  } catch (e) {
-    console.error('Failed to register session:', e);
-  }
-  
-  return sessionId;
+
+  return anonymousSignIn;
 }
 
+/**
+ * LEGACY COMPATIBILITY ONLY: old deployed clients may still send this value.
+ * New clients authenticate anonymous users with a Supabase JWT instead.
+ */
 export function getSessionId(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem(SESSION_KEY);
 }
 
-export function clearSession(): void {
+export function clearLegacySession(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(SESSION_KEY);
 }
-

@@ -14,9 +14,9 @@ import { format, subDays } from 'date-fns';
 interface Message { role: 'user' | 'assistant'; content: string; }
 interface UserContext {
   recentMoods?: Array<{ emoji: string; note: string; created_at: string }>;
-  assessments?: Array<{ type: string; score: number; interpretation: string; created_at: string }>;
+  assessments?: Array<{ type: string; score: number; max_score: number; created_at: string }>;
   goals?: Array<{ content: string; status: string; reflection?: string; date: string }>;
-  habits?: Array<{ name: string; current_streak: number }>;
+  habits?: Array<{ name: string; streak_count: number }>;
 }
 
 const quickPrompts = ['I feel anxious', 'Help me reframe a negative thought', 'Ground me', 'I need to talk'];
@@ -48,13 +48,20 @@ export default function ChatPage() {
         const ago = format(subDays(new Date(), 7), 'yyyy-MM-dd');
         const [m, a, g, h] = await Promise.all([
           supabase.from('moods').select('emoji, note, created_at').eq(query.column, query.value).gte('created_at', ago).order('created_at', { ascending: false }).limit(10),
-          supabase.from('assessments').select('type, score, interpretation, created_at').eq(query.column, query.value).order('created_at', { ascending: false }).limit(5),
+          supabase.from('assessments').select('type, score, max_score, created_at').eq(query.column, query.value).order('created_at', { ascending: false }).limit(5),
           supabase.from('goals').select('content, status, reflection, date').eq(query.column, query.value).gte('date', ago).order('date', { ascending: false }),
-          supabase.from('habits').select('name, current_streak').eq(query.column, query.value).eq('is_active', true),
+          supabase.from('habits').select('name, streak_count').eq(query.column, query.value).eq('is_active', true),
         ]);
+        const contextError = m.error || a.error || g.error || h.error;
+        if (contextError) throw contextError;
         setUserContext({ recentMoods: m.data || [], assessments: a.data || [], goals: g.data || [], habits: h.data || [] });
-      } catch (e) { console.error(e); }
-      setStatus('done');
+        setStatus('done');
+      } catch (e) {
+        console.error('Failed to load personalized chat context:', e);
+        setPersonalized(false);
+        setUserContext(null);
+        setStatus('idle');
+      }
     })();
   }, [personalized, authLoading, query]);
 

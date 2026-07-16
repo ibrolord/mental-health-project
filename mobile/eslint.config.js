@@ -1,0 +1,15 @@
+const { defineConfig, globalIgnores } = require('eslint/config');
+const expoConfig = require('eslint-config-expo/flat');
+
+module.exports = defineConfig([
+  globalIgnores(['.expo/*', 'dist/*', 'android/*', 'ios/*']),
+  expoConfig,
+  {
+    files: ['scripts/*.mjs'],
+    languageOptions: {
+      globals: {
+        Buffer: 'readonly',
+      },
+    },
+  },
+]);

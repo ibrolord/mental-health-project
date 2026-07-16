@@ -53,9 +53,6 @@ export default function LoginScreen() {
         <Text style={s.btnText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.replace('/auth/signup')} style={{ marginTop: 16 }}>
-        <Text style={s.link}>Don't have an account? Sign up</Text>
-      </TouchableOpacity>
     </View>
   );
 }

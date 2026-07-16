@@ -127,7 +127,7 @@ export default function GoalsScreen() {
       {/* Progress */}
       {goals.length > 0 && (
         <View style={s.progressRow}>
-          <Text style={s.progressLabel}>Today's Progress</Text>
+          <Text style={s.progressLabel}>{"Today's Progress"}</Text>
           <Text style={s.progressLabel}>{completed}/{goals.length}</Text>
         </View>
       )}
@@ -139,7 +139,7 @@ export default function GoalsScreen() {
 
       {/* Goals by Framework */}
       <View style={s.card}>
-        <Text style={s.cardTitle}>📅 Today's Goals ({format(new Date(), 'MMM dd')})</Text>
+        <Text style={s.cardTitle}>{"📅 Today's Goals"} ({format(new Date(), 'MMM dd')})</Text>
 
         {framework === 'simple' && (
           <>

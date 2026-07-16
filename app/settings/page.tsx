@@ -95,23 +95,12 @@ export default function SettingsPage() {
     try {
       setLoading(true);
 
-      // Delete all user data
-      await Promise.all([
-        supabase.from('moods').delete().eq(query.column, query.value),
-        supabase.from('assessments').delete().eq(query.column, query.value),
-        supabase.from('goals').delete().eq(query.column, query.value),
-        supabase.from('habits').delete().eq(query.column, query.value),
-        supabase.from('chat_history').delete().eq(query.column, query.value),
-        supabase.from('user_affirmation_history').delete().eq(query.column, query.value),
-        supabase.from('user_book_favorites').delete().eq(query.column, query.value),
-      ]);
+      const result = await apiRequest('/api/data/delete', {});
+      if (!result?.deleted) {
+        throw new Error(result?.error || 'Deletion failed');
+      }
 
       alert('All data deleted successfully');
-
-      // If authenticated user, sign out
-      if (!isAnonymous) {
-        await signOut();
-      }
 
       router.push('/');
     } catch (error) {
@@ -149,12 +138,18 @@ export default function SettingsPage() {
         throw new Error(result?.error || 'Failed to delete account');
       }
 
-      await signOut().catch(() => {});
+      const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+      const { data: clearedSession, error: sessionError } = await supabase.auth.getSession();
+      if (signOutError || sessionError || clearedSession.session) {
+        throw new Error(
+          'Your account was deleted, but this browser session could not be cleared. Close this tab and contact support before continuing.'
+        );
+      }
       alert('Your account and associated data have been deleted.');
       router.push('/');
     } catch (error) {
       console.error('Error deleting account:', error);
-      alert('Failed to delete account');
+      alert(error instanceof Error ? error.message : 'Failed to delete account');
     } finally {
       setLoading(false);
     }
@@ -187,10 +182,10 @@ export default function SettingsPage() {
             {isAnonymous ? (
               <div>
                 <p className="text-slate-700 mb-4">
-                  You are currently using the app anonymously. Your data is stored locally on this device.
+                  You are currently using the app anonymously. New account creation is temporarily unavailable while email verification is upgraded.
                 </p>
-                <Button onClick={() => router.push('/auth/signup')}>
-                  Create Account to Sync Data
+                <Button onClick={() => router.push('/auth/login')}>
+                  Sign In to an Existing Account
                 </Button>
               </div>
             ) : (

@@ -1,12 +1,40 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-crypto';
-import type { User } from '@supabase/supabase-js';
+import { supabase } from './supabase';
+import type { Session, User } from '@supabase/supabase-js';
 import { apiRequest } from './api';
+import { clearPersistedSupabaseSession } from './supabase';
 
-const SESSION_KEY = 'anonymous_session_id';
+let anonymousSignIn: Promise<Session> | null = null;
+const LEGACY_SESSION_KEY = 'anonymous_session_id';
+const USER_DATA_TABLES = [
+  'moods',
+  'assessments',
+  'goals',
+  'habits',
+  'chat_history',
+  'user_affirmation_history',
+  'user_book_favorites',
+] as const;
+
+async function assertAnonymousAccountIsEmpty(): Promise<void> {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (!session?.user.is_anonymous) return;
+
+  const results = await Promise.all(
+    USER_DATA_TABLES.map((table) => supabase.from(table).select('id').limit(1))
+  );
+  if (results.some(({ error }) => error)) {
+    throw new Error('Unable to verify that your anonymous data is safe. Sign in was blocked; please try again.');
+  }
+  if (results.some(({ data }) => (data?.length ?? 0) > 0)) {
+    throw new Error(
+      'Sign in is blocked because this anonymous profile has saved data. Export or delete that data in Settings before switching accounts.'
+    );
+  }
+}
 
 interface AuthContextType {
   user: User | null;
@@ -32,81 +60,103 @@ const AuthContext = createContext<AuthContextType>({
   deleteAccount: async () => {},
 });
 
-async function getOrCreateSession(): Promise<string> {
-  let sessionId = await AsyncStorage.getItem(SESSION_KEY);
+async function ensureAnonymousSession(): Promise<Session> {
+  const { data: current, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (current.session) return current.session;
 
-  if (!sessionId) {
-    sessionId = Crypto.randomUUID();
-    await AsyncStorage.setItem(SESSION_KEY, sessionId);
+  if (!anonymousSignIn) {
+    anonymousSignIn = supabase.auth.signInAnonymously().then(({ data, error }) => {
+      if (error) throw error;
+      if (!data.session) throw new Error('Anonymous sign-in did not return a session');
+      return data.session;
+    }).finally(() => {
+      anonymousSignIn = null;
+    });
   }
 
-  try {
-    await supabase
-      .from('anonymous_sessions')
-      .upsert(
-        {
-          session_id: sessionId,
-          device_fingerprint: 'mobile-app',
-          last_active_at: new Date().toISOString(),
-        },
-        { onConflict: 'session_id', ignoreDuplicates: false }
-      );
-  } catch (e) {
-    console.error('Session registration error:', e);
+  return anonymousSignIn;
+}
+
+async function migrateLegacyData(session: Session): Promise<void> {
+  const legacySessionId = await AsyncStorage.getItem(LEGACY_SESSION_KEY);
+  if (!legacySessionId) return;
+
+  const result = await apiRequest('/api/session/migrate', { legacySessionId });
+  if (result?.verified !== true) {
+    throw new Error('Legacy data migration was not verified');
   }
 
-  return sessionId;
+  await AsyncStorage.removeItem(LEGACY_SESSION_KEY);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+
     const initAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
-
-      if (!session?.user) {
-        const anonSession = await getOrCreateSession();
-        setSessionId(anonSession);
+      try {
+        const session = await ensureAnonymousSession();
+        try {
+          await migrateLegacyData(session);
+        } catch (error) {
+          // Keep the local key so the atomic migration can be retried next launch.
+          console.error('Legacy data migration error:', error);
+        }
+        if (active) setUser(session.user);
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+      } finally {
+        if (active) setLoading(false);
       }
-
-      setLoading(false);
     };
 
-    initAuth();
+    void initAuth();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
       setUser(session?.user ?? null);
 
-      if (!session?.user) {
-        const anonSession = await getOrCreateSession();
-        setSessionId(anonSession);
-      } else {
-        setSessionId(null);
+      if (!session) {
+        // Avoid calling another auth method from inside the auth callback lock.
+        setTimeout(() => {
+          void ensureAnonymousSession()
+            .then(async (anonymousSession) => {
+              try {
+                await migrateLegacyData(anonymousSession);
+              } catch (error) {
+                console.error('Legacy data migration error:', error);
+              }
+              if (active) setUser(anonymousSession.user);
+            })
+            .catch((error) => console.error('Anonymous sign-in error:', error));
+        }, 0);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const isAuthenticated = !!user;
-  const isAnonymous = !user && !!sessionId;
+  const isAnonymous = user?.is_anonymous === true;
+  const sessionId = null;
 
   const signIn = async (email: string, password: string) => {
+    await assertAnonymousAccountIsEmpty();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
   };
 
-  const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
+  const signUp = async (_email: string, _password: string) => {
+    throw new Error('Account creation is temporarily unavailable while email verification is being upgraded.');
   };
 
   const signOut = async () => {
@@ -124,10 +174,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(result?.error || 'Failed to delete account');
     }
 
-    await supabase.auth.signOut().catch(() => {});
-    setUser(null);
-    const anonSession = await getOrCreateSession();
-    setSessionId(anonSession);
+    let { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+    if (signOutError) {
+      await clearPersistedSupabaseSession();
+      ({ error: signOutError } = await supabase.auth.signOut({ scope: 'local' }));
+    }
+    const { data: clearedSession, error: sessionError } = await supabase.auth.getSession();
+    if (signOutError || sessionError || clearedSession.session) {
+      throw new Error(
+        'Your account was deleted, but this device session could not be cleared. Close the app and contact support before continuing.'
+      );
+    }
+    const anonymousSession = await ensureAnonymousSession();
+    setUser(anonymousSession.user);
   };
 
   if (loading) {

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, StyleSheet, Alert } from 'react-native';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
@@ -8,12 +9,17 @@ import { apiRequest } from '@/lib/api';
 import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import { format, subDays } from 'date-fns';
 
-interface Message { role: 'user' | 'assistant'; content: string; }
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  responseId?: string;
+  reportToken?: string;
+}
 interface UserContext {
   recentMoods?: Array<{ emoji: string; note: string; created_at: string }>;
-  assessments?: Array<{ type: string; score: number; interpretation: string; created_at: string }>;
+  assessments?: Array<{ type: string; score: number; max_score: number; created_at: string }>;
   goals?: Array<{ content: string; status: string; reflection?: string; date: string }>;
-  habits?: Array<{ name: string; current_streak: number }>;
+  habits?: Array<{ name: string; streak_count: number }>;
 }
 
 const quickPrompts = ['I feel anxious', 'Help me reframe a negative thought', 'Ground me', 'I need to talk'];
@@ -26,6 +32,7 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(false);
   const [personalized, setPersonalized] = useState(false);
   const [userContext, setUserContext] = useState<UserContext | null>(null);
+  const [reportedResponseIds, setReportedResponseIds] = useState<string[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   const fetchedRef = useRef(false);
 
@@ -41,10 +48,17 @@ export default function ChatScreen() {
       const ago = format(subDays(new Date(), 7), 'yyyy-MM-dd');
       const [m, a, g, h] = await Promise.all([
         supabase.from('moods').select('emoji, note, created_at').eq(query.column, query.value).gte('created_at', ago).order('created_at', { ascending: false }).limit(10),
-        supabase.from('assessments').select('type, score, interpretation, created_at').eq(query.column, query.value).order('created_at', { ascending: false }).limit(5),
+        supabase.from('assessments').select('type, score, max_score, created_at').eq(query.column, query.value).order('created_at', { ascending: false }).limit(5),
         supabase.from('goals').select('content, status, reflection, date').eq(query.column, query.value).gte('date', ago).order('date', { ascending: false }),
-        supabase.from('habits').select('name, current_streak').eq(query.column, query.value).eq('is_active', true),
+        supabase.from('habits').select('name, streak_count').eq(query.column, query.value).eq('is_active', true),
       ]);
+      const contextError = m.error || a.error || g.error || h.error;
+      if (contextError) {
+        console.error('Failed to load personalized chat context:', contextError);
+        setPersonalized(false);
+        setUserContext(null);
+        return;
+      }
       setUserContext({ recentMoods: m.data || [], assessments: a.data || [], goals: g.data || [], habits: h.data || [] });
     })();
   }, [personalized, authLoading, query]);
@@ -61,16 +75,57 @@ export default function ChatScreen() {
     setLoading(true);
     try {
       const d = await apiRequest('/api/chat', {
-        messages: msgs,
+        messages: msgs.map(({ role, content }) => ({ role, content })),
         userContext: personalized ? userContext : undefined,
       });
       if (d.response) {
-        setMessages([...msgs, { role: 'assistant', content: d.response }]);
+        setMessages([...msgs, {
+          role: 'assistant',
+          content: d.response,
+          responseId: d.responseId,
+          reportToken: d.reportToken,
+        }]);
       }
     } catch {
       setMessages([...msgs, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
     }
     setLoading(false);
+  };
+
+  const submitReport = async (
+    message: Message,
+    reason: 'harmful' | 'incorrect' | 'offensive'
+  ) => {
+    if (!message.responseId || !message.reportToken) return;
+    try {
+      await apiRequest('/api/ai-reports', {
+        reportToken: message.reportToken,
+        responseId: message.responseId,
+        response: message.content,
+        reason,
+        platform: Platform.OS,
+        appVersion: Constants.expoConfig?.version || 'unknown',
+      });
+      setReportedResponseIds((current) => [...current, message.responseId!]);
+      Alert.alert('Report Sent', 'Thank you. This response was sent for safety review.');
+    } catch {
+      Alert.alert('Unable to Send Report', 'Please try again or contact support.');
+    }
+  };
+
+  const reportResponse = (message: Message) => {
+    Alert.alert('Report AI Response', 'What is wrong with this response?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Safety Concern', style: 'destructive', onPress: () => submitReport(message, 'harmful') },
+      {
+        text: 'Other Issue',
+        onPress: () => Alert.alert('Report AI Response', 'Choose a reason.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Incorrect', onPress: () => submitReport(message, 'incorrect') },
+          { text: 'Offensive', onPress: () => submitReport(message, 'offensive') },
+        ]),
+      },
+    ]);
   };
 
   const save = async () => {
@@ -123,7 +178,7 @@ export default function ChatScreen() {
         {messages.length === 0 ? (
           <View style={s.emptyState}>
             <Text style={s.emptyTitle}>How can I help?</Text>
-            <Text style={s.emptySubtitle}>I'm here to listen.</Text>
+            <Text style={s.emptySubtitle}>{"I'm here to listen."}</Text>
             <View style={s.promptsGrid}>
               {quickPrompts.map((p) => (
                 <TouchableOpacity key={p} style={s.promptBtn} onPress={() => send(p)}>
@@ -138,6 +193,17 @@ export default function ChatScreen() {
               <View style={[s.msgBubble, msg.role === 'user' ? s.msgBubbleUser : s.msgBubbleAssistant]}>
                 <Text style={[s.msgText, msg.role === 'user' && { color: '#fff' }]}>{msg.content}</Text>
               </View>
+              {msg.role === 'assistant' && msg.responseId && msg.reportToken && (
+                <TouchableOpacity
+                  style={s.reportBtn}
+                  onPress={() => reportResponse(msg)}
+                  disabled={reportedResponseIds.includes(msg.responseId)}
+                >
+                  <Text style={s.reportBtnText}>
+                    {reportedResponseIds.includes(msg.responseId) ? 'Reported' : 'Report response'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           ))
         )}
@@ -212,6 +278,8 @@ const s = StyleSheet.create({
   msgBubbleUser: { backgroundColor: Colors.primary, borderBottomRightRadius: 4 },
   msgBubbleAssistant: { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderBottomLeftRadius: 4 },
   msgText: { fontSize: 15, lineHeight: 22, color: Colors.text },
+  reportBtn: { alignSelf: 'flex-start', marginTop: 5, paddingVertical: 4, paddingHorizontal: 2 },
+  reportBtnText: { fontSize: 12, color: Colors.textSecondary, textDecorationLine: 'underline' },
   saveBtn: { paddingVertical: 8, paddingHorizontal: 16, alignSelf: 'center' },
   saveBtnText: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
   inputRow: { flexDirection: 'row', padding: 12, gap: 10, backgroundColor: Colors.card, borderTopWidth: 1, borderTopColor: Colors.border },

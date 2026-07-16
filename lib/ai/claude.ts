@@ -44,9 +44,9 @@ export interface Message {
 
 export interface UserContext {
   recentMoods?: Array<{ emoji: string; note: string; created_at: string }>;
-  assessments?: Array<{ type: string; score: number; interpretation: string; created_at: string }>;
+  assessments?: Array<{ type: string; score: number; max_score: number; created_at: string }>;
   goals?: Array<{ content: string; status: string; reflection?: string; date: string }>;
-  habits?: Array<{ name: string; current_streak: number }>;
+  habits?: Array<{ name: string; streak_count: number }>;
 }
 
 function buildContextualPrompt(userContext?: UserContext): string {
@@ -69,7 +69,8 @@ function buildContextualPrompt(userContext?: UserContext): string {
     parts.push('Assessment Results:');
     userContext.assessments.forEach(a => {
       const date = new Date(a.created_at).toLocaleDateString();
-      parts.push(`- ${a.type.toUpperCase()} (${date}): Score ${a.score} - ${a.interpretation}`);
+      const percentage = a.max_score > 0 ? Math.round((a.score / a.max_score) * 100) : null;
+      parts.push(`- ${a.type.toUpperCase()} (${date}): Score ${a.score}/${a.max_score}${percentage === null ? '' : ` (${percentage}%)`}`);
     });
   }
   
@@ -103,7 +104,7 @@ function buildContextualPrompt(userContext?: UserContext): string {
     parts.push('');
     parts.push('Active Habits:');
     userContext.habits.forEach(h => {
-      parts.push(`- ${h.name} (streak: ${h.current_streak} days)`);
+      parts.push(`- ${h.name} (streak: ${h.streak_count} days)`);
     });
   }
   

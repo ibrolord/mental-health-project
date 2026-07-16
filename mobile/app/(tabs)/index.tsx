@@ -101,7 +101,7 @@ export default function DashboardScreen() {
       {/* Affirmation */}
       {affirmation ? (
         <View style={[s.card, { backgroundColor: '#eff6ff' }]}>
-          <Text style={s.affirmationText}>"{affirmation}"</Text>
+          <Text style={s.affirmationText}>{`"${affirmation}"`}</Text>
           <Text style={s.affirmationLabel}>Daily Affirmation</Text>
         </View>
       ) : null}
