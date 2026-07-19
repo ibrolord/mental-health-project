@@ -2,7 +2,16 @@
 
 Use the sender identity `Bolaji Agunbiade` and send from
 `bolajiagunbiade1@gmail.com`. Personalize the opening proof sentence and use the
-tracked link for the recipient's channel.
+tracked link for the recipient's channel. End every first-touch email with the
+full sender identity, reply address, and the one-reply opt-out below.
+
+```text
+Bolaji Agunbiade
+Founder, MHtoolkit
+bolajiagunbiade1@gmail.com
+
+If this is not relevant to your role, reply no and I will not follow up.
+```
 
 ## Campus Student-Life Email
 

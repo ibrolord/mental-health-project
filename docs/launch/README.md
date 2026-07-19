@@ -13,6 +13,9 @@ This folder turns the first 500-user goal into a measurable operating plan.
    endorsement, clinical efficacy, or App Store availability.
 5. Review `weekly-scorecard.csv` every Monday using `npm run growth:report`.
 6. Follow `release-checklist.md` before calling either mobile platform live.
+7. Record every external action in `outreach-log.csv`. Gmail `Sent` proves a
+   send, not delivery or engagement; only replies, referrals, partner shares,
+   and attributed activations advance those respective metrics.
 
 ## Operating Rule
 
