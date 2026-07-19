@@ -15,6 +15,8 @@ community_practitioner_dm,community mental health leaders,Bolaji,https://mhtoolk
 community_newsletter,community newsletters,Partner,https://mhtoolkit.vercel.app/?utm_source=community&utm_medium=newsletter&utm_campaign=seven_day_check_in&utm_content=student_group
 member_referral,existing activated users,Member,https://mhtoolkit.vercel.app/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share
 product_hunt,Product Hunt launch,Bolaji,https://mhtoolkit.vercel.app/?utm_source=producthunt&utm_medium=organic&utm_campaign=focused_launch&utm_content=launch_post
+western_wellness_dm,Western University wellness and wellbeing,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=dm&utm_campaign=seven_day_check_in&utm_content=western_wellness
+queens_health_promotion_email,Queen's University health promotion,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=queens_health_promotion
 waterloo_health_promotion_email,University of Waterloo health promotion,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=waterloo_health_promotion
 laurier_wellness_email,Wilfrid Laurier student wellness,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=laurier_wellness
 guelph_wellness_education_email,University of Guelph wellness education,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=guelph_wellness_education
@@ -35,3 +37,13 @@ memorial_student_wellness_email,Memorial student wellness,Bolaji,https://mhtoolk
 usask_peer_health_email,University of Saskatchewan Peer Health,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=usask_peer_health
 uvic_wellness_promotion_email,University of Victoria wellness promotion,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=uvic_wellness_promotion
 sfu_health_promotion_reroute_email,Simon Fraser administrative reroute,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=sfu_health_promotion_reroute
+uvic_student_life_reroute_email,University of Victoria Student Life reroute,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=uvic_student_life_reroute
+ucalgary_campus_wellbeing_email,University of Calgary campus wellbeing,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=ucalgary_campus_wellbeing
+uwinnipeg_student_wellness_email,University of Winnipeg student wellness,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=uwinnipeg_student_wellness
+unb_student_affairs_email,University of New Brunswick student affairs,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=unb_student_affairs
+upei_student_experience_email,University of Prince Edward Island student experience,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=upei_student_experience
+uregina_student_wellness_email,University of Regina student wellness,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=uregina_student_wellness
+cbu_student_experience_email,Cape Breton University student experience,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=cbu_student_experience
+ualberta_wellness_supports_email,University of Alberta wellness supports,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=ualberta_wellness_supports
+ulethbridge_wellness_outreach_email,University of Lethbridge wellness outreach,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=ulethbridge_wellness_outreach
+bcit_student_life_email,British Columbia Institute of Technology student life,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=bcit_student_life
