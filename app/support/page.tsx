@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Support - MHtoolkit",
   description:
-    "Get help with MHtoolkit, your mental health companion app. Contact us, report issues, and find answers.",
+    "Get help with MHtoolkit. Contact us, report issues, and find answers.",
 };
 
 export default function SupportPage() {
@@ -16,10 +16,9 @@ export default function SupportPage() {
         </p>
 
         <p className="text-gray-700 mb-6 leading-relaxed">
-          MHtoolkit is a free mental health companion app designed to help you
-          track your mood, build healthy habits, and access supportive
-          resources. If you have questions, feedback, or need assistance,
-          please reach out using any of the methods below.
+          MHtoolkit is a free self-reflection tool designed to help you track
+          your mood and notice patterns. If you have questions, feedback, or
+          need assistance, please reach out using the contact details below.
         </p>
 
         <section className="mb-8">
@@ -143,33 +142,22 @@ export default function SupportPage() {
 
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-3">
-            Crisis Resources
+            Urgent Support
           </h2>
-          <p className="text-gray-700 leading-relaxed mb-4">
-            If you or someone you know is in crisis, please reach out to one of
-            these resources:
+          <p className="text-gray-700 leading-relaxed">
+            MHtoolkit does not provide crisis care. If you or someone else is
+            in immediate danger, contact the emergency services where you are
+            located or go to the nearest emergency department. For urgent
+            emotional support, use an official crisis service published for
+            your country or region, or{" "}
+            <a
+              href="https://findahelpline.com/"
+              className="text-blue-600 hover:underline"
+            >
+              find a verified local helpline
+            </a>
+            .
           </p>
-          <ul className="list-disc pl-6 text-gray-700 space-y-2">
-            <li>
-              <strong>988 Suicide &amp; Crisis Lifeline:</strong> Call or text{" "}
-              <strong>988</strong> (US)
-            </li>
-            <li>
-              <strong>Crisis Text Line:</strong> Text <strong>HOME</strong> to{" "}
-              <strong>741741</strong> (US/Canada)
-            </li>
-            <li>
-              <strong>International Association for Suicide Prevention:</strong>{" "}
-              <a
-                href="https://www.iasp.info/resources/Crisis_Centres/"
-                className="text-blue-600 hover:underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Find a crisis center
-              </a>
-            </li>
-          </ul>
         </section>
 
         <footer className="pt-6 border-t border-gray-200">

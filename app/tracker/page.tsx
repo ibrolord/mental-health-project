@@ -12,6 +12,8 @@ import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, subMonths } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { queueActivationAttribution } from '@/lib/acquisition';
+import { getLocalCheckInFields } from '@/lib/check-in';
 
 interface MoodEntry {
   id: string;
@@ -30,7 +32,7 @@ const moodToValue: Record<MoodEmoji, number> = {
 };
 
 export default function TrackerPage() {
-  const { context, query } = useDataContext();
+  const { context, query, user } = useDataContext();
   
   const [moods, setMoods] = useState<MoodEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -40,47 +42,57 @@ export default function TrackerPage() {
   const [newTags, setNewTags] = useState('');
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    loadMoods();
-  }, [query, selectedDate, filterTag]);
-
-  const loadMoods = async () => {
     if (!query) return;
+    let active = true;
 
-    try {
-      setLoading(true);
-      const monthStart = startOfMonth(selectedDate).toISOString();
-      const monthEnd = endOfMonth(selectedDate).toISOString();
+    const loadMoods = async () => {
+      try {
+        setLoading(true);
+        const monthStart = startOfMonth(selectedDate).toISOString();
+        const monthEnd = endOfMonth(selectedDate).toISOString();
 
-      let queryBuilder = supabase
-        .from('moods')
-        .select('*')
-        .eq(query.column, query.value)
-        .gte('created_at', monthStart)
-        .lte('created_at', monthEnd)
-        .order('created_at', { ascending: false });
+        let queryBuilder = supabase
+          .from('moods')
+          .select('*')
+          .eq(query.column, query.value)
+          .gte('created_at', monthStart)
+          .lte('created_at', monthEnd)
+          .order('created_at', { ascending: false });
 
-      if (filterTag) {
-        queryBuilder = queryBuilder.contains('tags', [filterTag]);
+        if (filterTag) {
+          queryBuilder = queryBuilder.contains('tags', [filterTag]);
+        }
+
+        const { data } = await queryBuilder;
+
+        if (active && data) {
+          setMoods(data);
+        }
+      } catch (error) {
+        console.error('Error loading moods:', error);
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
+    };
 
-      const { data } = await queryBuilder;
+    void loadMoods();
 
-      if (data) {
-        setMoods(data);
-      }
-    } catch (error) {
-      console.error('Error loading moods:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => {
+      active = false;
+    };
+  }, [query, selectedDate, filterTag, refreshKey]);
 
   const handleAddMood = async () => {
-    if (!newMood) return;
+    if (!newMood || saving) return;
 
     try {
+      setSaving(true);
       const tags = newTags
         .split(',')
         .map((t) => t.trim())
@@ -91,17 +103,23 @@ export default function TrackerPage() {
         emoji: newMood,
         note: newNote || null,
         tags,
+        ...getLocalCheckInFields(),
       } as any);
 
-      if (!error) {
-        setNewMood(null);
-        setNewNote('');
-        setNewTags('');
-        setShowAddMood(false);
-        loadMoods();
+      if (error) throw error;
+
+      setNewMood(null);
+      setNewNote('');
+      setNewTags('');
+      setShowAddMood(false);
+      setRefreshKey((key) => key + 1);
+      if (user?.id) {
+        queueActivationAttribution(user.id);
       }
     } catch (error) {
       console.error('Error adding mood:', error);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -205,10 +223,14 @@ export default function TrackerPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button onClick={handleAddMood} disabled={!newMood}>
-                    Save Mood
+                  <Button onClick={handleAddMood} disabled={!newMood || saving}>
+                    {saving ? 'Saving...' : 'Save Mood'}
                   </Button>
-                  <Button variant="outline" onClick={() => setShowAddMood(false)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddMood(false)}
+                    disabled={saving}
+                  >
                     Cancel
                   </Button>
                 </div>
@@ -315,4 +337,3 @@ export default function TrackerPage() {
     </main>
   );
 }
-

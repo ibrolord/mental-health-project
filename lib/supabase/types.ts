@@ -57,6 +57,8 @@ export interface Database {
           note: string | null;
           tags: string[];
           created_at: string;
+          local_date: string;
+          utc_offset_minutes: number;
         };
         Insert: {
           id?: string;
@@ -66,6 +68,8 @@ export interface Database {
           note?: string | null;
           tags?: string[];
           created_at?: string;
+          local_date?: string;
+          utc_offset_minutes?: number;
         };
         Update: {
           id?: string;
@@ -75,6 +79,8 @@ export interface Database {
           note?: string | null;
           tags?: string[];
           created_at?: string;
+          local_date?: string;
+          utc_offset_minutes?: number;
         };
       };
       assessments: {
@@ -385,5 +391,3 @@ export interface Database {
     };
   };
 }
-
-

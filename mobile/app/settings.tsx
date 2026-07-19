@@ -3,7 +3,6 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch, Pl
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
 import { useDataContext } from '@/lib/hooks/use-data-context';
-import { supabase } from '@/lib/supabase';
 import { apiRequest } from '@/lib/api';
 import { Colors } from '@/lib/constants';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -15,6 +14,7 @@ import {
   setReminderTimes,
 } from '@/lib/notifications';
 import { hasAiDataSharingConsent, resetAiDataSharingConsent, PRIVACY_POLICY_URL } from '@/lib/ai-consent';
+import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
 
 const HOUR_OPTIONS = [
   { label: '7 AM', value: 7 },
@@ -66,32 +66,15 @@ export default function SettingsScreen() {
     if (!query) return;
     setLoading(true);
     try {
-      const [moods, assessments, goals, habits, chatHistory, bookFavorites] = await Promise.all([
-        supabase.from('moods').select('*').eq(query.column, query.value),
-        supabase.from('assessments').select('*').eq(query.column, query.value),
-        supabase.from('goals').select('*').eq(query.column, query.value),
-        supabase.from('habits').select('*').eq(query.column, query.value),
-        supabase.from('chat_history').select('*').eq(query.column, query.value),
-        supabase.from('user_book_favorites').select('*').eq(query.column, query.value),
-      ]);
-
-      const data = JSON.stringify({
-        exported_at: new Date().toISOString(),
-        user_type: isAnonymous ? 'anonymous' : 'authenticated',
-        moods: moods.data || [],
-        assessments: assessments.data || [],
-        goals: goals.data || [],
-        habits: habits.data || [],
-        chat_history: chatHistory.data || [],
-        book_favorites: bookFavorites.data || [],
-      }, null, 2);
+      const exportData = await apiRequest('/api/data/export', {});
+      const data = JSON.stringify(exportData, null, 2);
 
       const path = `${FileSystem.documentDirectory}mental-health-data.json`;
       await FileSystem.writeAsStringAsync(path, data);
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(path);
       }
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Failed to export data');
     }
     setLoading(false);
@@ -101,7 +84,7 @@ export default function SettingsScreen() {
     if (!query) return;
     Alert.alert(
       'Delete All Data?',
-      'This will permanently delete all your moods, assessments, goals, habits, and chat history. This cannot be undone.',
+      'This will permanently delete all your check-ins, assessments, goals, habits, chat history, favorites, AI reports, and acquisition attribution. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -110,6 +93,7 @@ export default function SettingsScreen() {
           onPress: async () => {
             setLoading(true);
             try {
+              await clearStoredAcquisitionAttribution();
               const result = await apiRequest('/api/data/delete', {});
               if (!result?.deleted) throw new Error(result?.error || 'Deletion failed');
               Alert.alert('Done', 'All data deleted.');
@@ -293,7 +277,7 @@ export default function SettingsScreen() {
       {/* Disclaimer */}
       <View style={[s.card, { backgroundColor: '#eff6ff' }]}>
         <Text style={{ fontSize: 13, color: Colors.textSecondary, lineHeight: 20, textAlign: 'center' }}>
-          {"This app is a self-help tool, not a replacement for professional therapy. If you're in crisis, call 988."}
+          This app is a self-help tool, not a replacement for professional therapy. If you are in immediate danger, contact local emergency services. Crisis resources are available on the MHtoolkit support page.
         </Text>
       </View>
     </ScrollView>

@@ -5,6 +5,7 @@ import { supabase } from './supabase';
 import type { Session, User } from '@supabase/supabase-js';
 import { apiRequest } from './api';
 import { clearPersistedSupabaseSession } from './supabase';
+import { clearStoredAcquisitionAttribution } from './acquisition';
 
 let anonymousSignIn: Promise<Session> | null = null;
 const LEGACY_SESSION_KEY = 'anonymous_session_id';
@@ -169,6 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('No authenticated account to delete');
     }
 
+    await clearStoredAcquisitionAttribution();
     const result = await apiRequest('/api/account/delete', {});
     if (!result?.deleted) {
       throw new Error(result?.error || 'Failed to delete account');

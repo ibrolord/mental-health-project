@@ -8,8 +8,14 @@ import { cn } from '@/lib/utils';
 export function Navigation() {
   const pathname = usePathname();
 
-  // Don't show nav on landing, onboarding, or auth pages
-  if (pathname === '/' || pathname.startsWith('/onboarding') || pathname.startsWith('/auth')) {
+  // Keep public and pre-auth pages independent from the signed-in app shell.
+  if (
+    pathname === '/' ||
+    pathname === '/privacy' ||
+    pathname === '/support' ||
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/auth')
+  ) {
     return null;
   }
 
@@ -82,7 +88,6 @@ export function Navigation() {
     </nav>
   );
 }
-
 
 
 

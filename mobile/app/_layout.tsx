@@ -9,6 +9,7 @@ import type {
   NotificationResponseLike,
   NotificationSubscription,
 } from '@/lib/notifications-types';
+import { AcquisitionCapture } from '@/components/AcquisitionCapture';
 
 // NOTE: Shared iOS-loaded files must not reference expo-notifications or
 // expo-device at all. Those modules are resolved through platform-specific
@@ -96,6 +97,7 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <AuthProvider>
+        <AcquisitionCapture />
         <RouterCapture routerRef={routerRef} />
         <StatusBar style="dark" />
         <Stack screenOptions={{ headerShown: false }}>

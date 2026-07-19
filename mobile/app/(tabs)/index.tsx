@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Share } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { Colors } from '@/lib/constants';
 import { format, subDays, startOfDay } from 'date-fns';
 import type { MoodEmoji } from '@/lib/types';
+import { queueActivationAttribution } from '@/lib/acquisition';
+import { getLocalCheckInFields } from '@/lib/check-in';
 
 const moodEmojis: MoodEmoji[] = ['\u{1F604}', '\u{1F642}', '\u{1F610}', '\u{1F61E}', '\u{1F622}'];
 const moodLabels = ['Great', 'Good', 'Okay', 'Low', 'Very Low'];
+const CHALLENGE_SHARE_URL =
+  'https://mhtoolkit.vercel.app/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -16,6 +20,7 @@ export default function DashboardScreen() {
   const [todayMood, setTodayMood] = useState<MoodEmoji | null>(null);
   const [weekMoods, setWeekMoods] = useState<any[]>([]);
   const [affirmation, setAffirmation] = useState('');
+  const [savingMood, setSavingMood] = useState(false);
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
@@ -41,9 +46,31 @@ export default function DashboardScreen() {
   }, [queryColumn, queryValue]);
 
   const saveMood = async (mood: MoodEmoji) => {
-    if (!queryValue || (!user?.id && !sessionId)) return;
-    await supabase.from('moods').insert({ ...context, emoji: mood });
-    setTodayMood(mood);
+    if (!queryValue || !user?.id || savingMood) return;
+    setSavingMood(true);
+    try {
+      const { error } = await supabase.from('moods').insert({
+        ...context,
+        emoji: mood,
+        ...getLocalCheckInFields(),
+      });
+      if (error) {
+        console.warn('Unable to save mood:', error.message);
+        return;
+      }
+      setTodayMood(mood);
+      setWeekMoods((current) => [
+        ...current.filter(
+          (entry) =>
+            format(new Date(entry.created_at), 'yyyy-MM-dd') !==
+            format(new Date(), 'yyyy-MM-dd')
+        ),
+        { emoji: mood, created_at: new Date().toISOString() },
+      ]);
+      queueActivationAttribution(user.id);
+    } finally {
+      setSavingMood(false);
+    }
   };
 
   const quickActions = [
@@ -54,6 +81,21 @@ export default function DashboardScreen() {
     { label: '✅ Goals', route: '/goals' as const },
     { label: '📚 Library', route: '/library' as const },
   ];
+  const challengeDays = new Set(
+    weekMoods.map((entry) => format(new Date(entry.created_at), 'yyyy-MM-dd'))
+  ).size;
+
+  const shareChallenge = async () => {
+    try {
+      await Share.share({
+        message:
+          `I found a private 30-second check-in with no signup required. ` +
+          `Try it for seven days: ${CHALLENGE_SHARE_URL}`,
+      });
+    } catch (error) {
+      console.warn('Unable to share challenge:', error);
+    }
+  };
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
@@ -69,6 +111,7 @@ export default function DashboardScreen() {
             <TouchableOpacity
               key={emoji}
               onPress={() => saveMood(emoji)}
+              disabled={savingMood}
               style={[s.moodBtn, todayMood === emoji && s.moodBtnActive]}
             >
               <Text style={s.moodEmoji}>{emoji}</Text>
@@ -97,6 +140,28 @@ export default function DashboardScreen() {
           })}
         </View>
       </View>
+
+      {todayMood ? (
+        <View style={s.challengeCard}>
+          <Text style={s.challengeEyebrow}>7-DAY PRIVATE CHECK-IN</Text>
+          <Text style={s.challengeTitle}>{Math.min(challengeDays, 7)} of 7 check-in days</Text>
+          <View
+            style={s.challengeProgress}
+            accessibilityLabel={`${Math.min(challengeDays, 7)} of 7 days complete`}
+          >
+            {Array.from({ length: 7 }).map((_, index) => (
+              <View
+                key={index}
+                style={[s.challengeBar, index < challengeDays && s.challengeBarDone]}
+              />
+            ))}
+          </View>
+          <Text style={s.challengeCopy}>A missed day does not reset your progress.</Text>
+          <TouchableOpacity style={s.shareBtn} onPress={shareChallenge}>
+            <Text style={s.shareBtnText}>Invite someone</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* Affirmation */}
       {affirmation ? (
@@ -142,6 +207,15 @@ const s = StyleSheet.create({
   weekDay: { alignItems: 'center' },
   weekEmoji: { fontSize: 22 },
   weekLabel: { fontSize: 11, color: Colors.textSecondary, marginTop: 4 },
+  challengeCard: { backgroundColor: '#edf4ea', borderWidth: 1, borderColor: '#bfd0c4', borderRadius: 16, padding: 20, marginBottom: 16 },
+  challengeEyebrow: { color: '#a84c34', fontSize: 11, fontWeight: '700', letterSpacing: 1.4 },
+  challengeTitle: { color: '#173d34', fontSize: 20, fontWeight: '700', marginTop: 8 },
+  challengeProgress: { flexDirection: 'row', gap: 6, marginTop: 16 },
+  challengeBar: { flex: 1, height: 8, borderRadius: 8, backgroundColor: '#cbd8ce' },
+  challengeBarDone: { backgroundColor: '#c65f3d' },
+  challengeCopy: { color: '#587169', fontSize: 13, marginTop: 12 },
+  shareBtn: { alignSelf: 'flex-start', borderWidth: 1, borderColor: '#9db4a6', backgroundColor: '#fff', borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16, marginTop: 16 },
+  shareBtnText: { color: '#24483e', fontSize: 14, fontWeight: '600' },
   affirmationText: { fontSize: 18, fontStyle: 'italic', color: Colors.text, textAlign: 'center', marginBottom: 8 },
   affirmationLabel: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center' },
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

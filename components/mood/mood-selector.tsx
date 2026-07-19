@@ -18,31 +18,32 @@ const moods: { emoji: MoodEmoji; label: string }[] = [
 ];
 
 const sizeClasses = {
-  sm: 'text-3xl',
-  md: 'text-5xl',
-  lg: 'text-6xl',
+  sm: 'text-2xl sm:text-3xl',
+  md: 'text-3xl sm:text-5xl',
+  lg: 'text-4xl sm:text-6xl',
 };
 
 export function MoodSelector({ selected, onSelect, size = 'lg' }: MoodSelectorProps) {
   return (
-    <div className="flex justify-center gap-4">
+    <div className="grid w-full grid-cols-5 gap-1 sm:flex sm:justify-center sm:gap-4">
       {moods.map(({ emoji, label }) => (
         <button
           key={emoji}
           onClick={() => onSelect(emoji)}
           className={cn(
-            'flex flex-col items-center gap-2 p-4 rounded-lg transition-all hover:scale-110',
+            'flex min-w-0 flex-col items-center gap-2 rounded-lg px-1 py-3 transition-all sm:p-4 sm:hover:scale-110',
             selected === emoji
-              ? 'bg-primary/10 ring-2 ring-primary scale-110'
+              ? 'bg-primary/10 ring-2 ring-primary sm:scale-110'
               : 'hover:bg-slate-100'
           )}
         >
           <span className={sizeClasses[size]}>{emoji}</span>
-          <span className="text-sm text-slate-600">{label}</span>
+          <span className="whitespace-nowrap text-xs text-slate-600 sm:text-sm">
+            {label}
+          </span>
         </button>
       ))}
     </div>
   );
 }
-
 

@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { apiRequest } from '@/lib/api/client';
 import { hasAiDataSharingConsent, resetAiDataSharingConsent } from '@/lib/ai-consent';
+import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -26,30 +27,7 @@ export default function SettingsPage() {
 
     try {
       setLoading(true);
-
-      // Fetch all user data
-      const [moods, assessments, goals, habits, habitLogs, chatHistory] = await Promise.all([
-        supabase.from('moods').select('*').eq(query.column, query.value),
-        supabase.from('assessments').select('*').eq(query.column, query.value),
-        supabase.from('goals').select('*').eq(query.column, query.value),
-        supabase.from('habits').select('*').eq(query.column, query.value),
-        supabase
-          .from('habit_logs')
-          .select('*, habits(*)')
-          .eq(`habits.${query.column}`, query.value),
-        supabase.from('chat_history').select('*').eq(query.column, query.value),
-      ]);
-
-      const exportData = {
-        exported_at: new Date().toISOString(),
-        user_type: isAnonymous ? 'anonymous' : 'authenticated',
-        moods: moods.data || [],
-        assessments: assessments.data || [],
-        goals: goals.data || [],
-        habits: habits.data || [],
-        habit_logs: habitLogs.data || [],
-        chat_history: chatHistory.data || [],
-      };
+      const exportData = await apiRequest('/api/data/export', {});
 
       // Create JSON file
       const dataStr = JSON.stringify(exportData, null, 2);
@@ -76,11 +54,9 @@ export default function SettingsPage() {
     const confirmed = confirm(
       'Are you sure you want to delete ALL your data? This action cannot be undone.\n\n' +
       'This will permanently delete:\n' +
-      '- All mood entries\n' +
-      '- All assessments\n' +
-      '- All goals\n' +
-      '- All habits and logs\n' +
-      '- All chat history\n\n' +
+      '- Check-ins, assessments, goals, habits, and chat history\n' +
+      '- Affirmation history and book favorites\n' +
+      '- AI response reports and acquisition attribution\n\n' +
       'Type "DELETE" in the next prompt to confirm.'
     );
 
@@ -95,11 +71,11 @@ export default function SettingsPage() {
     try {
       setLoading(true);
 
+      clearStoredAcquisitionAttribution();
       const result = await apiRequest('/api/data/delete', {});
       if (!result?.deleted) {
         throw new Error(result?.error || 'Deletion failed');
       }
-
       alert('All data deleted successfully');
 
       router.push('/');
@@ -133,6 +109,7 @@ export default function SettingsPage() {
     try {
       setLoading(true);
 
+      clearStoredAcquisitionAttribution();
       const result = await apiRequest('/api/account/delete', {});
       if (!result?.deleted) {
         throw new Error(result?.error || 'Failed to delete account');
@@ -234,7 +211,7 @@ export default function SettingsPage() {
                 <li>All data is encrypted at rest using industry-standard encryption</li>
                 <li>We never sell your data or share it for advertising</li>
                 <li>Optional AI features send selected chat, voice, and personalization data to AI providers only after consent</li>
-                <li>No tracking pixels or unnecessary analytics</li>
+                <li>No advertising trackers; acquisition reporting uses allowlisted campaign labels only</li>
                 <li>Anonymous usage requires no personal information</li>
               </ul>
               <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3">
@@ -255,6 +232,8 @@ export default function SettingsPage() {
                 <li>Mood entries and assessment results</li>
                 <li>Goals, habits, and reflections</li>
                 <li>Chat conversations with AI (stored securely)</li>
+                <li>Affirmation history, book favorites, and AI response reports</li>
+                <li>Allowlisted first-touch campaign labels after your first saved check-in</li>
                 <li>Email address (only if you create an account)</li>
               </ul>
             </div>
@@ -262,10 +241,10 @@ export default function SettingsPage() {
             <div>
               <h3 className="font-semibold mb-2">✅ Your Rights</h3>
               <ul className="list-disc list-inside space-y-1">
-                <li>Export all your data at any time (GDPR/CCPA compliant)</li>
+                <li>Export all your data at any time</li>
                 <li>Delete your data with one click</li>
                 <li>Use the app completely anonymously</li>
-                <li>Migrate anonymous data to an account anytime</li>
+                <li>Sign in to an existing account after exporting or deleting anonymous data</li>
               </ul>
             </div>
 

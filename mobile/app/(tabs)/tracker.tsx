@@ -5,6 +5,8 @@ import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import type { MoodEmoji } from '@/lib/types';
+import { queueActivationAttribution } from '@/lib/acquisition';
+import { getLocalCheckInFields } from '@/lib/check-in';
 
 const moodEmojis: MoodEmoji[] = ['\u{1F604}', '\u{1F642}', '\u{1F610}', '\u{1F61E}', '\u{1F622}'];
 const moodLabels = ['Great', 'Good', 'Okay', 'Low', 'Very Low'];
@@ -18,7 +20,7 @@ interface MoodEntry {
 }
 
 export default function TrackerScreen() {
-  const { context, query } = useDataContext();
+  const { context, query, user } = useDataContext();
   const [moods, setMoods] = useState<MoodEntry[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [newMood, setNewMood] = useState<MoodEmoji | null>(null);
@@ -26,47 +28,66 @@ export default function TrackerScreen() {
   const [newTags, setNewTags] = useState('');
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    loadMoods();
-  }, [query, filterTag]);
-
-  const loadMoods = async () => {
     if (!query) return;
-    setLoading(true);
-    const monthStart = startOfMonth(new Date()).toISOString();
-    const monthEnd = endOfMonth(new Date()).toISOString();
+    let active = true;
 
-    let qb = supabase
-      .from('moods')
-      .select('*')
-      .eq(query.column, query.value)
-      .gte('created_at', monthStart)
-      .lte('created_at', monthEnd)
-      .order('created_at', { ascending: false });
+    const loadMoods = async () => {
+      setLoading(true);
+      const monthStart = startOfMonth(new Date()).toISOString();
+      const monthEnd = endOfMonth(new Date()).toISOString();
 
-    if (filterTag) qb = qb.contains('tags', [filterTag]);
+      let qb = supabase
+        .from('moods')
+        .select('*')
+        .eq(query.column, query.value)
+        .gte('created_at', monthStart)
+        .lte('created_at', monthEnd)
+        .order('created_at', { ascending: false });
 
-    const { data } = await qb;
-    if (data) setMoods(data);
-    setLoading(false);
-  };
+      if (filterTag) qb = qb.contains('tags', [filterTag]);
+
+      const { data } = await qb;
+      if (active && data) setMoods(data);
+      if (active) setLoading(false);
+    };
+
+    void loadMoods();
+
+    return () => {
+      active = false;
+    };
+  }, [query, filterTag, refreshKey]);
 
   const handleAdd = async () => {
-    if (!newMood) return;
-    const tags = newTags.split(',').map((t) => t.trim()).filter((t) => t);
-    const { error } = await supabase.from('moods').insert({
-      ...context,
-      emoji: newMood,
-      note: newNote || null,
-      tags,
-    } as any);
-    if (!error) {
+    if (!newMood || saving) return;
+    setSaving(true);
+    try {
+      const tags = newTags.split(',').map((t) => t.trim()).filter((t) => t);
+      const { error } = await supabase.from('moods').insert({
+        ...context,
+        emoji: newMood,
+        note: newNote || null,
+        tags,
+        ...getLocalCheckInFields(),
+      } as any);
+      if (error) {
+        console.warn('Unable to save mood:', error.message);
+        return;
+      }
       setNewMood(null);
       setNewNote('');
       setNewTags('');
       setShowAdd(false);
-      loadMoods();
+      setRefreshKey((key) => key + 1);
+      if (user?.id) {
+        queueActivationAttribution(user.id);
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -118,11 +139,11 @@ export default function TrackerScreen() {
             placeholderTextColor={Colors.textSecondary}
           />
           <TouchableOpacity
-            style={[s.saveBtn, !newMood && s.saveBtnDisabled]}
+            style={[s.saveBtn, (!newMood || saving) && s.saveBtnDisabled]}
             onPress={handleAdd}
-            disabled={!newMood}
+            disabled={!newMood || saving}
           >
-            <Text style={s.saveBtnText}>Save Mood</Text>
+            <Text style={s.saveBtnText}>{saving ? 'Saving...' : 'Save Mood'}</Text>
           </TouchableOpacity>
         </View>
       )}

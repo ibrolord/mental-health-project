@@ -8,6 +8,9 @@ import { MoodEmoji } from '@/lib/supabase/types';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { format, subDays, startOfDay } from 'date-fns';
+import { queueActivationAttribution } from '@/lib/acquisition';
+import { getLocalCheckInFields } from '@/lib/check-in';
+import { ShareChallengeButton } from '@/components/launch/share-challenge-button';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -16,6 +19,7 @@ export default function DashboardPage() {
   const [todayMood, setTodayMood] = useState<MoodEmoji | null>(null);
   const [weekMoods, setWeekMoods] = useState<any[]>([]);
   const [affirmation, setAffirmation] = useState<string>('');
+  const [savingMood, setSavingMood] = useState(false);
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
@@ -49,17 +53,37 @@ export default function DashboardPage() {
   }, [queryColumn, queryValue]);
 
   const saveMood = async (mood: MoodEmoji) => {
-    if (!queryValue) return;
+    if (!queryValue || !user?.id || savingMood) return;
     try {
-      await supabase.from('moods').insert({ ...context, emoji: mood } as any);
+      setSavingMood(true);
+      const { error } = await supabase.from('moods').insert({
+        ...context,
+        emoji: mood,
+        ...getLocalCheckInFields(),
+      } as any);
+      if (error) throw error;
       setTodayMood(mood);
+      setWeekMoods((current) => [
+        ...current.filter(
+          (entry) =>
+            format(new Date(entry.created_at), 'yyyy-MM-dd') !==
+            format(new Date(), 'yyyy-MM-dd')
+        ),
+        { emoji: mood, created_at: new Date().toISOString() },
+      ]);
+      queueActivationAttribution(user.id);
     } catch (e) {
       console.error('Save mood error:', e);
+    } finally {
+      setSavingMood(false);
     }
   };
 
   const moodEmojis: MoodEmoji[] = ['😄', '🙂', '😐', '😞', '😢'];
   const moodLabels = ['Great', 'Good', 'Okay', 'Low', 'Very Low'];
+  const challengeDays = new Set(
+    weekMoods.map((entry) => format(new Date(entry.created_at), 'yyyy-MM-dd'))
+  ).size;
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 pt-20 md:p-8 md:pt-24">
@@ -81,9 +105,10 @@ export default function DashboardPage() {
                   <button
                     key={emoji}
                     onClick={() => saveMood(emoji)}
+                    disabled={savingMood}
                     className={`flex flex-col items-center p-2 rounded-lg transition-all ${
                       todayMood === emoji ? 'bg-blue-100 ring-2 ring-blue-500' : 'hover:bg-slate-100'
-                    }`}
+                    } disabled:cursor-wait disabled:opacity-60`}
                   >
                     <span className="text-2xl">{emoji}</span>
                     <span className="text-xs text-slate-600 mt-1">{moodLabels[index]}</span>
@@ -116,6 +141,35 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {todayMood && (
+          <Card className="overflow-hidden border-[#bfd0c4] bg-[#edf4ea]">
+            <CardContent className="flex flex-col gap-6 pt-6 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#a84c34]">
+                  7-day private check-in
+                </p>
+                <h2 className="mt-2 text-xl font-bold text-[#173d34]">
+                  {Math.min(challengeDays, 7)} of 7 check-in days
+                </h2>
+                <div className="mt-4 flex gap-2" aria-label={`${Math.min(challengeDays, 7)} of 7 days complete`}>
+                  {Array.from({ length: 7 }).map((_, index) => (
+                    <span
+                      key={index}
+                      className={`h-2.5 w-8 rounded-full ${
+                        index < challengeDays ? 'bg-[#c65f3d]' : 'bg-[#cbd8ce]'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <p className="mt-3 text-sm text-[#587169]">
+                  Keep it light. A missed day does not reset your progress.
+                </p>
+              </div>
+              <ShareChallengeButton />
+            </CardContent>
+          </Card>
+        )}
 
         {affirmation && (
           <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">

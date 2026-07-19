@@ -1,6 +1,6 @@
 # MHtoolkit
 
-A privacy-first mental health support platform offering mood tracking, AI-guided self-reflection, assessments, goal setting with prioritization frameworks, habit tracking, and more.
+A privacy-first self-reflection toolkit offering mood tracking, optional AI-guided prompts, published-source self-assessments, goal setting, habit tracking, and more.
 
 ## ✨ Features
 
@@ -12,7 +12,7 @@ A privacy-first mental health support platform offering mood tracking, AI-guided
 - **🎯 Habit Tracker**: Build and track daily habits with streak counting
 - **✨ Smart Affirmations**: AI-personalized daily affirmations based on your data
 - **🔒 Anonymous Mode**: Start using without signup, optionally create account later
-- **🔐 Privacy First**: Full data export, one-click deletion, no tracking
+- **🔐 Privacy First**: Full data export, one-click deletion, no ads or cross-app tracking
 
 ## 🛠 Tech Stack
 
@@ -129,7 +129,9 @@ The platform uses Supabase (PostgreSQL) with Row Level Security. Key tables:
 - `affirmations` - Affirmation library
 - `books` - Book summaries
 
-All tables support both anonymous (session_id) and authenticated (user_id) access.
+Core user-data tables support legacy anonymous (`session_id`) and authenticated
+(`user_id`) ownership. Current anonymous sessions use Supabase anonymous Auth
+users, and aggregate acquisition attribution is keyed only by `user_id`.
 
 ## 🔐 Privacy & Security
 
@@ -137,9 +139,11 @@ All tables support both anonymous (session_id) and authenticated (user_id) acces
 - **Row Level Security**: All data isolated by user/session
 - **Data migration**: Seamless transition from anonymous to authenticated
 - **Export & Delete**: One-click data export (JSON) and deletion
-- **No tracking**: No analytics pixels or unnecessary data collection
+- **Privacy-preserving measurement**: Anonymous page analytics and allowlisted
+  campaign labels support aggregate activation reporting; no advertising IDs,
+  referrer URLs, or mental-health content are included
 - **Encryption**: All data encrypted at rest
-- **GDPR/CCPA compliant**: Full data portability and right to deletion
+- **User-controlled data**: Complete export and permanent deletion controls
 
 ## 🚀 Deployment
 

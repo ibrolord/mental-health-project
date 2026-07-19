@@ -28,5 +28,9 @@ export async function apiRequest(path: string, body: any): Promise<any> {
     body: JSON.stringify(body),
   });
 
-  return res.json();
+  const result = await res.json().catch(() => ({ error: 'Request failed' }));
+  if (!res.ok) {
+    throw new Error(result.error || `API error: ${res.status}`);
+  }
+  return result;
 }

@@ -1,0 +1,17 @@
+name,audience,owner,url
+founder_linkedin,founder network,Bolaji,https://mhtoolkit.vercel.app/?utm_source=linkedin&utm_medium=organic&utm_campaign=seven_day_check_in&utm_content=founder_note
+founder_x,founder network,Bolaji,https://mhtoolkit.vercel.app/?utm_source=x&utm_medium=organic&utm_campaign=seven_day_check_in&utm_content=founder_note
+founder_email,direct contacts,Bolaji,https://mhtoolkit.vercel.app/?utm_source=founder&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=founder_note
+campus_email,campus staff and student organizations,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=student_group
+campus_dm,campus staff and student organizations,Bolaji,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=dm&utm_campaign=seven_day_check_in&utm_content=student_group
+campus_qr,campus events and approved print placements,Partner,https://mhtoolkit.vercel.app/?utm_source=campus&utm_medium=qr&utm_campaign=seven_day_check_in&utm_content=qr_card
+practitioner_email,wellness and peer-support practitioners,Bolaji,https://mhtoolkit.vercel.app/?utm_source=practitioner&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=practitioner_intro
+creator_dm,aligned creators,Bolaji,https://mhtoolkit.vercel.app/?utm_source=creator&utm_medium=dm&utm_campaign=seven_day_check_in&utm_content=creator_demo
+creator_social,creator audiences,Creator,https://mhtoolkit.vercel.app/?utm_source=creator&utm_medium=social&utm_campaign=seven_day_check_in&utm_content=creator_demo
+community_email,community organizations,Bolaji,https://mhtoolkit.vercel.app/?utm_source=community&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=student_group
+community_dm,community organizations,Bolaji,https://mhtoolkit.vercel.app/?utm_source=community&utm_medium=dm&utm_campaign=seven_day_check_in&utm_content=student_group
+community_practitioner_email,community mental health leaders,Bolaji,https://mhtoolkit.vercel.app/?utm_source=community&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=practitioner_intro
+community_practitioner_dm,community mental health leaders,Bolaji,https://mhtoolkit.vercel.app/?utm_source=community&utm_medium=dm&utm_campaign=seven_day_check_in&utm_content=practitioner_intro
+community_newsletter,community newsletters,Partner,https://mhtoolkit.vercel.app/?utm_source=community&utm_medium=newsletter&utm_campaign=seven_day_check_in&utm_content=student_group
+member_referral,existing activated users,Member,https://mhtoolkit.vercel.app/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share
+product_hunt,Product Hunt launch,Bolaji,https://mhtoolkit.vercel.app/?utm_source=producthunt&utm_medium=organic&utm_campaign=focused_launch&utm_content=launch_post

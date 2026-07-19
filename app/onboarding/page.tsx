@@ -10,6 +10,8 @@ import { MoodSelector } from '@/components/mood/mood-selector';
 import { MoodEmoji } from '@/lib/supabase/types';
 import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
+import { queueActivationAttribution } from '@/lib/acquisition';
+import { getLocalCheckInFields } from '@/lib/check-in';
 
 type Step = 'mood' | 'intention' | 'route';
 
@@ -23,30 +25,36 @@ const intentions = [
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { context } = useDataContext();
+  const { context, user, authLoading } = useDataContext();
   
   const [step, setStep] = useState<Step>('mood');
   const [mood, setMood] = useState<MoodEmoji | null>(null);
   const [note, setNote] = useState('');
   const [selectedIntentions, setSelectedIntentions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const handleMoodNext = async () => {
-    if (!mood) return;
+    if (!mood || !user?.id) return;
 
     try {
       setLoading(true);
+      setSaveError('');
       
       // Save mood to database
-      await supabase.from('moods').insert({
+      const { error } = await supabase.from('moods').insert({
         ...context,
         emoji: mood,
         note: note || null,
+        ...getLocalCheckInFields(),
       } as any);
+      if (error) throw error;
 
       setStep('intention');
+      queueActivationAttribution(user.id);
     } catch (error) {
       console.error('Error saving mood:', error);
+      setSaveError('Your check-in was not saved. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -138,10 +146,15 @@ export default function OnboardingPage() {
                 size="lg"
                 className="w-full"
                 onClick={handleMoodNext}
-                disabled={!mood || loading}
+                disabled={!mood || !user || authLoading || loading}
               >
-                {loading ? 'Saving...' : 'Continue'}
+                {authLoading ? 'Preparing your private space...' : loading ? 'Saving...' : 'Save day one'}
               </Button>
+              {saveError && (
+                <p role="alert" className="mt-3 text-center text-sm text-red-700">
+                  {saveError}
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
@@ -246,4 +259,3 @@ export default function OnboardingPage() {
     </main>
   );
 }
-

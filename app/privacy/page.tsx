@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Privacy Policy - MHtoolkit",
-  description: "Privacy policy for MHtoolkit, your mental health companion app.",
+  description: "Privacy policy for the MHtoolkit self-reflection app.",
 };
 
 export default function PrivacyPolicyPage() {
@@ -13,14 +13,14 @@ export default function PrivacyPolicyPage() {
           Privacy Policy
         </h1>
         <p className="text-sm text-gray-500 mb-8">
-          Effective date: May 6, 2026
+          Effective date: July 19, 2026
         </p>
 
         <p className="text-gray-700 mb-6 leading-relaxed">
-          MHtoolkit (&quot;the App&quot;) is a free mental health companion
-          developed by Bolaji Agunbiade. Your privacy matters deeply to us. This
-          policy explains what data we collect, how we use it, and what rights
-          you have over it.
+          MHtoolkit (&quot;the App&quot;) is a free self-reflection tool
+          developed by Bolaji Agunbiade. Your privacy matters deeply to us.
+          This policy explains what data we collect, how we use it, and what
+          rights you have over it.
         </p>
 
         {/* Data Collection */}
@@ -75,6 +75,13 @@ export default function PrivacyPolicyPage() {
               <strong>Anonymous page view analytics:</strong> Collected via
               Vercel Analytics (no cookies, no personal identifiers).
             </li>
+            <li>
+              <strong>Campaign attribution:</strong> After your first saved
+              check-in, we may store allowlisted labels from an MHtoolkit link,
+              such as source, medium, campaign, content variant, and platform.
+              We do not store the referring URL, advertising identifiers, your
+              mood value, notes, assessments, or AI content with these labels.
+            </li>
           </ul>
         </section>
 
@@ -103,6 +110,10 @@ export default function PrivacyPolicyPage() {
             <li>
               Understanding aggregate, anonymous usage patterns to improve the
               App.
+            </li>
+            <li>
+              Measuring aggregate activation and repeat check-in rates by
+              campaign so we can focus on useful, permission-based distribution.
             </li>
             <li>Reviewing user-reported AI responses for safety and quality.</li>
           </ul>
@@ -173,6 +184,10 @@ export default function PrivacyPolicyPage() {
               their own data.
             </li>
             <li>
+              Growth reports contain cohort counts only. They do not expose user
+              IDs or any mental-health content.
+            </li>
+            <li>
               Anonymous use is assigned a random Supabase Auth user ID without
               requiring an email address or other direct identifier. On the
               mobile app, its session credential is stored using the device&apos;s
@@ -238,6 +253,10 @@ export default function PrivacyPolicyPage() {
             <li>
               User-submitted AI response reports are retained for safety review
               for up to 90 days, unless you delete your data sooner.
+            </li>
+            <li>
+              Campaign attribution is retained with your anonymous or signed-in
+              account and is deleted when you delete your data or account.
             </li>
             <li>
               When you delete your data (see Section 7), it is permanently
