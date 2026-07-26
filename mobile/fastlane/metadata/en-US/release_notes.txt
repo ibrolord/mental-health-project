@@ -1,4 +1,4 @@
-Welcome to MHtoolkit v1.0.0!
+What's new in MHtoolkit v1.0.1:
 
 - AI chat companion with explicit AI data-sharing consent
 - Voice support with clearer microphone, AI processing, and self-help guidance
@@ -10,6 +10,6 @@ Welcome to MHtoolkit v1.0.0!
 - Goal setting with 5 proven frameworks
 - Habit tracking with daily streaks
 - AI-generated affirmations based on your data after consent
-- Task-oriented resource library with medically reviewed book notes
+- Task-oriented resource library with carefully reviewed book notes and clear limitations
 - Full data export, in-app data deletion, and account deletion
 - Anonymous use — no account required
