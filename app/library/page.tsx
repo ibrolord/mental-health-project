@@ -6,12 +6,8 @@ import {
   ArrowLeft,
   ArrowRight,
   AlertTriangle,
-  BarChart3,
   BookOpen,
-  Brain,
-  CheckCircle2,
   ExternalLink,
-  Feather,
   NotebookPen,
   Repeat2,
   Search,
@@ -25,41 +21,6 @@ import {
   LIBRARY_TOPICS,
   type LibraryTopic,
 } from '@/lib/library/editorial';
-
-const pathways = [
-  {
-    title: 'Check a symptom pattern',
-    description: 'Use published screeners with their original recall periods and scoring.',
-    href: '/assessments',
-    action: 'Choose a screener',
-    icon: Brain,
-    style: 'border-sky-200 bg-sky-50 text-sky-950',
-  },
-  {
-    title: 'Notice what changes',
-    description: 'Record a quick check-in and look for patterns over time.',
-    href: '/tracker',
-    action: 'Open mood tracker',
-    icon: BarChart3,
-    style: 'border-teal-200 bg-teal-50 text-teal-950',
-  },
-  {
-    title: 'Build one repeatable step',
-    description: 'Turn a small, realistic action into a routine you can adjust.',
-    href: '/habits',
-    action: 'Open habits',
-    icon: CheckCircle2,
-    style: 'border-amber-200 bg-amber-50 text-amber-950',
-  },
-  {
-    title: 'Reflect in writing',
-    description: 'Write private notes that are not sent to AI chat.',
-    href: '/journal',
-    action: 'Open private journal',
-    icon: Feather,
-    style: 'border-rose-200 bg-rose-50 text-rose-950',
-  },
-] as const;
 
 function integrationHref(book: CuratedBook, integration: LibraryIntegration): string {
   const params = new URLSearchParams({
@@ -378,48 +339,13 @@ export default function LibraryPage() {
               Start with what you need.
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-emerald-50/90 md:text-lg">
-              Go directly to a tool, or use source-backed guides to understand a book&apos;s core
-              premises, apply its useful ideas, and keep its claims within appropriate limits.
+              Explore source-backed guides that explain a book&apos;s core premises, turn useful
+              ideas into practical next steps, and keep its claims within appropriate limits.
             </p>
           </div>
         </section>
 
-        <section className="mt-10" aria-labelledby="next-step-heading">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-800">
-            Find a next step
-          </p>
-          <h2
-            id="next-step-heading"
-            className="mt-1 font-[family-name:var(--font-display)] text-3xl text-slate-950"
-          >
-            What would help right now?
-          </h2>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {pathways.map((pathway) => {
-              const Icon = pathway.icon;
-              return (
-                <Link
-                  key={pathway.href}
-                  href={pathway.href}
-                  className={`group flex min-h-56 flex-col rounded-2xl border p-5 transition-transform hover:-translate-y-1 ${pathway.style}`}
-                >
-                  <Icon className="h-6 w-6" aria-hidden="true" />
-                  <h3 className="mt-5 text-lg font-semibold">{pathway.title}</h3>
-                  <p className="mt-2 text-sm leading-6 opacity-75">{pathway.description}</p>
-                  <span className="mt-auto flex items-center gap-2 pt-5 text-sm font-semibold">
-                    {pathway.action}
-                    <ArrowRight
-                      className="h-4 w-4 transition-transform group-hover:translate-x-1"
-                      aria-hidden="true"
-                    />
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="mt-12" aria-labelledby="book-notes-heading">
+        <section className="mt-10" aria-labelledby="book-notes-heading">
           <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-800">

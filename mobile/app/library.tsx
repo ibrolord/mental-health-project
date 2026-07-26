@@ -19,33 +19,6 @@ import {
 } from '@/lib/library/editorial';
 import { Colors } from '@/lib/constants';
 
-const pathways = [
-  {
-    title: 'Check symptoms',
-    description: 'Use a published self-report tool.',
-    route: '/assessments',
-    color: '#eff6ff',
-  },
-  {
-    title: 'Notice patterns',
-    description: 'Record a quick mood check-in.',
-    route: '/tracker',
-    color: '#ecfdf5',
-  },
-  {
-    title: 'Build a routine',
-    description: 'Choose one repeatable step.',
-    route: '/habits',
-    color: '#fffbeb',
-  },
-  {
-    title: 'Reflect in writing',
-    description: 'Write private notes that are not sent to AI.',
-    route: '/journal',
-    color: '#fff1f2',
-  },
-] as const;
-
 function integrationRoute(book: CuratedBook, integration: LibraryIntegration) {
   const baseParams = {
     source: 'library',
@@ -239,29 +212,14 @@ export default function LibraryScreen() {
         <Text style={s.kicker}>RESOURCE LIBRARY</Text>
         <Text style={s.heroTitle}>Start with what you need.</Text>
         <Text style={s.heroText}>
-          Go directly to a tool, or use source-backed guides to understand a book&apos;s premises,
-          apply useful ideas, and keep claims within appropriate limits.
+          Explore source-backed guides that explain a book&apos;s premises, turn useful ideas into
+          practical next steps, and keep claims within appropriate limits.
         </Text>
       </View>
 
-      <Text style={s.sectionKicker}>FIND A NEXT STEP</Text>
-      <Text style={s.listTitle}>What would help right now?</Text>
-      <View style={s.pathwayGrid}>
-        {pathways.map((pathway) => (
-          <TouchableOpacity
-            key={pathway.route}
-            style={[s.pathwayCard, { backgroundColor: pathway.color }]}
-            onPress={() => router.push(pathway.route)}
-          >
-            <Text style={s.pathwayTitle}>{pathway.title}</Text>
-            <Text style={s.pathwayText}>{pathway.description}</Text>
-            <Text style={s.pathwayAction}>Open tool</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <Text style={[s.sectionKicker, { marginTop: 28 }]}>SOURCE-BACKED READING GUIDES</Text>
+      <Text style={s.sectionKicker}>SOURCE-BACKED READING GUIDES</Text>
       <Text style={s.listTitle}>Browse by need, not raw tags.</Text>
+      <Text style={s.guideCount}>{CURATED_LIBRARY.length} in-depth guides</Text>
 
       <View style={s.searchBox}>
         <TextInput
@@ -335,11 +293,7 @@ const s = StyleSheet.create({
   heroText: { color: '#d1fae5', fontSize: 14, lineHeight: 21, marginTop: 10 },
   sectionKicker: { color: '#287264', fontSize: 11, fontWeight: '700', letterSpacing: 1.1 },
   listTitle: { color: Colors.text, fontSize: 24, lineHeight: 30, fontWeight: '700', marginTop: 5 },
-  pathwayGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
-  pathwayCard: { width: '48%', minHeight: 150, borderRadius: 16, padding: 16 },
-  pathwayTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' },
-  pathwayText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 7 },
-  pathwayAction: { color: '#287264', fontSize: 13, fontWeight: '700', marginTop: 'auto' },
+  guideCount: { color: Colors.textSecondary, fontSize: 12, marginTop: 6 },
   searchBox: { backgroundColor: '#fff', borderRadius: 16, padding: 12, marginTop: 16 },
   searchInput: {
     backgroundColor: '#f8fafc',

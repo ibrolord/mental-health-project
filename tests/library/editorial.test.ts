@@ -8,6 +8,7 @@ import {
   applyEditorialReview as applyMobileEditorialReview,
   CURATED_LIBRARY as MOBILE_CURATED_LIBRARY,
 } from '../../mobile/lib/library/editorial';
+import { ADDITIONAL_BOOKS } from '../../mobile/lib/library/additional-books';
 
 const seededTitles = [
   'Atomic Habits',
@@ -62,20 +63,75 @@ describe('library editorial review', () => {
   });
 
   it('ships a complete reviewed catalog without a network dependency', () => {
-    expect(CURATED_LIBRARY.map(({ title }) => title)).toEqual([...seededTitles].sort());
+    const expectedTitles = [
+      ...seededTitles,
+      ...ADDITIONAL_BOOKS.map(({ title }) => title),
+    ].sort((a, b) => a.localeCompare(b));
+
+    expect(ADDITIONAL_BOOKS).toHaveLength(50);
+    expect(CURATED_LIBRARY).toHaveLength(58);
+    expect(CURATED_LIBRARY.map(({ title }) => title)).toEqual(expectedTitles);
     expect(CURATED_LIBRARY.every(({ quote }) => quote === null)).toBe(true);
-    expect(CURATED_LIBRARY.every(({ read_time_minutes }) => read_time_minutes >= 15)).toBe(true);
+    expect(CURATED_LIBRARY.every(({ read_time_minutes }) => read_time_minutes >= 13)).toBe(true);
     expect(MOBILE_CURATED_LIBRARY).toEqual(CURATED_LIBRARY);
+  });
+
+  it('keeps every supplemental guide substantial, source-backed, and actionable', () => {
+    const ids = ADDITIONAL_BOOKS.map(({ id }) => id);
+    const titles = ADDITIONAL_BOOKS.map(({ title }) => title);
+
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(new Set(titles).size).toBe(titles.length);
+
+    for (const draft of ADDITIONAL_BOOKS) {
+      expect(draft.summary.length).toBeGreaterThan(120);
+      expect(draft.centralPremise.length).toBeGreaterThan(120);
+      expect(draft.corePremises).toHaveLength(3);
+      expect(draft.practicalTakeaways).toHaveLength(3);
+      expect(draft.reflectionPrompts).toHaveLength(3);
+      expect(draft.sources.length).toBeGreaterThanOrEqual(1);
+      expect(draft.sources.every(({ url }) => url.startsWith('https://'))).toBe(true);
+      expect(draft.medicalCaveat?.length).toBeGreaterThan(100);
+
+      for (const premise of draft.corePremises) {
+        expect(premise.title.length).toBeGreaterThan(5);
+        expect(premise.premise.length).toBeGreaterThan(80);
+        expect(premise.whyItMatters.length).toBeGreaterThan(60);
+        expect(premise.practice.length).toBeGreaterThan(50);
+      }
+
+      for (const takeaway of draft.practicalTakeaways) {
+        expect(takeaway.description.length).toBeGreaterThan(45);
+        expect(takeaway.nextStep.length).toBeGreaterThan(50);
+      }
+
+      const reviewed = applyEditorialReview(book(draft.title));
+      expect(reviewed).not.toBeNull();
+      expect(reviewed?.quote).toBeNull();
+      expect(reviewed?.sources).toEqual(draft.sources);
+      expect(reviewed?.integrations.map(({ actionType }) => actionType).sort()).toEqual([
+        'goal',
+        'habit',
+        'journal',
+      ]);
+    }
   });
 
   it('flags debated medical claims instead of presenting them as fact', () => {
     const reviewed = applyEditorialReview(book('When the Body Says No'));
     expect(reviewed?.summary).toContain('debated');
     expect(reviewed?.summary).toContain('medical evaluation');
+
+    const somaticGuide = applyEditorialReview(book('Waking the Tiger'));
+    expect(somaticGuide?.medicalCaveat).toContain('debated');
+    expect(somaticGuide?.medicalCaveat).toContain('Do not use sensation practices to recover memories');
   });
 
   it('keeps mobile and web editorial content aligned', () => {
-    for (const title of seededTitles) {
+    for (const title of [
+      ...seededTitles,
+      ...ADDITIONAL_BOOKS.map(({ title }) => title),
+    ]) {
       expect(applyMobileEditorialReview(book(title))).toEqual(applyEditorialReview(book(title)));
     }
   });

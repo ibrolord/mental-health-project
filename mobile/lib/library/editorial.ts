@@ -1,3 +1,5 @@
+import { ADDITIONAL_BOOKS, type AdditionalBookDraft } from './additional-books';
+
 export interface BookRecord {
   id: string;
   title: string;
@@ -17,6 +19,8 @@ export const LIBRARY_TOPICS = [
   'Habits & growth',
   'Burnout & recovery',
   'Trauma',
+  'Grief & loss',
+  'Relationships & boundaries',
 ] as const;
 
 export type LibraryTopic = (typeof LIBRARY_TOPICS)[number];
@@ -71,7 +75,7 @@ type EditorialOverride = Omit<
   'id' | 'title' | 'author' | 'quote' | 'tags' | 'read_time_minutes'
 >;
 
-const BOOK_METADATA: Pick<
+const BASE_BOOK_METADATA: Pick<
   BookRecord,
   'id' | 'title' | 'author' | 'read_time_minutes'
 >[] = [
@@ -1071,8 +1075,58 @@ const EDITORIAL_OVERRIDES: Record<string, EditorialOverride> = {
   },
 };
 
+function expandAdditionalBook(book: AdditionalBookDraft): EditorialOverride {
+  const firstTakeaway = book.practicalTakeaways[0];
+
+  return {
+    topic: book.topic,
+    displayTags: book.displayTags,
+    summary: book.summary,
+    centralPremise: book.centralPremise,
+    corePremises: book.corePremises,
+    practicalTakeaways: book.practicalTakeaways,
+    takeaways: book.practicalTakeaways.map(({ description }) => description),
+    action_step: firstTakeaway.nextStep,
+    reflectionPrompts: book.reflectionPrompts,
+    integrations: [
+      {
+        title: 'Connect the guide to your experience',
+        description: 'Use the reflection prompts to capture what fits, what does not, and why.',
+        actionType: 'journal',
+        actionLabel: 'Start a book note',
+        prompt: [
+          `Notes on ${book.title}:`,
+          ...book.reflectionPrompts.map((prompt, index) => `${index + 1}. ${prompt}`),
+        ].join('\n'),
+      },
+      {
+        title: 'Choose one next step',
+        description: 'Turn the most useful takeaway into one bounded, realistic priority.',
+        actionType: 'goal',
+        actionLabel: 'Add as a priority',
+        goalContent: firstTakeaway.nextStep,
+      },
+      {
+        title: 'Practice before expanding',
+        description: 'Repeat one small behavior long enough to learn whether it helps.',
+        actionType: 'habit',
+        actionLabel: 'Prefill a habit',
+        habitName: firstTakeaway.title,
+        habitDescription: firstTakeaway.nextStep,
+      },
+    ],
+    sources: book.sources,
+    medicalCaveat: book.medicalCaveat,
+    editorialNote: STANDARD_NOTE,
+  };
+}
+
+const ADDITIONAL_EDITORIAL_OVERRIDES: Record<string, EditorialOverride> = Object.fromEntries(
+  ADDITIONAL_BOOKS.map((book) => [book.title, expandAdditionalBook(book)]),
+);
+
 export function applyEditorialReview(book: BookRecord): CuratedBook | null {
-  const override = EDITORIAL_OVERRIDES[book.title];
+  const override = EDITORIAL_OVERRIDES[book.title] ?? ADDITIONAL_EDITORIAL_OVERRIDES[book.title];
   if (!override) return null;
 
   return {
@@ -1081,6 +1135,19 @@ export function applyEditorialReview(book: BookRecord): CuratedBook | null {
     quote: null,
   };
 }
+
+const BOOK_METADATA: Pick<
+  BookRecord,
+  'id' | 'title' | 'author' | 'read_time_minutes'
+>[] = [
+  ...BASE_BOOK_METADATA,
+  ...ADDITIONAL_BOOKS.map(({ id, title, author, readTimeMinutes }) => ({
+    id,
+    title,
+    author,
+    read_time_minutes: readTimeMinutes,
+  })),
+];
 
 export const CURATED_LIBRARY: CuratedBook[] = BOOK_METADATA.map((metadata) => {
   const reviewed = applyEditorialReview({
