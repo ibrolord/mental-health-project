@@ -236,8 +236,10 @@ else
   fail "Promotional text is $promo_chars characters, over the 170-character App Store limit"
 fi
 
-if grep -q 'Immediate Support Available' "$ROOT_DIR/app/assessments/[type].tsx" &&
-  grep -q 'Immediate Support Available' "$ROOT_DIR/../app/assessments/[type]/page.tsx"; then
+if grep -q 'Please pause and check your safety' "$ROOT_DIR/app/assessments/[type].tsx" &&
+  grep -q "hasPositivePhq9SafetyResponse" "$ROOT_DIR/app/assessments/[type].tsx" &&
+  grep -q 'Please pause and check your safety' "$ROOT_DIR/../app/assessments/[type]/page.tsx" &&
+  grep -q "hasPositivePhq9SafetyResponse" "$ROOT_DIR/../app/assessments/[type]/page.tsx"; then
   pass "PHQ-9 self-harm response shows immediate crisis support"
 else
   fail "PHQ-9 self-harm response does not show immediate crisis support"
@@ -265,29 +267,54 @@ fi
 
 if grep -Fq 'https://pubmed.ncbi.nlm.nih.gov/11556941/' "$ROOT_DIR/lib/assessments/definitions.ts" &&
   grep -Fq 'https://pubmed.ncbi.nlm.nih.gov/16717171/' "$ROOT_DIR/lib/assessments/definitions.ts" &&
-  grep -Fq 'https://doi.org/10.1080/02678370500297720' "$ROOT_DIR/lib/assessments/definitions.ts" &&
-  grep -Fq 'https://cancercontrol.cancer.gov/brp/research/group-evaluated-measures/adopt/perceived-stress-scale' "$ROOT_DIR/lib/assessments/definitions.ts" &&
+  grep -Fq 'https://nfa.dk/media/hl5nbers/cbi-first-edition.pdf' "$ROOT_DIR/lib/assessments/definitions.ts" &&
   grep -Fq 'https://pubmed.ncbi.nlm.nih.gov/11556941/' "$ROOT_DIR/../lib/assessments/definitions.ts" &&
   grep -Fq 'https://pubmed.ncbi.nlm.nih.gov/16717171/' "$ROOT_DIR/../lib/assessments/definitions.ts" &&
-  grep -Fq 'https://doi.org/10.1080/02678370500297720' "$ROOT_DIR/../lib/assessments/definitions.ts" &&
-  grep -Fq 'https://cancercontrol.cancer.gov/brp/research/group-evaluated-measures/adopt/perceived-stress-scale' "$ROOT_DIR/../lib/assessments/definitions.ts"; then
+  grep -Fq 'https://nfa.dk/media/hl5nbers/cbi-first-edition.pdf' "$ROOT_DIR/../lib/assessments/definitions.ts"; then
   pass "Assessment definitions include clinical source citations"
 else
   fail "Assessment definitions are missing clinical source citations"
 fi
 
-if grep -Fq 'Medical disclaimer' "$ROOT_DIR/app/assessments/[type].tsx" &&
-  grep -Fq 'Clinical source' "$ROOT_DIR/app/assessments/[type].tsx"; then
-  pass "Mobile assessment screens render medical disclaimer and citations"
+if grep -Fq 'If you checked off any problems, how difficult have these problems made it for you' "$ROOT_DIR/lib/assessments/definitions.ts" &&
+  grep -Fq 'The daily-life impact answer is not added to the score' "$ROOT_DIR/lib/assessments/definitions.ts" &&
+  grep -Fq 'If you checked off any problems, how difficult have these problems made it for you' "$ROOT_DIR/../lib/assessments/definitions.ts" &&
+  grep -Fq 'The daily-life impact answer is not added to the score' "$ROOT_DIR/../lib/assessments/definitions.ts"; then
+  pass "PHQ-9 and GAD-7 include the unscored functioning follow-up"
 else
-  fail "Mobile assessment screens do not render medical disclaimer and citations"
+  fail "PHQ-9 or GAD-7 is missing the unscored functioning follow-up"
 fi
 
-if grep -Fq 'Medical disclaimer' "$ROOT_DIR/../app/assessments/[type]/page.tsx" &&
-  grep -Fq 'Clinical source' "$ROOT_DIR/../app/assessments/[type]/page.tsx"; then
-  pass "Web assessment screens render medical disclaimer and citations"
+if grep -Fq "orderedAnswers(responses, 6, [0, 25, 50, 75, 100])" "$ROOT_DIR/lib/assessments/definitions.ts" &&
+  grep -Fq "Math.round(answers.reduce((total, value) => total + value, 0) / answers.length)" "$ROOT_DIR/lib/assessments/definitions.ts" &&
+  grep -Fq "orderedAnswers(responses, 6, [0, 25, 50, 75, 100])" "$ROOT_DIR/../lib/assessments/definitions.ts" &&
+  grep -Fq "Math.round(answers.reduce((total, value) => total + value, 0) / answers.length)" "$ROOT_DIR/../lib/assessments/definitions.ts"; then
+  pass "CBI personal burnout score uses the published item average"
 else
-  fail "Web assessment screens do not render medical disclaimer and citations"
+  fail "CBI personal burnout score does not use the published item average"
+fi
+
+if grep -Fq "PSS4" "$ROOT_DIR/lib/assessments/definitions.ts" ||
+  grep -Fq "PSS4" "$ROOT_DIR/../lib/assessments/definitions.ts"; then
+  fail "PSS-4 remains exposed without documented instrument permission"
+else
+  pass "PSS-4 is not exposed without documented instrument permission"
+fi
+
+if grep -Fq 'Before you begin' "$ROOT_DIR/app/assessments/[type].tsx" &&
+  grep -Fq 'Read the published source' "$ROOT_DIR/app/assessments/[type].tsx" &&
+  grep -Fq 'Important limitation' "$ROOT_DIR/app/assessments/[type].tsx"; then
+  pass "Mobile assessment screens render medical limitations and citations"
+else
+  fail "Mobile assessment screens do not render medical limitations and citations"
+fi
+
+if grep -Fq 'Before you begin' "$ROOT_DIR/../app/assessments/[type]/page.tsx" &&
+  grep -Fq 'Read the published source' "$ROOT_DIR/../app/assessments/[type]/page.tsx" &&
+  grep -Fq 'Important limitation' "$ROOT_DIR/../app/assessments/[type]/page.tsx"; then
+  pass "Web assessment screens render medical limitations and citations"
+else
+  fail "Web assessment screens do not render medical limitations and citations"
 fi
 
 if grep -R -E "level: '(Minimal|Mild|Moderate|Moderately Severe|Severe) (Anxiety|Depression|Stress|Burnout)'" \
@@ -365,7 +392,7 @@ if [ -n "$IPA_PATH" ]; then
 
     if grep -aFq 'Delete Account' "$BUNDLE_PATH" &&
       grep -aFq '/api/account/delete' "$BUNDLE_PATH" &&
-      grep -aFq 'Immediate Support Available' "$BUNDLE_PATH"; then
+      grep -aFq 'Please pause and check your safety' "$BUNDLE_PATH"; then
       pass "IPA includes account deletion and PHQ-9 crisis UI"
     else
       fail "IPA does not include account deletion and PHQ-9 crisis UI"
@@ -385,15 +412,16 @@ if [ -n "$IPA_PATH" ]; then
       pass "IPA bundle avoids high-risk therapy/clinical overclaim wording"
     fi
 
-    if grep -aFq 'Medical disclaimer' "$BUNDLE_PATH" &&
-      grep -aFq 'Clinical source' "$BUNDLE_PATH" &&
+    if grep -aFq 'Before you begin' "$BUNDLE_PATH" &&
+      grep -aFq 'Important limitation' "$BUNDLE_PATH" &&
+      grep -aFq 'Read the published source' "$BUNDLE_PATH" &&
       grep -aFq "before making medical decisions" "$BUNDLE_PATH" &&
       grep -aFq 'https://pubmed.ncbi.nlm.nih.gov/11556941/' "$BUNDLE_PATH" &&
       grep -aFq 'https://pubmed.ncbi.nlm.nih.gov/16717171/' "$BUNDLE_PATH" &&
-      grep -aFq 'https://doi.org/10.1080/02678370500297720' "$BUNDLE_PATH"; then
-      pass "IPA includes Guideline 1.4.1 medical disclaimer and assessment citations"
+      grep -aFq 'https://nfa.dk/media/hl5nbers/cbi-first-edition.pdf' "$BUNDLE_PATH"; then
+      pass "IPA includes Guideline 1.4.1 limitations and assessment citations"
     else
-      fail "IPA does not include Guideline 1.4.1 medical disclaimer and assessment citations"
+      fail "IPA does not include Guideline 1.4.1 limitations and assessment citations"
     fi
 
     if grep -aEq 'support@mhtoolkit\.com|princebolajibreeze@gmail\.com' "$BUNDLE_PATH"; then

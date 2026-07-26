@@ -10,11 +10,10 @@ AI CHAT COMPANION
 Have a conversation with an AI companion that can use your mood patterns, assessment history, and personal context when you choose personalized responses. The app asks for consent before sending chat text, voice audio/transcripts, or personalized context to third-party AI providers. Voice support mode lets you speak naturally and hear responses aloud.
 
 PUBLISHED-SOURCE SELF-ASSESSMENTS
-Track your mental health patterns over time with widely used screening questionnaires. The app shows source citations in the Assess section before and after each screener:
+Track symptom and exhaustion patterns with published self-report tools. The app shows the recall period, scoring limitations, and source citation before and after each tool:
 - PHQ-9 - Depression symptom screener
 - GAD-7 - Anxiety symptom screener
-- PSS-4 - Perceived stress screener
-- CBI - Copenhagen Burnout Inventory
+- CBI - Personal burnout self-report measure
 
 MOOD TRACKING
 Log your mood in seconds with emoji-based check-ins. View trend charts that reveal patterns you might not notice on your own.
@@ -35,4 +34,4 @@ PRIVACY BY DESIGN
 - No data sold to third parties
 - AI features ask before sharing selected data with AI providers for processing
 
-MHtoolkit is not a replacement for professional care, diagnosis, or treatment. Seek advice from a doctor or licensed mental health professional in addition to using MHtoolkit and before making medical decisions. If you're in crisis, MHtoolkit connects you with emergency resources including the 988 Suicide & Crisis Lifeline.
+MHtoolkit is not a replacement for professional care, diagnosis, or treatment. Seek advice from a doctor or licensed mental health professional in addition to using MHtoolkit and before making medical decisions. A PHQ-9 response about thoughts of death or self-harm displays immediate safety guidance and 988 contact options for the U.S. and Canada.

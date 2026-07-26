@@ -5,10 +5,10 @@ A privacy-first self-reflection toolkit offering mood tracking, optional AI-guid
 ## ✨ Features
 
 - **🎭 Mood Tracking**: Daily check-ins with trend visualization and tagging
-- **📋 Self-Assessments**: GAD-7, PHQ-9, CBI, PSS-4 assessments with interpretations
+- **📋 Self-Assessments**: GAD-7 and PHQ-9 symptom screeners plus the CBI personal burnout measure, with published scoring and limitations
 - **💬 AI Chat**: Evidence-informed self-reflection support powered by Claude
 - **✅ Life Organizer**: Goal setting with Eisenhower Matrix, Ivy Lee, 1-3-5, ABCDE frameworks
-- **📚 Book Library**: Curated mental health book summaries with key takeaways
+- **📚 Resource Library**: Direct paths to app tools plus reviewed book notes that separate author claims from clinical guidance
 - **🎯 Habit Tracker**: Build and track daily habits with streak counting
 - **✨ Smart Affirmations**: AI-personalized daily affirmations based on your data
 - **🔒 Anonymous Mode**: Start using without signup, optionally create account later

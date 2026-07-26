@@ -25,22 +25,24 @@ No login is required to review MHtoolkit. Full functionality is available in ano
 Suggested review path:
 
 1. Launch the app and continue anonymously.
-2. Open Assess. Each screener card now shows a source citation link.
-3. Start PHQ-9, GAD-7, PSS-4, or CBI. The app shows a medical disclaimer before questions begin.
-4. Complete a screener. The result page shows the medical disclaimer, the source citation, and non-diagnostic "symptom range" wording.
-5. Use mood tracking, goals, habits, library, and settings without an account.
-6. Open AI Chat. The app shows an AI data-sharing disclosure and asks for consent before sending any chat text or personalized context to third-party AI providers.
-7. Turn on Personalized Responses only if you want to verify that recent moods, assessment results, goals, and habits can be included in AI requests after consent.
-8. Open Voice Support. The app explains voice AI data sharing and asks for consent before requesting microphone permission or sending audio for transcription.
-9. Open Daily Affirmations and tap "Generate AI Affirmation with My Data." The app asks for consent before sending mood, assessment, and goal context for AI generation.
-10. Settings > Privacy & Data Protection shows AI consent status and allows consent revocation.
+2. Open Assess. Each tool identifies its recall period, measure type, and published source.
+3. Start PHQ-9, GAD-7, or the CBI Personal Burnout measure. The app explains the medical limitations before questions begin. PHQ-9 and GAD-7 include the published daily-functioning follow-up, which is shown separately and is not added to the total score.
+4. Complete a tool. The result page shows the scoring limitation, published source, and non-diagnostic wording.
+5. On PHQ-9 item 9, choose any option above "Not at all" to verify that immediate safety guidance and U.S./Canada 988 actions appear before the result.
+6. Use mood tracking, goals, habits, library, and settings without an account.
+7. Open AI Chat. The app shows an AI data-sharing disclosure and asks for consent before sending any chat text or personalized context to third-party AI providers.
+8. Turn on Personalized Responses only if you want to verify that recent moods, assessment results, goals, and habits can be included in AI requests after consent.
+9. Open Voice Support. The app explains voice AI data sharing and asks for consent before requesting microphone permission or sending audio for transcription.
+10. Open Daily Affirmations and tap "Generate AI Affirmation with My Data." The app asks for consent before sending mood, assessment, and goal context for AI generation.
+11. Settings > Privacy & Data Protection shows AI consent status and allows consent revocation.
 
 Assessment sources shown in app:
 
 - PHQ-9: Kroenke K, Spitzer RL, Williams JB. The PHQ-9: validity of a brief depression severity measure. J Gen Intern Med. 2001. https://pubmed.ncbi.nlm.nih.gov/11556941/
 - GAD-7: Spitzer RL, Kroenke K, Williams JB, Lowe B. A brief measure for assessing generalized anxiety disorder: the GAD-7. Arch Intern Med. 2006. https://pubmed.ncbi.nlm.nih.gov/16717171/
-- PSS: Cohen S, Kamarck T, Mermelstein R. A global measure of perceived stress. J Health Soc Behav. 1983. https://cancercontrol.cancer.gov/brp/research/group-evaluated-measures/adopt/perceived-stress-scale
-- CBI: Kristensen TS, Borritz M, Villadsen E, Christensen KB. The Copenhagen Burnout Inventory: A new tool for the assessment of burnout. Work & Stress. 2005. https://doi.org/10.1080/02678370500297720
+- CBI Personal Burnout: Kristensen TS, Borritz M, Villadsen E, Christensen KB. The Copenhagen Burnout Inventory: A new tool for the assessment of burnout. Work & Stress. 2005. https://nfa.dk/media/hl5nbers/cbi-first-edition.pdf
+
+The PSS-4 is not exposed in this release because MHtoolkit does not have a documented usage permission from the rights administrator. Historical stored PSS-4 results remain part of user exports.
 
 AI data-sharing update:
 

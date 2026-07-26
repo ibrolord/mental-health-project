@@ -1,491 +1,343 @@
 import { Assessment } from './types';
 
+const TWO_WEEK_OPTIONS = [
+  { value: 0, label: 'Not at all' },
+  { value: 1, label: 'Several days' },
+  { value: 2, label: 'More than half the days' },
+  { value: 3, label: 'Nearly every day' },
+];
+
+const CBI_OPTIONS = [
+  { value: 0, label: 'Never / almost never' },
+  { value: 25, label: 'Seldom' },
+  { value: 50, label: 'Sometimes' },
+  { value: 75, label: 'Often' },
+  { value: 100, label: 'Always' },
+];
+
+const FUNCTIONING_QUESTION = {
+  id: 'functioning',
+  text: 'If you checked off any problems, how difficult have these problems made it for you to do your work, take care of things at home, or get along with other people?',
+  contextLabel: 'Daily-life impact. This answer is not included in the total score.',
+  options: [
+    { value: 0, label: 'Not difficult at all' },
+    { value: 1, label: 'Somewhat difficult' },
+    { value: 2, label: 'Very difficult' },
+    { value: 3, label: 'Extremely difficult' },
+  ],
+};
+
+function orderedAnswers(
+  responses: Record<string, number>,
+  count: number,
+  allowedValues: readonly number[]
+): number[] {
+  return Array.from({ length: count }, (_, index) => {
+    const value = responses[`q${index + 1}`];
+    if (!allowedValues.includes(value)) {
+      throw new Error('Assessment responses are incomplete or invalid');
+    }
+    return value;
+  });
+}
+
+function sumAnswers(
+  responses: Record<string, number>,
+  count: number,
+  allowedValues: readonly number[]
+): number {
+  return orderedAnswers(responses, count, allowedValues).reduce(
+    (total, value) => total + value,
+    0
+  );
+}
+
 export const GAD7: Assessment = {
   type: 'GAD7',
   name: 'GAD-7 Anxiety Symptom Screener',
-  description: '7-item anxiety symptom screening tool',
-  source: 'Spitzer RL, Kroenke K, Williams JB, Lowe B. A brief measure for assessing generalized anxiety disorder: the GAD-7. Arch Intern Med. 2006.',
+  shortName: 'Anxiety symptoms',
+  description: 'Checks the frequency of seven common anxiety symptoms.',
+  measureType: 'Validated symptom screener',
+  timeframe: 'Past 2 weeks',
+  instructions:
+    'Over the last 2 weeks, how often have you been bothered by the following problems?',
+  scoreMeaning:
+    'Scores range from 0-21. Published symptom ranges are 0-4 minimal, 5-9 mild, 10-14 moderate, and 15-21 severe. The daily-life impact answer is not added to the score. A score is not a diagnosis.',
+  source:
+    'Spitzer RL, Kroenke K, Williams JBW, Lowe B. A brief measure for assessing generalized anxiety disorder: the GAD-7. Arch Intern Med. 2006.',
   citationUrl: 'https://pubmed.ncbi.nlm.nih.gov/16717171/',
+  reviewedAt: 'July 2026',
   maxScore: 21,
   questions: [
-    {
-      id: 'q1',
-      text: 'Feeling nervous, anxious, or on edge',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
-    },
+    { id: 'q1', text: 'Feeling nervous, anxious, or on edge', options: TWO_WEEK_OPTIONS },
     {
       id: 'q2',
       text: 'Not being able to stop or control worrying',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
     {
       id: 'q3',
       text: 'Worrying too much about different things',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
-    {
-      id: 'q4',
-      text: 'Trouble relaxing',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
-    },
+    { id: 'q4', text: 'Trouble relaxing', options: TWO_WEEK_OPTIONS },
     {
       id: 'q5',
-      text: 'Being so restless that it\'s hard to sit still',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      text: "Being so restless that it's hard to sit still",
+      options: TWO_WEEK_OPTIONS,
     },
     {
       id: 'q6',
       text: 'Becoming easily annoyed or irritable',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
     {
       id: 'q7',
       text: 'Feeling afraid as if something awful might happen',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
   ],
+  functioningQuestion: FUNCTIONING_QUESTION,
+  calculateScore: (responses) => sumAnswers(responses, 7, [0, 1, 2, 3]),
   interpret: (score) => {
     if (score <= 4) {
       return {
-        level: 'Minimal Anxiety Symptom Range',
-        message: 'Your responses fall in the minimal range for anxiety symptoms on this screener.',
+        level: 'Minimal anxiety symptom range',
+        message:
+          'Your GAD-7 score is in the published minimal range. A low score does not rule out distress or another condition.',
         suggestions: [
-          'Continue with your current self-care practices',
-          'Use the mood tracker to monitor changes',
-          'Practice stress management techniques preventatively',
-        ],
-      };
-    } else if (score <= 9) {
-      return {
-        level: 'Mild Anxiety Symptom Range',
-        message: 'Your responses fall in the mild range for anxiety symptoms on this screener.',
-        suggestions: [
-          'Talk to our AI about anxiety management techniques',
-          'Try daily relaxation exercises or meditation',
-          'Read: "The Happiness Trap" in our book library',
-          'Set goals around stress reduction',
-        ],
-      };
-    } else if (score <= 14) {
-      return {
-        level: 'Moderate Anxiety Symptom Range',
-        message: 'Your responses fall in the moderate range for anxiety symptoms on this screener.',
-        suggestions: [
-          'Consider speaking with a mental health professional',
-          'Talk to our AI about cognitive reframing techniques',
-          'Build daily habits around anxiety management',
-          'Track your mood patterns to identify triggers',
-        ],
-      };
-    } else {
-      return {
-        level: 'Severe Anxiety Symptom Range',
-        message: 'Your responses fall in the severe range for anxiety symptoms on this screener.',
-        suggestions: [
-          'We strongly recommend consulting a mental health professional',
-          'Crisis resources: 988 Suicide & Crisis Lifeline',
-          'Use the app for grounding and coping ideas while you arrange support',
-          'Focus on basic self-care: sleep, nutrition, gentle movement',
+          'Notice whether anxiety is still interfering with sleep, work, study, or relationships.',
+          'Repeat the same screener later only if comparing the same two-week window would be useful.',
+          'Talk with a qualified professional if symptoms concern you, regardless of the score.',
         ],
       };
     }
+    if (score <= 9) {
+      return {
+        level: 'Mild anxiety symptom range',
+        message:
+          'Your GAD-7 score is in the published mild range. The result describes symptom frequency, not a diagnosis.',
+        suggestions: [
+          'Monitor whether symptoms persist, worsen, or interfere with daily functioning.',
+          'Use low-risk supports such as a regular sleep schedule, movement, and brief relaxation practice.',
+          'Consider discussing the result with a qualified professional if you want support.',
+        ],
+      };
+    }
+    if (score <= 14) {
+      return {
+        level: 'Moderate anxiety symptom range',
+        message:
+          'Your GAD-7 score is in the published moderate range. Further assessment can clarify the cause and appropriate support.',
+        suggestions: [
+          'Consider arranging an evaluation with a doctor or licensed mental health professional.',
+          'Bring this score and examples of how symptoms affect daily life to that conversation.',
+          'Seek help sooner if symptoms are rapidly worsening or you feel unable to stay safe.',
+        ],
+      };
+    }
+    return {
+      level: 'Severe anxiety symptom range',
+      message:
+        'Your GAD-7 score is in the published severe range. A qualified professional should assess the symptoms and their impact.',
+      suggestions: [
+        'Arrange a timely evaluation with a doctor or licensed mental health professional.',
+        'Tell a trusted person if anxiety is making daily activities or self-care difficult.',
+        'Use this result as a conversation aid, not as a diagnosis or treatment plan.',
+      ],
+    };
   },
 };
 
 export const PHQ9: Assessment = {
   type: 'PHQ9',
   name: 'PHQ-9 Depression Symptom Screener',
-  description: '9-item depression symptom screening tool',
-  source: 'Kroenke K, Spitzer RL, Williams JB. The PHQ-9: validity of a brief depression severity measure. J Gen Intern Med. 2001.',
+  shortName: 'Depression symptoms',
+  description: 'Checks the frequency of nine common depression symptoms.',
+  measureType: 'Validated symptom screener',
+  timeframe: 'Past 2 weeks',
+  instructions:
+    'Over the last 2 weeks, how often have you been bothered by the following problems?',
+  scoreMeaning:
+    'Scores range from 0-27. Published symptom ranges are 0-4 minimal, 5-9 mild, 10-14 moderate, 15-19 moderately severe, and 20-27 severe. The daily-life impact answer is not added to the score. A score is not a diagnosis.',
+  source:
+    'Kroenke K, Spitzer RL, Williams JBW. The PHQ-9: validity of a brief depression severity measure. J Gen Intern Med. 2001.',
   citationUrl: 'https://pubmed.ncbi.nlm.nih.gov/11556941/',
+  reviewedAt: 'July 2026',
   maxScore: 27,
   questions: [
     {
       id: 'q1',
       text: 'Little interest or pleasure in doing things',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
     {
       id: 'q2',
       text: 'Feeling down, depressed, or hopeless',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
     {
       id: 'q3',
       text: 'Trouble falling or staying asleep, or sleeping too much',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
     {
       id: 'q4',
       text: 'Feeling tired or having little energy',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
-    {
-      id: 'q5',
-      text: 'Poor appetite or overeating',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
-    },
+    { id: 'q5', text: 'Poor appetite or overeating', options: TWO_WEEK_OPTIONS },
     {
       id: 'q6',
       text: 'Feeling bad about yourself - or that you are a failure or have let yourself or your family down',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
     {
       id: 'q7',
       text: 'Trouble concentrating on things, such as reading the newspaper or watching television',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
     {
       id: 'q8',
       text: 'Moving or speaking so slowly that other people could have noticed. Or the opposite - being so fidgety or restless that you have been moving around a lot more than usual',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
     {
       id: 'q9',
       text: 'Thoughts that you would be better off dead, or of hurting yourself in some way',
-      options: [
-        { value: 0, label: 'Not at all' },
-        { value: 1, label: 'Several days' },
-        { value: 2, label: 'More than half the days' },
-        { value: 3, label: 'Nearly every day' },
-      ],
+      options: TWO_WEEK_OPTIONS,
     },
   ],
+  functioningQuestion: FUNCTIONING_QUESTION,
+  calculateScore: (responses) => sumAnswers(responses, 9, [0, 1, 2, 3]),
   interpret: (score) => {
     if (score <= 4) {
       return {
-        level: 'Minimal Depression Symptom Range',
-        message: 'Your responses fall in the minimal range for depression symptoms on this screener.',
+        level: 'Minimal depression symptom range',
+        message:
+          'Your PHQ-9 score is in the published minimal range. A low score does not rule out distress or another condition.',
         suggestions: [
-          'Maintain healthy routines and self-care',
-          'Track your mood to notice early changes',
-          'Explore our book library for personal growth',
-        ],
-      };
-    } else if (score <= 9) {
-      return {
-        level: 'Mild Depression Symptom Range',
-        message: 'Your responses fall in the mild range for depression symptoms on this screener.',
-        suggestions: [
-          'Read "Feeling Good" in our library (CBT techniques)',
-          'Talk to our AI about thought patterns',
-          'Set small, achievable daily goals',
-          'Build habits around sleep, exercise, and social connection',
-        ],
-      };
-    } else if (score <= 14) {
-      return {
-        level: 'Moderate Depression Symptom Range',
-        message: 'Your responses fall in the moderate range for depression symptoms on this screener.',
-        suggestions: [
-          'Consider consulting a mental health professional',
-          'Use chat for daily emotional reflection and coping ideas',
-          'Focus on one small positive action per day',
-          'Track mood patterns to understand triggers',
-        ],
-      };
-    } else if (score <= 19) {
-      return {
-        level: 'Moderately Severe Depression Symptom Range',
-        message: 'Your responses fall in the moderately severe range for depression symptoms on this screener.',
-        suggestions: [
-          'We strongly recommend speaking with a mental health professional',
-          'Crisis Line: 988 Suicide & Crisis Lifeline',
-          'Use grounding tools while you arrange professional or trusted-person support',
-          'Prioritize basic needs: sleep, food, safety',
-        ],
-      };
-    } else {
-      return {
-        level: 'Severe Depression Symptom Range',
-        message: 'Your responses fall in the severe range for depression symptoms on this screener.',
-        suggestions: [
-          'Please reach out to a mental health professional immediately',
-          'Crisis resources: 988 Suicide & Crisis Lifeline or text "HOME" to 741741',
-          'You are not alone - support is available',
-          'Use the app for grounding while seeking professional help',
+          'Notice whether symptoms are still interfering with sleep, work, study, or relationships.',
+          'Repeat the same screener later only if comparing the same two-week window would be useful.',
+          'Talk with a qualified professional if symptoms concern you, regardless of the score.',
         ],
       };
     }
+    if (score <= 9) {
+      return {
+        level: 'Mild depression symptom range',
+        message:
+          'Your PHQ-9 score is in the published mild range. The result describes symptom frequency, not a diagnosis.',
+        suggestions: [
+          'Monitor whether symptoms persist, worsen, or interfere with daily functioning.',
+          'Keep daily goals small and maintain regular sleep, meals, movement, and social contact where possible.',
+          'Consider discussing the result with a qualified professional if you want support.',
+        ],
+      };
+    }
+    if (score <= 14) {
+      return {
+        level: 'Moderate depression symptom range',
+        message:
+          'Your PHQ-9 score is in the published moderate range. Further assessment can clarify the cause and appropriate support.',
+        suggestions: [
+          'Consider arranging an evaluation with a doctor or licensed mental health professional.',
+          'Bring this score and examples of how symptoms affect daily life to that conversation.',
+          'Seek help sooner if symptoms are rapidly worsening or you feel unable to stay safe.',
+        ],
+      };
+    }
+    if (score <= 19) {
+      return {
+        level: 'Moderately severe depression symptom range',
+        message:
+          'Your PHQ-9 score is in the published moderately severe range. A qualified professional should assess the symptoms and their impact.',
+        suggestions: [
+          'Arrange a timely evaluation with a doctor or licensed mental health professional.',
+          'Tell a trusted person if symptoms are making daily activities or self-care difficult.',
+          'Use this result as a conversation aid, not as a diagnosis or treatment plan.',
+        ],
+      };
+    }
+    return {
+      level: 'Severe depression symptom range',
+      message:
+        'Your PHQ-9 score is in the published severe range. A qualified professional should assess the symptoms and their impact.',
+      suggestions: [
+        'Arrange a prompt evaluation with a doctor or licensed mental health professional.',
+        'Ask a trusted person to help you connect with care if doing so feels difficult.',
+        'Use this result as a conversation aid, not as a diagnosis or treatment plan.',
+      ],
+    };
   },
 };
 
 export const CBI: Assessment = {
   type: 'CBI',
-  name: 'Copenhagen Burnout Inventory',
-  description: 'Short personal burnout screening tool',
-  source: 'Kristensen TS, Borritz M, Villadsen E, Christensen KB. The Copenhagen Burnout Inventory: A new tool for the assessment of burnout. Work & Stress. 2005.',
-  citationUrl: 'https://doi.org/10.1080/02678370500297720',
-  maxScore: 24,
+  name: 'CBI Personal Burnout Measure',
+  shortName: 'Personal burnout',
+  description: 'Measures physical and emotional exhaustion with the six-item CBI subscale.',
+  measureType: 'Validated self-report measure',
+  timeframe: 'How you generally feel',
+  instructions: 'For each item, choose the answer that best reflects how often it is true for you.',
+  scoreMeaning:
+    'Each response is converted to 0, 25, 50, 75, or 100 and the six items are averaged. Higher scores mean greater reported exhaustion. This measure has no diagnostic result or universal individual cutoff.',
+  source:
+    'Kristensen TS, Borritz M, Villadsen E, Christensen KB. The Copenhagen Burnout Inventory: a new tool for the assessment of burnout. Work & Stress. 2005.',
+  citationUrl: 'https://nfa.dk/media/hl5nbers/cbi-first-edition.pdf',
+  reviewedAt: 'July 2026',
+  maxScore: 100,
   questions: [
-    {
-      id: 'q1',
-      text: 'How often do you feel tired?',
-      options: [
-        { value: 0, label: 'Never/Very infrequently' },
-        { value: 2, label: 'Sometimes' },
-        { value: 3, label: 'Often' },
-        { value: 4, label: 'Always' },
-      ],
-    },
+    { id: 'q1', text: 'How often do you feel tired?', options: CBI_OPTIONS },
     {
       id: 'q2',
       text: 'How often are you physically exhausted?',
-      options: [
-        { value: 0, label: 'Never/Very infrequently' },
-        { value: 2, label: 'Sometimes' },
-        { value: 3, label: 'Often' },
-        { value: 4, label: 'Always' },
-      ],
+      options: CBI_OPTIONS,
     },
     {
       id: 'q3',
       text: 'How often are you emotionally exhausted?',
-      options: [
-        { value: 0, label: 'Never/Very infrequently' },
-        { value: 2, label: 'Sometimes' },
-        { value: 3, label: 'Often' },
-        { value: 4, label: 'Always' },
-      ],
+      options: CBI_OPTIONS,
     },
     {
       id: 'q4',
       text: 'How often do you think: "I can\'t take it anymore"?',
-      options: [
-        { value: 0, label: 'Never/Very infrequently' },
-        { value: 2, label: 'Sometimes' },
-        { value: 3, label: 'Often' },
-        { value: 4, label: 'Always' },
-      ],
+      options: CBI_OPTIONS,
     },
-    {
-      id: 'q5',
-      text: 'How often do you feel worn out?',
-      options: [
-        { value: 0, label: 'Never/Very infrequently' },
-        { value: 2, label: 'Sometimes' },
-        { value: 3, label: 'Often' },
-        { value: 4, label: 'Always' },
-      ],
-    },
+    { id: 'q5', text: 'How often do you feel worn out?', options: CBI_OPTIONS },
     {
       id: 'q6',
       text: 'How often do you feel weak and susceptible to illness?',
-      options: [
-        { value: 0, label: 'Never/Very infrequently' },
-        { value: 2, label: 'Sometimes' },
-        { value: 3, label: 'Often' },
-        { value: 4, label: 'Always' },
-      ],
+      options: CBI_OPTIONS,
     },
   ],
-  interpret: (score) => {
-    if (score <= 8) {
-      return {
-        level: 'Low Burnout Range',
-        message: 'Your responses fall in the low range for burnout symptoms on this screener.',
-        suggestions: [
-          'Maintain work-life boundaries',
-          'Continue your current self-care practices',
-          'Build habits that prevent burnout (rest, hobbies, connection)',
-        ],
-      };
-    } else if (score <= 16) {
-      return {
-        level: 'Moderate Burnout Range',
-        message: 'Your responses fall in the moderate range for burnout symptoms on this screener.',
-        suggestions: [
-          'Read "Burnout" by Nagoski in our library',
-          'Set clear boundaries around work and rest',
-          'Talk to our AI about stress management',
-          'Practice completing the stress cycle (movement, breathing)',
-        ],
-      };
-    } else {
-      return {
-        level: 'High Burnout Range',
-        message: 'Your responses fall in the high range for burnout symptoms on this screener.',
-        suggestions: [
-          'Consider taking time off if possible',
-          'Speak with a mental health professional or doctor',
-          'Read "When the Body Says No" in our library',
-          'Focus on rest as a priority, not a luxury',
-          'Use our life organizer to reduce overwhelm',
-        ],
-      };
-    }
+  calculateScore: (responses) => {
+    const answers = orderedAnswers(responses, 6, [0, 25, 50, 75, 100]);
+    return Math.round(answers.reduce((total, value) => total + value, 0) / answers.length);
   },
-};
-
-export const PSS4: Assessment = {
-  type: 'PSS4',
-  name: 'Perceived Stress Scale',
-  description: '4-item perceived stress screening tool',
-  source: 'Cohen S, Kamarck T, Mermelstein R. A global measure of perceived stress. J Health Soc Behav. 1983.',
-  citationUrl: 'https://cancercontrol.cancer.gov/brp/research/group-evaluated-measures/adopt/perceived-stress-scale',
-  maxScore: 16,
-  questions: [
-    {
-      id: 'q1',
-      text: 'In the last month, how often have you felt that you were unable to control the important things in your life?',
-      options: [
-        { value: 0, label: 'Never' },
-        { value: 1, label: 'Almost never' },
-        { value: 2, label: 'Sometimes' },
-        { value: 3, label: 'Fairly often' },
-        { value: 4, label: 'Very often' },
-      ],
-    },
-    {
-      id: 'q2',
-      text: 'In the last month, how often have you felt confident about your ability to handle your personal problems?',
-      options: [
-        { value: 4, label: 'Never' },
-        { value: 3, label: 'Almost never' },
-        { value: 2, label: 'Sometimes' },
-        { value: 1, label: 'Fairly often' },
-        { value: 0, label: 'Very often' },
-      ],
-    },
-    {
-      id: 'q3',
-      text: 'In the last month, how often have you felt that things were going your way?',
-      options: [
-        { value: 4, label: 'Never' },
-        { value: 3, label: 'Almost never' },
-        { value: 2, label: 'Sometimes' },
-        { value: 1, label: 'Fairly often' },
-        { value: 0, label: 'Very often' },
-      ],
-    },
-    {
-      id: 'q4',
-      text: 'In the last month, how often have you felt difficulties were piling up so high that you could not overcome them?',
-      options: [
-        { value: 0, label: 'Never' },
-        { value: 1, label: 'Almost never' },
-        { value: 2, label: 'Sometimes' },
-        { value: 3, label: 'Fairly often' },
-        { value: 4, label: 'Very often' },
-      ],
-    },
-  ],
-  interpret: (score) => {
-    if (score <= 5) {
-      return {
-        level: 'Low Perceived Stress Range',
-        message: 'Your responses fall in the low range for perceived stress on this screener.',
-        suggestions: [
-          'Continue managing stress effectively',
-          'Maintain healthy coping strategies',
-          'Use our mood tracker to stay aware',
-        ],
-      };
-    } else if (score <= 10) {
-      return {
-        level: 'Moderate Perceived Stress Range',
-        message: 'Your responses fall in the moderate range for perceived stress on this screener.',
-        suggestions: [
-          'Talk to our AI about stress reduction techniques',
-          'Use the life organizer to prioritize and reduce overwhelm',
-          'Build daily stress-relief habits (exercise, meditation, hobbies)',
-          'Read stress management resources in our library',
-        ],
-      };
-    } else {
-      return {
-        level: 'High Perceived Stress Range',
-        message: 'Your responses fall in the high range for perceived stress on this screener.',
-        suggestions: [
-          'Consider speaking with a mental health professional',
-          'Read "Burnout" in our library about completing the stress cycle',
-          'Practice daily relaxation or grounding exercises',
-          'Use our AI for immediate support and coping strategies',
-          'Simplify your commitments where possible',
-        ],
-      };
-    }
-  },
+  interpret: () => ({
+    level: 'Personal burnout score',
+    message:
+      'This score is a rounded 0-100 average of the six personal-burnout items. Higher scores reflect more reported exhaustion, but the CBI does not diagnose a medical or mental health condition and does not define a universal individual cutoff.',
+    suggestions: [
+      'Look at which forms of exhaustion are affecting you and whether they are persistent.',
+      'Consider practical changes to workload, rest, support, and recovery where possible.',
+      'Persistent fatigue can have many physical and mental health causes; consider a professional evaluation if it continues or impairs daily life.',
+    ],
+  }),
 };
 
 export const ASSESSMENTS = {
   GAD7,
   PHQ9,
   CBI,
-  PSS4,
-};
+} as const;
+
+export type AssessmentKey = keyof typeof ASSESSMENTS;
+
+export function hasPositivePhq9SafetyResponse(
+  assessment: Assessment,
+  responses: Record<string, number>
+): boolean {
+  return assessment.type === 'PHQ9' && (responses.q9 ?? 0) > 0;
+}

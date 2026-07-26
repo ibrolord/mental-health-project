@@ -3,11 +3,13 @@ Welcome to MHtoolkit v1.0.0!
 - AI chat companion with explicit AI data-sharing consent
 - Voice support with clearer microphone, AI processing, and self-help guidance
 - Mood tracking with emoji check-ins and trend charts
-- Published-source assessments with in-app citations: PHQ-9, GAD-7, PSS-4, and CBI
+- Corrected PHQ-9 and GAD-7 recall instructions, unscored functioning follow-up, scoring context, and in-app citations
+- Corrected five-option, 0-100 scoring for the CBI personal burnout measure
+- Immediate safety guidance for any positive PHQ-9 item 9 response
 - Clear medical disclaimer reminding users to seek a doctor's advice before medical decisions
 - Goal setting with 5 proven frameworks
 - Habit tracking with daily streaks
 - AI-generated affirmations based on your data after consent
-- Mental health resource library
+- Task-oriented resource library with medically reviewed book notes
 - Full data export, in-app data deletion, and account deletion
 - Anonymous use — no account required
