@@ -22,6 +22,7 @@ export function Navigation() {
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
     { href: '/tracker', label: 'Mood', icon: '📊' },
+    { href: '/journal', label: 'Journal', icon: '🖋️' },
     { href: '/goals', label: 'Goals', icon: '✅' },
     { href: '/chat', label: 'AI Chat', icon: '💬' },
     { href: '/assessments', label: 'Assess', icon: '📋' },
@@ -88,7 +89,6 @@ export function Navigation() {
     </nav>
   );
 }
-
 
 
 

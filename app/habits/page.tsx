@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,8 @@ export default function HabitsPage() {
   const [showAddHabit, setShowAddHabit] = useState(false);
   const [newHabitName, setNewHabitName] = useState('');
   const [newHabitDesc, setNewHabitDesc] = useState('');
+  const [librarySourceTitle, setLibrarySourceTitle] = useState('');
+  const appliedLibraryActionRef = useRef(false);
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
@@ -64,6 +66,21 @@ export default function HabitsPage() {
     loadHabits();
   }, [queryColumn, queryValue]);
 
+  useEffect(() => {
+    if (appliedLibraryActionRef.current || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('source') !== 'library') return;
+
+    const name = params.get('name')?.trim().slice(0, 160) ?? '';
+    if (!name) return;
+    appliedLibraryActionRef.current = true;
+    setNewHabitName(name);
+    setNewHabitDesc(params.get('description')?.trim().slice(0, 500) ?? '');
+    setLibrarySourceTitle(params.get('bookTitle')?.slice(0, 200) ?? 'the library');
+    setShowAddHabit(true);
+    window.history.replaceState({}, '', window.location.pathname);
+  }, []);
+
   const addHabit = async () => {
     if (!newHabitName.trim() || !queryValue) return;
     try {
@@ -77,6 +94,7 @@ export default function HabitsPage() {
         setHabits([...habits, data]);
         setNewHabitName('');
         setNewHabitDesc('');
+        setLibrarySourceTitle('');
         setShowAddHabit(false);
       }
     } catch (e) { console.error('Add habit error:', e); }
@@ -114,6 +132,16 @@ export default function HabitsPage() {
           <Card>
             <CardHeader><CardTitle>Create New Habit</CardTitle></CardHeader>
             <CardContent className="space-y-4">
+              {librarySourceTitle && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-800">
+                    Suggested from {librarySourceTitle}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-emerald-900">
+                    Review and customize this draft before saving it.
+                  </p>
+                </div>
+              )}
               <div>
                 <Label htmlFor="habitName">Habit Name</Label>
                 <Input id="habitName" value={newHabitName} onChange={(e) => setNewHabitName(e.target.value)} placeholder="e.g., Meditate for 10 minutes" />

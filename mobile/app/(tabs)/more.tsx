@@ -5,9 +5,10 @@ import { Colors } from '@/lib/constants';
 const menuItems = [
   { label: 'Voice Support', icon: '🎙️', desc: 'Talk to your AI companion', route: '/voice' as const },
   { label: 'Goals', icon: '✅', desc: 'Plan your day with intention', route: '/goals' as const },
+  { label: 'Journal', icon: '🖋️', desc: 'Write private notes and reflections', route: '/journal' as const },
   { label: 'Habits', icon: '🎯', desc: 'Build positive habits', route: '/habits' as const },
   { label: 'Affirmations', icon: '✨', desc: 'Daily affirmations', route: '/affirmations' as const },
-  { label: 'Library', icon: '📚', desc: 'Mental health book summaries', route: '/library' as const },
+  { label: 'Library', icon: '📚', desc: 'Source-backed book guides', route: '/library' as const },
   { label: 'Settings', icon: '⚙️', desc: 'Account & privacy', route: '/settings' as const },
 ];
 

@@ -12,6 +12,7 @@ const USER_DATA_TABLES = [
   'assessments',
   'goals',
   'habits',
+  'journal_entries',
   'chat_history',
   'user_affirmation_history',
   'user_book_favorites',

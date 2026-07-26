@@ -43,6 +43,17 @@ describe('library editorial review', () => {
       expect(reviewed?.quote).toBeNull();
       expect(reviewed?.displayTags.length).toBeGreaterThan(0);
       expect(reviewed?.editorialNote).toBeTruthy();
+      expect(reviewed?.centralPremise.length).toBeGreaterThan(120);
+      expect(reviewed?.corePremises).toHaveLength(4);
+      expect(reviewed?.practicalTakeaways).toHaveLength(3);
+      expect(reviewed?.reflectionPrompts).toHaveLength(3);
+      expect(reviewed?.sources.length).toBeGreaterThanOrEqual(2);
+      expect(reviewed?.sources.every(({ url }) => url.startsWith('https://'))).toBe(true);
+      expect(reviewed?.integrations.map(({ actionType }) => actionType).sort()).toEqual([
+        'goal',
+        'habit',
+        'journal',
+      ]);
     }
   });
 
@@ -53,6 +64,7 @@ describe('library editorial review', () => {
   it('ships a complete reviewed catalog without a network dependency', () => {
     expect(CURATED_LIBRARY.map(({ title }) => title)).toEqual([...seededTitles].sort());
     expect(CURATED_LIBRARY.every(({ quote }) => quote === null)).toBe(true);
+    expect(CURATED_LIBRARY.every(({ read_time_minutes }) => read_time_minutes >= 15)).toBe(true);
     expect(MOBILE_CURATED_LIBRARY).toEqual(CURATED_LIBRARY);
   });
 

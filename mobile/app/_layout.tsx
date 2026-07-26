@@ -107,6 +107,7 @@ export default function RootLayout() {
           <Stack.Screen name="assessments/[type]" options={{ headerShown: true, title: 'Assessment' }} />
           <Stack.Screen name="goals" options={{ headerShown: true, title: 'Life Organizer' }} />
           <Stack.Screen name="habits" options={{ headerShown: true, title: 'Habit Tracker' }} />
+          <Stack.Screen name="journal" options={{ headerShown: true, title: 'Private Journal' }} />
           <Stack.Screen name="affirmations" options={{ headerShown: true, title: 'Affirmations' }} />
           <Stack.Screen name="library" options={{ headerShown: true, title: 'Book Library' }} />
           <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings' }} />

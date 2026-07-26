@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
+  Alert,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +13,7 @@ import { useRouter } from 'expo-router';
 import {
   CURATED_LIBRARY,
   type CuratedBook,
+  type LibraryIntegration,
   LIBRARY_TOPICS,
   type LibraryTopic,
 } from '@/lib/library/editorial';
@@ -37,11 +40,40 @@ const pathways = [
   },
   {
     title: 'Reflect in writing',
-    description: 'Use AI chat for reflection, not care.',
-    route: '/chat',
+    description: 'Write private notes that are not sent to AI.',
+    route: '/journal',
     color: '#fff1f2',
   },
 ] as const;
+
+function integrationRoute(book: CuratedBook, integration: LibraryIntegration) {
+  const baseParams = {
+    source: 'library',
+    book: book.id,
+    bookTitle: book.title,
+  };
+
+  if (integration.actionType === 'journal') {
+    return {
+      pathname: '/journal' as const,
+      params: { ...baseParams, prompt: integration.prompt ?? '' },
+    };
+  }
+  if (integration.actionType === 'goal') {
+    return {
+      pathname: '/goals' as const,
+      params: { ...baseParams, content: integration.goalContent ?? '' },
+    };
+  }
+  return {
+    pathname: '/habits' as const,
+    params: {
+      ...baseParams,
+      name: integration.habitName ?? '',
+      description: integration.habitDescription ?? '',
+    },
+  };
+}
 
 export default function LibraryScreen() {
   const router = useRouter();
@@ -54,9 +86,16 @@ export default function LibraryScreen() {
     return CURATED_LIBRARY.filter((book) => {
       if (selectedTopic !== 'All' && book.topic !== selectedTopic) return false;
       if (!query) return true;
-      return [book.title, book.author, book.summary, book.topic, ...book.displayTags].some(
-        (value) => value.toLowerCase().includes(query)
-      );
+      return [
+        book.title,
+        book.author,
+        book.summary,
+        book.centralPremise,
+        book.topic,
+        ...book.displayTags,
+        ...book.corePremises.flatMap(({ title, premise }) => [title, premise]),
+        ...book.practicalTakeaways.flatMap(({ title, description }) => [title, description]),
+      ].some((value) => value.toLowerCase().includes(query));
     });
   }, [search, selectedTopic]);
 
@@ -68,9 +107,11 @@ export default function LibraryScreen() {
         </TouchableOpacity>
 
         <View style={s.detailHeader}>
-          <Text style={s.kicker}>REVIEWED BOOK NOTE</Text>
+          <Text style={s.kicker}>SOURCE-BACKED READING GUIDE</Text>
           <Text style={s.detailTitle}>{selected.title}</Text>
-          <Text style={s.detailAuthor}>by {selected.author}</Text>
+          <Text style={s.detailAuthor}>
+            by {selected.author} · {selected.read_time_minutes} min guide
+          </Text>
           <View style={s.tagsRow}>
             {selected.displayTags.map((tag) => (
               <View key={tag} style={s.headerTag}>
@@ -81,32 +122,111 @@ export default function LibraryScreen() {
         </View>
 
         <View style={s.detailBody}>
-          <Text style={s.sectionKicker}>WHAT THE BOOK ARGUES</Text>
+          <View style={s.sourceNotice}>
+            <Text style={s.sourceNoticeText}>
+              Premises are paraphrased and linked to author, publisher, research, or
+              clinical-context sources. They are not quotations.
+            </Text>
+          </View>
+
+          <Text style={s.sectionTitle}>A useful orientation</Text>
           <Text style={s.leadText}>{selected.summary}</Text>
 
-          <Text style={s.sectionTitle}>Ideas to consider</Text>
-          {selected.takeaways.map((takeaway, index) => (
-            <View key={takeaway} style={s.takeaway}>
-              <View style={s.takeawayNumber}>
-                <Text style={s.takeawayNumberText}>{index + 1}</Text>
+          <View style={s.centralPremiseBox}>
+            <Text style={s.centralPremiseLabel}>CENTRAL PREMISE</Text>
+            <Text style={s.centralPremiseText}>{selected.centralPremise}</Text>
+          </View>
+
+          <Text style={s.sectionTitle}>Core premises, unpacked</Text>
+          {selected.corePremises.map((idea, index) => (
+            <View key={idea.title} style={s.ideaCard}>
+              <View style={s.ideaHeader}>
+                <View style={s.takeawayNumber}>
+                  <Text style={s.takeawayNumberText}>{index + 1}</Text>
+                </View>
+                <Text style={s.ideaTitle}>{idea.title}</Text>
               </View>
-              <Text style={s.takeawayText}>{takeaway}</Text>
+              <Text style={s.ideaPremise}>{idea.premise}</Text>
+              <View style={s.ideaDivider} />
+              <Text style={s.ideaLabel}>WHY IT MATTERS</Text>
+              <Text style={s.ideaDetail}>{idea.whyItMatters}</Text>
+              <Text style={[s.ideaLabel, { marginTop: 12 }]}>TRY IT</Text>
+              <Text style={s.ideaDetail}>{idea.practice}</Text>
             </View>
           ))}
 
-          {selected.action_step && (
-            <View style={s.experimentBox}>
-              <Text style={s.experimentTitle}>A small experiment</Text>
-              <Text style={s.experimentText}>{selected.action_step}</Text>
+          <Text style={s.sectionTitle}>Takeaways you can use</Text>
+          {selected.practicalTakeaways.map((takeaway) => (
+            <View key={takeaway.title} style={s.takeawayCard}>
+              <Text style={s.takeawayTitle}>{takeaway.title}</Text>
+              <Text style={s.takeawayDescription}>{takeaway.description}</Text>
+              <Text style={s.takeawayNext}>{takeaway.nextStep}</Text>
             </View>
-          )}
+          ))}
+
+          <Text style={s.sectionTitle}>Use it in MHtoolkit</Text>
+          <Text style={s.integrationIntro}>
+            Each action opens a prefilled draft. Nothing is saved until you choose to save it.
+          </Text>
+          {selected.integrations.map((integration) => (
+            <TouchableOpacity
+              key={integration.title}
+              style={[
+                s.integrationCard,
+                integration.actionType === 'journal'
+                  ? s.integrationJournal
+                  : integration.actionType === 'goal'
+                    ? s.integrationGoal
+                    : s.integrationHabit,
+              ]}
+              onPress={() => router.push(integrationRoute(selected, integration))}
+            >
+              <Text style={s.integrationType}>{integration.actionType.toUpperCase()}</Text>
+              <Text style={s.integrationTitle}>{integration.title}</Text>
+              <Text style={s.integrationText}>{integration.description}</Text>
+              <Text style={s.integrationAction}>{integration.actionLabel} →</Text>
+            </TouchableOpacity>
+          ))}
+
+          <View style={s.reflectionBox}>
+            <Text style={s.reflectionTitle}>Questions to carry forward</Text>
+            {selected.reflectionPrompts.map((prompt, index) => (
+              <View key={prompt} style={s.reflectionRow}>
+                <Text style={s.reflectionNumber}>{index + 1}.</Text>
+                <Text style={s.reflectionText}>{prompt}</Text>
+              </View>
+            ))}
+          </View>
+
+          {selected.medicalCaveat ? (
+            <View style={s.caveatBox}>
+              <Text style={s.caveatTitle}>Important clinical boundary</Text>
+              <Text style={s.caveatText}>{selected.medicalCaveat}</Text>
+            </View>
+          ) : null}
+
+          <Text style={s.sectionTitle}>Sources and further reading</Text>
+          {selected.sources.map((source) => (
+            <TouchableOpacity
+              key={source.url}
+              style={s.sourceLink}
+              onPress={() =>
+                void Linking.openURL(source.url).catch(() => {
+                  Alert.alert('Unable to open link', 'Please try again when you are online.');
+                })
+              }
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={s.sourceTitle}>{source.label}</Text>
+                <Text style={s.sourceType}>{source.sourceType.replace('-', ' ')}</Text>
+              </View>
+              <Text style={s.sourceArrow}>↗</Text>
+            </TouchableOpacity>
+          ))}
 
           <View style={s.editorialBox}>
-            <Text style={s.editorialTitle}>How to use this note</Text>
-            <Text style={s.editorialText}>
-              {selected.editorialNote} A summary cannot capture the full book or assess whether its
-              ideas are appropriate for you.
-            </Text>
+            <Text style={s.editorialTitle}>Editorial scope</Text>
+            <Text style={s.editorialText}>{selected.editorialNote}</Text>
           </View>
         </View>
       </ScrollView>
@@ -119,8 +239,8 @@ export default function LibraryScreen() {
         <Text style={s.kicker}>RESOURCE LIBRARY</Text>
         <Text style={s.heroTitle}>Start with what you need.</Text>
         <Text style={s.heroText}>
-          Go directly to a tool, or browse reviewed notes that separate an author&apos;s ideas from
-          clinical guidance.
+          Go directly to a tool, or use source-backed guides to understand a book&apos;s premises,
+          apply useful ideas, and keep claims within appropriate limits.
         </Text>
       </View>
 
@@ -140,7 +260,7 @@ export default function LibraryScreen() {
         ))}
       </View>
 
-      <Text style={[s.sectionKicker, { marginTop: 28 }]}>REVIEWED READING NOTES</Text>
+      <Text style={[s.sectionKicker, { marginTop: 28 }]}>SOURCE-BACKED READING GUIDES</Text>
       <Text style={s.listTitle}>Browse by need, not raw tags.</Text>
 
       <View style={s.searchBox}>
@@ -191,14 +311,15 @@ export default function LibraryScreen() {
           <Text style={s.summaryPreview} numberOfLines={3}>
             {book.summary}
           </Text>
-          <Text style={s.readAction}>Read reviewed note</Text>
+          <Text style={s.readAction}>Open the full guide</Text>
         </TouchableOpacity>
       ))}
 
       <View style={s.libraryNote}>
         <Text style={s.libraryNoteText}>
-          Book notes summarize authors&apos; ideas and flag important limitations. They are not
-          diagnoses, treatment recommendations, or substitutes for professional care.
+          Guides paraphrase authors&apos; premises, link their sources, and flag important
+          limitations. They are not diagnoses, treatment recommendations, or substitutes for the
+          complete books or professional care.
         </Text>
       </View>
     </ScrollView>
@@ -278,15 +399,47 @@ const s = StyleSheet.create({
   headerTag: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
   headerTagText: { color: '#fff', fontSize: 11 },
   detailBody: { backgroundColor: '#fff', borderBottomLeftRadius: 24, borderBottomRightRadius: 24, padding: 22 },
+  sourceNotice: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bae6fd', borderRadius: 13, padding: 14 },
+  sourceNoticeText: { color: '#0c4a6e', fontSize: 12, lineHeight: 19 },
   leadText: { color: Colors.textSecondary, fontSize: 16, lineHeight: 25, marginTop: 10 },
   sectionTitle: { color: Colors.text, fontSize: 23, fontWeight: '700', marginTop: 28, marginBottom: 14 },
-  takeaway: { flexDirection: 'row', gap: 12, backgroundColor: '#f8fafc', borderRadius: 12, padding: 14, marginBottom: 10 },
+  centralPremiseBox: { backgroundColor: '#173f38', borderRadius: 14, padding: 17, marginTop: 22 },
+  centralPremiseLabel: { color: '#a7f3d0', fontSize: 10, fontWeight: '700', letterSpacing: 0.9 },
+  centralPremiseText: { color: '#ecfdf5', fontSize: 15, lineHeight: 24, marginTop: 8 },
+  ideaCard: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: Colors.border, borderRadius: 14, padding: 15, marginBottom: 11 },
+  ideaHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  ideaTitle: { flex: 1, color: Colors.text, fontSize: 16, fontWeight: '700' },
+  ideaPremise: { color: Colors.textSecondary, fontSize: 13, lineHeight: 21, marginTop: 11 },
+  ideaDivider: { height: 1, backgroundColor: Colors.border, marginVertical: 13 },
+  ideaLabel: { color: Colors.textSecondary, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
+  ideaDetail: { color: Colors.textSecondary, fontSize: 12, lineHeight: 19, marginTop: 4 },
   takeawayNumber: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#173f38', alignItems: 'center', justifyContent: 'center' },
   takeawayNumberText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  takeawayText: { flex: 1, color: Colors.textSecondary, fontSize: 14, lineHeight: 21 },
-  experimentBox: { backgroundColor: '#fffbeb', borderRadius: 14, padding: 16, marginTop: 18 },
-  experimentTitle: { color: '#78350f', fontSize: 15, fontWeight: '700' },
-  experimentText: { color: '#92400e', fontSize: 14, lineHeight: 21, marginTop: 7 },
+  takeawayCard: { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 14, padding: 15, marginBottom: 10 },
+  takeawayTitle: { color: '#78350f', fontSize: 15, fontWeight: '700' },
+  takeawayDescription: { color: '#92400e', fontSize: 13, lineHeight: 20, marginTop: 6 },
+  takeawayNext: { color: '#78350f', fontSize: 13, lineHeight: 20, fontWeight: '600', borderTopWidth: 1, borderTopColor: '#fde68a', paddingTop: 10, marginTop: 10 },
+  integrationIntro: { color: Colors.textSecondary, fontSize: 12, lineHeight: 19, marginTop: -7, marginBottom: 11 },
+  integrationCard: { borderWidth: 1, borderRadius: 14, padding: 15, marginBottom: 10 },
+  integrationJournal: { backgroundColor: '#fff1f2', borderColor: '#fecdd3' },
+  integrationGoal: { backgroundColor: '#f0f9ff', borderColor: '#bae6fd' },
+  integrationHabit: { backgroundColor: '#fffbeb', borderColor: '#fde68a' },
+  integrationType: { color: Colors.textSecondary, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
+  integrationTitle: { color: Colors.text, fontSize: 15, fontWeight: '700', marginTop: 7 },
+  integrationText: { color: Colors.textSecondary, fontSize: 12, lineHeight: 19, marginTop: 5 },
+  integrationAction: { color: '#287264', fontSize: 12, fontWeight: '700', marginTop: 11 },
+  reflectionBox: { borderWidth: 1, borderColor: Colors.border, borderRadius: 14, padding: 16, marginTop: 20 },
+  reflectionTitle: { color: Colors.text, fontSize: 18, fontWeight: '700', marginBottom: 10 },
+  reflectionRow: { flexDirection: 'row', gap: 8, marginTop: 7 },
+  reflectionNumber: { color: '#287264', fontSize: 12, fontWeight: '700' },
+  reflectionText: { flex: 1, color: Colors.textSecondary, fontSize: 12, lineHeight: 19 },
+  caveatBox: { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', borderRadius: 14, padding: 16, marginTop: 18 },
+  caveatTitle: { color: '#7f1d1d', fontSize: 14, fontWeight: '700' },
+  caveatText: { color: '#991b1b', fontSize: 12, lineHeight: 19, marginTop: 6 },
+  sourceLink: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, padding: 13, marginBottom: 8 },
+  sourceTitle: { color: '#166534', fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  sourceType: { color: Colors.textSecondary, fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.7, marginTop: 3 },
+  sourceArrow: { color: '#287264', fontSize: 18 },
   editorialBox: { borderWidth: 1, borderColor: Colors.border, borderRadius: 14, padding: 16, marginTop: 18 },
   editorialTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' },
   editorialText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 7 },

@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
@@ -36,15 +37,47 @@ const PRIORITIES_135 = [
   { id: 'small', label: '5 Small Tasks', limit: 5, icon: '✅' },
 ];
 
+function firstParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? '' : value ?? '';
+}
+
 export default function GoalsScreen() {
+  const params = useLocalSearchParams<{
+    source?: string | string[];
+    content?: string | string[];
+    bookTitle?: string | string[];
+  }>();
   const { context, query } = useDataContext();
   const [framework, setFramework] = useState<FrameworkType>('simple');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [librarySourceTitle, setLibrarySourceTitle] = useState('');
+  const appliedLibraryActionRef = useRef('');
 
   useEffect(() => { loadGoals(); }, [query]);
+
+  useEffect(() => {
+    if (firstParam(params.source) !== 'library') {
+      appliedLibraryActionRef.current = '';
+      return;
+    }
+
+    const content = firstParam(params.content).trim().slice(0, 500);
+    if (!content) {
+      appliedLibraryActionRef.current = '';
+      return;
+    }
+
+    const bookTitle = firstParam(params.bookTitle).slice(0, 200);
+    const actionIdentity = `${content}\u0000${bookTitle}`;
+    if (appliedLibraryActionRef.current === actionIdentity) return;
+    appliedLibraryActionRef.current = actionIdentity;
+    setFramework('simple');
+    setInput(content);
+    setLibrarySourceTitle(bookTitle || 'the library');
+  }, [params.bookTitle, params.content, params.source]);
 
   const loadGoals = async () => {
     if (!query) return;
@@ -56,7 +89,11 @@ export default function GoalsScreen() {
   const addGoal = async (content: string, priority?: string, quadrant?: string) => {
     if (!content.trim() || (!context.user_id && !context.session_id)) return;
     const { data, error } = await supabase.from('goals').insert({ ...context, content: content.trim(), framework, priority: priority || null, eisenhower_quadrant: quadrant || null, date: format(new Date(), 'yyyy-MM-dd') } as any).select().single();
-    if (!error && data) { setGoals([...goals, data]); setInput(''); }
+    if (!error && data) {
+      setGoals([...goals, data]);
+      setInput('');
+      setLibrarySourceTitle('');
+    }
   };
 
   const toggleGoal = async (id: string, status: string) => {
@@ -111,6 +148,14 @@ export default function GoalsScreen() {
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
+      {librarySourceTitle ? (
+        <View style={s.libraryDraft}>
+          <Text style={s.libraryDraftLabel}>FROM {librarySourceTitle.toUpperCase()}</Text>
+          <Text style={s.libraryDraftText}>{input}</Text>
+          <Text style={s.libraryDraftHint}>Review this draft in Simple priorities before adding it.</Text>
+        </View>
+      ) : null}
+
       {/* Framework Picker */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
         {FRAMEWORKS.map((fw) => (
@@ -237,6 +282,10 @@ export default function GoalsScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: 16, paddingBottom: 40 },
+  libraryDraft: { backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', borderRadius: 14, padding: 14, marginBottom: 14 },
+  libraryDraftLabel: { color: '#047857', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+  libraryDraftText: { color: '#064e3b', fontSize: 14, lineHeight: 20, fontWeight: '600', marginTop: 5 },
+  libraryDraftHint: { color: '#065f46', fontSize: 11, lineHeight: 17, marginTop: 5 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 16 },

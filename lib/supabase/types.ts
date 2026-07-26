@@ -4,6 +4,7 @@ export type GoalStatus = 'pending' | 'completed' | 'cancelled';
 export type GoalPriority = 'big' | 'medium' | 'small' | 'A' | 'B' | 'C' | 'D' | 'E';
 export type FrameworkType = 'eisenhower' | 'ivy_lee' | '1-3-5' | 'abcde' | 'simple';
 export type AffirmationCategory = 'self-compassion' | 'capability' | 'growth' | 'rest' | 'boundaries';
+export type JournalEntryKind = 'freeform' | 'guided' | 'book_note';
 
 export interface Database {
   public: {
@@ -257,6 +258,50 @@ export interface Database {
           messages?: Array<{role: string; content: string}>;
           saved?: boolean;
           title?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      journal_entries: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          content: string;
+          prompt: string | null;
+          entry_kind: JournalEntryKind;
+          linked_book_id: string | null;
+          linked_book_title: string | null;
+          tags: string[];
+          is_favorite: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title: string;
+          content: string;
+          prompt?: string | null;
+          entry_kind?: JournalEntryKind;
+          linked_book_id?: string | null;
+          linked_book_title?: string | null;
+          tags?: string[];
+          is_favorite?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          content?: string;
+          prompt?: string | null;
+          entry_kind?: JournalEntryKind;
+          linked_book_id?: string | null;
+          linked_book_title?: string | null;
+          tags?: string[];
+          is_favorite?: boolean;
           created_at?: string;
           updated_at?: string;
         };

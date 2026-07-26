@@ -155,7 +155,7 @@ export default function AssessmentTakeScreen() {
               This tool cannot diagnose a condition, identify the cause of symptoms, or recommend
               treatment. A qualified professional considers your history, functioning, physical
               health, medications, and context. You choose whether to save the result. Seek a
-              doctor's advice in addition to using this app and before making medical decisions.
+              doctor&apos;s advice in addition to using this app and before making medical decisions.
             </Text>
           </View>
 

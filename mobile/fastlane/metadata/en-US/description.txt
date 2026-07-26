@@ -18,8 +18,14 @@ Track symptom and exhaustion patterns with published self-report tools. The app 
 MOOD TRACKING
 Log your mood in seconds with emoji-based check-ins. View trend charts that reveal patterns you might not notice on your own.
 
+PRIVATE JOURNAL
+Write free-form or guided entries that stay in your private profile and are not sent to AI chat. Search your writing, mark important entries, add tags, and connect book reflections to your own notes.
+
+SOURCE-BACKED READING GUIDES
+Explore in-depth guides to popular self-help books. Each guide clearly labels paraphrased premises, practical takeaways, reflection prompts, primary sources, and important clinical limitations. Turn an idea into a journal entry, priority, or habit only after reviewing the prefilled draft.
+
 GOAL SETTING THAT ACTUALLY WORKS
-Choose from five proven frameworks: Eisenhower Matrix, Ivy Lee Method, 1-3-5 Rule, ABCDE Method, or free-form goals.
+Choose from five planning frameworks: Eisenhower Matrix, Ivy Lee Method, 1-3-5 Rule, ABCDE Method, or free-form goals.
 
 HABIT TRACKING WITH STREAKS
 Build daily practices that support your mental health. Track habits and watch your consistency grow.

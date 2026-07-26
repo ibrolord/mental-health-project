@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       assessmentsResult,
       goalsResult,
       habitsResult,
+      journalEntriesResult,
       chatHistoryResult,
       affirmationHistoryResult,
       bookFavoritesResult,
@@ -40,6 +41,12 @@ export async function POST(request: NextRequest) {
       supabaseAdmin.from('assessments').select('*').eq(ownerColumn, ownerValue),
       supabaseAdmin.from('goals').select('*').eq(ownerColumn, ownerValue),
       supabaseAdmin.from('habits').select('*').eq(ownerColumn, ownerValue),
+      auth.userId
+        ? supabaseAdmin
+            .from('journal_entries')
+            .select('*')
+            .eq('user_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
       supabaseAdmin.from('chat_history').select('*').eq(ownerColumn, ownerValue),
       supabaseAdmin
         .from('user_affirmation_history')
@@ -132,6 +139,7 @@ export async function POST(request: NextRequest) {
         goals: requireQuery('goals', goalsResult),
         habits,
         habit_logs: requireQuery('habit logs', habitLogsResult),
+        journal_entries: requireQuery('journal entries', journalEntriesResult),
         chat_history: requireQuery('chat history', chatHistoryResult),
         affirmation_history: requireQuery(
           'affirmation history',

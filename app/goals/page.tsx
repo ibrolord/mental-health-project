@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,8 +51,30 @@ export default function GoalsPage() {
   const [simpleInput, setSimpleInput] = useState('');
   const [quadrantInputs, setQuadrantInputs] = useState<Record<string, string>>({});
   const [priorityInputs, setPriorityInputs] = useState<Record<string, string>>({});
+  const [librarySourceTitle, setLibrarySourceTitle] = useState('');
+  const appliedLibraryActionRef = useRef(false);
 
   useEffect(() => { loadGoals(); }, [query]);
+
+  useEffect(() => {
+    if (appliedLibraryActionRef.current || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('source') !== 'library') return;
+
+    const content = params.get('content')?.trim().slice(0, 500) ?? '';
+    if (!content) return;
+    appliedLibraryActionRef.current = true;
+    setFramework('simple');
+    setSimpleInput(content);
+    setLibrarySourceTitle(params.get('bookTitle')?.slice(0, 200) ?? 'the library');
+    window.history.replaceState({}, '', window.location.pathname);
+  }, []);
+
+  useEffect(() => {
+    if (librarySourceTitle && !simpleInput.trim()) {
+      setLibrarySourceTitle('');
+    }
+  }, [librarySourceTitle, simpleInput]);
 
   const loadGoals = async () => {
     if (!query) return;
@@ -64,9 +86,11 @@ export default function GoalsPage() {
   };
 
   const addGoal = async (content: string, priority?: string, quadrant?: string) => {
-    if (!content.trim() || (!context.user_id && !context.session_id)) return;
+    if (!content.trim() || (!context.user_id && !context.session_id)) return false;
     const { data, error } = await supabase.from('goals').insert({ ...context, content: content.trim(), framework, priority: priority || null, eisenhower_quadrant: quadrant || null, date: format(new Date(), 'yyyy-MM-dd') } as any).select().single();
-    if (!error && data) setGoals([...goals, data]);
+    if (error || !data) return false;
+    setGoals((current) => [...current, data]);
+    return true;
   };
 
   const toggleGoal = async (id: string, status: string) => {
@@ -278,6 +302,35 @@ export default function GoalsPage() {
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4">
       <div className="max-w-5xl mx-auto">
         <div className="mb-8"><h1 className="text-4xl font-bold text-slate-900 mb-2">✅ Life Organizer</h1><p className="text-slate-600">Plan your day with intention</p></div>
+
+        {librarySourceTitle && (
+          <Card className="mb-6 border-emerald-200 bg-emerald-50">
+            <CardContent className="flex flex-col gap-4 py-5 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-800">
+                  From {librarySourceTitle}
+                </p>
+                <p className="mt-1 font-semibold text-emerald-950">{simpleInput}</p>
+                <p className="mt-1 text-sm text-emerald-900/75">
+                  Review this suggestion before adding it to today&apos;s priorities.
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  void addGoal(simpleInput).then((saved) => {
+                    if (saved) {
+                      setSimpleInput('');
+                      setLibrarySourceTitle('');
+                    }
+                  });
+                }}
+                disabled={!simpleInput.trim() || goals.filter((goal) => goal.framework === 'simple').length >= 3}
+              >
+                Add to today
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="mb-6">
           <CardHeader><CardTitle>Choose Your Planning Framework</CardTitle><CardDescription>{framework === 'eisenhower' ? 'Prioritize by urgency and importance using Dwight Eisenhower\'s decision matrix' : framework === 'ivy_lee' ? 'The 100-year-old productivity method used by executives — simple and effective' : framework === '1-3-5' ? 'A realistic daily planning method: 1 big thing, 3 medium tasks, 5 small tasks' : framework === 'abcde' ? 'Brian Tracy\'s method: rank tasks by consequences and tackle them in order' : 'Keep it simple with 1-3 key priorities'}</CardDescription></CardHeader>

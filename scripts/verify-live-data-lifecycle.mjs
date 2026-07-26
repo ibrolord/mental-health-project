@@ -69,6 +69,16 @@ try {
   });
   if (moodError) throw moodError;
 
+  const { error: journalError } = await client.from('journal_entries').insert({
+    user_id: testUserId,
+    title: 'Lifecycle test entry',
+    content: 'This temporary entry verifies export and deletion.',
+    entry_kind: 'guided',
+    prompt: 'What should be removed?',
+    tags: ['lifecycle-test'],
+  });
+  if (journalError) throw journalError;
+
   const { error: attributionError } = await client
     .from('acquisition_attribution')
     .insert({
@@ -89,6 +99,7 @@ try {
     'goals',
     'habits',
     'habit_logs',
+    'journal_entries',
     'chat_history',
     'affirmation_history',
     'book_favorites',
@@ -104,6 +115,10 @@ try {
   }
   assert(exported.moods.length === 1, 'Export did not contain the owned mood');
   assert(
+    exported.journal_entries.length === 1,
+    'Export did not contain the owned journal entry'
+  );
+  assert(
     exported.acquisition_attribution.length === 1,
     'Export did not contain acquisition attribution'
   );
@@ -111,13 +126,19 @@ try {
   const deleted = await post('/api/data/delete');
   assert(deleted.deleted === true, 'Delete endpoint did not confirm deletion');
 
-  const [moodsAfter, attributionAfter] = await Promise.all([
+  const [moodsAfter, journalAfter, attributionAfter] = await Promise.all([
     client.from('moods').select('id'),
+    client.from('journal_entries').select('id'),
     client.from('acquisition_attribution').select('user_id'),
   ]);
   if (moodsAfter.error) throw moodsAfter.error;
+  if (journalAfter.error) throw journalAfter.error;
   if (attributionAfter.error) throw attributionAfter.error;
   assert(moodsAfter.data.length === 0, 'Mood rows remained after deletion');
+  assert(
+    journalAfter.data.length === 0,
+    'Journal rows remained after deletion'
+  );
   assert(
     attributionAfter.data.length === 0,
     'Attribution remained after deletion'
@@ -128,7 +149,7 @@ try {
   accountDeleted = true;
 
   console.log(
-    'PASS live data lifecycle: complete export, transactional data deletion, attribution deletion, and account deletion'
+    'PASS live data lifecycle: complete export, journal deletion, attribution deletion, and account deletion'
   );
 } finally {
   if (testUserId && !accountDeleted) {

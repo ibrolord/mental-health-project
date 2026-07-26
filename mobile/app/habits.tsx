@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { Colors } from '@/lib/constants';
@@ -12,13 +13,25 @@ interface Habit {
   streak_count: number;
 }
 
+function firstParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? '' : value ?? '';
+}
+
 export default function HabitsScreen() {
+  const params = useLocalSearchParams<{
+    source?: string | string[];
+    name?: string | string[];
+    description?: string | string[];
+    bookTitle?: string | string[];
+  }>();
   const { user, sessionId, isAuthenticated } = useAuth();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [logs, setLogs] = useState<Record<string, boolean>>({});
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
+  const [librarySourceTitle, setLibrarySourceTitle] = useState('');
+  const appliedLibraryActionRef = useRef('');
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
@@ -41,10 +54,39 @@ export default function HabitsScreen() {
     })();
   }, [queryColumn, queryValue]);
 
+  useEffect(() => {
+    if (firstParam(params.source) !== 'library') {
+      appliedLibraryActionRef.current = '';
+      return;
+    }
+
+    const suggestedName = firstParam(params.name).trim().slice(0, 160);
+    if (!suggestedName) {
+      appliedLibraryActionRef.current = '';
+      return;
+    }
+
+    const description = firstParam(params.description).trim().slice(0, 500);
+    const bookTitle = firstParam(params.bookTitle).slice(0, 200);
+    const actionIdentity = `${suggestedName}\u0000${description}\u0000${bookTitle}`;
+    if (appliedLibraryActionRef.current === actionIdentity) return;
+    appliedLibraryActionRef.current = actionIdentity;
+    setName(suggestedName);
+    setDesc(description);
+    setLibrarySourceTitle(bookTitle || 'the library');
+    setShowAdd(true);
+  }, [params.bookTitle, params.description, params.name, params.source]);
+
   const addHabit = async () => {
     if (!name.trim() || !queryValue) return;
     const { data, error } = await supabase.from('habits').insert({ ...context, name, description: desc || null, frequency: 'daily' } as any).select().single();
-    if (!error && data) { setHabits([...habits, data]); setName(''); setDesc(''); setShowAdd(false); }
+    if (!error && data) {
+      setHabits([...habits, data]);
+      setName('');
+      setDesc('');
+      setLibrarySourceTitle('');
+      setShowAdd(false);
+    }
   };
 
   const toggleHabit = async (habitId: string) => {
@@ -73,6 +115,16 @@ export default function HabitsScreen() {
       {showAdd && (
         <View style={s.card}>
           <Text style={s.cardTitle}>Create New Habit</Text>
+          {librarySourceTitle ? (
+            <View style={s.libraryDraft}>
+              <Text style={s.libraryDraftLabel}>
+                SUGGESTED FROM {librarySourceTitle.toUpperCase()}
+              </Text>
+              <Text style={s.libraryDraftHint}>
+                Review and customize this draft before saving it.
+              </Text>
+            </View>
+          ) : null}
           <Text style={s.label}>Habit Name</Text>
           <TextInput style={s.input} value={name} onChangeText={setName} placeholder="e.g., Meditate for 10 minutes" placeholderTextColor={Colors.textSecondary} />
           <Text style={s.label}>Description (optional)</Text>
@@ -136,6 +188,9 @@ const s = StyleSheet.create({
   headerBtnText: { color: '#fff', fontWeight: '600' },
   card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 12 },
+  libraryDraft: { backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', borderRadius: 12, padding: 12, marginBottom: 4 },
+  libraryDraftLabel: { color: '#047857', fontSize: 10, fontWeight: '700', letterSpacing: 0.7 },
+  libraryDraftHint: { color: '#065f46', fontSize: 11, lineHeight: 17, marginTop: 4 },
   label: { fontSize: 14, fontWeight: '500', color: Colors.text, marginBottom: 6, marginTop: 12 },
   input: { backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 12, fontSize: 15, color: Colors.text },
   textArea: { backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 12, fontSize: 15, color: Colors.text, minHeight: 80, textAlignVertical: 'top' },
