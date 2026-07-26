@@ -359,7 +359,7 @@ const EDITORIAL_OVERRIDES: Record<string, EditorialOverride> = {
   },
   'Feeling Good': {
     topic: 'Mood & self-compassion',
-    displayTags: ['CBT-informed', 'Thought patterns', 'Behavior'],
+    displayTags: ['CBT skills', 'Thought patterns', 'Behavior'],
     summary:
       'David Burns presents cognitive behavioral self-help exercises for identifying automatic thoughts, checking common thinking patterns, and developing more balanced responses.',
     centralPremise:
