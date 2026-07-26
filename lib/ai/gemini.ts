@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { UserContext, Message } from './claude';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
+const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash';
 
 const BASE_SYSTEM_PROMPT = `You are a compassionate self-help support coach. Your role is to:
 
@@ -102,8 +103,9 @@ function buildContextualPrompt(userContext?: UserContext): string {
 
 export async function chat(messages: Message[], userContext?: UserContext): Promise<string> {
   try {
+    const modelName = process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: modelName,
       systemInstruction: buildContextualPrompt(userContext)
     });
 
