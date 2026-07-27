@@ -43,3 +43,11 @@ supabase/.temp/
 
 # mobile
 mobile/node_modules/
+
+# Internal go-to-market material. prospects.csv and outreach-log.csv hold
+# named contacts, job titles, work emails and outreach history for ~100 real
+# people, and this repository is public. Keep local, never commit.
+# campaign-links.csv is the exception: it is campaign taxonomy with no
+# personal data, and tests/growth/acquisition-taxonomy.test.ts reads it.
+docs/launch/*
+!docs/launch/campaign-links.csv
