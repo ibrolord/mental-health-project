@@ -212,7 +212,7 @@ export const SUPPORT_GROUPS: ResourceLink[] = [
     region: 'US',
     description:
       'Free peer-led groups for people living with mental health conditions, and separate groups for family members.',
-    url: 'https://www.nami.org/Support-Education/Support-Groups/',
+    url: 'https://helplinefaqs.nami.org/article/63-online-support',
     note: 'Free',
   },
   {
@@ -270,13 +270,6 @@ export const COMMUNITY_HELP: ResourceLink[] = [
  * CRISIS_LINES with its real hours rather than adding a phone field here.
  */
 export const AFRICA_SUPPORT: ResourceLink[] = [
-  {
-    name: 'Mentally Aware Nigeria Initiative',
-    region: 'Nigeria',
-    description:
-      'Nigeria’s largest provider of crisis support, offering free and confidential help plus mental health advocacy.',
-    url: 'https://mentallyaware.org',
-  },
   {
     name: 'Nigerian Mental Health',
     region: 'Nigeria',

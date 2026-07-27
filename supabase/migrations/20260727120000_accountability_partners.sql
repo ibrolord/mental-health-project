@@ -64,12 +64,14 @@ CREATE TABLE public.partner_links (
   share_mood_trend BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   revoked_at TIMESTAMPTZ,
-  CONSTRAINT partner_is_not_owner CHECK (owner_id <> partner_id),
-  CONSTRAINT partner_link_unique UNIQUE (owner_id, partner_id)
+  CONSTRAINT partner_is_not_owner CHECK (owner_id <> partner_id)
 );
 
 CREATE INDEX partner_links_owner_idx ON public.partner_links (owner_id);
 CREATE INDEX partner_links_partner_idx ON public.partner_links (partner_id);
+CREATE UNIQUE INDEX partner_links_one_active_pair_idx
+  ON public.partner_links (owner_id, partner_id)
+  WHERE status = 'active';
 
 ALTER TABLE public.partner_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.partner_links ENABLE ROW LEVEL SECURITY;
@@ -114,22 +116,45 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  -- Revocation is final for this link. Reconnecting requires accepting a new
+  -- invite, which creates a new active row and preserves the audit history.
+  IF OLD.status = 'revoked' AND NEW.status <> 'revoked' THEN
+    RAISE EXCEPTION 'a revoked partnership cannot be reactivated';
+  END IF;
+
   -- A partner acting on their own row may only set status to 'revoked'.
   -- Every other column must be untouched, so scopes cannot be widened by the
   -- person receiving the data.
   IF auth.uid() = OLD.partner_id AND auth.uid() <> OLD.owner_id THEN
-    IF NEW.share_goals IS DISTINCT FROM OLD.share_goals
+    IF NEW.id IS DISTINCT FROM OLD.id
+      OR NEW.share_goals IS DISTINCT FROM OLD.share_goals
       OR NEW.share_habits IS DISTINCT FROM OLD.share_habits
       OR NEW.share_checkins IS DISTINCT FROM OLD.share_checkins
       OR NEW.share_mood_trend IS DISTINCT FROM OLD.share_mood_trend
       OR NEW.owner_id IS DISTINCT FROM OLD.owner_id
       OR NEW.partner_id IS DISTINCT FROM OLD.partner_id
+      OR NEW.partner_label IS DISTINCT FROM OLD.partner_label
+      OR NEW.created_at IS DISTINCT FROM OLD.created_at
+      OR NEW.revoked_at IS DISTINCT FROM OLD.revoked_at
     THEN
       RAISE EXCEPTION 'partners may only revoke, not modify sharing scopes';
     END IF;
 
     IF NEW.status <> 'revoked' THEN
       RAISE EXCEPTION 'partners may only set status to revoked';
+    END IF;
+  END IF;
+
+  -- Owners may change scopes, labels, or revoke, but cannot rewrite who a
+  -- historical partnership belonged to.
+  IF auth.uid() = OLD.owner_id THEN
+    IF NEW.id IS DISTINCT FROM OLD.id
+      OR NEW.owner_id IS DISTINCT FROM OLD.owner_id
+      OR NEW.partner_id IS DISTINCT FROM OLD.partner_id
+      OR NEW.created_at IS DISTINCT FROM OLD.created_at
+      OR NEW.revoked_at IS DISTINCT FROM OLD.revoked_at
+    THEN
+      RAISE EXCEPTION 'partnership identity and history are immutable';
     END IF;
   END IF;
 
@@ -183,23 +208,37 @@ BEGIN
     RAISE EXCEPTION 'you cannot accept your own invite';
   END IF;
 
-  INSERT INTO public.partner_links (
+  -- Keep a currently active connection as-is. If the previous connection was
+  -- revoked, the partial unique index allows a fresh row for the new consent.
+  SELECT id INTO v_link_id
+    FROM public.partner_links
+   WHERE owner_id = v_invite.owner_id
+     AND partner_id = v_caller
+     AND status = 'active';
+
+  IF v_link_id IS NULL THEN
+    INSERT INTO public.partner_links (
     owner_id, partner_id, status,
     share_goals, share_habits, share_checkins, share_mood_trend
-  )
-  VALUES (
-    v_invite.owner_id, v_caller, 'active',
-    v_invite.share_goals, v_invite.share_habits,
-    v_invite.share_checkins, v_invite.share_mood_trend
-  )
-  ON CONFLICT (owner_id, partner_id) DO UPDATE
-    SET status = 'active',
-        revoked_at = NULL,
-        share_goals = EXCLUDED.share_goals,
-        share_habits = EXCLUDED.share_habits,
-        share_checkins = EXCLUDED.share_checkins,
-        share_mood_trend = EXCLUDED.share_mood_trend
-  RETURNING id INTO v_link_id;
+    )
+    VALUES (
+      v_invite.owner_id, v_caller, 'active',
+      v_invite.share_goals, v_invite.share_habits,
+      v_invite.share_checkins, v_invite.share_mood_trend
+    )
+    ON CONFLICT (owner_id, partner_id) WHERE status = 'active'
+      DO NOTHING
+    RETURNING id INTO v_link_id;
+
+    -- Another acceptance may have won the race.
+    IF v_link_id IS NULL THEN
+      SELECT id INTO v_link_id
+        FROM public.partner_links
+       WHERE owner_id = v_invite.owner_id
+         AND partner_id = v_caller
+         AND status = 'active';
+    END IF;
+  END IF;
 
   UPDATE public.partner_invites
      SET status = 'accepted', accepted_at = NOW()
@@ -227,7 +266,7 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_link public.partner_links%ROWTYPE;
-  v_since DATE := (CURRENT_DATE - INTERVAL '7 days')::DATE;
+  v_since DATE := CURRENT_DATE - 6;
   v_result JSONB := '{}'::JSONB;
 BEGIN
   SELECT * INTO v_link
@@ -261,7 +300,8 @@ BEGIN
         'total', COUNT(*)
       )
       FROM public.goals
-      WHERE user_id = p_owner_id AND date >= v_since
+      WHERE user_id = p_owner_id
+        AND date BETWEEN v_since AND CURRENT_DATE
     ));
   END IF;
 
@@ -276,7 +316,7 @@ BEGIN
       FROM public.habit_logs hl
       JOIN public.habits h ON h.id = hl.habit_id
       WHERE h.user_id = p_owner_id
-        AND hl.log_date >= v_since
+        AND hl.log_date BETWEEN v_since AND CURRENT_DATE
         AND hl.completed
     ));
   END IF;
@@ -284,10 +324,11 @@ BEGIN
   IF v_link.share_checkins THEN
     v_result := v_result || jsonb_build_object('checkins', (
       SELECT jsonb_build_object(
-        'days', COUNT(DISTINCT created_at::DATE)
+        'days', COUNT(DISTINCT local_date)
       )
       FROM public.moods
-      WHERE user_id = p_owner_id AND created_at >= v_since
+      WHERE user_id = p_owner_id
+        AND local_date BETWEEN v_since AND CURRENT_DATE
     ));
   END IF;
 
@@ -297,12 +338,13 @@ BEGIN
       SELECT COALESCE(jsonb_agg(entry ORDER BY entry->>'day'), '[]'::JSONB)
       FROM (
         SELECT jsonb_build_object(
-          'day', created_at::DATE,
+          'day', local_date,
           'emoji', MODE() WITHIN GROUP (ORDER BY emoji)
         ) AS entry
         FROM public.moods
-        WHERE user_id = p_owner_id AND created_at >= v_since
-        GROUP BY created_at::DATE
+        WHERE user_id = p_owner_id
+          AND local_date BETWEEN v_since AND CURRENT_DATE
+        GROUP BY local_date
       ) daily
     ));
   END IF;

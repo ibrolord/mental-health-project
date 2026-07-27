@@ -340,19 +340,14 @@ export default function PartnerPage() {
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
               Everything else in MHtoolkit works anonymously and always will.
               Accountability partners are the exception, because two people have to
-              stay connected across devices.
+              stay connected across devices. Sign in with an existing account to use
+              this feature. New account creation is temporarily unavailable while
+              email verification is upgraded.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link
-                href="/auth/signup"
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <UserPlus className="h-4 w-4" aria-hidden="true" />
-                Create an account
-              </Link>
-              <Link
                 href="/auth/login"
-                className="inline-flex items-center rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex items-center rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Sign in
               </Link>

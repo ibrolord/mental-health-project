@@ -24,35 +24,37 @@ const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
 
 async function probe(url) {
+  let lastStatus = 'unknown';
+
   for (const method of ['HEAD', 'GET']) {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 20000);
-      const res = await fetch(url, {
-        method,
-        redirect: 'follow',
-        signal: controller.signal,
-        headers: { 'user-agent': UA, accept: '*/*' },
-      });
-      clearTimeout(timer);
-      if (res.ok || res.status === 403 || res.status === 405) {
-        // 403/405 means the host is up but dislikes automated probes. That is
-        // not a broken link, so report it rather than failing the build.
-        return { url, status: res.status, ok: true, note: res.ok ? '' : 'bot-blocked' };
+      try {
+        const res = await fetch(url, {
+          method,
+          redirect: 'follow',
+          signal: controller.signal,
+          headers: { 'user-agent': UA, accept: '*/*' },
+        });
+        lastStatus = res.status;
+        if (res.ok) return { url, status: res.status, ok: true };
+      } finally {
+        clearTimeout(timer);
       }
-      if (method === 'GET') return { url, status: res.status, ok: false };
     } catch (error) {
-      if (method === 'GET') return { url, status: error.name === 'AbortError' ? 'timeout' : 'error', ok: false };
+      lastStatus = error.name === 'AbortError' ? 'timeout' : 'error';
     }
   }
-  return { url, status: 'unknown', ok: false };
+
+  return { url, status: lastStatus, ok: false };
 }
 
 const results = await Promise.all(urls.map(probe));
 const broken = results.filter((r) => !r.ok);
 
 for (const r of results.sort((a, b) => Number(a.ok) - Number(b.ok))) {
-  const label = r.ok ? (r.note ? `OK(${r.note})` : 'OK') : 'BROKEN';
+  const label = r.ok ? 'OK' : 'BROKEN';
   console.log(`${label.padEnd(15)} ${String(r.status).padEnd(8)} ${r.url}`);
 }
 
