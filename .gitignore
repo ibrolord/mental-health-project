@@ -51,3 +51,9 @@ mobile/node_modules/
 # personal data, and tests/growth/acquisition-taxonomy.test.ts reads it.
 docs/launch/*
 !docs/launch/campaign-links.csv
+
+# Tooling coupled to the gitignored outreach data above. These read
+# docs/launch/outreach-log.csv and prospects.csv, which are deliberately not
+# in the repository, so committing them would fail npm test on a fresh clone.
+scripts/verify-outreach-ledger.mjs
+tests/growth/outreach-ledger.test.mjs
