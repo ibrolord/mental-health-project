@@ -189,4 +189,11 @@ This app is a self-help tool and **not a replacement for professional therapy**.
 
 ## 📄 License
 
-MIT
+[GNU AGPL-3.0-only](LICENSE).
+
+You are free to use, study, modify and share this code. If you run a
+modified version as a network service, the AGPL requires you to publish your
+changes under the same licence.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request, and
+[SECURITY.md](SECURITY.md) to report a vulnerability privately.
