@@ -146,8 +146,8 @@ export default function SettingsPage() {
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">Settings</h1>
-          <p className="text-slate-600">Manage your account and privacy</p>
+          <h1 className="text-4xl font-bold text-foreground mb-2">Settings</h1>
+          <p className="text-muted-foreground">Manage your account and privacy</p>
         </div>
 
         {/* Account Info */}
@@ -158,7 +158,7 @@ export default function SettingsPage() {
           <CardContent>
             {isAnonymous ? (
               <div>
-                <p className="text-slate-700 mb-4">
+                <p className="text-foreground mb-4">
                   You are currently using the app anonymously. New account creation is temporarily unavailable while email verification is upgraded.
                 </p>
                 <Button onClick={() => router.push('/auth/login')}>
@@ -167,10 +167,10 @@ export default function SettingsPage() {
               </div>
             ) : (
               <div>
-                <p className="text-slate-700 mb-2">
+                <p className="text-foreground mb-2">
                   <strong>Email:</strong> {user?.email}
                 </p>
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-muted-foreground">
                   Your data is synced across devices
                 </p>
                 <Button onClick={signOut} variant="outline" className="mt-4">
@@ -190,7 +190,7 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-600 mb-4">
+            <p className="text-sm text-muted-foreground mb-4">
               This includes all your moods, assessments, goals, habits, and chat history.
             </p>
             <Button onClick={handleExportData} disabled={loading}>
@@ -204,7 +204,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle>Privacy & Data Protection</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4 text-sm text-slate-700">
+          <CardContent className="space-y-4 text-sm text-foreground">
             <div>
               <h3 className="font-semibold mb-2">🔒 Your Privacy Matters</h3>
               <ul className="list-disc list-inside space-y-1">
@@ -248,7 +248,7 @@ export default function SettingsPage() {
               </ul>
             </div>
 
-            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+            <div className="bg-secondary border-l-4 border-blue-500 p-4 rounded">
               <p className="font-semibold mb-1">Important Note:</p>
               <p>
                 This app is a self-help tool, not a replacement for professional therapy. We do

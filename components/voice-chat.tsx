@@ -219,7 +219,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
             <div className="absolute inset-0 flex items-center justify-center">
               <div
                 className={`rounded-full transition-all duration-300 ${
-                  isListening ? 'bg-blue-500' : isSpeaking ? 'bg-green-500' : isProcessing ? 'bg-yellow-500' : 'bg-gray-300'
+                  isListening ? 'bg-primary' : isSpeaking ? 'bg-green-500' : isProcessing ? 'bg-yellow-500' : 'bg-gray-300'
                 }`}
                 style={{
                   width: `${100 + volume * 150}px`,
@@ -239,7 +239,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
           {/* Status Text */}
           <div className="text-center">
             <h3 className="text-xl font-semibold mb-2">{getStatusText()}</h3>
-            <p className="text-sm text-slate-600">{getSubText()}</p>
+            <p className="text-sm text-muted-foreground">{getSubText()}</p>
           </div>
 
           <div className="w-full p-4 bg-orange-50 border border-orange-200 rounded-lg">
@@ -255,15 +255,15 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
           {(transcript || aiResponse) && (
             <div className="w-full space-y-3">
               {transcript && (
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm font-medium text-blue-700 mb-1">You said:</p>
-                  <p className="text-slate-900">{transcript}</p>
+                <div className="p-4 bg-secondary rounded-lg">
+                  <p className="text-sm font-medium text-primary mb-1">You said:</p>
+                  <p className="text-foreground">{transcript}</p>
                 </div>
               )}
               {aiResponse && (
                 <div className="p-4 bg-green-50 rounded-lg">
                   <p className="text-sm font-medium text-green-700 mb-1">AI Companion:</p>
-                  <p className="text-slate-900">{aiResponse}</p>
+                  <p className="text-foreground">{aiResponse}</p>
                 </div>
               )}
             </div>
@@ -313,7 +313,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
           </div>
 
           {/* Privacy Notice */}
-          <div className="text-xs text-slate-500 text-center max-w-md">
+          <div className="text-xs text-muted-foreground text-center max-w-md">
             Use Voice Support only if you agree to this AI processing. MHtoolkit does not sell your data or share it for advertising.
           </div>
         </div>

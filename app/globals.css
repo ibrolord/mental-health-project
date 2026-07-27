@@ -3,49 +3,70 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * MHtoolkit brand tokens.
+   *
+   * These are lifted from the marketing page (app/page.tsx) so the signed-in
+   * app and the landing page read as one product. Ink is the deep green,
+   * canvas is the warm cream, clay is the terracotta accent used sparingly
+   * for emphasis and never for destructive or crisis UI.
+   */
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 217 91% 60%;
-    --radius: 0.5rem;
+    --background: 48 38% 92%;
+    --foreground: 167 45% 16%;
+    --card: 52 100% 99%;
+    --card-foreground: 167 45% 16%;
+    --popover: 52 100% 99%;
+    --popover-foreground: 167 45% 16%;
+    --primary: 167 45% 16%;
+    --primary-foreground: 48 38% 96%;
+    --secondary: 97 29% 93%;
+    --secondary-foreground: 165 25% 28%;
+    --muted: 97 29% 93%;
+    --muted-foreground: 165 25% 38%;
+    --accent: 15 55% 51%;
+    --accent-foreground: 48 38% 96%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 48 38% 96%;
+    --border: 143 13% 82%;
+    --input: 143 13% 82%;
+    --ring: 167 45% 16%;
+    --radius: 0.875rem;
+
+    /* Named brand values for cases where a semantic token would misread. */
+    --brand-ink: 167 45% 16%;
+    --brand-ink-soft: 165 25% 28%;
+    --brand-clay: 15 55% 51%;
+    --brand-sage: 143 20% 62%;
+    --brand-canvas: 48 38% 92%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --background: 168 30% 8%;
+    --foreground: 48 30% 92%;
+    --card: 168 26% 11%;
+    --card-foreground: 48 30% 92%;
+    --popover: 168 26% 11%;
+    --popover-foreground: 48 30% 92%;
+    --primary: 143 30% 78%;
+    --primary-foreground: 168 40% 10%;
+    --secondary: 168 20% 16%;
+    --secondary-foreground: 48 30% 92%;
+    --muted: 168 20% 16%;
+    --muted-foreground: 143 14% 66%;
+    --accent: 15 62% 60%;
+    --accent-foreground: 168 40% 10%;
+    --destructive: 0 55% 55%;
+    --destructive-foreground: 168 40% 10%;
+    --border: 168 16% 22%;
+    --input: 168 16% 22%;
+    --ring: 143 30% 78%;
+
+    --brand-ink: 48 30% 92%;
+    --brand-ink-soft: 143 14% 66%;
+    --brand-clay: 15 62% 60%;
+    --brand-sage: 143 20% 45%;
+    --brand-canvas: 168 30% 8%;
   }
 }
 
@@ -59,6 +80,37 @@
 }
 
 @layer components {
+  /*
+   * Signed-in app surface. Same paper grid as .launch-page but calmer: the
+   * app is a place people return to daily, so the texture sits further back
+   * and there are no animated orbs competing with content.
+   */
+  .app-shell {
+    position: relative;
+    min-height: 100vh;
+    background:
+      linear-gradient(hsl(var(--brand-ink) / 0.022) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--brand-ink) / 0.022) 1px, transparent 1px),
+      hsl(var(--background));
+    background-size: 42px 42px;
+  }
+
+  /* Card treatment shared by every panel in the signed-in app. */
+  .app-panel {
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--card));
+    box-shadow:
+      0 1px 2px hsl(var(--brand-ink) / 0.04),
+      0 12px 28px -18px hsl(var(--brand-ink) / 0.18);
+  }
+
+  .app-panel-quiet {
+    border: 1px solid hsl(var(--border) / 0.7);
+    border-radius: var(--radius);
+    background: hsl(var(--card) / 0.6);
+  }
+
   .launch-page {
     position: relative;
     min-height: 100vh;

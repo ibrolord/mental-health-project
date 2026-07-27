@@ -34,11 +34,11 @@ export function MoodSelector({ selected, onSelect, size = 'lg' }: MoodSelectorPr
             'flex min-w-0 flex-col items-center gap-2 rounded-lg px-1 py-3 transition-all sm:p-4 sm:hover:scale-110',
             selected === emoji
               ? 'bg-primary/10 ring-2 ring-primary sm:scale-110'
-              : 'hover:bg-slate-100'
+              : 'hover:bg-secondary'
           )}
         >
           <span className={sizeClasses[size]}>{emoji}</span>
-          <span className="whitespace-nowrap text-xs text-slate-600 sm:text-sm">
+          <span className="whitespace-nowrap text-xs text-muted-foreground sm:text-sm">
             {label}
           </span>
         </button>

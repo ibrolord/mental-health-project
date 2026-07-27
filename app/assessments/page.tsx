@@ -32,7 +32,7 @@ export default function AssessmentsPage() {
         <section className="relative overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-[#173f38] px-6 py-9 text-white shadow-[0_24px_70px_rgba(23,63,56,0.18)] md:px-10 md:py-12">
           <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-amber-300/20 blur-2xl" />
           <div className="relative max-w-3xl">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm text-emerald-50">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-card/10 px-3 py-1 text-sm text-emerald-50">
               <BadgeCheck className="h-4 w-4" aria-hidden="true" />
               Published self-report tools
             </div>
@@ -55,12 +55,12 @@ export default function AssessmentsPage() {
               </p>
               <h2
                 id="assessment-list-title"
-                className="mt-1 font-[family-name:var(--font-display)] text-3xl text-slate-950"
+                className="mt-1 font-[family-name:var(--font-display)] text-3xl text-foreground"
               >
                 What do you want to check?
               </h2>
             </div>
-            <p className="text-sm text-slate-600">About 2-5 minutes each</p>
+            <p className="text-sm text-muted-foreground">About 2-5 minutes each</p>
           </div>
 
           <div className="grid gap-5 lg:grid-cols-3">
@@ -125,23 +125,23 @@ export default function AssessmentsPage() {
           </div>
         </section>
 
-        <section className="mt-8 grid gap-4 rounded-[1.5rem] border border-slate-200 bg-white p-6 md:grid-cols-3 md:p-8">
+        <section className="mt-8 grid gap-4 rounded-[1.5rem] border border-border bg-card p-6 md:grid-cols-3 md:p-8">
           <div>
-            <p className="font-semibold text-slate-950">What a score can do</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="font-semibold text-foreground">What a score can do</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
               Summarize symptom frequency or exhaustion using the instrument&apos;s published
               method.
             </p>
           </div>
           <div>
-            <p className="font-semibold text-slate-950">What it cannot do</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="font-semibold text-foreground">What it cannot do</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
               Diagnose a condition, identify its cause, or decide which treatment is right for you.
             </p>
           </div>
           <div>
-            <p className="font-semibold text-slate-950">When to get help</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="font-semibold text-foreground">When to get help</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
               Seek professional care whenever symptoms concern you or interfere with daily life,
               regardless of the number.
             </p>

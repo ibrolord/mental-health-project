@@ -37,8 +37,8 @@ export default function LoginPage() {
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4 flex items-center justify-center">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">Welcome Back</h1>
-          <p className="text-slate-600">Sign in to access your mental health data</p>
+          <h1 className="text-4xl font-bold text-foreground mb-2">Welcome Back</h1>
+          <p className="text-muted-foreground">Sign in to access your mental health data</p>
         </div>
 
         <Card>
@@ -84,7 +84,7 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-6 text-center">
-              <p className="text-sm text-slate-600 mt-2">
+              <p className="text-sm text-muted-foreground mt-2">
                 or{' '}
                 <Link href="/" className="text-primary hover:underline">
                   continue anonymously

@@ -3,6 +3,7 @@ import { DM_Sans, Newsreader } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { Navigation } from "@/components/navigation";
+import { AppShell } from "@/components/app-shell";
 import { Analytics } from "@vercel/analytics/react";
 import { CampaignCapture } from "@/components/launch/campaign-capture";
 
@@ -47,7 +48,7 @@ export default function RootLayout({
         <CampaignCapture />
         <AuthProvider>
           <Navigation />
-          {children}
+          <AppShell>{children}</AppShell>
         </AuthProvider>
         <Analytics />
       </body>

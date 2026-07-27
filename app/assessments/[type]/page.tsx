@@ -79,8 +79,8 @@ export default function AssessmentTakePage() {
   if (!assessment) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#f4f1e8] px-4">
-        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center">
-          <h1 className="text-2xl font-bold text-slate-950">Assessment not found</h1>
+        <div className="max-w-md rounded-2xl border border-border bg-card p-8 text-center">
+          <h1 className="text-2xl font-bold text-foreground">Assessment not found</h1>
           <Button className="mt-5" onClick={() => router.push('/assessments')}>
             Back to assessments
           </Button>
@@ -166,7 +166,7 @@ export default function AssessmentTakePage() {
             All assessments
           </button>
 
-          <section className="overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-white shadow-[0_24px_70px_rgba(23,63,56,0.12)]">
+          <section className="overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-card shadow-[0_24px_70px_rgba(23,63,56,0.12)]">
             <div className="bg-[#173f38] px-6 py-8 text-white md:px-10">
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-200">
                 {assessment.measureType}
@@ -181,33 +181,33 @@ export default function AssessmentTakePage() {
 
             <div className="space-y-7 p-6 md:p-10">
               <dl className="grid gap-4 sm:grid-cols-3">
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl bg-secondary/50 p-4">
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Recall period
                   </dt>
-                  <dd className="mt-1 font-semibold text-slate-950">{assessment.timeframe}</dd>
+                  <dd className="mt-1 font-semibold text-foreground">{assessment.timeframe}</dd>
                 </div>
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl bg-secondary/50 p-4">
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Length
                   </dt>
-                  <dd className="mt-1 font-semibold text-slate-950">
+                  <dd className="mt-1 font-semibold text-foreground">
                     {assessment.functioningQuestion
                       ? `${assessment.questions.length} scored + 1 impact`
                       : `${assessment.questions.length} questions`}
                   </dd>
                 </div>
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl bg-secondary/50 p-4">
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Reviewed
                   </dt>
-                  <dd className="mt-1 font-semibold text-slate-950">{assessment.reviewedAt}</dd>
+                  <dd className="mt-1 font-semibold text-foreground">{assessment.reviewedAt}</dd>
                 </div>
               </dl>
 
               <div>
-                <h2 className="font-semibold text-slate-950">Use the same frame for every answer</h2>
-                <p className="mt-2 text-lg leading-7 text-slate-700">{assessment.instructions}</p>
+                <h2 className="font-semibold text-foreground">Use the same frame for every answer</h2>
+                <p className="mt-2 text-lg leading-7 text-foreground">{assessment.instructions}</p>
               </div>
 
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
@@ -227,7 +227,7 @@ export default function AssessmentTakePage() {
               </div>
 
               <div>
-                <p className="text-sm leading-6 text-slate-600">{assessment.scoreMeaning}</p>
+                <p className="text-sm leading-6 text-muted-foreground">{assessment.scoreMeaning}</p>
                 <a
                   href={assessment.citationUrl}
                   target="_blank"
@@ -257,7 +257,7 @@ export default function AssessmentTakePage() {
     return (
       <main className="min-h-screen bg-[#f4f1e8] px-4 py-10 pb-28 md:py-14">
         <div className="mx-auto max-w-3xl space-y-5">
-          <section className="overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-white shadow-[0_24px_70px_rgba(23,63,56,0.12)]">
+          <section className="overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-card shadow-[0_24px_70px_rgba(23,63,56,0.12)]">
             <div className="bg-[#173f38] px-6 py-8 text-white md:px-10">
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-200">
                 Your result
@@ -278,8 +278,8 @@ export default function AssessmentTakePage() {
 
             <div className="space-y-7 p-6 md:p-10">
               <div>
-                <h2 className="font-semibold text-slate-950">What this score means</h2>
-                <p className="mt-2 leading-7 text-slate-700">{result.message}</p>
+                <h2 className="font-semibold text-foreground">What this score means</h2>
+                <p className="mt-2 leading-7 text-foreground">{result.message}</p>
               </div>
 
               {showSafetySupport && <SafetySupport />}
@@ -307,9 +307,9 @@ export default function AssessmentTakePage() {
                 </ul>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 p-5">
-                <h2 className="font-semibold text-slate-950">Important limitation</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
+              <div className="rounded-2xl border border-border p-5">
+                <h2 className="font-semibold text-foreground">Important limitation</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   Screening scores are one piece of information. They do not diagnose, rule out
                   other causes, or replace an assessment by a doctor or licensed mental health
                   professional.
@@ -350,7 +350,7 @@ export default function AssessmentTakePage() {
               <button
                 type="button"
                 onClick={handleRetake}
-                className="w-full text-sm font-semibold text-slate-600 underline underline-offset-4"
+                className="w-full text-sm font-semibold text-muted-foreground underline underline-offset-4"
               >
                 Start over
               </button>
@@ -367,7 +367,7 @@ export default function AssessmentTakePage() {
     <main className="min-h-screen bg-[#f4f1e8] px-4 py-10 pb-28 md:py-14">
       <div className="mx-auto max-w-3xl">
         <div className="mb-5">
-          <div className="mb-2 flex items-center justify-between text-sm text-slate-600">
+          <div className="mb-2 flex items-center justify-between text-sm text-muted-foreground">
             <span>
               Question {currentQuestion + 1} of {questions.length}
             </span>
@@ -387,11 +387,11 @@ export default function AssessmentTakePage() {
           </div>
         </div>
 
-        <section className="rounded-[2rem] border border-emerald-950/10 bg-white p-6 shadow-[0_24px_70px_rgba(23,63,56,0.1)] md:p-10">
+        <section className="rounded-[2rem] border border-emerald-950/10 bg-card p-6 shadow-[0_24px_70px_rgba(23,63,56,0.1)] md:p-10">
           <p className="text-sm font-semibold text-emerald-800">
             {question.contextLabel ?? assessment.instructions}
           </p>
-          <h1 className="mt-4 text-2xl font-semibold leading-9 text-slate-950">{question.text}</h1>
+          <h1 className="mt-4 text-2xl font-semibold leading-9 text-foreground">{question.text}</h1>
 
           <div className="mt-7 grid gap-3">
             {question.options.map((option) => {
@@ -410,13 +410,13 @@ export default function AssessmentTakePage() {
                   className={`flex w-full items-center justify-between rounded-xl border-2 p-4 text-left transition-colors ${
                     isSelected
                       ? 'border-emerald-900 bg-emerald-50 text-emerald-950'
-                      : 'border-slate-200 text-slate-800 hover:border-emerald-700'
+                      : 'border-border text-foreground hover:border-emerald-700'
                   }`}
                 >
                   <span className="font-medium">{option.label}</span>
                   <span
                     className={`grid h-5 w-5 place-items-center rounded-full border ${
-                      isSelected ? 'border-emerald-900 bg-emerald-900 text-white' : 'border-slate-300'
+                      isSelected ? 'border-emerald-900 bg-emerald-900 text-white' : 'border-border'
                     }`}
                   >
                     {isSelected && <Check className="h-3 w-3" aria-hidden="true" />}

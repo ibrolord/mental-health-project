@@ -15,7 +15,7 @@ export default function SignupPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-slate-700">
+          <p className="text-sm text-foreground">
             You can continue using MHtoolkit anonymously, or sign in if you already have an account.
           </p>
           <Button asChild className="w-full">

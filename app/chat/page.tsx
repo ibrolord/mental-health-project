@@ -103,8 +103,8 @@ export default function ChatPage() {
         <div className="max-w-4xl mx-auto">
           <div className="mb-6 flex justify-between items-start">
             <div>
-              <h1 className="text-4xl font-bold text-slate-900 mb-2">🎙️ Voice Support</h1>
-              <p className="text-slate-600">Have a natural voice conversation with your AI companion</p>
+              <h1 className="text-4xl font-bold text-foreground mb-2">🎙️ Voice Support</h1>
+              <p className="text-muted-foreground">Have a natural voice conversation with your AI companion</p>
             </div>
             <Button variant="outline" onClick={() => setVoiceMode(false)}>
               Back to Text
@@ -120,7 +120,7 @@ export default function ChatPage() {
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6 flex justify-between items-start">
-          <div><h1 className="text-4xl font-bold text-slate-900 mb-2">💬 AI Chat</h1><p className="text-slate-600">Talk through what's on your mind</p></div>
+          <div><h1 className="text-4xl font-bold text-foreground mb-2">💬 AI Chat</h1><p className="text-muted-foreground">Talk through what's on your mind</p></div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setVoiceMode(true)} className="gap-2">
               🎙️ Voice Mode
@@ -131,13 +131,13 @@ export default function ChatPage() {
 
         <Card className="mb-4 border-orange-200 bg-orange-50"><CardContent className="pt-4"><p className="font-semibold text-orange-900 mb-1">AI data sharing</p><p className="text-sm text-orange-900">Chat sends your messages to Google Gemini, Anthropic Claude, or OpenAI through MHtoolkit to generate responses. Personalized Responses also include recent moods, assessments, goals, and habits if you turn it on.</p></CardContent></Card>
 
-        <Card className="mb-4"><CardContent className="pt-4"><div className="flex items-center justify-between"><button type="button" onClick={toggle} className="flex items-center gap-3 text-left"><div className={`relative w-11 h-6 rounded-full transition-colors ${personalized ? 'bg-blue-500' : 'bg-gray-300'}`}><div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${personalized ? 'translate-x-5' : ''}`} /></div><div><p className="font-medium">🔒 Personalized Responses</p><p className="text-sm text-slate-600">Include recent moods, assessments, goals, and habits in AI requests</p></div></button></div>{personalized && <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg"><p className="text-sm text-slate-700 mb-2">{status === 'loading' ? '⏳ Loading context...' : hasData ? `📊 Using: ${summary}` : '📭 No data yet'}</p><p className="text-xs text-slate-600">Your moods, assessments, goals, and habits help me provide better support. Turn off anytime for standard responses.</p></div>}</CardContent></Card>
+        <Card className="mb-4"><CardContent className="pt-4"><div className="flex items-center justify-between"><button type="button" onClick={toggle} className="flex items-center gap-3 text-left"><div className={`relative w-11 h-6 rounded-full transition-colors ${personalized ? 'bg-primary' : 'bg-gray-300'}`}><div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-card rounded-full transition-transform ${personalized ? 'translate-x-5' : ''}`} /></div><div><p className="font-medium">🔒 Personalized Responses</p><p className="text-sm text-muted-foreground">Include recent moods, assessments, goals, and habits in AI requests</p></div></button></div>{personalized && <div className="mt-4 p-3 bg-secondary border border-border rounded-lg"><p className="text-sm text-foreground mb-2">{status === 'loading' ? '⏳ Loading context...' : hasData ? `📊 Using: ${summary}` : '📭 No data yet'}</p><p className="text-xs text-muted-foreground">Your moods, assessments, goals, and habits help me provide better support. Turn off anytime for standard responses.</p></div>}</CardContent></Card>
 
-        <Card className="mb-4 h-[550px] flex flex-col"><CardContent className="flex-1 overflow-y-auto pt-6">{messages.length === 0 ? (<div className="text-center py-12"><div><h2 className="text-2xl font-semibold mb-2">How can I help?</h2><p className="text-slate-600 mb-6">I'm here to listen.</p><div className="grid grid-cols-2 gap-3 max-w-md mx-auto">{quickPrompts.map(p => <Button key={p} variant="outline" onClick={() => send(p)}>{p}</Button>)}</div></div></div>) : (<div className="space-y-4">{messages.map((msg, idx) => <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[80%] p-4 rounded-lg ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-white text-slate-900 border border-slate-200'}`}><p className="text-sm whitespace-pre-wrap">{msg.content}</p></div></div>)}{loading && <div className="flex justify-start"><div className="max-w-[80%] p-4 rounded-lg bg-white border border-slate-200"><p className="text-sm text-slate-600">Thinking...</p></div></div>}<div ref={messagesEndRef} /></div>)}</CardContent></Card>
+        <Card className="mb-4 h-[550px] flex flex-col"><CardContent className="flex-1 overflow-y-auto pt-6">{messages.length === 0 ? (<div className="text-center py-12"><div><h2 className="text-2xl font-semibold mb-2">How can I help?</h2><p className="text-muted-foreground mb-6">I'm here to listen.</p><div className="grid grid-cols-2 gap-3 max-w-md mx-auto">{quickPrompts.map(p => <Button key={p} variant="outline" onClick={() => send(p)}>{p}</Button>)}</div></div></div>) : (<div className="space-y-4">{messages.map((msg, idx) => <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[80%] p-4 rounded-lg ${msg.role === 'user' ? 'bg-primary text-white' : 'bg-card text-foreground border border-border'}`}><p className="text-sm whitespace-pre-wrap">{msg.content}</p></div></div>)}{loading && <div className="flex justify-start"><div className="max-w-[80%] p-4 rounded-lg bg-card border border-border"><p className="text-sm text-muted-foreground">Thinking...</p></div></div>}<div ref={messagesEndRef} /></div>)}</CardContent></Card>
 
         <Card><CardContent className="pt-6"><form onSubmit={handleSubmit} className="flex gap-2"><Textarea value={input} onChange={e => setInput(e.target.value)} placeholder="What's on your mind?" rows={2} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e as any); } }} /><Button type="submit" disabled={!input.trim() || loading}>Send</Button></form></CardContent></Card>
 
-        <p className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-center"><strong>⚠️ Not a replacement for therapy. Crisis? Call <a href="tel:988" className="underline font-bold">988</a></strong></p>
+        <p className="mt-4 p-3 bg-secondary border border-border rounded-lg text-sm text-center"><strong>⚠️ Not a replacement for therapy. Crisis? Call <a href="tel:988" className="underline font-bold">988</a></strong></p>
       </div>
     </main>
   );

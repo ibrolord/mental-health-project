@@ -8,15 +8,15 @@ export const metadata: Metadata = {
 export default function PrivacyPolicyPage() {
   return (
     <main className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <article className="mx-auto max-w-3xl bg-white rounded-2xl shadow-sm p-8 sm:p-12">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+      <article className="mx-auto max-w-3xl bg-card rounded-2xl shadow-sm p-8 sm:p-12">
+        <h1 className="text-3xl font-bold text-foreground mb-2">
           Privacy Policy
         </h1>
-        <p className="text-sm text-gray-500 mb-8">
+        <p className="text-sm text-muted-foreground mb-8">
           Effective date: July 19, 2026
         </p>
 
-        <p className="text-gray-700 mb-6 leading-relaxed">
+        <p className="text-foreground mb-6 leading-relaxed">
           MHtoolkit (&quot;the App&quot;) is a free self-reflection tool
           developed by Bolaji Agunbiade. Your privacy matters deeply to us.
           This policy explains what data we collect, how we use it, and what
@@ -25,14 +25,14 @@ export default function PrivacyPolicyPage() {
 
         {/* Data Collection */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-foreground mb-3">
             1. Data We Collect
           </h2>
-          <p className="text-gray-700 mb-3 leading-relaxed">
+          <p className="text-foreground mb-3 leading-relaxed">
             We collect only the data necessary to provide the App&apos;s
             features. This includes:
           </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-2">
+          <ul className="list-disc list-inside text-foreground space-y-2 ml-2">
             <li>
               <strong>Account information:</strong> Email address for existing
               account holders who sign in. New account creation is temporarily
@@ -87,14 +87,14 @@ export default function PrivacyPolicyPage() {
 
         {/* How Data Is Used */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-foreground mb-3">
             2. How Your Data Is Used
           </h2>
-          <p className="text-gray-700 mb-3 leading-relaxed">
+          <p className="text-foreground mb-3 leading-relaxed">
             Your data is used solely to provide and improve the App&apos;s
             features:
           </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-2">
+          <ul className="list-disc list-inside text-foreground space-y-2 ml-2">
             <li>Displaying your mood history, trends, and progress.</li>
             <li>
               Powering AI chat conversations and generating affirmations after
@@ -117,7 +117,7 @@ export default function PrivacyPolicyPage() {
             </li>
             <li>Reviewing user-reported AI responses for safety and quality.</li>
           </ul>
-          <p className="text-gray-700 mt-3 leading-relaxed">
+          <p className="text-foreground mt-3 leading-relaxed">
             We do <strong>not</strong> sell, rent, or share your personal data
             with third parties for advertising or marketing purposes. The App
             contains no ads. Third-party AI sharing is limited to the optional
@@ -128,17 +128,17 @@ export default function PrivacyPolicyPage() {
 
         {/* AI Processing */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-foreground mb-3">
             3. AI Processing
           </h2>
-          <p className="text-gray-700 mb-3 leading-relaxed">
+          <p className="text-foreground mb-3 leading-relaxed">
             The App uses third-party AI services to power optional AI features.
             Before your first AI request, the App asks for permission to send
             selected data to AI providers through the MHtoolkit backend. If you
             decline, chat messages, voice recordings/transcripts, and
             personalized context are not sent for AI processing.
           </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-2">
+          <ul className="list-disc list-inside text-foreground space-y-2 ml-2">
             <li>
               <strong>Google Gemini:</strong> Processes standard chat messages
               and may generate personalized affirmations.
@@ -153,7 +153,7 @@ export default function PrivacyPolicyPage() {
               (text-to-speech).
             </li>
           </ul>
-          <p className="text-gray-700 mt-3 leading-relaxed">
+          <p className="text-foreground mt-3 leading-relaxed">
             Data sent to these providers can include the message or audio you
             submit, the generated transcript, and optional recent moods,
             assessment scores, goals, and habits if you enable personalized AI
@@ -165,10 +165,10 @@ export default function PrivacyPolicyPage() {
 
         {/* Data Storage & Security */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-foreground mb-3">
             4. Data Storage and Security
           </h2>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-2">
+          <ul className="list-disc list-inside text-foreground space-y-2 ml-2">
             <li>
               Your data is stored in a PostgreSQL database hosted by{" "}
               <strong>Supabase</strong> in the <strong>EU West (Ireland)</strong>{" "}
@@ -198,13 +198,13 @@ export default function PrivacyPolicyPage() {
 
         {/* Third-Party Services */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-foreground mb-3">
             5. Third-Party Services
           </h2>
-          <p className="text-gray-700 mb-3 leading-relaxed">
+          <p className="text-foreground mb-3 leading-relaxed">
             The App relies on the following third-party services:
           </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-2">
+          <ul className="list-disc list-inside text-foreground space-y-2 ml-2">
             <li>
               <strong>Supabase</strong> &mdash; Database hosting and
               authentication.
@@ -226,7 +226,7 @@ export default function PrivacyPolicyPage() {
               transcription and text-to-speech.
             </li>
           </ul>
-          <p className="text-gray-700 mt-3 leading-relaxed">
+          <p className="text-foreground mt-3 leading-relaxed">
             Each service processes data in accordance with its own privacy policy.
             We encourage you to review their respective policies.
           </p>
@@ -234,10 +234,10 @@ export default function PrivacyPolicyPage() {
 
         {/* Data Retention */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-foreground mb-3">
             6. Data Retention
           </h2>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-2">
+          <ul className="list-disc list-inside text-foreground space-y-2 ml-2">
             <li>
               Your data is retained for as long as your account exists or your
               anonymous session remains active.
@@ -271,13 +271,13 @@ export default function PrivacyPolicyPage() {
 
         {/* User Rights */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-foreground mb-3">
             7. Your Rights
           </h2>
-          <p className="text-gray-700 mb-3 leading-relaxed">
+          <p className="text-foreground mb-3 leading-relaxed">
             You have the following rights regarding your data:
           </p>
-          <ul className="list-disc list-inside text-gray-700 space-y-2 ml-2">
+          <ul className="list-disc list-inside text-foreground space-y-2 ml-2">
             <li>
               <strong>Access:</strong> You can view all your data within the App
               at any time.
@@ -301,7 +301,7 @@ export default function PrivacyPolicyPage() {
               directly within the App.
             </li>
           </ul>
-          <p className="text-gray-700 mt-3 leading-relaxed">
+          <p className="text-foreground mt-3 leading-relaxed">
             If you need assistance exercising any of these rights, please contact
             us at the email address listed below.
           </p>
@@ -309,10 +309,10 @@ export default function PrivacyPolicyPage() {
 
         {/* Children's Privacy */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-foreground mb-3">
             8. Children&apos;s Privacy
           </h2>
-          <p className="text-gray-700 leading-relaxed">
+          <p className="text-foreground leading-relaxed">
             MHtoolkit is not intended for use by children under the age of 13. We
             do not knowingly collect personal data from children under 13. If you
             believe a child under 13 has provided us with personal data, please
@@ -322,10 +322,10 @@ export default function PrivacyPolicyPage() {
 
         {/* Changes to This Policy */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-foreground mb-3">
             9. Changes to This Policy
           </h2>
-          <p className="text-gray-700 leading-relaxed">
+          <p className="text-foreground leading-relaxed">
             We may update this Privacy Policy from time to time. When we do, we
             will revise the &quot;Effective date&quot; at the top of this page.
             We encourage you to review this policy periodically. Continued use of
@@ -335,14 +335,14 @@ export default function PrivacyPolicyPage() {
 
         {/* Contact */}
         <section className="mb-4">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-foreground mb-3">
             10. Contact
           </h2>
-          <p className="text-gray-700 leading-relaxed">
+          <p className="text-foreground leading-relaxed">
             If you have any questions or concerns about this Privacy Policy or
             your data, please contact:
           </p>
-          <div className="mt-3 text-gray-700">
+          <div className="mt-3 text-foreground">
             <p>
               <strong>Bolaji Agunbiade</strong>
             </p>
@@ -350,7 +350,7 @@ export default function PrivacyPolicyPage() {
               Email:{" "}
               <a
                 href="mailto:bolajiag10@gmail.com"
-                className="text-blue-600 hover:text-blue-800 underline"
+                className="text-primary hover:text-blue-800 underline"
               >
                 bolajiag10@gmail.com
               </a>

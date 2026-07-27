@@ -116,12 +116,12 @@ export default function HabitsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 p-4 pt-20 md:p-8 md:pt-24">
+    <main className="min-h-screen px-4 py-8 md:px-8 md:py-12">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">Habit Tracker</h1>
-            <p className="text-slate-600">Build positive habits, one day at a time</p>
+            <h1 className="text-3xl font-bold text-foreground">Habit Tracker</h1>
+            <p className="text-muted-foreground">Build positive habits, one day at a time</p>
           </div>
           <Button onClick={() => setShowAddHabit(!showAddHabit)}>
             {showAddHabit ? 'Cancel' : '+ New Habit'}
@@ -158,7 +158,7 @@ export default function HabitsPage() {
         {habits.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
-              <p className="text-slate-500 mb-4">No habits yet. Start building positive routines!</p>
+              <p className="text-muted-foreground mb-4">No habits yet. Start building positive routines!</p>
               <Button onClick={() => setShowAddHabit(true)}>Create Your First Habit</Button>
             </CardContent>
           </Card>
@@ -174,19 +174,19 @@ export default function HabitsPage() {
                         <button
                           onClick={() => toggleHabit(habit.id)}
                           className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
-                            isCompleted ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300 hover:border-green-400'
+                            isCompleted ? 'bg-green-500 border-green-500 text-white' : 'border-border hover:border-green-400'
                           }`}
                         >
                           {isCompleted && '✓'}
                         </button>
                         <div>
-                          <h3 className={`font-medium ${isCompleted ? 'text-green-700' : 'text-slate-900'}`}>{habit.name}</h3>
-                          {habit.description && <p className="text-sm text-slate-500">{habit.description}</p>}
+                          <h3 className={`font-medium ${isCompleted ? 'text-green-700' : 'text-foreground'}`}>{habit.name}</h3>
+                          {habit.description && <p className="text-sm text-muted-foreground">{habit.description}</p>}
                         </div>
                       </div>
                       <div className="text-center">
                         <span className="text-2xl font-bold text-orange-500">🔥 {habit.streak_count}</span>
-                        <p className="text-xs text-slate-500">day streak</p>
+                        <p className="text-xs text-muted-foreground">day streak</p>
                       </div>
                     </div>
                   </CardContent>
@@ -196,10 +196,10 @@ export default function HabitsPage() {
           </div>
         )}
 
-        <Card className="bg-blue-50 border-blue-100">
+        <Card className="bg-secondary border-blue-100">
           <CardContent className="py-4">
             <h3 className="font-medium text-blue-900">💡 Habit Tips</h3>
-            <ul className="text-sm text-blue-700 mt-2 space-y-1">
+            <ul className="text-sm text-primary mt-2 space-y-1">
               <li>• Start small - 2 minutes is better than nothing</li>
               <li>• Stack habits - attach new ones to existing routines</li>
               <li>• Track progress - seeing streaks is motivating</li>

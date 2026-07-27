@@ -183,8 +183,8 @@ export default function AffirmationsPage() {
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4 flex items-center justify-center">
       <div className="max-w-2xl w-full">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">Daily Affirmations</h1>
-          <p className="text-slate-600">
+          <h1 className="text-4xl font-bold text-foreground mb-2">Daily Affirmations</h1>
+          <p className="text-muted-foreground">
             You can view {MAX_DAILY_VIEWS} affirmations per day ({viewedCount}/
             {MAX_DAILY_VIEWS} today)
           </p>
@@ -195,15 +195,15 @@ export default function AffirmationsPage() {
             {currentAffirmation ? (
               <div className="text-center">
                 <div className="text-6xl mb-6">✨</div>
-                <blockquote className="text-2xl font-medium text-slate-800 italic mb-6">
+                <blockquote className="text-2xl font-medium text-foreground italic mb-6">
                   "{currentAffirmation.content}"
                 </blockquote>
-                <div className="text-sm text-slate-500">
+                <div className="text-sm text-muted-foreground">
                   Category: {currentAffirmation.category}
                 </div>
               </div>
             ) : (
-              <div className="text-center text-slate-600">
+              <div className="text-center text-muted-foreground">
                 <p>No affirmation loaded yet.</p>
               </div>
             )}
@@ -244,10 +244,10 @@ export default function AffirmationsPage() {
           </CardContent>
         </Card>
 
-        <Card className="mt-8 bg-blue-50 border-blue-200">
+        <Card className="mt-8 bg-secondary border-border">
           <CardContent className="pt-6">
             <h3 className="font-semibold mb-2">Why limit affirmations?</h3>
-            <p className="text-sm text-slate-700">
+            <p className="text-sm text-foreground">
               Affirmations are most effective when given time to resonate. Viewing too many at
               once can dilute their impact. We limit it to 3 per day to help you focus and
               reflect on each one.

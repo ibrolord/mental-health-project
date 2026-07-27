@@ -47,6 +47,13 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        brand: {
+          ink: "hsl(var(--brand-ink))",
+          "ink-soft": "hsl(var(--brand-ink-soft))",
+          clay: "hsl(var(--brand-clay))",
+          sage: "hsl(var(--brand-sage))",
+          canvas: "hsl(var(--brand-canvas))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
