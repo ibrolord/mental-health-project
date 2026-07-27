@@ -157,6 +157,20 @@ else
   pass "Support/privacy pages omit stale support emails"
 fi
 
+SUPPORT_SOURCE="$ROOT_DIR/lib/support.ts"
+SETTINGS_SOURCE="$ROOT_DIR/app/settings.tsx"
+if grep -Fq "bolajiag10@gmail.com" "$SUPPORT_SOURCE" &&
+  grep -Fq "https://mhtoolkit.vercel.app/support" "$SUPPORT_SOURCE" &&
+  grep -Fq "import { SUPPORT_EMAIL, SUPPORT_EMAIL_URL, SUPPORT_URL } from '@/lib/support';" "$SETTINGS_SOURCE" &&
+  grep -Fq "Email Support & Feedback" "$SETTINGS_SOURCE" &&
+  grep -Fq "openSupportLink(SUPPORT_EMAIL_URL, 'Email')" "$SETTINGS_SOURCE" &&
+  grep -Fq "View Support & Crisis Resources" "$SETTINGS_SOURCE" &&
+  grep -Fq "openSupportLink(SUPPORT_URL, 'Support Page')" "$SETTINGS_SOURCE"; then
+  pass "Mobile Settings wires support email, feedback, and crisis resources"
+else
+  fail "Mobile Settings support and feedback path is incomplete"
+fi
+
 if (cd "$ROOT_DIR/.." && node scripts/verify-resource-links.mjs >/tmp/mhtoolkit-resource-links.log 2>&1); then
   pass "Every /resources link is reachable"
 else
@@ -434,6 +448,14 @@ if [ -n "$IPA_PATH" ]; then
       fail "IPA bundle contains stale support email"
     else
       pass "IPA bundle omits stale support emails"
+    fi
+
+    if grep -aFq 'bolajiag10@gmail.com' "$BUNDLE_PATH" &&
+      grep -aFq 'Email Support & Feedback' "$BUNDLE_PATH" &&
+      grep -aFq 'View Support & Crisis Resources' "$BUNDLE_PATH"; then
+      pass "IPA includes the current support and feedback UI strings"
+    else
+      fail "IPA does not include the current support and feedback UI strings"
     fi
   fi
 else

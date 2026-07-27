@@ -15,6 +15,7 @@ import {
 } from '@/lib/notifications';
 import { hasAiDataSharingConsent, resetAiDataSharingConsent, PRIVACY_POLICY_URL } from '@/lib/ai-consent';
 import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
+import { SUPPORT_EMAIL, SUPPORT_EMAIL_URL, SUPPORT_URL } from '@/lib/support';
 
 const HOUR_OPTIONS = [
   { label: '7 AM', value: 7 },
@@ -157,6 +158,12 @@ export default function SettingsScreen() {
     );
   };
 
+  const openSupportLink = (url: string, label: string) => {
+    Linking.openURL(url).catch(() => {
+      Alert.alert(`Unable to Open ${label}`, url);
+    });
+  };
+
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       {/* Account */}
@@ -255,6 +262,31 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Support */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>Support & Feedback</Text>
+        <Text style={s.bodyText}>
+          Questions, feedback, or an app issue? Contact the MHtoolkit developer directly.
+        </Text>
+        <Text style={s.supportEmail}>{SUPPORT_EMAIL}</Text>
+        <TouchableOpacity
+          style={s.btnOutline}
+          onPress={() => openSupportLink(SUPPORT_EMAIL_URL, 'Email')}
+          accessibilityRole="button"
+          accessibilityLabel={`Email MHtoolkit support at ${SUPPORT_EMAIL}`}
+        >
+          <Text style={s.btnOutlineText}>Email Support & Feedback</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={s.btnOutline}
+          onPress={() => openSupportLink(SUPPORT_URL, 'Support Page')}
+          accessibilityRole="button"
+          accessibilityLabel="Open MHtoolkit support and crisis resources"
+        >
+          <Text style={s.btnOutlineText}>View Support & Crisis Resources</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Danger Zone */}
       <View style={[s.card, { backgroundColor: Colors.dangerLight, borderWidth: 1, borderColor: '#fecaca' }]}>
         <Text style={[s.cardTitle, { color: Colors.danger }]}>Danger Zone</Text>
@@ -290,6 +322,7 @@ const s = StyleSheet.create({
   card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, marginBottom: 14, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 10 },
   bodyText: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20 },
+  supportEmail: { fontSize: 14, color: Colors.primary, fontWeight: '600', marginTop: 10 },
   privacyItem: { fontSize: 14, color: Colors.textSecondary, marginBottom: 8, lineHeight: 20 },
   btn: { backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 15 },

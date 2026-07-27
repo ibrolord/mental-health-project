@@ -35,6 +35,7 @@ Suggested review path:
 9. Open Voice Support. The app explains voice AI data sharing and asks for consent before requesting microphone permission or sending audio for transcription.
 10. Open Daily Affirmations and tap "Generate AI Affirmation with My Data." The app asks for consent before sending mood, assessment, and goal context for AI generation.
 11. Settings > Privacy & Data Protection shows AI consent status and allows consent revocation.
+12. Settings > Support & Feedback shows the developer email and links directly to the public support and crisis-resources page.
 
 Assessment sources shown in app:
 
