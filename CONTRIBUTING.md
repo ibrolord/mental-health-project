@@ -12,11 +12,17 @@ network service, the AGPL requires you to publish your changes.
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in Supabase and model provider keys
+npm install --prefix mobile      # required, see below
+cp .env.example .env.local       # fill in Supabase and model provider keys
 npm run dev
 ```
 
-The Expo app lives in `mobile/` with its own `package.json`.
+The Expo app lives in `mobile/` with its own `package.json`. **You need its
+dependencies installed even to run the web test suite.** Several tests assert
+that web and mobile stay in sync and therefore import from `mobile/`, and
+`mobile/tsconfig.json` extends `expo/tsconfig.base`. Without
+`mobile/node_modules`, three test files fail to load with a `TSConfckParseError`
+rather than an obvious message.
 
 Before opening a pull request:
 
@@ -25,6 +31,10 @@ npx tsc --noEmit
 npm run lint
 npm test
 ```
+
+Three checks in `tests/growth/acquisition-taxonomy.test.ts` validate internal
+outreach data that is not in the repository. They skip automatically on a
+clean clone, so seeing them skipped is expected and not a failure.
 
 ## The rules that matter
 

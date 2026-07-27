@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -7,6 +7,24 @@ import {
   parseStoredCampaign,
 } from '../../lib/acquisition-taxonomy';
 import { getLocalCheckInFields } from '../../lib/check-in';
+
+/**
+ * Some checks below validate internal outreach data that is deliberately not
+ * committed. prospects.csv, outreach-log.csv and partner-share-kit.md hold
+ * named contacts and outreach history, so they are gitignored and were purged
+ * from history. campaign-links.csv is the exception: it is campaign taxonomy
+ * with no personal data and is tracked.
+ *
+ * Those checks still run for maintainers who have the files locally, and skip
+ * on a clean clone rather than failing it.
+ */
+function hasLaunchFile(relativePath: string): boolean {
+  return existsSync(resolve(process.cwd(), relativePath));
+}
+
+const hasProspects = hasLaunchFile('docs/launch/prospects.csv');
+const hasOutreachLog = hasLaunchFile('docs/launch/outreach-log.csv');
+const hasShareKit = hasLaunchFile('docs/launch/partner-share-kit.md');
 
 function extractSetValues(source: string, name: string): Set<string> {
   const match = source.match(
@@ -237,7 +255,7 @@ describe('campaign attribution taxonomy', () => {
     }
   });
 
-  it('keeps every researched prospect link in the canonical campaign file', () => {
+  it.skipIf(!hasProspects)('keeps every researched prospect link in the canonical campaign file', () => {
     const canonicalCsv = readFileSync(
       resolve(process.cwd(), 'docs/launch/campaign-links.csv'),
       'utf8'
@@ -264,7 +282,7 @@ describe('campaign attribution taxonomy', () => {
     }
   });
 
-  it('keeps every outreach link canonical and reconciles the first wave', () => {
+  it.skipIf(!hasOutreachLog)('keeps every outreach link canonical and reconciles the first wave', () => {
     const canonicalCsv = readFileSync(
       resolve(process.cwd(), 'docs/launch/campaign-links.csv'),
       'utf8'
@@ -313,7 +331,7 @@ describe('campaign attribution taxonomy', () => {
     expect(founderPosts).toHaveLength(2);
   });
 
-  it('keeps every partner share-kit link canonical and channel matched', () => {
+  it.skipIf(!hasShareKit)('keeps every partner share-kit link canonical and channel matched', () => {
     const canonicalCsv = readFileSync(
       resolve(process.cwd(), 'docs/launch/campaign-links.csv'),
       'utf8'
