@@ -69,16 +69,26 @@ INSERT INTO auth.users (id) VALUES
   ('bbbbbbbb-0000-0000-0000-000000000002'),
   ('cccccccc-0000-0000-0000-000000000003');
 
-INSERT INTO public.moods (user_id, emoji, note, created_at) VALUES
-  ('aaaaaaaa-0000-0000-0000-000000000001', '🙂', 'SECRET MOOD NOTE', NOW()),
-  ('aaaaaaaa-0000-0000-0000-000000000001', '😐', 'ANOTHER SECRET',  NOW() - INTERVAL '1 day');
+INSERT INTO public.moods
+  (user_id, emoji, note, created_at, local_date, utc_offset_minutes)
+VALUES
+  ('aaaaaaaa-0000-0000-0000-000000000001', '🙂', 'SECRET MOOD NOTE',
+   NOW(), CURRENT_DATE, 0),
+  ('aaaaaaaa-0000-0000-0000-000000000001', '😐', 'ANOTHER SECRET',
+   NOW() - INTERVAL '1 day', CURRENT_DATE - 1, 0),
+  ('aaaaaaaa-0000-0000-0000-000000000001', '😄', 'OUTSIDE WINDOW',
+   NOW() - INTERVAL '7 days', CURRENT_DATE - 7, 0);
 
 INSERT INTO public.assessments (user_id, type, score, max_score, responses) VALUES
   ('aaaaaaaa-0000-0000-0000-000000000001', 'PHQ9', 18, 27, '{"item9":2}'::jsonb);
 
+INSERT INTO public.journal_entries (user_id, title, content) VALUES
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'SECRET JOURNAL', 'PRIVATE CONTENT');
+
 INSERT INTO public.goals (user_id, content, status, date) VALUES
   ('aaaaaaaa-0000-0000-0000-000000000001', 'SECRET GOAL TEXT', 'completed', CURRENT_DATE),
-  ('aaaaaaaa-0000-0000-0000-000000000001', 'ANOTHER GOAL',     'pending',   CURRENT_DATE);
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'ANOTHER GOAL',     'pending',   CURRENT_DATE),
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'OUTSIDE WINDOW',   'completed', CURRENT_DATE - 7);
 
 INSERT INTO public.partner_links
   (owner_id, partner_id, status, share_goals, share_habits, share_checkins, share_mood_trend)
@@ -108,6 +118,7 @@ echo "== NEGATIVE: partner B must not reach A's raw rows =="
 check "B reads 0 of A's moods"       "$(run_as $B "SELECT count(*) FROM public.moods WHERE user_id='$A';")" '^0$'
 check "B reads 0 of A's assessments" "$(run_as $B "SELECT count(*) FROM public.assessments WHERE user_id='$A';")" '^0$'
 check "B reads 0 of A's goals"       "$(run_as $B "SELECT count(*) FROM public.goals WHERE user_id='$A';")" '^0$'
+check "B reads 0 of A's journal"     "$(run_as $B "SELECT count(*) FROM public.journal_entries WHERE user_id='$A';")" '^0$'
 check "B cannot see mood note text"  "$(run_as $B "SELECT coalesce(string_agg(note,','),'NONE') FROM public.moods;")" 'NONE'
 
 echo ""
@@ -116,6 +127,7 @@ SNAP="$(run_as $B "SELECT public.partner_snapshot('$A');")"
 check "snapshot returns goals counts"  "$SNAP" '"goals":'
 check "snapshot goal completed = 1"    "$SNAP" '"completed": ?1'
 check "snapshot has checkins"          "$SNAP" '"checkins":'
+check "snapshot covers exactly 7 dates" "$SNAP" '"days": ?2'
 if echo "$SNAP" | grep -q 'SECRET GOAL TEXT'; then
   echo "  FAIL  snapshot leaks goal text"; fail=$((fail+1))
 else
@@ -144,6 +156,28 @@ check "B revoking own link works" \
   'revoked'
 check "after revoke, snapshot refused" \
   "$(run_as $B "SELECT public.partner_snapshot('$A');")" 'not an active partner'
+check "owner cannot reactivate revoked link" \
+  "$(run_as $A "UPDATE public.partner_links SET status='active' WHERE owner_id='$A' AND partner_id='$B';")" \
+  'cannot be reactivated|ERROR'
+
+echo ""
+echo "== RECONNECT: a fresh accepted invite creates a new active row =="
+psql -q <<'SQL'
+INSERT INTO public.partner_invites (owner_id, token_hash)
+VALUES ('aaaaaaaa-0000-0000-0000-000000000001', 'fresh-invite-hash');
+SQL
+check "fresh invite is accepted" \
+  "$(run_as $B "SELECT public.accept_partner_invite('fresh-invite-hash');")" \
+  '^[0-9a-f-]{36}$'
+check "one active link exists after reconnect" \
+  "$(run_as $A "SELECT count(*) FROM public.partner_links WHERE partner_id='$B' AND status='active';")" \
+  '^1$'
+check "revoked history is preserved" \
+  "$(run_as $A "SELECT count(*) FROM public.partner_links WHERE partner_id='$B' AND status='revoked';")" \
+  '^1$'
+check "partner cannot rewrite active link metadata" \
+  "$(run_as $B "UPDATE public.partner_links SET partner_label='tampered' WHERE owner_id='$A' AND partner_id='$B' AND status='active';")" \
+  'may only|ERROR'
 
 echo ""
 echo "================================"
