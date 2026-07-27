@@ -1,0 +1,57 @@
+name: Supabase keep-alive
+
+# Supabase free-tier projects pause after 7 days without activity, and a
+# paused project needs a MANUAL restore from the dashboard. It does not wake
+# on request. For an app someone might open while distressed, "down until a
+# human notices" is not an acceptable failure mode.
+#
+# This runs a trivial read against a publicly readable table every day, which
+# is enough to keep the project marked active. It uses only the anon key,
+# which is already public in the client bundle, so nothing sensitive is held
+# in CI. If the ping starts failing you get a workflow failure notification,
+# which doubles as uptime monitoring you would otherwise not have.
+#
+# Required repository secrets:
+#   SUPABASE_URL       e.g. https://<project-ref>.supabase.co
+#   SUPABASE_ANON_KEY  the public anon key
+
+on:
+  schedule:
+    # 06:14 UTC daily. Deliberately not on the hour, to avoid the moment when
+    # every cron on GitHub fires at once and jobs get queued.
+    - cron: '14 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+            echo "::error::SUPABASE_URL and SUPABASE_ANON_KEY repository secrets are not set."
+            exit 1
+          fi
+
+          # `books` is world-readable ("Anyone can read books" policy), so this
+          # needs no user session and touches no personal data.
+          status=$(curl -sS -o /tmp/body.json -w '%{http_code}' \
+            --max-time 30 --retry 3 --retry-delay 10 --retry-connrefused \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            "${SUPABASE_URL}/rest/v1/books?select=id&limit=1")
+
+          echo "HTTP ${status}"
+
+          if [ "${status}" != "200" ]; then
+            echo "::error::Supabase keep-alive failed with HTTP ${status}. The project may be paused."
+            cat /tmp/body.json || true
+            exit 1
+          fi
+
+          echo "Supabase reachable; project remains active."
