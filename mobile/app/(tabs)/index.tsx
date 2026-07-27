@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Share } from 'react-native';
+import { Alert, View, Text, ScrollView, TouchableOpacity, StyleSheet, Share } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { Colors } from '@/lib/constants';
 import { format, subDays, startOfDay } from 'date-fns';
 import type { MoodEmoji } from '@/lib/types';
-import { queueActivationAttribution } from '@/lib/acquisition';
+import { saveCheckInWithAttribution } from '@/lib/acquisition';
 import { getLocalCheckInFields } from '@/lib/check-in';
 
 const moodEmojis: MoodEmoji[] = ['\u{1F604}', '\u{1F642}', '\u{1F610}', '\u{1F61E}', '\u{1F622}'];
@@ -24,10 +24,6 @@ export default function DashboardScreen() {
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
-  const context = isAuthenticated
-    ? { user_id: user?.id, session_id: null }
-    : { user_id: null, session_id: sessionId };
-
   useEffect(() => {
     if (!queryValue) return;
     const loadData = async () => {
@@ -49,15 +45,10 @@ export default function DashboardScreen() {
     if (!queryValue || !user?.id || savingMood) return;
     setSavingMood(true);
     try {
-      const { error } = await supabase.from('moods').insert({
-        ...context,
+      await saveCheckInWithAttribution({
         emoji: mood,
         ...getLocalCheckInFields(),
       });
-      if (error) {
-        console.warn('Unable to save mood:', error.message);
-        return;
-      }
       setTodayMood(mood);
       setWeekMoods((current) => [
         ...current.filter(
@@ -67,7 +58,12 @@ export default function DashboardScreen() {
         ),
         { emoji: mood, created_at: new Date().toISOString() },
       ]);
-      queueActivationAttribution(user.id);
+    } catch (error) {
+      console.warn('Unable to save check-in:', error);
+      Alert.alert(
+        'Unable to Save Check-In',
+        'Your check-in was not saved. Please try again.'
+      );
     } finally {
       setSavingMood(false);
     }
@@ -157,7 +153,12 @@ export default function DashboardScreen() {
             ))}
           </View>
           <Text style={s.challengeCopy}>A missed day does not reset your progress.</Text>
-          <TouchableOpacity style={s.shareBtn} onPress={shareChallenge}>
+          <TouchableOpacity
+            style={s.shareBtn}
+            onPress={shareChallenge}
+            accessibilityRole="button"
+            accessibilityLabel="Invite someone to try the 7-day private check-in"
+          >
             <Text style={s.shareBtnText}>Invite someone</Text>
           </TouchableOpacity>
         </View>

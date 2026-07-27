@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
+import { Alert, View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import type { MoodEmoji } from '@/lib/types';
-import { queueActivationAttribution } from '@/lib/acquisition';
+import { saveCheckInWithAttribution } from '@/lib/acquisition';
 import { getLocalCheckInFields } from '@/lib/check-in';
 
 const moodEmojis: MoodEmoji[] = ['\u{1F604}', '\u{1F642}', '\u{1F610}', '\u{1F61E}', '\u{1F622}'];
@@ -20,7 +20,7 @@ interface MoodEntry {
 }
 
 export default function TrackerScreen() {
-  const { context, query, user } = useDataContext();
+  const { query, user } = useDataContext();
   const [moods, setMoods] = useState<MoodEntry[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [newMood, setNewMood] = useState<MoodEmoji | null>(null);
@@ -63,29 +63,27 @@ export default function TrackerScreen() {
   }, [query, filterTag, refreshKey]);
 
   const handleAdd = async () => {
-    if (!newMood || saving) return;
+    if (!newMood || !user?.id || saving) return;
     setSaving(true);
     try {
       const tags = newTags.split(',').map((t) => t.trim()).filter((t) => t);
-      const { error } = await supabase.from('moods').insert({
-        ...context,
+      await saveCheckInWithAttribution({
         emoji: newMood,
         note: newNote || null,
         tags,
         ...getLocalCheckInFields(),
-      } as any);
-      if (error) {
-        console.warn('Unable to save mood:', error.message);
-        return;
-      }
+      });
       setNewMood(null);
       setNewNote('');
       setNewTags('');
       setShowAdd(false);
       setRefreshKey((key) => key + 1);
-      if (user?.id) {
-        queueActivationAttribution(user.id);
-      }
+    } catch (error) {
+      console.warn('Unable to save check-in:', error);
+      Alert.alert(
+        'Unable to Save Check-In',
+        'Your check-in was not saved. Please try again.'
+      );
     } finally {
       setSaving(false);
     }

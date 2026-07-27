@@ -19,6 +19,23 @@ function extractSetValues(source: string, name: string): Set<string> {
   );
 }
 
+function extractSqlAllowedValues(
+  source: string,
+  constraintName: string,
+  columnName: string
+): Set<string> {
+  const match = source.match(
+    new RegExp(
+      `CONSTRAINT ${constraintName} CHECK \\(\\s*${columnName} IN \\(([\\s\\S]*?)\\)\\s*\\)`
+    )
+  );
+  if (!match) throw new Error(`Unable to find ${constraintName} allowlist`);
+
+  return new Set(
+    Array.from(match[1].matchAll(/'([^']+)'/g), (value) => value[1])
+  );
+}
+
 function sorted(values: Iterable<string>): string[] {
   return Array.from(values).sort();
 }
@@ -118,7 +135,7 @@ describe('campaign attribution taxonomy', () => {
     }
   });
 
-  it('keeps published content labels aligned across web, mobile, and SQL', () => {
+  it('keeps published attribution labels aligned across web, mobile, and SQL', () => {
     const campaignCsv = readFileSync(
       resolve(process.cwd(), 'docs/launch/campaign-links.csv'),
       'utf8'
@@ -131,41 +148,92 @@ describe('campaign attribution taxonomy', () => {
       resolve(process.cwd(), 'lib/acquisition-taxonomy.ts'),
       'utf8'
     );
-    const databaseMigration = readFileSync(
+    const baseDatabaseMigration = readFileSync(
+      resolve(
+        process.cwd(),
+        'supabase/migrations/20260719124506_privacy_preserving_growth_metrics.sql'
+      ),
+      'utf8'
+    );
+    const contentDatabaseMigration = readFileSync(
       resolve(
         process.cwd(),
         'supabase/migrations/20260719182000_allow_partner_attribution_content.sql'
       ),
       'utf8'
     );
-    const contentLabels = new Set(
-      campaignCsv
-        .trim()
-        .split(/\r?\n/)
-        .slice(1)
-        .map((row) =>
-          new URL(row.split(',')[3]).searchParams.get('utm_content')
-        )
-        .filter((value): value is string => value !== null)
-    );
-    const webValues = extractSetValues(webSource, 'CONTENT');
-    const mobileValues = extractSetValues(mobileSource, 'CONTENT');
-    const databaseValues = new Set(
-      Array.from(
-        databaseMigration.matchAll(/'([a-z0-9][a-z0-9_-]*)'/g),
-        (value) => value[1]
-      )
-    );
+    const campaignUrls = campaignCsv
+      .trim()
+      .split(/\r?\n/)
+      .slice(1)
+      .map((row) => new URL(row.split(',')[3]));
+    const dimensions = [
+      {
+        clientSetName: 'SOURCES',
+        queryParam: 'utm_source',
+        constraintName: 'acquisition_source_allowed',
+        columnName: 'source',
+        migration: baseDatabaseMigration,
+        maxLength: 32,
+      },
+      {
+        clientSetName: 'MEDIUMS',
+        queryParam: 'utm_medium',
+        constraintName: 'acquisition_medium_allowed',
+        columnName: 'medium',
+        migration: baseDatabaseMigration,
+        maxLength: 32,
+      },
+      {
+        clientSetName: 'CAMPAIGNS',
+        queryParam: 'utm_campaign',
+        constraintName: 'acquisition_campaign_allowed',
+        columnName: 'campaign',
+        migration: baseDatabaseMigration,
+        maxLength: 48,
+      },
+      {
+        clientSetName: 'CONTENT',
+        queryParam: 'utm_content',
+        constraintName: 'acquisition_content_allowed',
+        columnName: 'content',
+        migration: contentDatabaseMigration,
+        maxLength: 48,
+      },
+    ] as const;
 
-    for (const content of contentLabels) {
-      expect(webValues.has(content)).toBe(true);
-    }
+    for (const dimension of dimensions) {
+      const publishedValues = new Set(
+        campaignUrls
+          .map((url) => url.searchParams.get(dimension.queryParam))
+          .filter((value): value is string => value !== null)
+      );
+      const webValues = extractSetValues(
+        webSource,
+        dimension.clientSetName
+      );
+      const mobileValues = extractSetValues(
+        mobileSource,
+        dimension.clientSetName
+      );
+      const databaseValues = extractSqlAllowedValues(
+        dimension.migration,
+        dimension.constraintName,
+        dimension.columnName
+      );
 
-    expect(sorted(mobileValues)).toEqual(sorted(webValues));
-    expect(sorted(databaseValues)).toEqual(sorted(new Set([...webValues, 'other'])));
-    for (const content of databaseValues) {
-      expect(content).toMatch(/^[a-z0-9][a-z0-9_-]*$/);
-      expect(content.length).toBeLessThanOrEqual(48);
+      for (const value of publishedValues) {
+        expect(webValues.has(value)).toBe(true);
+      }
+
+      expect(sorted(mobileValues)).toEqual(sorted(webValues));
+      expect(sorted(databaseValues)).toEqual(
+        sorted(new Set([...webValues, 'other']))
+      );
+      for (const value of databaseValues) {
+        expect(value).toMatch(/^[a-z0-9][a-z0-9_-]*$/);
+        expect(value.length).toBeLessThanOrEqual(dimension.maxLength);
+      }
     }
   });
 
@@ -223,21 +291,111 @@ describe('campaign attribution taxonomy', () => {
       expect(canonicalUrls.has(row[4])).toBe(true);
     }
 
-    const emailAttempts = rows.filter(
-      (row) => row[1] === 'email' && row[6] !== 'draft_prepared_not_sent'
+    const firstWaveEmailAttempts = rows.filter(
+      (row) =>
+        row[0].startsWith('2026-07-19') &&
+        row[1] === 'email' &&
+        row[6] !== 'draft_prepared_not_sent'
     );
-    const bounced = emailAttempts.filter((row) => row[6].startsWith('bounced_'));
-    const withoutObservedBounce = emailAttempts.filter(
+    const bounced = firstWaveEmailAttempts.filter((row) =>
+      row[6].startsWith('bounced_')
+    );
+    const withoutObservedBounce = firstWaveEmailAttempts.filter(
       (row) => !row[6].startsWith('bounced_')
     );
     const founderPosts = rows.filter(
       (row) => ['linkedin', 'x'].includes(row[1]) && row[3] === 'Founder network'
     );
 
-    expect(emailAttempts).toHaveLength(40);
+    expect(firstWaveEmailAttempts).toHaveLength(40);
     expect(bounced).toHaveLength(3);
     expect(withoutObservedBounce).toHaveLength(37);
     expect(founderPosts).toHaveLength(2);
+  });
+
+  it('keeps every partner share-kit link canonical and channel matched', () => {
+    const canonicalCsv = readFileSync(
+      resolve(process.cwd(), 'docs/launch/campaign-links.csv'),
+      'utf8'
+    );
+    const canonicalUrls = new Set(
+      canonicalCsv
+        .trim()
+        .split(/\r?\n/)
+        .slice(1)
+        .map((row) => row.split(',')[3])
+    );
+    const shareKit = readFileSync(
+      resolve(process.cwd(), 'docs/launch/partner-share-kit.md'),
+      'utf8'
+    );
+    const shareKitUrls = Array.from(
+      shareKit.matchAll(
+        /`(https:\/\/mhtoolkit\.vercel\.app\/\?utm_source=[^`]+)`/g
+      ),
+      (match) => match[1]
+    );
+
+    expect(shareKitUrls).toHaveLength(4);
+    expect(
+      new Set(
+        shareKitUrls.map(
+          (url) => new URL(url).searchParams.get('utm_medium')
+        )
+      )
+    ).toEqual(new Set(['newsletter', 'email', 'organic', 'dm']));
+    for (const url of shareKitUrls) {
+      expect(canonicalUrls.has(url)).toBe(true);
+    }
+  });
+
+  it('keeps web and mobile member shares canonical and anonymous', () => {
+    const campaignCsv = readFileSync(
+      resolve(process.cwd(), 'docs/launch/campaign-links.csv'),
+      'utf8'
+    );
+    const referralRow = campaignCsv
+      .trim()
+      .split(/\r?\n/)
+      .find((row) => row.startsWith('member_referral,'));
+    expect(referralRow).toBeDefined();
+
+    const canonicalReferralUrl = referralRow!.split(',')[3];
+    const sources = [
+      readFileSync(
+        resolve(
+          process.cwd(),
+          'components/launch/share-challenge-button.tsx'
+        ),
+        'utf8'
+      ),
+      readFileSync(
+        resolve(process.cwd(), 'mobile/app/(tabs)/index.tsx'),
+        'utf8'
+      ),
+    ];
+
+    for (const source of sources) {
+      const urls =
+        source.match(
+          /https:\/\/mhtoolkit\.vercel\.app\/\?utm_source=[^'"\s]+/g
+        ) ?? [];
+      expect(urls).toContain(canonicalReferralUrl);
+
+      const referralUrl = new URL(canonicalReferralUrl);
+      expect([...referralUrl.searchParams.keys()].sort()).toEqual([
+        'utm_campaign',
+        'utm_content',
+        'utm_medium',
+        'utm_source',
+      ]);
+      expect(referralUrl.searchParams.get('utm_source')).toBe('referral');
+      expect(referralUrl.searchParams.get('utm_medium')).toBe('referral');
+      expect(referralUrl.searchParams.get('utm_content')).toBe('member_share');
+      expect(canonicalReferralUrl).not.toMatch(
+        /user|email|mood|note|assessment|chat|session/i
+      );
+    }
   });
 
   it('records the device-local calendar date and UTC offset', () => {
@@ -247,5 +405,79 @@ describe('campaign attribution taxonomy', () => {
       local_date: '2026-01-02',
       utc_offset_minutes: -localDate.getTimezoneOffset(),
     });
+  });
+
+  it('commits attribution and every check-in through one owned transaction', () => {
+    const migration = readFileSync(
+      resolve(
+        process.cwd(),
+        'supabase/migrations/20260719201000_atomic_check_in_attribution.sql'
+      ),
+      'utf8'
+    );
+    const attributionInsert = migration.match(
+      /INSERT INTO public\.acquisition_attribution([\s\S]*?)ON CONFLICT/
+    )?.[1];
+
+    expect(migration).toContain(
+      'CREATE OR REPLACE FUNCTION public.save_check_in_with_attribution'
+    );
+    expect(migration).toContain('SECURITY INVOKER');
+    expect(migration).toContain('v_user_id UUID := auth.uid()');
+    expect(migration).toMatch(
+      /INSERT INTO public\.acquisition_attribution[\s\S]*ON CONFLICT \(user_id\) DO NOTHING;[\s\S]*INSERT INTO public\.moods/
+    );
+    expect(migration).toMatch(
+      /REVOKE ALL ON FUNCTION public\.save_check_in_with_attribution\([\s\S]*FROM PUBLIC, anon, authenticated;/
+    );
+    expect(migration).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.save_check_in_with_attribution\([\s\S]*TO authenticated;/
+    );
+    expect(attributionInsert).toBeDefined();
+    expect(attributionInsert).not.toMatch(/p_emoji|p_note|p_tags/);
+
+    const saveSurfaces = [
+      'app/onboarding/page.tsx',
+      'app/tracker/page.tsx',
+      'app/dashboard/page.tsx',
+      'mobile/app/(tabs)/tracker.tsx',
+      'mobile/app/(tabs)/index.tsx',
+    ];
+
+    for (const path of saveSurfaces) {
+      const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+      expect(source).toContain('saveCheckInWithAttribution');
+      expect(source).not.toMatch(
+        /\.from\(['"]moods['"]\)\s*\.insert/
+      );
+      expect(source).not.toContain('queueActivationAttribution');
+    }
+
+    for (const path of ['lib/acquisition.ts', 'mobile/lib/acquisition.ts']) {
+      const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+      expect(source).toContain(
+        ".rpc('save_check_in_with_attribution'"
+      );
+      expect(source).not.toContain("from('acquisition_attribution')");
+      expect(source).not.toContain('queueActivationAttribution');
+    }
+  });
+
+  it('provides a read-only production gate for the atomic RPC', () => {
+    const preflight = readFileSync(
+      resolve(
+        process.cwd(),
+        'scripts/verify-atomic-attribution-deployment.mjs'
+      ),
+      'utf8'
+    );
+
+    expect(preflight).toContain(
+      ".rpc('save_check_in_with_attribution'"
+    );
+    expect(preflight).toContain("error.code === 'PGRST202'");
+    expect(preflight).toContain("error.code !== '42501'");
+    expect(preflight).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
+    expect(preflight).not.toContain('signInAnonymously');
   });
 });

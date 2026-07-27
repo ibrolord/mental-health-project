@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, subMonths } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { queueActivationAttribution } from '@/lib/acquisition';
+import { saveCheckInWithAttribution } from '@/lib/acquisition';
 import { getLocalCheckInFields } from '@/lib/check-in';
 
 interface MoodEntry {
@@ -32,7 +32,7 @@ const moodToValue: Record<MoodEmoji, number> = {
 };
 
 export default function TrackerPage() {
-  const { context, query, user } = useDataContext();
+  const { query, user } = useDataContext();
   
   const [moods, setMoods] = useState<MoodEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -89,7 +89,7 @@ export default function TrackerPage() {
   }, [query, selectedDate, filterTag, refreshKey]);
 
   const handleAddMood = async () => {
-    if (!newMood || saving) return;
+    if (!newMood || !user?.id || saving) return;
 
     try {
       setSaving(true);
@@ -98,24 +98,18 @@ export default function TrackerPage() {
         .map((t) => t.trim())
         .filter((t) => t);
 
-      const { error } = await supabase.from('moods').insert({
-        ...context,
+      await saveCheckInWithAttribution({
         emoji: newMood,
         note: newNote || null,
         tags,
         ...getLocalCheckInFields(),
-      } as any);
-
-      if (error) throw error;
+      });
 
       setNewMood(null);
       setNewNote('');
       setNewTags('');
       setShowAddMood(false);
       setRefreshKey((key) => key + 1);
-      if (user?.id) {
-        queueActivationAttribution(user.id);
-      }
     } catch (error) {
       console.error('Error adding mood:', error);
     } finally {
@@ -182,8 +176,8 @@ export default function TrackerPage() {
       <div className="max-w-6xl mx-auto">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-2">Mood Tracker</h1>
-            <p className="text-slate-600">Your emotional journey over time</p>
+            <h1 className="text-4xl font-bold text-foreground mb-2">Mood Tracker</h1>
+            <p className="text-muted-foreground">Your emotional journey over time</p>
           </div>
           <Button onClick={() => setShowAddMood(true)}>Add Mood</Button>
         </div>
@@ -299,7 +293,7 @@ export default function TrackerPage() {
             {loading ? (
               <div className="text-center py-8">Loading...</div>
             ) : moods.length === 0 ? (
-              <div className="text-center py-8 text-slate-600">
+              <div className="text-center py-8 text-muted-foreground">
                 No mood entries for this period
               </div>
             ) : (
@@ -308,18 +302,18 @@ export default function TrackerPage() {
                   <div key={mood.id} className="flex gap-4 p-4 border rounded-lg">
                     <div className="text-4xl">{mood.emoji}</div>
                     <div className="flex-1">
-                      <div className="text-sm text-slate-500 mb-1">
+                      <div className="text-sm text-muted-foreground mb-1">
                         {format(new Date(mood.created_at), 'MMMM dd, yyyy - h:mm a')}
                       </div>
                       {mood.note && (
-                        <p className="text-slate-700 mb-2">{mood.note}</p>
+                        <p className="text-foreground mb-2">{mood.note}</p>
                       )}
                       {mood.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                           {mood.tags.map((tag, i) => (
                             <span
                               key={i}
-                              className="text-xs bg-slate-200 px-2 py-1 rounded"
+                              className="text-xs bg-secondary px-2 py-1 rounded"
                             >
                               {tag}
                             </span>

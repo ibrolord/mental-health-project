@@ -8,7 +8,7 @@ import { MoodEmoji } from '@/lib/supabase/types';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { format, subDays, startOfDay } from 'date-fns';
-import { queueActivationAttribution } from '@/lib/acquisition';
+import { saveCheckInWithAttribution } from '@/lib/acquisition';
 import { getLocalCheckInFields } from '@/lib/check-in';
 import { ShareChallengeButton } from '@/components/launch/share-challenge-button';
 
@@ -23,10 +23,6 @@ export default function DashboardPage() {
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
-  const context = isAuthenticated 
-    ? { user_id: user?.id, session_id: null } 
-    : { user_id: null, session_id: sessionId };
-
   useEffect(() => {
     if (!queryValue) return;
 
@@ -56,12 +52,10 @@ export default function DashboardPage() {
     if (!queryValue || !user?.id || savingMood) return;
     try {
       setSavingMood(true);
-      const { error } = await supabase.from('moods').insert({
-        ...context,
+      await saveCheckInWithAttribution({
         emoji: mood,
         ...getLocalCheckInFields(),
-      } as any);
-      if (error) throw error;
+      });
       setTodayMood(mood);
       setWeekMoods((current) => [
         ...current.filter(
@@ -71,7 +65,6 @@ export default function DashboardPage() {
         ),
         { emoji: mood, created_at: new Date().toISOString() },
       ]);
-      queueActivationAttribution(user.id);
     } catch (e) {
       console.error('Save mood error:', e);
     } finally {
@@ -86,11 +79,11 @@ export default function DashboardPage() {
   ).size;
 
   return (
-    <main className="min-h-screen bg-slate-50 p-4 pt-20 md:p-8 md:pt-24">
+    <main className="min-h-screen px-4 py-8 md:px-8 md:py-12">
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Welcome back</h1>
-          <p className="text-slate-600">Your mental health snapshot</p>
+          <h1 className="text-3xl font-bold text-foreground">Welcome back</h1>
+          <p className="text-muted-foreground">Your mental health snapshot</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -107,11 +100,11 @@ export default function DashboardPage() {
                     onClick={() => saveMood(emoji)}
                     disabled={savingMood}
                     className={`flex flex-col items-center p-2 rounded-lg transition-all ${
-                      todayMood === emoji ? 'bg-blue-100 ring-2 ring-blue-500' : 'hover:bg-slate-100'
+                      todayMood === emoji ? 'bg-secondary ring-2 ring-primary' : 'hover:bg-secondary'
                     } disabled:cursor-wait disabled:opacity-60`}
                   >
                     <span className="text-2xl">{emoji}</span>
-                    <span className="text-xs text-slate-600 mt-1">{moodLabels[index]}</span>
+                    <span className="text-xs text-muted-foreground mt-1">{moodLabels[index]}</span>
                   </button>
                 ))}
               </div>
@@ -133,7 +126,7 @@ export default function DashboardPage() {
                   return (
                     <div key={i} className="flex flex-col items-center">
                       <span className="text-xl">{dayMood?.emoji || '·'}</span>
-                      <span className="text-xs text-slate-500 mt-1">{format(date, 'EEE')}</span>
+                      <span className="text-xs text-muted-foreground mt-1">{format(date, 'EEE')}</span>
                     </div>
                   );
                 })}
@@ -172,10 +165,10 @@ export default function DashboardPage() {
         )}
 
         {affirmation && (
-          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
+          <Card className="border-brand-sage/40 bg-secondary">
             <CardContent className="pt-6">
-              <p className="text-center text-lg italic text-slate-700">&quot;{affirmation}&quot;</p>
-              <p className="text-center text-sm text-slate-500 mt-2">Daily Affirmation</p>
+              <p className="text-center text-lg italic text-foreground">&quot;{affirmation}&quot;</p>
+              <p className="text-center text-sm text-muted-foreground mt-2">Daily Affirmation</p>
             </CardContent>
           </Card>
         )}

@@ -7,7 +7,7 @@ export const CHALLENGE_SHARE_URL =
   'https://mhtoolkit.vercel.app/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share';
 
 export function ShareChallengeButton() {
-  const [shared, setShared] = useState(false);
+  const [result, setResult] = useState<'idle' | 'shared' | 'copied'>('idle');
 
   const share = async () => {
     const data = {
@@ -19,11 +19,12 @@ export function ShareChallengeButton() {
     try {
       if (navigator.share) {
         await navigator.share(data);
+        setResult('shared');
       } else {
         await navigator.clipboard.writeText(CHALLENGE_SHARE_URL);
+        setResult('copied');
       }
-      setShared(true);
-      window.setTimeout(() => setShared(false), 2500);
+      window.setTimeout(() => setResult('idle'), 2500);
     } catch (error) {
       if ((error as DOMException).name !== 'AbortError') {
         console.warn('Unable to share challenge:', error);
@@ -35,10 +36,21 @@ export function ShareChallengeButton() {
     <button
       type="button"
       onClick={share}
+      aria-label="Invite someone to try the 7-day private check-in"
       className="inline-flex items-center gap-2 rounded-full border border-[#9db4a6] bg-white px-4 py-2 text-sm font-semibold text-[#24483e] transition hover:bg-[#f8faf7]"
     >
-      {shared ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
-      {shared ? 'Link copied' : 'Invite someone'}
+      {result === 'idle' ? (
+        <Share2 className="h-4 w-4" />
+      ) : (
+        <Check className="h-4 w-4" />
+      )}
+      <span aria-live="polite">
+        {result === 'shared'
+          ? 'Shared'
+          : result === 'copied'
+            ? 'Link copied'
+            : 'Invite someone'}
+      </span>
     </button>
   );
 }

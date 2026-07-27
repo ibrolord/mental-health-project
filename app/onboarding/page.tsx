@@ -8,9 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { MoodSelector } from '@/components/mood/mood-selector';
 import { MoodEmoji } from '@/lib/supabase/types';
-import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
-import { queueActivationAttribution } from '@/lib/acquisition';
+import { saveCheckInWithAttribution } from '@/lib/acquisition';
 import { getLocalCheckInFields } from '@/lib/check-in';
 
 type Step = 'mood' | 'intention' | 'route';
@@ -25,7 +24,7 @@ const intentions = [
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { context, user, authLoading } = useDataContext();
+  const { user, authLoading } = useDataContext();
   
   const [step, setStep] = useState<Step>('mood');
   const [mood, setMood] = useState<MoodEmoji | null>(null);
@@ -41,17 +40,13 @@ export default function OnboardingPage() {
       setLoading(true);
       setSaveError('');
       
-      // Save mood to database
-      const { error } = await supabase.from('moods').insert({
-        ...context,
+      await saveCheckInWithAttribution({
         emoji: mood,
         note: note || null,
         ...getLocalCheckInFields(),
-      } as any);
-      if (error) throw error;
+      });
 
       setStep('intention');
-      queueActivationAttribution(user.id);
     } catch (error) {
       console.error('Error saving mood:', error);
       setSaveError('Your check-in was not saved. Please try again.');
@@ -124,7 +119,7 @@ export default function OnboardingPage() {
             <CardContent className="pt-6">
               <div className="text-center mb-8">
                 <h1 className="text-3xl font-bold mb-2">How are you feeling today?</h1>
-                <p className="text-slate-600">Choose the emoji that best represents your mood</p>
+                <p className="text-muted-foreground">Choose the emoji that best represents your mood</p>
               </div>
 
               <div className="mb-8">
@@ -164,7 +159,7 @@ export default function OnboardingPage() {
             <CardContent className="pt-6">
               <div className="text-center mb-8">
                 <h1 className="text-3xl font-bold mb-2">What would you like support with?</h1>
-                <p className="text-slate-600">Select all that apply</p>
+                <p className="text-muted-foreground">Select all that apply</p>
               </div>
 
               <div className="grid gap-3 mb-8">
@@ -175,7 +170,7 @@ export default function OnboardingPage() {
                     className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all text-left ${
                       selectedIntentions.includes(intention.id)
                         ? 'border-primary bg-primary/5'
-                        : 'border-slate-200 hover:border-slate-300'
+                        : 'border-border hover:border-border'
                     }`}
                   >
                     <span className="text-2xl">{intention.icon}</span>
@@ -211,7 +206,7 @@ export default function OnboardingPage() {
               <div className="text-center mb-8">
                 <div className="text-6xl mb-4">{recommendation.icon}</div>
                 <h1 className="text-3xl font-bold mb-2">{recommendation.title}</h1>
-                <p className="text-slate-600">{recommendation.description}</p>
+                <p className="text-muted-foreground">{recommendation.description}</p>
               </div>
 
               <div className="space-y-3">
@@ -223,7 +218,7 @@ export default function OnboardingPage() {
                   {recommendation.title}
                 </Button>
 
-                <div className="text-center text-sm text-slate-600 my-4">or choose another path</div>
+                <div className="text-center text-sm text-muted-foreground my-4">or choose another path</div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <Button

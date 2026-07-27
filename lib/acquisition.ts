@@ -7,9 +7,9 @@ import {
   parseStoredCampaign,
   type CampaignAttribution,
 } from './acquisition-taxonomy';
+import type { LocalCheckInFields } from './check-in';
 import { supabase } from './supabase/client';
 
-const ATTRIBUTION_DEADLINE_MS = 1500;
 const DIRECT_ATTRIBUTION: CampaignAttribution = {
   source: 'direct',
   medium: 'direct',
@@ -53,34 +53,28 @@ export function clearStoredAcquisitionAttribution(): void {
   window.localStorage.removeItem(ACQUISITION_STORAGE_KEY);
 }
 
-async function recordActivationAttribution(userId: string): Promise<void> {
-  try {
-    const attribution = readAttribution();
-    const { error } = await supabase
-      .from('acquisition_attribution')
-      .upsert(
-        {
-          user_id: userId,
-          ...attribution,
-          platform: 'web',
-        },
-        { onConflict: 'user_id', ignoreDuplicates: true }
-      );
-
-    if (error) {
-      console.warn('Unable to record aggregate acquisition source:', error.message);
-    }
-  } catch (error) {
-    // Measurement must never interfere with a user's check-in.
-    console.warn('Unable to record aggregate acquisition source:', error);
-  }
+export interface AttributedCheckIn extends LocalCheckInFields {
+  emoji: string;
+  note?: string | null;
+  tags?: string[];
 }
 
-export function queueActivationAttribution(userId: string): void {
-  const deadline = new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ATTRIBUTION_DEADLINE_MS);
+export async function saveCheckInWithAttribution(
+  checkIn: AttributedCheckIn
+): Promise<void> {
+  const attribution = readAttribution();
+  const { error } = await supabase.rpc('save_check_in_with_attribution', {
+    p_emoji: checkIn.emoji,
+    p_note: checkIn.note ?? null,
+    p_tags: checkIn.tags ?? [],
+    p_local_date: checkIn.local_date,
+    p_utc_offset_minutes: checkIn.utc_offset_minutes,
+    p_source: attribution.source,
+    p_medium: attribution.medium,
+    p_campaign: attribution.campaign,
+    p_content: attribution.content,
+    p_platform: 'web',
   });
 
-  // Attribution is best-effort telemetry and must not delay a successful check-in.
-  void Promise.race([recordActivationAttribution(userId), deadline]);
+  if (error) throw error;
 }

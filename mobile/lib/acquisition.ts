@@ -2,8 +2,8 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import type { LocalCheckInFields } from './check-in';
 
-const ATTRIBUTION_DEADLINE_MS = 1500;
 const STORAGE_KEY = 'mhtoolkit_acquisition_v1';
 const SOURCES = new Set([
   'direct',
@@ -160,35 +160,29 @@ export async function clearStoredAcquisitionAttribution(): Promise<void> {
   await AsyncStorage.removeItem(STORAGE_KEY);
 }
 
-async function recordActivationAttribution(userId: string): Promise<void> {
-  try {
-    const attribution = await readAttribution();
-    const platform = Platform.OS === 'ios' ? 'ios' : 'android';
-    const { error } = await supabase
-      .from('acquisition_attribution')
-      .upsert(
-        {
-          user_id: userId,
-          ...attribution,
-          platform,
-        },
-        { onConflict: 'user_id', ignoreDuplicates: true }
-      );
-
-    if (error) {
-      console.warn('Unable to record aggregate acquisition source:', error.message);
-    }
-  } catch (error) {
-    // Measurement must never interfere with a user's check-in.
-    console.warn('Unable to record aggregate acquisition source:', error);
-  }
+export interface AttributedCheckIn extends LocalCheckInFields {
+  emoji: string;
+  note?: string | null;
+  tags?: string[];
 }
 
-export function queueActivationAttribution(userId: string): void {
-  const deadline = new Promise<void>((resolve) => {
-    setTimeout(resolve, ATTRIBUTION_DEADLINE_MS);
+export async function saveCheckInWithAttribution(
+  checkIn: AttributedCheckIn
+): Promise<void> {
+  const attribution = await readAttribution();
+  const platform = Platform.OS === 'ios' ? 'ios' : 'android';
+  const { error } = await supabase.rpc('save_check_in_with_attribution', {
+    p_emoji: checkIn.emoji,
+    p_note: checkIn.note ?? null,
+    p_tags: checkIn.tags ?? [],
+    p_local_date: checkIn.local_date,
+    p_utc_offset_minutes: checkIn.utc_offset_minutes,
+    p_source: attribution.source,
+    p_medium: attribution.medium,
+    p_campaign: attribution.campaign,
+    p_content: attribution.content,
+    p_platform: platform,
   });
 
-  // Attribution is best-effort telemetry and must not delay a successful check-in.
-  void Promise.race([recordActivationAttribution(userId), deadline]);
+  if (error) throw error;
 }
