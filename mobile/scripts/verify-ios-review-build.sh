@@ -157,6 +157,12 @@ else
   pass "Support/privacy pages omit stale support emails"
 fi
 
+if (cd "$ROOT_DIR/.." && node scripts/verify-resource-links.mjs >/tmp/mhtoolkit-resource-links.log 2>&1); then
+  pass "Every /resources link is reachable"
+else
+  fail "One or more /resources links are unreachable (see /tmp/mhtoolkit-resource-links.log)"
+fi
+
 ACCOUNT_DELETE_ROUTE="$ROOT_DIR/../app/api/account/delete/route.ts"
 if [ -f "$ACCOUNT_DELETE_ROUTE" ] &&
   grep -q 'deleteUser' "$ACCOUNT_DELETE_ROUTE" &&
