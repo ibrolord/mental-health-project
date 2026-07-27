@@ -96,26 +96,25 @@ function AcceptInviteInner() {
         {state.kind === 'needs-account' && (
           <>
             <h1 className="font-display text-3xl font-medium text-foreground">
-              Sign in to accept
+              Create an account to accept
             </h1>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              Accountability partners need an existing account so the connection
-              survives across devices. New account creation is temporarily
-              unavailable while email verification is upgraded. If you already
-              have an account, sign in and then open this invite link again.
+              Being someone&apos;s accountability partner needs an account on
+              both sides so the connection survives across devices. Your invite
+              link still works afterwards, so open it again once you are in.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Link
-                href="/auth/login"
+                href="/auth/signup"
                 className="rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
               >
-                Sign in
+                Create an account
               </Link>
               <Link
-                href="/dashboard"
+                href="/auth/login"
                 className="rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
               >
-                Continue anonymously
+                Sign in
               </Link>
             </div>
           </>

@@ -55,7 +55,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAnonymous: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  /** Resolves true if a session was returned, false if email confirmation is required. */
+  signUp: (email: string, password: string) => Promise<boolean>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -66,7 +68,8 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   isAnonymous: false,
   signIn: async () => {},
-  signUp: async () => {},
+  signUp: async () => false,
+  signInWithGoogle: async () => {},
   signOut: async () => {},
 });
 
@@ -133,8 +136,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const signUp = async (_email: string, _password: string) => {
-    throw new Error('Account creation is temporarily unavailable while email verification is being upgraded.');
+  /**
+   * Returns true when Supabase handed back a session immediately, which means
+   * the project autoconfirms addresses. Returns false when confirmation by
+   * email is required, so the caller can say so instead of pretending the
+   * account is ready. This keeps the flow correct whether or not custom SMTP
+   * is ever configured.
+   */
+  const signUp = async (email: string, password: string): Promise<boolean> => {
+    // Same guard as signIn: creating an account while an anonymous profile
+    // holds unsaved data would strand that data under an identity the user is
+    // about to stop using.
+    await assertAnonymousAccountIsEmpty();
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo:
+          typeof window !== 'undefined'
+            ? `${window.location.origin}/auth/callback`
+            : undefined,
+      },
+    });
+    if (error) throw error;
+
+    return data.session !== null;
+  };
+
+  const signInWithGoogle = async () => {
+    await assertAnonymousAccountIsEmpty();
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo:
+          typeof window !== 'undefined'
+            ? `${window.location.origin}/auth/callback`
+            : undefined,
+      },
+    });
+    if (error) throw error;
   };
 
   const signOut = async () => {
@@ -143,7 +185,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, sessionId, loading, isAuthenticated, isAnonymous, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        sessionId,
+        loading,
+        isAuthenticated,
+        isAnonymous,
+        signIn,
+        signUp,
+        signInWithGoogle,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
