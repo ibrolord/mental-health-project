@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createReportToken,
+  createReportTokenIfConfigured,
   hashSubject,
   subjectForAuth,
   verifyReportToken,
@@ -40,5 +41,20 @@ describe('report tokens', () => {
     expect(subjectForAuth({ userId: 'abc' })).toBe('user:abc');
     expect(subjectForAuth({ sessionId: 'abc' })).toBe('session:abc');
     expect(hashSubject('user:abc', secret)).not.toContain('abc');
+  });
+
+  it('omits reporting credentials instead of failing chat when the secret is absent', () => {
+    const originalSecret = process.env.AI_REPORT_SIGNING_SECRET;
+    delete process.env.AI_REPORT_SIGNING_SECRET;
+    try {
+      expect(createReportTokenIfConfigured({
+        subject,
+        response,
+        model: 'claude',
+      })).toBeNull();
+    } finally {
+      if (originalSecret === undefined) delete process.env.AI_REPORT_SIGNING_SECRET;
+      else process.env.AI_REPORT_SIGNING_SECRET = originalSecret;
+    }
   });
 });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { chat } from '@/lib/ai/model-router';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
 import { chatRequestSchema } from '@/lib/ai/chat-validation';
-import { createReportToken, getReportSigningSecret, subjectForAuth } from '@/lib/ai/report-token';
+import { createReportTokenIfConfigured, subjectForAuth } from '@/lib/ai/report-token';
 import { readBoundedJson, RequestBodyError } from '@/lib/ai/request-body';
 
 const MAX_REQUEST_BYTES = 64 * 1024;
@@ -26,14 +26,16 @@ export async function POST(request: NextRequest) {
 
     const { messages, userContext } = parsed.data;
     const { response, model } = await chat(messages, userContext);
-    const report = createReportToken({
+    const report = createReportTokenIfConfigured({
       subject: subjectForAuth(auth),
       response,
       model,
-      secret: getReportSigningSecret(),
     });
+    if (!report) {
+      console.warn('AI response reporting is disabled because its signing secret is not configured.');
+    }
 
-    return NextResponse.json({ response, model, ...report }, { headers: corsHeaders() });
+    return NextResponse.json({ response, model, ...(report ?? {}) }, { headers: corsHeaders() });
   } catch (error) {
     if (error instanceof RequestBodyError) {
       return NextResponse.json({ error: error.message }, { status: error.status, headers: corsHeaders() });

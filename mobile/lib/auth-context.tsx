@@ -1,11 +1,17 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from './supabase';
+import { clearPersistedSupabaseSession, supabase } from './supabase';
 import type { Session, User } from '@supabase/supabase-js';
 import { apiRequest } from './api';
-import { clearPersistedSupabaseSession } from './supabase';
 import { clearStoredAcquisitionAttribution } from './acquisition';
+import {
+  ACCOUNT_UPGRADE_EMAIL_FIELD,
+  ACCOUNT_UPGRADE_STARTED_FLAG,
+  getPendingAccountUpgradeEmail,
+  isAccountUpgradeComplete,
+  isAccountUpgradePending,
+} from './auth-validation';
 
 let anonymousSignIn: Promise<Session> | null = null;
 const LEGACY_SESSION_KEY = 'anonymous_session_id';
@@ -44,8 +50,11 @@ interface AuthContextType {
   loading: boolean;
   isAuthenticated: boolean;
   isAnonymous: boolean;
+  accountUpgradePending: boolean;
+  pendingAccountUpgradeEmail: string | null;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  startAccountUpgrade: (email: string) => Promise<void>;
+  completeAccountUpgrade: () => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
@@ -56,8 +65,11 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isAuthenticated: false,
   isAnonymous: false,
+  accountUpgradePending: false,
+  pendingAccountUpgradeEmail: null,
   signIn: async () => {},
-  signUp: async () => {},
+  startAccountUpgrade: async () => {},
+  completeAccountUpgrade: async () => {},
   signOut: async () => {},
   deleteAccount: async () => {},
 });
@@ -149,6 +161,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = !!user;
   const isAnonymous = user?.is_anonymous === true;
+  const accountUpgradePending = isAccountUpgradePending(user);
+  const pendingAccountUpgradeEmail = getPendingAccountUpgradeEmail(user);
   const sessionId = null;
 
   const signIn = async (email: string, password: string) => {
@@ -157,8 +171,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const signUp = async (_email: string, _password: string) => {
-    throw new Error('Account creation is temporarily unavailable while email verification is being upgraded.');
+  const startAccountUpgrade = async (email: string): Promise<void> => {
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    if (!current.session?.user.is_anonymous) {
+      throw new Error('This device is already signed in to an account.');
+    }
+
+    // Link the email to the current anonymous user so its ID and saved data
+    // remain unchanged. The confirmation page sets a password in the browser.
+    const redirectUrl =
+      `https://mhtoolkit.vercel.app/auth/mobile-confirmed?upgrade_user_id=${encodeURIComponent(current.session.user.id)}`;
+    const { data, error } = await supabase.auth.updateUser(
+      {
+        email: email.trim(),
+        data: {
+          [ACCOUNT_UPGRADE_STARTED_FLAG]: true,
+          [ACCOUNT_UPGRADE_EMAIL_FIELD]: email.trim(),
+        },
+      },
+      { emailRedirectTo: redirectUrl }
+    );
+    if (error) throw error;
+    setUser(data.user);
+  };
+
+  const completeAccountUpgrade = async (): Promise<void> => {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error) throw error;
+    if (!isAccountUpgradeComplete(data.user)) {
+      throw new Error('Account setup is not complete yet. Finish the email and password steps in your browser, then try again.');
+    }
+    setUser(data.user);
   };
 
   const signOut = async () => {
@@ -202,7 +246,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, sessionId, loading, isAuthenticated, isAnonymous, signIn, signUp, signOut, deleteAccount }}
+      value={{
+        user,
+        sessionId,
+        loading,
+        isAuthenticated,
+        isAnonymous,
+        accountUpgradePending,
+        pendingAccountUpgradeEmail,
+        signIn,
+        startAccountUpgrade,
+        completeAccountUpgrade,
+        signOut,
+        deleteAccount,
+      }}
     >
       {children}
     </AuthContext.Provider>

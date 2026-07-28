@@ -4,6 +4,8 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
+export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5';
+
 const BASE_SYSTEM_PROMPT = `You are a compassionate self-help support coach. Your role is to:
 
 1. Listen empathetically and validate emotions
@@ -128,7 +130,7 @@ export async function chat(messages: Message[], userContext?: UserContext): Prom
     const systemPrompt = buildContextualPrompt(userContext);
     
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: process.env.CLAUDE_MODEL?.trim() || DEFAULT_CLAUDE_MODEL,
       max_tokens: 1024,
       system: systemPrompt,
       messages: messages.map(m => ({

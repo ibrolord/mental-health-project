@@ -31,7 +31,13 @@ const HOUR_OPTIONS = [
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, signOut, isAnonymous, deleteAccount } = useAuth();
+  const {
+    user,
+    signOut,
+    isAnonymous,
+    accountUpgradePending,
+    deleteAccount,
+  } = useAuth();
   const { query } = useDataContext();
   const [loading, setLoading] = useState(false);
   const [remindersOn, setRemindersOn] = useState(true);
@@ -169,10 +175,25 @@ export default function SettingsScreen() {
       {/* Account */}
       <View style={s.card}>
         <Text style={s.cardTitle}>Account</Text>
-        {isAnonymous ? (
+        {accountUpgradePending ? (
+          <>
+            <Text style={s.bodyText}>Your account setup is waiting to be finished.</Text>
+            <Text style={[s.bodyText, { marginTop: 4 }]}>
+              Use the confirmation email to create your password, then return here. Your saved data remains attached to this profile.
+            </Text>
+            <TouchableOpacity style={s.btn} onPress={() => router.push('/auth/signup')}>
+              <Text style={s.btnText}>Finish Account Setup</Text>
+            </TouchableOpacity>
+          </>
+        ) : isAnonymous ? (
           <>
             <Text style={s.bodyText}>You are using the app anonymously.</Text>
-            <Text style={[s.bodyText, { marginTop: 4 }]}>New account creation is temporarily unavailable while email verification is upgraded.</Text>
+            <Text style={[s.bodyText, { marginTop: 4 }]}>
+              Turn this profile into an account to sync across devices without losing saved data.
+            </Text>
+            <TouchableOpacity style={s.btn} onPress={() => router.push('/auth/signup')}>
+              <Text style={s.btnText}>Create Account</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={s.btnOutline} onPress={() => router.push('/auth/login')}>
               <Text style={s.btnOutlineText}>Sign In to an Existing Account</Text>
             </TouchableOpacity>

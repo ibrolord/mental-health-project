@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
 import { apiRequest } from '@/lib/api';
+import { RequestTimeoutError } from '@/lib/request';
 import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import { format, subDays } from 'date-fns';
 
@@ -16,10 +17,16 @@ interface Message {
   reportToken?: string;
 }
 interface UserContext {
-  recentMoods?: Array<{ emoji: string; note: string; created_at: string }>;
-  assessments?: Array<{ type: string; score: number; max_score: number; created_at: string }>;
-  goals?: Array<{ content: string; status: string; reflection?: string; date: string }>;
-  habits?: Array<{ name: string; streak_count: number }>;
+  recentMoods?: { emoji: string; note: string; created_at: string }[];
+  assessments?: { type: string; score: number; max_score: number; created_at: string }[];
+  goals?: { content: string; status: string; reflection?: string; date: string }[];
+  habits?: { name: string; streak_count: number }[];
+}
+
+interface ChatApiResponse {
+  response?: unknown;
+  responseId?: string;
+  reportToken?: string;
 }
 
 const quickPrompts = ['I feel anxious', 'Help me reframe a negative thought', 'Ground me', 'I need to talk'];
@@ -30,15 +37,37 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Thinking...');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [personalized, setPersonalized] = useState(false);
   const [userContext, setUserContext] = useState<UserContext | null>(null);
   const [reportedResponseIds, setReportedResponseIds] = useState<string[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   const fetchedRef = useRef(false);
+  const requestInFlightRef = useRef(false);
+  const saveInFlightRef = useRef(false);
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingMessage('Thinking...');
+      return;
+    }
+
+    const stillWorking = setTimeout(() => setLoadingMessage('Still working...'), 10_000);
+    const takingLonger = setTimeout(
+      () => setLoadingMessage('Taking longer than usual...'),
+      25_000
+    );
+
+    return () => {
+      clearTimeout(stillWorking);
+      clearTimeout(takingLonger);
+    };
+  }, [loading]);
 
   useEffect(() => {
     if (!personalized) { setUserContext(null); fetchedRef.current = false; return; }
@@ -64,32 +93,50 @@ export default function ChatScreen() {
   }, [personalized, authLoading, query]);
 
   const send = async (text: string) => {
-    if (!text.trim()) return;
-    const consented = await ensureAiDataSharingConsent();
-    if (!consented) return;
+    if (
+      !text.trim() ||
+      loading ||
+      requestInFlightRef.current ||
+      saveInFlightRef.current
+    ) return;
 
-    const newMsg: Message = { role: 'user', content: text };
-    const msgs = [...messages, newMsg];
-    setMessages(msgs);
-    setInput('');
-    setLoading(true);
+    requestInFlightRef.current = true;
     try {
-      const d = await apiRequest('/api/chat', {
-        messages: msgs.map(({ role, content }) => ({ role, content })),
-        userContext: personalized ? userContext : undefined,
-      });
-      if (d.response) {
+      const consented = await ensureAiDataSharingConsent();
+      if (!consented) return;
+
+      const newMsg: Message = { role: 'user', content: text };
+      const msgs = [...messages, newMsg];
+      setMessages(msgs);
+      setInput('');
+      setSaveState('idle');
+      setLoading(true);
+      try {
+        const d = await apiRequest<ChatApiResponse>('/api/chat', {
+          messages: msgs.map(({ role, content }) => ({ role, content })),
+          userContext: personalized ? userContext : undefined,
+        });
+        if (typeof d.response !== 'string' || !d.response.trim()) {
+          throw new Error('AI response was empty');
+        }
+
         setMessages([...msgs, {
           role: 'assistant',
-          content: d.response,
+          content: d.response.trim(),
           responseId: d.responseId,
           reportToken: d.reportToken,
         }]);
+      } catch (error) {
+        const content = error instanceof RequestTimeoutError
+          ? 'The AI response took too long. Please check your connection and try again.'
+          : 'I could not reach the AI service. Please try again in a moment.';
+        setMessages([...msgs, { role: 'assistant', content }]);
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      setMessages([...msgs, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
+    } finally {
+      requestInFlightRef.current = false;
     }
-    setLoading(false);
   };
 
   const submitReport = async (
@@ -129,8 +176,33 @@ export default function ChatScreen() {
   };
 
   const save = async () => {
-    if (context) {
-      await supabase.from('chat_history').insert({ ...context, messages, saved: true } as any);
+    if (!context) {
+      Alert.alert('Unable to Save', 'Your account session is still loading. Please try again.');
+      return;
+    }
+    if (
+      saveState === 'saving' ||
+      saveState === 'saved' ||
+      saveInFlightRef.current ||
+      requestInFlightRef.current
+    ) return;
+
+    saveInFlightRef.current = true;
+    setSaveState('saving');
+    try {
+      const { error } = await supabase
+        .from('chat_history')
+        .insert({ ...context, messages, saved: true } as any);
+      if (error) throw error;
+
+      setSaveState('saved');
+      Alert.alert('Chat Saved', 'This conversation is now in your saved chat history.');
+    } catch (error) {
+      console.error('Failed to save chat:', error);
+      setSaveState('idle');
+      Alert.alert('Unable to Save', 'This chat was not saved. Please try again.');
+    } finally {
+      saveInFlightRef.current = false;
     }
   };
 
@@ -210,7 +282,7 @@ export default function ChatScreen() {
         {loading && (
           <View style={s.msgRow}>
             <View style={s.msgBubbleAssistant}>
-              <Text style={s.msgText}>Thinking...</Text>
+              <Text style={s.msgText}>{loadingMessage}</Text>
             </View>
           </View>
         )}
@@ -218,8 +290,20 @@ export default function ChatScreen() {
 
       {/* Save button */}
       {messages.length > 0 && (
-        <TouchableOpacity style={s.saveBtn} onPress={save}>
-          <Text style={s.saveBtnText}>Save Chat</Text>
+        <TouchableOpacity
+          style={[s.saveBtn, (loading || saveState !== 'idle') && s.saveBtnDisabled]}
+          onPress={save}
+          disabled={loading || saveState !== 'idle'}
+        >
+          <Text style={s.saveBtnText}>
+            {loading
+              ? 'Waiting for response...'
+              : saveState === 'saving'
+                ? 'Saving...'
+                : saveState === 'saved'
+                  ? 'Saved'
+                  : 'Save Chat'}
+          </Text>
         </TouchableOpacity>
       )}
 
@@ -236,7 +320,7 @@ export default function ChatScreen() {
         <TouchableOpacity
           style={[s.sendBtn, (!input.trim() || loading) && { opacity: 0.5 }]}
           onPress={() => send(input)}
-          disabled={!input.trim() || loading}
+          disabled={!input.trim() || loading || saveState === 'saving'}
         >
           <Text style={s.sendBtnText}>Send</Text>
         </TouchableOpacity>
@@ -281,6 +365,7 @@ const s = StyleSheet.create({
   reportBtn: { alignSelf: 'flex-start', marginTop: 5, paddingVertical: 4, paddingHorizontal: 2 },
   reportBtnText: { fontSize: 12, color: Colors.textSecondary, textDecorationLine: 'underline' },
   saveBtn: { paddingVertical: 8, paddingHorizontal: 16, alignSelf: 'center' },
+  saveBtnDisabled: { opacity: 0.55 },
   saveBtnText: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
   inputRow: { flexDirection: 'row', padding: 12, gap: 10, backgroundColor: Colors.card, borderTopWidth: 1, borderTopColor: Colors.border },
   input: { flex: 1, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, padding: 12, fontSize: 15, maxHeight: 100, color: Colors.text },

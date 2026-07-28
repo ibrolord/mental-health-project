@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { DEFAULT_CLAUDE_MODEL } from '@/lib/ai/claude';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
 
 const anthropic = new Anthropic({
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
 Return ONLY the affirmation text, no explanation or formatting.`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: process.env.CLAUDE_MODEL?.trim() || DEFAULT_CLAUDE_MODEL,
       max_tokens: 150,
       messages: [
         {
@@ -76,5 +77,4 @@ Return ONLY the affirmation text, no explanation or formatting.`;
     );
   }
 }
-
 

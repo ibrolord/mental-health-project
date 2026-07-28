@@ -68,6 +68,16 @@ export function createReportToken(input: {
   };
 }
 
+export function createReportTokenIfConfigured(input: {
+  subject: string;
+  response: string;
+  model: ReportableModel;
+}): { responseId: string; reportToken: string } | null {
+  const secret = process.env.AI_REPORT_SIGNING_SECRET;
+  if (!secret || secret.length < 32) return null;
+  return createReportToken({ ...input, secret });
+}
+
 export function verifyReportToken(input: {
   token: string;
   subject: string;
