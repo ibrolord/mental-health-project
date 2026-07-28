@@ -126,6 +126,7 @@ export interface Database {
           framework: FrameworkType;
           priority: GoalPriority | null;
           eisenhower_quadrant: string | null;
+          dedupe_key: string | null;
           tags: string[];
           reflection: string | null;
           date: string;
@@ -142,6 +143,7 @@ export interface Database {
           framework?: FrameworkType;
           priority?: GoalPriority | null;
           eisenhower_quadrant?: string | null;
+          dedupe_key?: string | null;
           tags?: string[];
           reflection?: string | null;
           date?: string;
@@ -158,6 +160,7 @@ export interface Database {
           framework?: FrameworkType;
           priority?: GoalPriority | null;
           eisenhower_quadrant?: string | null;
+          dedupe_key?: string | null;
           tags?: string[];
           reflection?: string | null;
           date?: string;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -6,6 +6,12 @@ import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
 import { format } from 'date-fns';
 import type { FrameworkType } from '@/lib/types';
+import {
+  appendUniqueGoal,
+  collapseDuplicateGoals,
+  createSingleFlight,
+  goalIdentityKey,
+} from '@/lib/goals/deduplication';
 
 interface Goal {
   id: string;
@@ -51,12 +57,44 @@ export default function GoalsScreen() {
   const [framework, setFramework] = useState<FrameworkType>('simple');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [goalError, setGoalError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [librarySourceTitle, setLibrarySourceTitle] = useState('');
   const appliedLibraryActionRef = useRef('');
+  const goalIdsByKeyRef = useRef(new Map<string, string[]>());
+  const runGoalInsertRef = useRef(createSingleFlight());
 
-  useEffect(() => { loadGoals(); }, [query]);
+  const loadGoals = useCallback(async () => {
+    if (!query) {
+      setGoals([]);
+      goalIdsByKeyRef.current = new Map();
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('goals')
+      .select('*')
+      .eq(query.column, query.value)
+      .eq('date', format(new Date(), 'yyyy-MM-dd'))
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      setGoalError('Could not load your goals. Please try again.');
+    } else if (data) {
+      const collapsed = collapseDuplicateGoals(data as Goal[]);
+      goalIdsByKeyRef.current = collapsed.idsByKey;
+      setGoals(collapsed.goals);
+    }
+    setLoading(false);
+  }, [query]);
+
+  useEffect(() => {
+    void loadGoals();
+  }, [loadGoals]);
 
   useEffect(() => {
     if (firstParam(params.source) !== 'library') {
@@ -79,34 +117,98 @@ export default function GoalsScreen() {
     setLibrarySourceTitle(bookTitle || 'the library');
   }, [params.bookTitle, params.content, params.source]);
 
-  const loadGoals = async () => {
-    if (!query) return;
-    const { data } = await supabase.from('goals').select('*').eq(query.column, query.value).eq('date', format(new Date(), 'yyyy-MM-dd')).order('created_at', { ascending: true });
-    if (data) setGoals(data);
-    setLoading(false);
-  };
-
   const addGoal = async (content: string, priority?: string, quadrant?: string) => {
-    if (!content.trim() || (!context.user_id && !context.session_id)) return;
-    const { data, error } = await supabase.from('goals').insert({ ...context, content: content.trim(), framework, priority: priority || null, eisenhower_quadrant: quadrant || null, date: format(new Date(), 'yyyy-MM-dd') } as any).select().single();
-    if (!error && data) {
-      setGoals([...goals, data]);
-      setInput('');
-      setLibrarySourceTitle('');
-    }
+    const normalizedContent = content.trim().replace(/\s+/g, ' ');
+    if (!normalizedContent || (!context.user_id && !context.session_id)) return false;
+
+    setGoalError(null);
+    const date = format(new Date(), 'yyyy-MM-dd');
+    const identity = {
+      id: 'pending',
+      content: normalizedContent,
+      framework,
+      priority: priority || null,
+      eisenhower_quadrant: quadrant || null,
+    };
+    const identityKey = goalIdentityKey(identity);
+
+    const saved = await runGoalInsertRef.current(async () => {
+      if (goalIdsByKeyRef.current.has(identityKey)) {
+        setGoalError('That goal is already in this section.');
+        return false;
+      }
+
+      setAdding(true);
+      try {
+        const { data, error } = await supabase
+          .from('goals')
+          .insert({
+            ...context,
+            content: normalizedContent,
+            framework,
+            priority: priority || null,
+            eisenhower_quadrant: quadrant || null,
+            date,
+          } as any)
+          .select()
+          .single();
+
+        if (error || !data) {
+          if (error?.code === '23505') {
+            await loadGoals();
+            setGoalError('That goal is already in this section.');
+          } else {
+            setGoalError('Could not add that goal. Please try again.');
+          }
+          return false;
+        }
+
+        goalIdsByKeyRef.current.set(identityKey, [data.id]);
+        setGoals((current) => appendUniqueGoal(current, data as Goal));
+        setInput((current) =>
+          current.trim().replace(/\s+/g, ' ') === normalizedContent ? '' : current
+        );
+        setActiveSection(null);
+        setLibrarySourceTitle('');
+        return true;
+      } catch {
+        setGoalError('Could not add that goal. Please try again.');
+        return false;
+      } finally {
+        setAdding(false);
+      }
+    });
+
+    return saved ?? false;
   };
 
   const toggleGoal = async (id: string, status: string) => {
     if (!query) return;
+    const goal = goals.find((item) => item.id === id);
+    if (!goal) return;
+    const ids = goalIdsByKeyRef.current.get(goalIdentityKey(goal)) ?? [id];
     const newStatus = status === 'completed' ? 'pending' : 'completed';
-    await supabase.from('goals').update({ status: newStatus, completed_at: newStatus === 'completed' ? new Date().toISOString() : null } as any).eq('id', id).eq(query.column, query.value);
-    setGoals(goals.map((g) => (g.id === id ? { ...g, status: newStatus as any } : g)));
+    const { error } = await supabase.from('goals').update({ status: newStatus, completed_at: newStatus === 'completed' ? new Date().toISOString() : null } as any).in('id', ids).eq(query.column, query.value);
+    if (error) {
+      setGoalError('Could not update that goal. Please try again.');
+      return;
+    }
+    setGoals((current) => current.map((g) => (g.id === id ? { ...g, status: newStatus as Goal['status'] } : g)));
   };
 
   const deleteGoal = async (id: string) => {
     if (!query) return;
-    await supabase.from('goals').delete().eq('id', id).eq(query.column, query.value);
-    setGoals(goals.filter((g) => g.id !== id));
+    const goal = goals.find((item) => item.id === id);
+    if (!goal) return;
+    const identityKey = goalIdentityKey(goal);
+    const ids = goalIdsByKeyRef.current.get(identityKey) ?? [id];
+    const { error } = await supabase.from('goals').delete().in('id', ids).eq(query.column, query.value);
+    if (error) {
+      setGoalError('Could not delete that goal. Please try again.');
+      return;
+    }
+    goalIdsByKeyRef.current.delete(identityKey);
+    setGoals((current) => current.filter((g) => g.id !== id));
   };
 
   const completed = goals.filter((g) => g.status === 'completed').length;
@@ -137,11 +239,18 @@ export default function GoalsScreen() {
         placeholder="Add task..."
         value={input}
         onChangeText={setInput}
-        onSubmitEditing={onSubmit}
+        onSubmitEditing={() => {
+          if (!adding) onSubmit();
+        }}
         placeholderTextColor={Colors.textSecondary}
+        editable={!adding}
       />
-      <TouchableOpacity style={s.addSmallBtn} onPress={onSubmit}>
-        <Text style={s.addSmallBtnText}>+</Text>
+      <TouchableOpacity
+        style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]}
+        onPress={onSubmit}
+        disabled={adding || !input.trim()}
+      >
+        {adding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addSmallBtnText}>+</Text>}
       </TouchableOpacity>
     </View>
   );
@@ -185,10 +294,11 @@ export default function GoalsScreen() {
       {/* Goals by Framework */}
       <View style={s.card}>
         <Text style={s.cardTitle}>{"📅 Today's Goals"} ({format(new Date(), 'MMM dd')})</Text>
+        {goalError ? <Text style={s.errorText}>{goalError}</Text> : null}
 
         {framework === 'simple' && (
           <>
-            {frameworkGoals.length < 3 && renderAddInput(() => { addGoal(input); })}
+            {frameworkGoals.length < 3 && renderAddInput(() => { void addGoal(input); })}
             {frameworkGoals.map((g, i) => renderGoalItem(g, i + 1))}
             {frameworkGoals.length === 0 && <Text style={s.empty}>What are your top priorities today?</Text>}
           </>
@@ -201,9 +311,9 @@ export default function GoalsScreen() {
               <Text style={s.sectionTitle}>{q.icon} {q.label}</Text>
               {activeSection === q.id ? (
                 <View style={s.inputRow}>
-                  <TextInput style={s.input} placeholder="Add task..." value={input} onChangeText={setInput} onSubmitEditing={() => { addGoal(input, undefined, q.id); setActiveSection(null); }} placeholderTextColor={Colors.textSecondary} autoFocus />
-                  <TouchableOpacity style={s.addSmallBtn} onPress={() => { addGoal(input, undefined, q.id); setActiveSection(null); }}>
-                    <Text style={s.addSmallBtnText}>+</Text>
+                  <TextInput style={s.input} placeholder="Add task..." value={input} onChangeText={setInput} onSubmitEditing={() => { void addGoal(input, undefined, q.id); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
+                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => { void addGoal(input, undefined, q.id); }} disabled={adding || !input.trim()}>
+                    {adding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addSmallBtnText}>+</Text>}
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -218,7 +328,7 @@ export default function GoalsScreen() {
 
         {framework === 'ivy_lee' && (
           <>
-            {frameworkGoals.length < 6 && renderAddInput(() => addGoal(input))}
+            {frameworkGoals.length < 6 && renderAddInput(() => { void addGoal(input); })}
             {frameworkGoals.length >= 6 && <Text style={s.limitMsg}>✓ You have your 6 tasks. Now focus on #1!</Text>}
             {frameworkGoals.map((g, i) => renderGoalItem(g, i + 1))}
           </>
@@ -235,9 +345,9 @@ export default function GoalsScreen() {
               </View>
               {!atLimit && activeSection === p.id ? (
                 <View style={s.inputRow}>
-                  <TextInput style={s.input} placeholder="Add task..." value={input} onChangeText={setInput} onSubmitEditing={() => { addGoal(input, p.id); setActiveSection(null); }} placeholderTextColor={Colors.textSecondary} autoFocus />
-                  <TouchableOpacity style={s.addSmallBtn} onPress={() => { addGoal(input, p.id); setActiveSection(null); }}>
-                    <Text style={s.addSmallBtnText}>+</Text>
+                  <TextInput style={s.input} placeholder="Add task..." value={input} onChangeText={setInput} onSubmitEditing={() => { void addGoal(input, p.id); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
+                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => { void addGoal(input, p.id); }} disabled={adding || !input.trim()}>
+                    {adding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addSmallBtnText}>+</Text>}
                   </TouchableOpacity>
                 </View>
               ) : !atLimit ? (
@@ -260,9 +370,9 @@ export default function GoalsScreen() {
               <Text style={s.sectionTitle}>{labels[p]}</Text>
               {activeSection === p ? (
                 <View style={s.inputRow}>
-                  <TextInput style={s.input} placeholder="Add task..." value={input} onChangeText={setInput} onSubmitEditing={() => { addGoal(input, p); setActiveSection(null); }} placeholderTextColor={Colors.textSecondary} autoFocus />
-                  <TouchableOpacity style={s.addSmallBtn} onPress={() => { addGoal(input, p); setActiveSection(null); }}>
-                    <Text style={s.addSmallBtnText}>+</Text>
+                  <TextInput style={s.input} placeholder="Add task..." value={input} onChangeText={setInput} onSubmitEditing={() => { void addGoal(input, p); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
+                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => { void addGoal(input, p); }} disabled={adding || !input.trim()}>
+                    {adding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addSmallBtnText}>+</Text>}
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -302,6 +412,7 @@ const s = StyleSheet.create({
   inputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   input: { flex: 1, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 10, fontSize: 14, color: Colors.text },
   addSmallBtn: { backgroundColor: Colors.primary, borderRadius: 10, width: 40, justifyContent: 'center', alignItems: 'center' },
+  addSmallBtnDisabled: { opacity: 0.55 },
   addSmallBtnText: { color: '#fff', fontSize: 20, fontWeight: '600' },
   addLink: { color: Colors.primary, fontSize: 14, fontWeight: '500', marginBottom: 8 },
   limitMsg: { color: Colors.success, fontSize: 13, marginBottom: 8 },
@@ -314,4 +425,5 @@ const s = StyleSheet.create({
   goalTextDone: { textDecorationLine: 'line-through', color: Colors.textSecondary },
   deleteBtn: { fontSize: 22, color: Colors.danger, paddingHorizontal: 8 },
   empty: { textAlign: 'center', color: Colors.textSecondary, paddingVertical: 16 },
+  errorText: { color: Colors.danger, fontSize: 13, marginBottom: 10 },
 });

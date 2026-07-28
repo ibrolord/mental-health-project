@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabase/client';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { format } from 'date-fns';
+import {
+  appendUniqueGoal,
+  collapseDuplicateGoals,
+  createSingleFlight,
+  goalIdentityKey,
+} from '@/lib/goals/deduplication';
 
 type Framework = 'simple' | 'eisenhower' | 'ivy_lee' | '1-3-5' | 'abcde';
 
@@ -46,6 +52,8 @@ export default function GoalsPage() {
   const [framework, setFramework] = useState<Framework>('simple');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [goalError, setGoalError] = useState<string | null>(null);
   const [showReflection, setShowReflection] = useState(false);
   const [reflection, setReflection] = useState('');
   const [simpleInput, setSimpleInput] = useState('');
@@ -53,8 +61,38 @@ export default function GoalsPage() {
   const [priorityInputs, setPriorityInputs] = useState<Record<string, string>>({});
   const [librarySourceTitle, setLibrarySourceTitle] = useState('');
   const appliedLibraryActionRef = useRef(false);
+  const goalIdsByKeyRef = useRef(new Map<string, string[]>());
+  const runGoalInsertRef = useRef(createSingleFlight());
 
-  useEffect(() => { loadGoals(); }, [query]);
+  const loadGoals = useCallback(async () => {
+    if (!query) {
+      setGoals([]);
+      goalIdsByKeyRef.current = new Map();
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('goals')
+      .select('*')
+      .eq(query.column, query.value)
+      .eq('date', format(new Date(), 'yyyy-MM-dd'))
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      setGoalError('Could not load your goals. Please try again.');
+    } else if (data) {
+      const collapsed = collapseDuplicateGoals(data as Goal[]);
+      goalIdsByKeyRef.current = collapsed.idsByKey;
+      setGoals(collapsed.goals);
+    }
+    setLoading(false);
+  }, [query]);
+
+  useEffect(() => {
+    void loadGoals();
+  }, [loadGoals]);
 
   useEffect(() => {
     if (appliedLibraryActionRef.current || typeof window === 'undefined') return;
@@ -76,38 +114,111 @@ export default function GoalsPage() {
     }
   }, [librarySourceTitle, simpleInput]);
 
-  const loadGoals = async () => {
-    if (!query) return;
-    try {
-      const { data } = await supabase.from('goals').select('*').eq(query.column, query.value).eq('date', format(new Date(), 'yyyy-MM-dd')).order('created_at', { ascending: true });
-      if (data) setGoals(data);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
-
   const addGoal = async (content: string, priority?: string, quadrant?: string) => {
-    if (!content.trim() || (!context.user_id && !context.session_id)) return false;
-    const { data, error } = await supabase.from('goals').insert({ ...context, content: content.trim(), framework, priority: priority || null, eisenhower_quadrant: quadrant || null, date: format(new Date(), 'yyyy-MM-dd') } as any).select().single();
-    if (error || !data) return false;
-    setGoals((current) => [...current, data]);
-    return true;
+    const normalizedContent = content.trim().replace(/\s+/g, ' ');
+    if (!normalizedContent || (!context.user_id && !context.session_id)) return false;
+
+    setGoalError(null);
+    const date = format(new Date(), 'yyyy-MM-dd');
+    const identity = {
+      id: 'pending',
+      content: normalizedContent,
+      framework,
+      priority: priority || null,
+      eisenhower_quadrant: quadrant || null,
+    };
+    const identityKey = goalIdentityKey(identity);
+
+    const saved = await runGoalInsertRef.current(async () => {
+      if (goalIdsByKeyRef.current.has(identityKey)) {
+        setGoalError('That goal is already in this section.');
+        return false;
+      }
+
+      setAdding(true);
+      try {
+        const { data, error } = await supabase
+          .from('goals')
+          .insert({
+            ...context,
+            content: normalizedContent,
+            framework,
+            priority: priority || null,
+            eisenhower_quadrant: quadrant || null,
+            date,
+          } as any)
+          .select()
+          .single();
+
+        if (error || !data) {
+          if (error?.code === '23505') {
+            await loadGoals();
+            setGoalError('That goal is already in this section.');
+          } else {
+            setGoalError('Could not add that goal. Please try again.');
+          }
+          return false;
+        }
+
+        goalIdsByKeyRef.current.set(identityKey, [data.id]);
+        setGoals((current) => appendUniqueGoal(current, data as Goal));
+        return true;
+      } catch {
+        setGoalError('Could not add that goal. Please try again.');
+        return false;
+      } finally {
+        setAdding(false);
+      }
+    });
+
+    return saved ?? false;
   };
 
   const toggleGoal = async (id: string, status: string) => {
+    if (!query) return;
+    const goal = goals.find((item) => item.id === id);
+    if (!goal) return;
+    const ids = goalIdsByKeyRef.current.get(goalIdentityKey(goal)) ?? [id];
     const newStatus = status === 'completed' ? 'pending' : 'completed';
-    await supabase.from('goals').update({ status: newStatus, completed_at: newStatus === 'completed' ? new Date().toISOString() : null } as any).eq('id', id);
-    setGoals(goals.map(g => g.id === id ? { ...g, status: newStatus as any } : g));
+    const { error } = await supabase.from('goals').update({ status: newStatus, completed_at: newStatus === 'completed' ? new Date().toISOString() : null } as any).in('id', ids).eq(query.column, query.value);
+    if (error) {
+      setGoalError('Could not update that goal. Please try again.');
+      return;
+    }
+    setGoals((current) => current.map(g => g.id === id ? { ...g, status: newStatus as Goal['status'] } : g));
   };
 
   const deleteGoal = async (id: string) => {
-    await supabase.from('goals').delete().eq('id', id);
-    setGoals(goals.filter(g => g.id !== id));
+    if (!query) return;
+    const goal = goals.find((item) => item.id === id);
+    if (!goal) return;
+    const identityKey = goalIdentityKey(goal);
+    const ids = goalIdsByKeyRef.current.get(identityKey) ?? [id];
+    const { error } = await supabase.from('goals').delete().in('id', ids).eq(query.column, query.value);
+    if (error) {
+      setGoalError('Could not delete that goal. Please try again.');
+      return;
+    }
+    goalIdsByKeyRef.current.delete(identityKey);
+    setGoals((current) => current.filter(g => g.id !== id));
   };
 
   const saveReflection = async () => {
-    const ids = goals.map(g => g.id);
+    const ids = [...goalIdsByKeyRef.current.values()].flat();
     if (ids.length > 0) await supabase.from('goals').update({ reflection } as any).in('id', ids);
     alert('Saved!'); setShowReflection(false);
+  };
+
+  const submitGoal = (
+    content: string,
+    priority?: string,
+    quadrant?: string,
+    onSaved?: () => void
+  ) => {
+    if (adding || !content.trim()) return;
+    void addGoal(content, priority, quadrant).then((saved) => {
+      if (saved) onSaved?.();
+    });
   };
 
   const frameworkGoals = goals.filter(g => g.framework === framework);
@@ -137,8 +248,18 @@ export default function GoalsPage() {
             </div>
             <div className="p-4">
               <div className="flex gap-2 mb-3">
-                <Input placeholder="Add task..." value={val} onChange={e => setQuadrantInputs({ ...quadrantInputs, [q.id]: e.target.value })} onKeyDown={e => { if (e.key === 'Enter' && val) { addGoal(val, undefined, q.id); setQuadrantInputs({ ...quadrantInputs, [q.id]: '' }); }}} className="bg-card" />
-                <Button size="sm" onClick={() => { if (val) { addGoal(val, undefined, q.id); setQuadrantInputs({ ...quadrantInputs, [q.id]: '' }); }}}>+</Button>
+                <Input placeholder="Add task..." value={val} disabled={adding} onChange={e => setQuadrantInputs((current) => ({ ...current, [q.id]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitGoal(val, undefined, q.id, () => setQuadrantInputs((current) => ({ ...current, [q.id]: '' }))); }}} className="bg-card" />
+                <Button
+                  size="sm"
+                  disabled={adding || !val.trim()}
+                  onClick={() =>
+                    submitGoal(val, undefined, q.id, () =>
+                      setQuadrantInputs((current) => ({ ...current, [q.id]: '' }))
+                    )
+                  }
+                >
+                  {adding ? 'Adding…' : '+'}
+                </Button>
               </div>
               <div className="space-y-2 min-h-[60px]">
                 {list.length === 0 ? <p className="text-muted-foreground text-sm italic text-center py-2">No tasks yet</p> : list.map(g => renderGoalItem(g))}
@@ -170,8 +291,17 @@ export default function GoalsPage() {
             <div className="p-4">
               {!atLimit && (
                 <div className="flex gap-2 mb-3">
-                  <Input placeholder="Add task..." value={val} onChange={e => setPriorityInputs({ ...priorityInputs, [p.id]: e.target.value })} onKeyDown={e => { if (e.key === 'Enter' && val) { addGoal(val, p.id); setPriorityInputs({ ...priorityInputs, [p.id]: '' }); }}} className="bg-card" />
-                  <Button onClick={() => { if (val) { addGoal(val, p.id); setPriorityInputs({ ...priorityInputs, [p.id]: '' }); }}}>Add</Button>
+                  <Input placeholder="Add task..." value={val} disabled={adding} onChange={e => setPriorityInputs((current) => ({ ...current, [p.id]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitGoal(val, p.id, undefined, () => setPriorityInputs((current) => ({ ...current, [p.id]: '' }))); }}} className="bg-card" />
+                  <Button
+                    disabled={adding || !val.trim()}
+                    onClick={() =>
+                      submitGoal(val, p.id, undefined, () =>
+                        setPriorityInputs((current) => ({ ...current, [p.id]: '' }))
+                      )
+                    }
+                  >
+                    {adding ? 'Adding…' : 'Add'}
+                  </Button>
                 </div>
               )}
               {atLimit && <p className="text-sm text-green-600 bg-green-50 p-2 rounded mb-3">✓ Section complete!</p>}
@@ -200,8 +330,17 @@ export default function GoalsPage() {
             </div>
             <div className="p-4">
               <div className="flex gap-2 mb-3">
-                <Input placeholder="Add task..." value={val} onChange={e => setPriorityInputs({ ...priorityInputs, [p.id]: e.target.value })} onKeyDown={e => { if (e.key === 'Enter' && val) { addGoal(val, p.id); setPriorityInputs({ ...priorityInputs, [p.id]: '' }); }}} className="bg-card" />
-                <Button onClick={() => { if (val) { addGoal(val, p.id); setPriorityInputs({ ...priorityInputs, [p.id]: '' }); }}}>Add</Button>
+                <Input placeholder="Add task..." value={val} disabled={adding} onChange={e => setPriorityInputs((current) => ({ ...current, [p.id]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitGoal(val, p.id, undefined, () => setPriorityInputs((current) => ({ ...current, [p.id]: '' }))); }}} className="bg-card" />
+                <Button
+                  disabled={adding || !val.trim()}
+                  onClick={() =>
+                    submitGoal(val, p.id, undefined, () =>
+                      setPriorityInputs((current) => ({ ...current, [p.id]: '' }))
+                    )
+                  }
+                >
+                  {adding ? 'Adding…' : 'Add'}
+                </Button>
               </div>
               <div className="space-y-2">
                 {list.length === 0 ? <p className="text-muted-foreground text-sm italic text-center py-2">No tasks yet</p> : list.map(g => renderGoalItem(g))}
@@ -232,8 +371,8 @@ export default function GoalsPage() {
         <div className="p-4">
           {frameworkGoals.length < limit && (
             <div className="flex gap-2 mb-3">
-              <Input placeholder="Add task..." value={simpleInput} onChange={e => setSimpleInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && simpleInput) { addGoal(simpleInput); setSimpleInput(''); }}} className="bg-card" />
-              <Button onClick={() => { if (simpleInput) { addGoal(simpleInput); setSimpleInput(''); }}}>Add</Button>
+              <Input placeholder="Add task..." value={simpleInput} disabled={adding} onChange={e => setSimpleInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitGoal(simpleInput, undefined, undefined, () => setSimpleInput('')); }}} className="bg-card" />
+              <Button disabled={adding || !simpleInput.trim()} onClick={() => submitGoal(simpleInput, undefined, undefined, () => setSimpleInput(''))}>{adding ? 'Adding…' : 'Add'}</Button>
             </div>
           )}
           {frameworkGoals.length >= limit && <p className="text-sm text-indigo-600 bg-indigo-100 p-2 rounded mb-3">✓ You have your 6 tasks. Now focus on #1!</p>}
@@ -272,8 +411,8 @@ export default function GoalsPage() {
         <div className="p-4">
           {frameworkGoals.length < limit && (
             <div className="flex gap-2 mb-3">
-              <Input placeholder="What's your priority?" value={simpleInput} onChange={e => setSimpleInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && simpleInput) { addGoal(simpleInput); setSimpleInput(''); }}} />
-              <Button onClick={() => { if (simpleInput) { addGoal(simpleInput); setSimpleInput(''); }}}>Add</Button>
+              <Input placeholder="What's your priority?" value={simpleInput} disabled={adding} onChange={e => setSimpleInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitGoal(simpleInput, undefined, undefined, () => setSimpleInput('')); }}} />
+              <Button disabled={adding || !simpleInput.trim()} onClick={() => submitGoal(simpleInput, undefined, undefined, () => setSimpleInput(''))}>{adding ? 'Adding…' : 'Add'}</Button>
             </div>
           )}
           <div className="space-y-2">
@@ -324,7 +463,7 @@ export default function GoalsPage() {
                     }
                   });
                 }}
-                disabled={!simpleInput.trim() || goals.filter((goal) => goal.framework === 'simple').length >= 3}
+                disabled={adding || !simpleInput.trim() || goals.filter((goal) => goal.framework === 'simple').length >= 3}
               >
                 Add to today
               </Button>
@@ -346,7 +485,7 @@ export default function GoalsPage() {
 
         {goals.length > 0 && <div className="mb-6"><div className="flex justify-between text-sm mb-2"><span className="font-medium">Today's Progress</span><span>{completed}/{goals.length}</span></div><div className="h-3 bg-secondary rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all" style={{ width: `${(completed / goals.length) * 100}%` }} /></div></div>}
 
-        <Card className="mb-6"><CardHeader><CardTitle>📅 Today's Goals ({format(new Date(), 'MMMM dd, yyyy')})</CardTitle></CardHeader><CardContent>{render()}</CardContent></Card>
+        <Card className="mb-6"><CardHeader><CardTitle>📅 Today's Goals ({format(new Date(), 'MMMM dd, yyyy')})</CardTitle></CardHeader><CardContent>{goalError && <p role="alert" className="mb-3 text-sm text-red-600">{goalError}</p>}{render()}</CardContent></Card>
 
         <Card><CardHeader><CardTitle>🌙 Evening Reflection</CardTitle><CardDescription>Take a moment to reflect on your day</CardDescription></CardHeader><CardContent>{!showReflection ? <Button variant="outline" onClick={() => setShowReflection(true)}>✏️ Add Reflection</Button> : <div className="space-y-4"><Textarea placeholder="What went well today? What did you learn? What would you do differently?" value={reflection} onChange={e => setReflection(e.target.value)} rows={4} /><div className="flex gap-2"><Button onClick={saveReflection}>💾 Save</Button><Button variant="outline" onClick={() => setShowReflection(false)}>Cancel</Button></div></div>}</CardContent></Card>
       </div>
