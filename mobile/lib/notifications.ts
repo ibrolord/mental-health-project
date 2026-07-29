@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Runtime platform resolution prevents iOS from loading excluded notification modules. */
 import { Platform } from 'react-native';
 
 type NotificationsApiModule = {

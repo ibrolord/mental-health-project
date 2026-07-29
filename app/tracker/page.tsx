@@ -32,7 +32,7 @@ const moodToValue: Record<MoodEmoji, number> = {
 };
 
 export default function TrackerPage() {
-  const { query, user } = useDataContext();
+  const { query, user, authLoading } = useDataContext();
   
   const [moods, setMoods] = useState<MoodEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -44,6 +44,10 @@ export default function TrackerPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [saveStatus, setSaveStatus] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!query) return;
@@ -89,10 +93,18 @@ export default function TrackerPage() {
   }, [query, selectedDate, filterTag, refreshKey]);
 
   const handleAddMood = async () => {
-    if (!newMood || !user?.id || saving) return;
+    if (!newMood || saving) return;
+    if (!user?.id) {
+      setSaveStatus({
+        type: 'error',
+        message: 'Your private profile is not ready. Refresh and try again.',
+      });
+      return;
+    }
 
     try {
       setSaving(true);
+      setSaveStatus(null);
       const tags = newTags
         .split(',')
         .map((t) => t.trim())
@@ -110,8 +122,13 @@ export default function TrackerPage() {
       setNewTags('');
       setShowAddMood(false);
       setRefreshKey((key) => key + 1);
+      setSaveStatus({ type: 'success', message: 'Mood entry saved.' });
     } catch (error) {
       console.error('Error adding mood:', error);
+      setSaveStatus({
+        type: 'error',
+        message: 'Your mood entry was not saved. Please try again.',
+      });
     } finally {
       setSaving(false);
     }
@@ -179,8 +196,32 @@ export default function TrackerPage() {
             <h1 className="text-4xl font-bold text-foreground mb-2">Mood Tracker</h1>
             <p className="text-muted-foreground">Your emotional journey over time</p>
           </div>
-          <Button onClick={() => setShowAddMood(true)}>Add Mood</Button>
+          <Button
+            onClick={() => setShowAddMood(true)}
+            disabled={authLoading || !user?.id}
+          >
+            Add Mood
+          </Button>
         </div>
+
+        {authLoading ? (
+          <p role="status" className="mb-4 text-sm text-muted-foreground">
+            Getting your mood tracker ready…
+          </p>
+        ) : !user?.id ? (
+          <p role="alert" className="mb-4 text-sm text-destructive">
+            Your private profile could not be loaded. Refresh and try again.
+          </p>
+        ) : saveStatus ? (
+          <p
+            role={saveStatus.type === 'error' ? 'alert' : 'status'}
+            className={`mb-4 text-sm ${
+              saveStatus.type === 'error' ? 'text-destructive' : 'text-primary'
+            }`}
+          >
+            {saveStatus.message}
+          </p>
+        ) : null}
 
         {showAddMood && (
           <Card className="mb-6">
@@ -217,7 +258,10 @@ export default function TrackerPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button onClick={handleAddMood} disabled={!newMood || saving}>
+                  <Button
+                    onClick={handleAddMood}
+                    disabled={!newMood || saving || !user?.id}
+                  >
                     {saving ? 'Saving...' : 'Save Mood'}
                   </Button>
                   <Button

@@ -13,7 +13,7 @@ export default function PrivacyPolicyPage() {
           Privacy Policy
         </h1>
         <p className="text-sm text-muted-foreground mb-8">
-          Effective date: July 19, 2026
+          Effective date: July 28, 2026
         </p>
 
         <p className="text-foreground mb-6 leading-relaxed">
@@ -34,9 +34,9 @@ export default function PrivacyPolicyPage() {
           </p>
           <ul className="list-disc list-inside text-foreground space-y-2 ml-2">
             <li>
-              <strong>Account information:</strong> Email address for existing
-              account holders who sign in. New account creation is temporarily
-              unavailable. Anonymous sessions require no personal information.
+              <strong>Account information:</strong> Email address for people who
+              create an account or sign in. Anonymous sessions require no
+              personal information.
             </li>
             <li>
               <strong>Mood entries:</strong> Mood ratings, notes, and timestamps
@@ -47,12 +47,28 @@ export default function PrivacyPolicyPage() {
               self-assessments (e.g., PHQ-9, GAD-7).
             </li>
             <li>
-              <strong>Goals and habits:</strong> Goals you set and habit tracking
-              data.
+              <strong>Goals, habits, and routines:</strong> Goals you set,
+              habit definitions, daily completion history, streaks, cues, tiny
+              steps, and optional reward milestones.
+            </li>
+            <li>
+              <strong>Planning and focus:</strong> Life-plan items, reflections,
+              next steps, time horizons, and focus-session configuration and
+              completion history.
+            </li>
+            <li>
+              <strong>Reminders:</strong> Reminder schedules, timezone, generic
+              delivery history, and an optional browser push subscription. We do
+              not put private journal, mood-note, assessment, goal, habit, or AI
+              content in push notification text.
             </li>
             <li>
               <strong>Chat history:</strong> Messages exchanged with the AI chat
               feature.
+            </li>
+            <li>
+              <strong>Journal and library notes:</strong> Private writing and
+              notes you save on books or videos.
             </li>
             <li>
               <strong>Voice recordings and transcripts:</strong> Audio recorded
@@ -61,9 +77,10 @@ export default function PrivacyPolicyPage() {
             </li>
             <li>
               <strong>AI personalization context:</strong> If you turn on
-              personalized AI features, recent mood notes, assessment scores,
-              goals, habits, and related timestamps may be included with your AI
-              request.
+              individual context categories, recent moods, mood notes,
+              assessment scores, goals, habits, journal entries, private library
+              notes, and related timestamps may be included with that AI request.
+              Every category is off by default.
             </li>
             <li>
               <strong>AI response reports:</strong> If you report an AI response,
@@ -104,6 +121,14 @@ export default function PrivacyPolicyPage() {
               Transcribing voice recordings and generating spoken responses.
             </li>
             <li>Tracking your goals, habits, and streaks.</li>
+            <li>
+              Saving life plans, focus sessions, routine templates, and optional
+              reminder schedules.
+            </li>
+            <li>
+              Sharing only the accountability counts you turn on and delivering
+              fixed-format partner cheers or reward ideas.
+            </li>
             <li>
               Providing self-assessment scores and mental health resources.
             </li>
@@ -155,11 +180,12 @@ export default function PrivacyPolicyPage() {
           </ul>
           <p className="text-foreground mt-3 leading-relaxed">
             Data sent to these providers can include the message or audio you
-            submit, the generated transcript, and optional recent moods,
-            assessment scores, goals, and habits if you enable personalized AI
-            features. We do not intentionally send your email address or account
-            identifiers to AI providers. AI providers process data according to
-            their own data processing terms and privacy policies.
+            submit, the generated transcript, and only the optional context
+            categories you select for that conversation. Journal entries and
+            private library notes are not sent unless you select those categories
+            explicitly. We do not intentionally send your email address or
+            account identifiers to AI providers. AI providers process data
+            according to their own data processing terms and privacy policies.
           </p>
         </section>
 
@@ -181,7 +207,9 @@ export default function PrivacyPolicyPage() {
             <li>Data at rest is encrypted by Supabase&apos;s infrastructure.</li>
             <li>
               Row Level Security (RLS) policies ensure that users can only access
-              their own data.
+              their own private rows. Accountability partners can call only a
+              database function that returns enabled counts; they cannot select
+              journal entries, AI chat history, assessment scores, or mood notes.
             </li>
             <li>
               Growth reports contain cohort counts only. They do not expose user
@@ -192,6 +220,11 @@ export default function PrivacyPolicyPage() {
               requiring an email address or other direct identifier. On the
               mobile app, its session credential is stored using the device&apos;s
               protected credential storage.
+            </li>
+            <li>
+              Life-plan text, focus sessions, push subscriptions, reminders, and
+              dismissed notice preferences use the same owner-scoped Row Level
+              Security model.
             </li>
           </ul>
         </section>
@@ -224,6 +257,12 @@ export default function PrivacyPolicyPage() {
             <li>
               <strong>OpenAI (Whisper & TTS APIs)</strong> &mdash; Voice
               transcription and text-to-speech.
+            </li>
+            <li>
+              <strong>Browser push services</strong> &mdash; If you explicitly
+              enable background reminders, the push service selected by your
+              browser or operating system delivers a generic encrypted
+              notification payload to that browser installation.
             </li>
           </ul>
           <p className="text-foreground mt-3 leading-relaxed">
@@ -259,12 +298,17 @@ export default function PrivacyPolicyPage() {
               account and is deleted when you delete your data or account.
             </li>
             <li>
+              A browser push subscription is retained until you turn it off,
+              delete your data, or the browser reports that the subscription has
+              expired.
+            </li>
+            <li>
               When you delete your data (see Section 7), it is permanently
               removed from our database.
             </li>
             <li>
-              Anonymous session data that has not been accessed for an extended
-              period may be periodically purged.
+              Anonymous sessions are not automatically purged. Their data remains
+              available until you delete it from Settings.
             </li>
           </ul>
         </section>

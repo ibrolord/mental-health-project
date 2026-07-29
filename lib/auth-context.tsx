@@ -16,6 +16,11 @@ const USER_DATA_TABLES = [
   'chat_history',
   'user_affirmation_history',
   'user_book_favorites',
+  'user_library_items',
+  'life_plan_items',
+  'focus_sessions',
+  'wellbeing_reminders',
+  'push_subscriptions',
 ] as const;
 
 async function assertAnonymousAccountIsEmpty(): Promise<void> {
@@ -31,7 +36,39 @@ async function assertAnonymousAccountIsEmpty(): Promise<void> {
   }
   if (results.some(({ data }) => (data?.length ?? 0) > 0)) {
     throw new Error(
-      'Sign in is blocked because this anonymous profile has saved data. Export or delete that data in Settings before switching accounts.'
+      'Sign in is blocked because this anonymous profile has saved data or an active device reminder. Export or delete the data, and turn off device reminders in Settings before switching accounts.'
+    );
+  }
+}
+
+async function removeCurrentDevicePushSubscription(userId: string): Promise<void> {
+  if (
+    typeof window === 'undefined' ||
+    !('serviceWorker' in navigator) ||
+    !('PushManager' in window)
+  ) {
+    return;
+  }
+
+  const registration = await navigator.serviceWorker.getRegistration();
+  const subscription = await registration?.pushManager.getSubscription();
+  if (!subscription) return;
+
+  const { error } = await supabase
+    .from('push_subscriptions')
+    .delete()
+    .eq('user_id', userId)
+    .eq('endpoint', subscription.endpoint);
+  if (error) {
+    throw new Error(
+      'Sign out was blocked because device reminders could not be disconnected.'
+    );
+  }
+
+  const unsubscribed = await subscription.unsubscribe();
+  if (!unsubscribed) {
+    throw new Error(
+      'Sign out was blocked because device reminders could not be disconnected.'
     );
   }
 }
@@ -83,13 +120,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initAuth = async () => {
       try {
         const session = await ensureAnonymousSession();
-        try {
-          await migrateLegacyData(session);
-        } catch (error) {
+        if (!active) return;
+
+        // The current authenticated profile is usable before the one-time
+        // legacy migration finishes. Do not block every save behind that request.
+        setUser(session.user);
+        setLoading(false);
+        void migrateLegacyData(session).catch((error) => {
           // Keep the local key so the atomic migration can be retried next launch.
           console.error('Legacy data migration error:', error);
-        }
-        if (active) setUser(session.user);
+        });
       } catch (error) {
         console.error('Auth initialization error:', error);
       } finally {
@@ -103,19 +143,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!active) return;
       setUser(session?.user ?? null);
 
-      if (!session) {
+      if (session) {
+        setLoading(false);
+      } else {
+        setLoading(true);
         // Avoid calling another auth method from inside the auth callback lock.
         setTimeout(() => {
           void ensureAnonymousSession()
             .then(async (anonymousSession) => {
-              try {
-                await migrateLegacyData(anonymousSession);
-              } catch (error) {
+              if (!active) return;
+              setUser(anonymousSession.user);
+              setLoading(false);
+              void migrateLegacyData(anonymousSession).catch((error) => {
                 console.error('Legacy data migration error:', error);
-              }
-              if (active) setUser(anonymousSession.user);
+              });
             })
-            .catch((error) => console.error('Anonymous sign-in error:', error));
+            .catch((error) => {
+              console.error('Anonymous sign-in error:', error);
+              if (active) setLoading(false);
+            });
         }, 0);
       }
     });
@@ -180,6 +226,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    if (user) {
+      await removeCurrentDevicePushSubscription(user.id);
+    }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   };

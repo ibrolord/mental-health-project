@@ -5,7 +5,7 @@ const AI_CONSENT_KEY = 'mhtoolkit.ai_data_sharing_consent.v1';
 export const AI_DATA_SHARING_TITLE = 'AI Data Sharing Consent';
 
 export const AI_DATA_SHARING_DISCLOSURE =
-  'MHtoolkit AI features send the content you choose to provide to third-party AI providers through the MHtoolkit backend. This can include chat messages, voice recordings/transcripts, and optional recent moods, assessments, goals, or habits when you use personalized features.\n\nRecipients may include Google Gemini, Anthropic Claude, and OpenAI. They process this data to generate chat responses, affirmations, transcription, and spoken responses. We do not sell your data or share it for advertising.\n\nDo you agree to send this data for AI processing?';
+  'Your message and any MHtoolkit context you turn on may be sent securely to AI providers including Google Gemini, Anthropic Claude, and OpenAI. Voice features also send audio for transcription and playback. We do not sell this data or use it for advertising.';
 
 export function hasAiDataSharingConsent(): boolean {
   if (typeof window === 'undefined') return false;
@@ -25,17 +25,12 @@ export function resetAiDataSharingConsent(): void {
   }
 }
 
-export function ensureAiDataSharingConsent(): boolean {
-  if (hasAiDataSharingConsent()) return true;
+export function grantAiDataSharingConsent(): boolean {
   if (typeof window === 'undefined') return false;
-
-  const agreed = window.confirm(AI_DATA_SHARING_DISCLOSURE);
-  if (agreed) {
-    try {
-      window.localStorage.setItem(AI_CONSENT_KEY, 'granted');
-    } catch {
-      return false;
-    }
+  try {
+    window.localStorage.setItem(AI_CONSENT_KEY, 'granted');
+    return true;
+  } catch {
+    return false;
   }
-  return agreed;
 }

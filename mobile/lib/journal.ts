@@ -6,7 +6,13 @@ export const JOURNAL_LIMITS = {
   tag: 32,
 } as const;
 
-export type JournalEntryKind = 'freeform' | 'guided' | 'book_note';
+export type JournalEntryKind =
+  | 'freeform'
+  | 'guided'
+  | 'book_note'
+  | 'video_note'
+  | 'story_note';
+export type JournalMediaType = 'book' | 'video' | 'story';
 
 export interface JournalEntry {
   id: string;
@@ -17,6 +23,7 @@ export interface JournalEntry {
   entry_kind: JournalEntryKind;
   linked_book_id: string | null;
   linked_book_title: string | null;
+  linked_media_type: JournalMediaType | null;
   tags: string[];
   is_favorite: boolean;
   created_at: string;
@@ -30,6 +37,7 @@ export interface JournalDraft {
   entryKind: JournalEntryKind;
   linkedBookId: string;
   linkedBookTitle: string;
+  linkedMediaType: JournalMediaType | '';
   tags: string;
   isFavorite: boolean;
 }
@@ -41,6 +49,7 @@ export interface PreparedJournalDraft {
   entry_kind: JournalEntryKind;
   linked_book_id: string | null;
   linked_book_title: string | null;
+  linked_media_type: JournalMediaType | null;
   tags: string[];
   is_favorite: boolean;
 }
@@ -110,6 +119,7 @@ export function normalizeJournalTags(value: string): string[] {
 export function validateJournalDraft(draft: JournalDraft): string[] {
   const errors: string[] = [];
   const content = draft.content.trim();
+  const expectedMediaType = mediaTypeForEntryKind(draft.entryKind);
 
   if (!content) {
     errors.push('Write something before saving.');
@@ -125,20 +135,44 @@ export function validateJournalDraft(draft: JournalDraft): string[] {
     errors.push(`Keep the prompt under ${JOURNAL_LIMITS.prompt} characters.`);
   }
 
+  if (expectedMediaType && !draft.linkedBookId.trim()) {
+    errors.push('Choose a library item before saving this note.');
+  }
+
+  if (
+    draft.linkedMediaType &&
+    draft.linkedMediaType !== expectedMediaType
+  ) {
+    errors.push('This library note does not match its source type.');
+  }
+
   return errors;
 }
 
 export function prepareJournalDraft(draft: JournalDraft): PreparedJournalDraft {
+  const linkedMediaType = mediaTypeForEntryKind(draft.entryKind);
   return {
     title: deriveJournalTitle(draft.title, draft.content),
     content: draft.content.trim(),
     prompt: draft.prompt.trim() || null,
     entry_kind: draft.entryKind,
-    linked_book_id: draft.linkedBookId.trim() || null,
-    linked_book_title: draft.linkedBookTitle.trim() || null,
+    linked_book_id: linkedMediaType ? draft.linkedBookId.trim() || null : null,
+    linked_book_title: linkedMediaType
+      ? draft.linkedBookTitle.trim() || null
+      : null,
+    linked_media_type: linkedMediaType,
     tags: normalizeJournalTags(draft.tags),
     is_favorite: draft.isFavorite,
   };
+}
+
+function mediaTypeForEntryKind(
+  entryKind: JournalEntryKind
+): JournalMediaType | null {
+  if (entryKind === 'book_note') return 'book';
+  if (entryKind === 'video_note') return 'video';
+  if (entryKind === 'story_note') return 'story';
+  return null;
 }
 
 export function emptyJournalDraft(): JournalDraft {
@@ -149,6 +183,7 @@ export function emptyJournalDraft(): JournalDraft {
     entryKind: 'freeform',
     linkedBookId: '',
     linkedBookTitle: '',
+    linkedMediaType: '',
     tags: '',
     isFavorite: false,
   };

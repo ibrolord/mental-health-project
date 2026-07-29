@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated } from 'react-native';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
-import { useRouter } from 'expo-router';
 import { Colors } from '@/lib/constants';
 import { apiRequest } from '@/lib/api';
 import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
@@ -15,7 +14,6 @@ interface Message {
 }
 
 export default function VoiceSupportScreen() {
-  const router = useRouter();
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -55,7 +53,7 @@ export default function VoiceSupportScreen() {
     } else {
       pulseAnim.setValue(1);
     }
-  }, [isListening]);
+  }, [isListening, pulseAnim]);
 
   const startListening = async () => {
     try {

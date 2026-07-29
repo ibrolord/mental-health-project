@@ -43,14 +43,13 @@ export default function RootLayout() {
         }
         const { Notifications, notificationsHelper } = notificationBundle;
 
+        // Reconcile only a choice the user already made. This never requests
+        // permission; the opt-in prompt is triggered from Settings.
         (async () => {
           try {
-            const granted = await notificationsHelper.requestPermissions();
-            if (granted) {
-              await notificationsHelper.scheduleMoodReminders();
-            }
+            await notificationsHelper.scheduleMoodReminders();
           } catch (e) {
-            console.warn('Notification setup failed:', e);
+            console.warn('Notification schedule sync failed:', e);
           }
         })();
 
@@ -100,7 +99,14 @@ export default function RootLayout() {
         <AcquisitionCapture />
         <RouterCapture routerRef={routerRef} />
         <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            headerBackTitle: 'Back',
+            headerStyle: { backgroundColor: '#fffef8' },
+            headerTintColor: '#163a32',
+          }}
+        >
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="auth/login" options={{ presentation: 'modal', headerShown: true, title: 'Sign In' }} />
           <Stack.Screen name="auth/signup" options={{ presentation: 'modal', headerShown: true, title: 'Sign Up' }} />
@@ -109,7 +115,16 @@ export default function RootLayout() {
           <Stack.Screen name="habits" options={{ headerShown: true, title: 'Habit Tracker' }} />
           <Stack.Screen name="journal" options={{ headerShown: true, title: 'Private Journal' }} />
           <Stack.Screen name="affirmations" options={{ headerShown: true, title: 'Affirmations' }} />
-          <Stack.Screen name="library" options={{ headerShown: true, title: 'Book Library' }} />
+          <Stack.Screen name="library" options={{ headerShown: true, title: 'Library' }} />
+          <Stack.Screen name="ground" options={{ headerShown: true, title: 'Grounding' }} />
+          <Stack.Screen name="meditate" options={{ headerShown: true, title: 'Meditation' }} />
+          <Stack.Screen name="mind-games" options={{ headerShown: true, title: 'Mind Games' }} />
+          <Stack.Screen name="planner" options={{ headerShown: true, title: 'Life Planner' }} />
+          <Stack.Screen name="focus" options={{ headerShown: true, title: 'Focus Mode' }} />
+          <Stack.Screen name="partner" options={{ headerShown: true, title: 'Accountability' }} />
+          <Stack.Screen name="resources" options={{ headerShown: true, title: 'Find Support' }} />
+          <Stack.Screen name="research" options={{ headerShown: true, title: 'Research' }} />
+          <Stack.Screen name="support" options={{ headerShown: true, title: 'Support' }} />
           <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings' }} />
           <Stack.Screen name="voice" options={{ headerShown: true, title: 'Voice Support' }} />
         </Stack>
@@ -123,6 +138,6 @@ function RouterCapture({ routerRef }: { routerRef: React.MutableRefObject<Return
   const router = useRouter();
   useEffect(() => {
     routerRef.current = router;
-  }, [router]);
+  }, [router, routerRef]);
   return null;
 }

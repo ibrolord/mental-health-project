@@ -1,154 +1,295 @@
-import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { supabase } from '@/lib/supabase';
-import { useDataContext } from '@/lib/hooks/use-data-context';
-import { Colors } from '@/lib/constants';
-import { apiRequest } from '@/lib/api';
-import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
+import { useEffect, useRef, useState } from 'react';
+import { Feather } from '@expo/vector-icons';
+import {
+  Alert,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { subDays } from 'date-fns';
-
-interface Affirmation { id: string; content: string; category: string; }
-
-const MAX_DAILY = 3;
+import {
+  AppButton,
+  AppCard,
+  AppScreen,
+  PageHeader,
+  appUiStyles,
+} from '@/components/AppUI';
+import {
+  chooseRandomAffirmation,
+  type AffirmationDisplayRecord,
+} from '@/lib/affirmations';
+import { loadAffirmationCatalog } from '@/lib/affirmations-client';
+import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
+import { apiRequest } from '@/lib/api';
+import { Colors } from '@/lib/constants';
+import { useDataContext } from '@/lib/hooks/use-data-context';
+import { supabase } from '@/lib/supabase';
 
 export default function AffirmationsScreen() {
-  const { context, query } = useDataContext();
-  const [current, setCurrent] = useState<Affirmation | null>(null);
-  const [viewed, setViewed] = useState(0);
+  const { context, query, authLoading } = useDataContext();
+  const [catalog, setCatalog] = useState<AffirmationDisplayRecord[]>([]);
+  const [current, setCurrent] = useState<AffirmationDisplayRecord | null>(null);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState('');
+  const ownerRef = useRef(query?.value ?? null);
+  ownerRef.current = query?.value ?? null;
 
-  useEffect(() => { loadToday(); }, [query]);
-
-  const loadToday = async () => {
-    if (!query) return;
+  useEffect(() => {
+    if (authLoading || !query) return;
+    const ownerId = query.value;
+    let active = true;
     setLoading(true);
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    const { data: history } = await supabase.from('user_affirmation_history').select('affirmation_id, shown_at').eq(query.column, query.value).gte('shown_at', todayStart.toISOString());
-
-    if (history && history.length > 0) {
-      setViewed(history.length);
-      const last = history[history.length - 1] as { affirmation_id: string };
-      const { data } = await supabase.from('affirmations').select('*').eq('id', last.affirmation_id).single();
-      if (data) setCurrent(data);
-    } else {
-      setViewed(0);
-      await loadNew();
-    }
-    setLoading(false);
-  };
-
-  const loadNew = async () => {
-    if (viewed >= MAX_DAILY || !query) return;
-    setLoading(true);
-    const sevenDaysAgo = subDays(new Date(), 7).toISOString();
-    const { data: moods } = await supabase.from('moods').select('emoji').eq(query.column, query.value).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }).limit(7);
-
-    let qb = supabase.from('affirmations').select('*');
-    if (moods && moods.length > 0) {
-      qb = qb.contains('mood_tags', [(moods[0] as { emoji: string }).emoji]);
-    }
-
-    const { data: affirmations } = await qb;
-    if (affirmations && affirmations.length > 0) {
-      const aff = affirmations[Math.floor(Math.random() * affirmations.length)] as Affirmation;
-      setCurrent(aff);
-      await supabase.from('user_affirmation_history').insert({ ...context, affirmation_id: aff.id } as any);
-      setViewed(viewed + 1);
-    }
-    setLoading(false);
-  };
-
-  const generateAI = async () => {
-    if (!query) return;
-    const consented = await ensureAiDataSharingConsent();
-    if (!consented) return;
-
-    setGenerating(true);
-    try {
-      const sevenDaysAgo = subDays(new Date(), 7).toISOString();
-      const [m, a, g] = await Promise.all([
-        supabase.from('moods').select('emoji, note').eq(query.column, query.value).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }).limit(7),
-        supabase.from('assessments').select('type, score, max_score').eq(query.column, query.value).order('created_at', { ascending: false }).limit(3),
-        supabase.from('goals').select('content, status').eq(query.column, query.value).order('created_at', { ascending: false }).limit(5),
-      ]);
-
-      const data = await apiRequest('/api/affirmations/generate', {
-        moods: m.data,
-        assessments: a.data,
-        goals: g.data,
-      });
-      if (data.affirmation) {
-        setCurrent({ id: 'personalized', content: data.affirmation, category: 'personalized' });
+    setError('');
+    const load = async () => {
+      try {
+        const sevenDaysAgo = subDays(new Date(), 7).toISOString();
+        const [moods, history] = await Promise.all([
+          supabase
+            .from('moods')
+            .select('emoji')
+            .eq(query.column, ownerId)
+            .gte('created_at', sevenDaysAgo)
+            .order('created_at', { ascending: false })
+            .limit(1),
+          supabase
+            .from('user_affirmation_history')
+            .select('affirmation_id')
+            .eq(query.column, ownerId)
+            .order('shown_at', { ascending: false })
+            .limit(20),
+        ]);
+        if (moods.error) throw moods.error;
+        if (history.error) throw history.error;
+        const mood = moods.data?.[0]?.emoji ?? null;
+        const result = await loadAffirmationCatalog(mood);
+        if (!active || ownerRef.current !== ownerId) return;
+        const ids = (history.data ?? []).map(({ affirmation_id }) => affirmation_id);
+        const selected = chooseRandomAffirmation(result.records, {
+          excludeIds: ids,
+        });
+        setCatalog(result.records);
+        setRecentIds(ids);
+        setCurrent(selected);
+        if (selected?.historyEligible) {
+          await supabase.from('user_affirmation_history').insert({
+            ...context,
+            affirmation_id: selected.id,
+          } as never);
+        }
+      } catch {
+        if (active) setError('Affirmations could not be loaded.');
+      } finally {
+        if (active) setLoading(false);
       }
-    } catch (e) {
-      console.error(e);
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [authLoading, context, query]);
+
+  const showAnother = async () => {
+    if (!query || loading) return;
+    const next = chooseRandomAffirmation(catalog, {
+      excludeIds: recentIds,
+      currentId: current?.id,
+    });
+    if (!next) return;
+    setCurrent(next);
+    setRecentIds((ids) => [next.id, ...ids].slice(0, 20));
+    if (next.historyEligible) {
+      const { error: historyError } = await supabase
+        .from('user_affirmation_history')
+        .insert({ ...context, affirmation_id: next.id } as never);
+      if (historyError) setError('This affirmation opened, but its history was not saved.');
+    }
+  };
+
+  const generateAi = async () => {
+    if (!query || generating) return;
+    if (!(await ensureAiDataSharingConsent())) return;
+    setGenerating(true);
+    setError('');
+    try {
+      const since = subDays(new Date(), 7).toISOString();
+      const [moods, assessments, goals] = await Promise.all([
+        supabase
+          .from('moods')
+          .select('emoji, note')
+          .eq(query.column, query.value)
+          .gte('created_at', since)
+          .order('created_at', { ascending: false })
+          .limit(7),
+        supabase
+          .from('assessments')
+          .select('type, score, max_score')
+          .eq(query.column, query.value)
+          .order('created_at', { ascending: false })
+          .limit(3),
+        supabase
+          .from('goals')
+          .select('content, status')
+          .eq(query.column, query.value)
+          .order('created_at', { ascending: false })
+          .limit(5),
+      ]);
+      if (moods.error || assessments.error || goals.error) {
+        throw new Error('Context unavailable');
+      }
+      const response = await apiRequest<{ affirmation?: unknown }>(
+        '/api/affirmations/generate',
+        {
+          moods: moods.data,
+          assessments: assessments.data,
+          goals: goals.data,
+        }
+      );
+      if (
+        typeof response.affirmation !== 'string' ||
+        !response.affirmation.trim()
+      ) {
+        throw new Error('Empty affirmation');
+      }
+      setCurrent({
+        id: `personalized-${Date.now()}`,
+        content: response.affirmation.trim(),
+        category: 'personalized',
+        kind: 'affirmation',
+        attribution_name: null,
+        source_title: null,
+        source_url: null,
+        historyEligible: false,
+      });
+    } catch {
+      setError('A personalized affirmation could not be generated.');
     } finally {
       setGenerating(false);
     }
   };
 
-  if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
-
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <Text style={s.title}>Daily Affirmations</Text>
-      <Text style={s.subtitle}>You can view {MAX_DAILY} affirmations per day ({viewed}/{MAX_DAILY} today)</Text>
-
-      <View style={s.card}>
-        {current ? (
-          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-            <Text style={{ fontSize: 48, marginBottom: 20 }}>✨</Text>
-            <Text style={s.affirmation}>{`"${current.content}"`}</Text>
-            <Text style={s.category}>{current.category}</Text>
-          </View>
+    <AppScreen>
+      <PageHeader
+        eyebrow="Affirmations"
+        title="A fresh thought for right now."
+        description="Random affirmations and verified quotes from real people."
+        icon="sun"
+      />
+      <AppCard style={styles.quoteCard}>
+        {loading ? (
+          <Text style={styles.loading}>Loading...</Text>
+        ) : current ? (
+          <>
+            <View style={styles.mark}>
+              <Feather
+                name={current.kind === 'quote' ? 'message-circle' : 'sun'}
+                size={22}
+                color={Colors.primary}
+              />
+            </View>
+            <Text style={styles.quote}>{current.content}</Text>
+            {current.attribution_name ? (
+              <Text style={styles.attribution}>
+                {current.attribution_name}
+              </Text>
+            ) : (
+              <Text style={styles.attribution}>{current.category}</Text>
+            )}
+            {current.source_url ? (
+              <Pressable
+                accessibilityRole="link"
+                onPress={() =>
+                  void Linking.openURL(current.source_url!).catch(() =>
+                    Alert.alert('Unable to open source')
+                  )
+                }
+                style={styles.source}
+              >
+                <Text style={styles.sourceText}>
+                  {current.source_title ?? 'Source'}
+                </Text>
+                <Feather
+                  name="external-link"
+                  size={14}
+                  color={Colors.primary}
+                />
+              </Pressable>
+            ) : null}
+          </>
         ) : (
-          <Text style={s.empty}>No affirmation loaded yet.</Text>
+          <Text style={styles.loading}>No affirmation is available.</Text>
         )}
+      </AppCard>
+      {error ? <Text style={appUiStyles.error}>{error}</Text> : null}
+      <View style={styles.actions}>
+        <AppButton
+          label="Show another"
+          icon="refresh-cw"
+          disabled={loading || catalog.length === 0}
+          onPress={() => void showAnother()}
+          style={{ flex: 1 }}
+        />
+        <AppButton
+          label="Personalize with AI"
+          icon="message-circle"
+          variant="secondary"
+          loading={generating}
+          onPress={() => void generateAi()}
+          style={{ flex: 1 }}
+        />
       </View>
-
-      <TouchableOpacity style={[s.btn, viewed >= MAX_DAILY && { opacity: 0.5 }]} onPress={loadNew} disabled={viewed >= MAX_DAILY || loading}>
-        <Text style={s.btnText}>{viewed >= MAX_DAILY ? 'Daily Limit Reached' : 'Show Another Affirmation'}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={s.btnOutline} onPress={generateAI} disabled={generating}>
-        <Text style={s.btnOutlineText}>{generating ? 'Generating...' : 'Generate AI Affirmation with My Data'}</Text>
-      </TouchableOpacity>
-
-      <View style={s.aiDisclosure}>
-        <Text style={s.aiDisclosureTitle}>AI data sharing</Text>
-        <Text style={s.aiDisclosureText}>
-          AI affirmations send recent moods, assessment scores, and goals to Google Gemini through MHtoolkit to generate a personalized affirmation. You will be asked for consent before this data is sent.
+      <AppCard quiet style={{ marginTop: 14 }}>
+        <Text style={appUiStyles.muted}>
+          AI personalization sends recent mood, assessment, and goal context
+          only after you consent.
         </Text>
-      </View>
-
-      <View style={[s.card, { backgroundColor: '#eff6ff', marginTop: 24 }]}>
-        <Text style={{ fontWeight: '600', color: Colors.text, marginBottom: 8 }}>Why limit affirmations?</Text>
-        <Text style={{ fontSize: 13, color: Colors.textSecondary, lineHeight: 20 }}>
-          Affirmations are most effective when given time to resonate. Viewing too many at once can dilute their impact.
-        </Text>
-      </View>
-    </ScrollView>
+      </AppCard>
+    </AppScreen>
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 16, paddingBottom: 40 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 28, fontWeight: '700', color: Colors.text, textAlign: 'center', marginBottom: 4 },
-  subtitle: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center', marginBottom: 20 },
-  card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  affirmation: { fontSize: 22, fontStyle: 'italic', color: Colors.text, textAlign: 'center', lineHeight: 32, marginBottom: 12 },
-  category: { fontSize: 13, color: Colors.textSecondary },
-  empty: { textAlign: 'center', color: Colors.textSecondary, paddingVertical: 40 },
-  btn: { backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 10 },
-  btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  btnOutline: { borderWidth: 1, borderColor: Colors.border, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
-  btnOutlineText: { color: Colors.text, fontWeight: '500', fontSize: 15 },
-  aiDisclosure: { backgroundColor: '#fff7ed', borderWidth: 1, borderColor: '#fed7aa', borderRadius: 12, padding: 14, marginTop: 12 },
-  aiDisclosureTitle: { fontSize: 13, fontWeight: '700', color: '#9a3412', marginBottom: 4 },
-  aiDisclosureText: { fontSize: 12, color: '#9a3412', lineHeight: 18 },
+const styles = StyleSheet.create({
+  quoteCard: {
+    minHeight: 310,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  mark: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primaryLight,
+    marginBottom: 20,
+  },
+  quote: {
+    color: Colors.text,
+    fontSize: 23,
+    lineHeight: 33,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  attribution: {
+    color: Colors.accent,
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 18,
+  },
+  source: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  sourceText: { color: Colors.primary, fontSize: 11, fontWeight: '600' },
+  loading: { color: Colors.textSecondary, fontSize: 14 },
+  actions: { flexDirection: 'row', gap: 9 },
 });

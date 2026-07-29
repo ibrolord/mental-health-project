@@ -1,6 +1,6 @@
 # MHtoolkit
 
-A privacy-first self-reflection toolkit offering mood tracking, optional AI-guided prompts, published-source self-assessments, goal setting, habit tracking, and more.
+A privacy-first self-reflection toolkit offering mood tracking, optional AI-guided prompts, published-source self-assessments, private planning, routines, focus tools, and local exercises.
 
 ## ✨ Features
 
@@ -9,7 +9,11 @@ A privacy-first self-reflection toolkit offering mood tracking, optional AI-guid
 - **💬 AI Chat**: Evidence-informed self-reflection support powered by Claude
 - **✅ Life Organizer**: Goal setting with Eisenhower Matrix, Ivy Lee, 1-3-5, ABCDE frameworks
 - **📚 Resource Library**: Direct paths to app tools plus reviewed book notes that separate author claims from clinical guidance
-- **🎯 Habit Tracker**: Build and track daily habits with streak counting
+- **🎯 Habits & Routines**: Build or reduce habits with cues, tiny steps, templates, streaks, and reward milestones
+- **⏱ Focus Mode**: Goal-linked focus and break blocks with optional locally generated sound
+- **🧠 Mind Games**: Five evidence-honest exercises cached for offline use after the first visit
+- **🧭 Life Planner**: Private dreams, motivations, obstacles, milestones, horizons, and next steps
+- **🔔 Reminders**: Opt-in generic Web Push with owner-scoped schedules and delivery records
 - **✨ Smart Affirmations**: AI-personalized daily affirmations based on your data
 - **🔒 Anonymous Mode**: Start using without signup, optionally create account later
 - **🔐 Privacy First**: Full data export, one-click deletion, no ads or cross-app tracking
@@ -46,10 +50,10 @@ npm install
 
 2. **Set up environment variables**
 
-Copy `.env.local.example` to `.env.local`:
+Copy `.env.example` to `.env.local`:
 
 ```bash
-cp .env.local.example .env.local
+cp .env.example .env.local
 ```
 
 Then fill in your credentials:
@@ -63,13 +67,9 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 
 3. **Set up Supabase database**
 
-Run the migrations in `supabase/migrations/` in your Supabase SQL editor in order:
-
-```
-001_initial_schema.sql   → Creates tables, types, indexes
-002_rls_policies.sql     → Sets up Row Level Security
-003_seed_data.sql        → Seeds affirmations and books
-```
+Apply every migration in `supabase/migrations/` in filename order. New tables
+are explicitly granted to the authenticated role and protected with owner-scoped
+Row Level Security.
 
 4. **Run the development server**
 
@@ -92,6 +92,10 @@ npm run dev
   /goals                 - Life organizer
   /library               - Book summaries
   /habits                - Habit tracker
+  /focus                 - Focus and break timer
+  /mind-games            - Local attention exercises
+  /planner               - Private life planner
+  /research              - Evidence and limitations
   /affirmations          - Daily affirmations
   /settings              - Privacy & account settings
   /auth                  - Login/signup
@@ -125,6 +129,12 @@ The platform uses Supabase (PostgreSQL) with Row Level Security. Key tables:
 - `goals` - Daily goals and priorities
 - `habits` - User habits
 - `habit_logs` - Daily habit check-ins
+- `life_plan_items` - Private directions, obstacles, and milestones
+- `focus_sessions` - Focus configuration and completion history
+- `wellbeing_reminders` - Owner-scoped recurring and one-time schedules
+- `push_subscriptions` - Optional per-browser Web Push subscription
+- `reminder_deliveries` - Deduplicated generic delivery receipts
+- `dismissed_notices` - Owner-scoped UI notice preferences
 - `chat_history` - AI conversation history
 - `affirmations` - Affirmation library
 - `books` - Book summaries
@@ -165,11 +175,26 @@ NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
 ANTHROPIC_API_KEY
+NEXT_PUBLIC_VAPID_PUBLIC_KEY
+VAPID_PRIVATE_KEY
+VAPID_SUBJECT
+CRON_SECRET
+NEXT_PUBLIC_REMINDER_DISPATCH_ENABLED
 ```
+
+Generate VAPID keys with `npx web-push generate-vapid-keys`. Background
+reminders also require a scheduler to call
+`GET /api/reminders/dispatch` every five minutes with
+`Authorization: Bearer <CRON_SECRET>`. The current Vercel project is on Hobby,
+whose cron minimum is once per day, so `vercel.json` intentionally does not
+declare an invalid five-minute cron. Set
+`NEXT_PUBLIC_REMINDER_DISPATCH_ENABLED=true` only after a compatible external
+scheduler or Vercel Pro cron is active.
 
 ## 📝 Development Notes
 
-- The app works fully offline-first with anonymous sessions
+- Mind Games is cached for offline use after its first successful visit; the
+  rest of the app requires network access for synchronized private data
 - Data migration happens automatically on signup
 - Assessments use widely used screening questionnaires
 - AI responses provide self-reflection prompts and crisis resource routing
@@ -181,11 +206,10 @@ This is a personal mental health project. If you'd like to contribute or suggest
 
 ## ⚠️ Disclaimer
 
-This app is a self-help tool and **not a replacement for professional therapy**. If you're in crisis:
-
-- 🆘 Call **988** (Suicide & Crisis Lifeline)
-- 💬 Text **HOME** to **741741** (Crisis Text Line)
-- 🌍 Visit [findahelpline.com](https://findahelpline.com)
+This app is a self-help tool and **not a replacement for professional therapy**.
+If you are in immediate danger, contact local emergency services or go to the
+nearest emergency department. For verified country-specific support, visit
+[findahelpline.com](https://findahelpline.com).
 
 ## 📄 License
 

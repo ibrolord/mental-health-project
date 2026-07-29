@@ -11,6 +11,7 @@
     "verify:atomic-deployment": "node scripts/verify-atomic-attribution-deployment.mjs",
     "verify:outreach": "node scripts/verify-outreach-ledger.mjs",
     "verify:data-lifecycle": "node scripts/verify-live-data-lifecycle.mjs",
+    "verify:ai-live": "vite-node scripts/verify-ai-live.ts",
     "verify:partner-rls": "bash scripts/verify-partner-rls.sh",
     "verify:resource-links": "node scripts/verify-resource-links.mjs",
     "verify:anonymous-reaper": "bash scripts/verify-anonymous-reaper.sh",
@@ -31,29 +32,33 @@
     "dotenv": "^17.2.3",
     "framer-motion": "^12.0.3",
     "lucide-react": "^0.468.0",
-    "next": "^15.1.6",
+    "next": "15.5.21",
     "openai": "^6.15.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "recharts": "^2.15.0",
+    "sharp": "0.35.3",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^13.0.0",
+    "web-push": "3.6.7",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.6",
     "@types/react-dom": "^19.0.2",
+    "@types/web-push": "3.6.4",
     "autoprefixer": "^10.4.20",
     "eslint": "9.39.5",
-    "eslint-config-next": "15.5.20",
-    "postcss": "^8.5.10",
+    "eslint-config-next": "15.5.21",
+    "postcss": "8.5.18",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
     "vitest": "3.2.7"
   },
   "overrides": {
-    "postcss": "$postcss"
+    "postcss": "$postcss",
+    "sharp": "$sharp"
   }
 }

@@ -60,14 +60,59 @@ try {
     String(now.getDate()).padStart(2, '0'),
   ].join('-');
 
-  const { error: moodError } = await client.from('moods').insert({
+  const { error: moodError } = await client.rpc(
+    'save_check_in_with_attribution',
+    {
+      p_emoji: '😐',
+      p_note: 'Temporary lifecycle note',
+      p_tags: ['lifecycle-test'],
+      p_local_date: localDate,
+      p_utc_offset_minutes: -now.getTimezoneOffset(),
+      p_source: 'founder',
+      p_medium: 'organic',
+      p_campaign: 'closed_test',
+      p_content: 'founder_note',
+      p_platform: 'web',
+    }
+  );
+  if (moodError) throw moodError;
+
+  const { error: assessmentError } = await client.from('assessments').insert({
     user_id: testUserId,
     session_id: null,
-    emoji: '😐',
-    local_date: localDate,
-    utc_offset_minutes: -now.getTimezoneOffset(),
+    type: 'PHQ9',
+    score: 1,
+    max_score: 27,
+    responses: { 0: 1 },
   });
-  if (moodError) throw moodError;
+  if (assessmentError) throw assessmentError;
+
+  const { error: goalError } = await client.from('goals').insert({
+    user_id: testUserId,
+    session_id: null,
+    content: 'Lifecycle test goal',
+    date: localDate,
+  });
+  if (goalError) throw goalError;
+
+  const { data: habit, error: habitError } = await client
+    .from('habits')
+    .insert({
+      user_id: testUserId,
+      session_id: null,
+      name: 'Lifecycle test habit',
+      dedupe_key: `lifecycle-test:${testUserId}`,
+    })
+    .select('id')
+    .single();
+  if (habitError) throw habitError;
+
+  const { error: habitLogError } = await client.from('habit_logs').insert({
+    habit_id: habit.id,
+    completed: true,
+    log_date: localDate,
+  });
+  if (habitLogError) throw habitLogError;
 
   const { error: journalError } = await client.from('journal_entries').insert({
     user_id: testUserId,
@@ -79,17 +124,123 @@ try {
   });
   if (journalError) throw journalError;
 
-  const { error: attributionError } = await client
-    .from('acquisition_attribution')
+  const { error: chatError } = await client.from('chat_history').insert({
+    user_id: testUserId,
+    session_id: null,
+    messages: [
+      { role: 'user', content: 'Temporary lifecycle chat' },
+      { role: 'assistant', content: 'Temporary lifecycle response' },
+    ],
+    saved: true,
+    title: 'Lifecycle test chat',
+  });
+  if (chatError) throw chatError;
+
+  const { data: affirmation, error: affirmationReadError } = await client
+    .from('affirmations')
+    .select('id')
+    .limit(1)
+    .single();
+  if (affirmationReadError) throw affirmationReadError;
+
+  const { error: affirmationHistoryError } = await client
+    .from('user_affirmation_history')
     .insert({
       user_id: testUserId,
-      source: 'founder',
-      medium: 'organic',
-      campaign: 'closed_test',
-      content: 'founder_note',
-      platform: 'web',
+      session_id: null,
+      affirmation_id: affirmation.id,
     });
-  if (attributionError) throw attributionError;
+  if (affirmationHistoryError) throw affirmationHistoryError;
+
+  const { error: libraryError } = await client
+    .from('user_library_items')
+    .insert({
+      user_id: testUserId,
+      content_id: 'lifecycle-test-book',
+      media_type: 'book',
+      is_saved: true,
+      priority: 'next',
+      custom_notes: 'Temporary private library note',
+    });
+  if (libraryError) throw libraryError;
+
+  const { error: planError } = await client.from('life_plan_items').insert({
+    user_id: testUserId,
+    item_type: 'milestone',
+    horizon: '30_days',
+    title: 'Lifecycle test milestone',
+    reflection: 'Temporary reflection',
+    next_step: 'Remove this row',
+  });
+  if (planError) throw planError;
+
+  const { error: focusError } = await client.from('focus_sessions').insert({
+    user_id: testUserId,
+    task_label: 'Lifecycle test focus',
+    status: 'complete',
+    completed_cycles: 1,
+    completed_at: now.toISOString(),
+  });
+  if (focusError) throw focusError;
+
+  const { data: reminder, error: reminderError } = await client
+    .from('wellbeing_reminders')
+    .insert({
+      user_id: testUserId,
+      kind: 'routine',
+      label: 'Lifecycle test reminder',
+      route: '/habits',
+      timezone: 'UTC',
+      local_time: '09:00:00',
+    })
+    .select('id')
+    .single();
+  if (reminderError) throw reminderError;
+
+  const { error: pushError } = await client.from('push_subscriptions').insert({
+    user_id: testUserId,
+    endpoint: `https://push.example.test/${testUserId}`,
+    p256dh: 'lifecycle-test-public-key',
+    auth_key: 'lifecycle-auth-key',
+    user_agent: 'MHtoolkit lifecycle verifier',
+  });
+  if (pushError) throw pushError;
+
+  const { error: dismissedNoticeError } = await client
+    .from('dismissed_notices')
+    .insert({
+      user_id: testUserId,
+      notice_key: 'lifecycle-test-notice',
+    });
+  if (dismissedNoticeError) throw dismissedNoticeError;
+
+  const { error: deliveryError } = await admin
+    .from('reminder_deliveries')
+    .insert({
+      reminder_id: reminder.id,
+      user_id: testUserId,
+      delivery_key: 'lifecycle-test-delivery',
+      status: 'delivered',
+      delivered_at: now.toISOString(),
+    });
+  if (deliveryError) throw deliveryError;
+
+  const aiResponseId = crypto.randomUUID();
+  const { error: aiReportError } = await admin
+    .from('ai_response_reports')
+    .insert({
+      response_id: aiResponseId,
+      user_id: testUserId,
+      subject_hash: `subject-${testUserId}`,
+      response_hash: `response-${aiResponseId}`,
+      reported_response: 'Temporary lifecycle AI response',
+      model: 'safety',
+      reason: 'incorrect',
+      details: 'Temporary lifecycle report',
+      platform: 'web',
+      app_version: 'lifecycle-test',
+    });
+  if (aiReportError) throw aiReportError;
 
   const exported = await post('/api/data/export');
   const arraySections = [
@@ -103,6 +254,16 @@ try {
     'chat_history',
     'affirmation_history',
     'book_favorites',
+    'library_items',
+    'partner_invites',
+    'partner_links',
+    'partner_celebrations',
+    'life_plan_items',
+    'focus_sessions',
+    'wellbeing_reminders',
+    'push_subscriptions',
+    'reminder_deliveries',
+    'dismissed_notices',
     'acquisition_attribution',
     'ai_response_reports',
     'migration_history',
@@ -122,34 +283,79 @@ try {
     exported.acquisition_attribution.length === 1,
     'Export did not contain acquisition attribution'
   );
+  const expectedSingleRowSections = [
+    'moods',
+    'assessments',
+    'goals',
+    'habits',
+    'habit_logs',
+    'journal_entries',
+    'chat_history',
+    'affirmation_history',
+    'library_items',
+    'life_plan_items',
+    'focus_sessions',
+    'wellbeing_reminders',
+    'push_subscriptions',
+    'reminder_deliveries',
+    'dismissed_notices',
+    'ai_response_reports',
+  ];
+  for (const section of expectedSingleRowSections) {
+    assert(
+      exported[section].length === 1,
+      `Export section ${section} did not contain its owned row`
+    );
+  }
+  assert(
+    !('p256dh' in exported.push_subscriptions[0]) &&
+      !('auth_key' in exported.push_subscriptions[0]),
+    'Export exposed push encryption keys'
+  );
 
   const deleted = await post('/api/data/delete');
   assert(deleted.deleted === true, 'Delete endpoint did not confirm deletion');
 
-  const [moodsAfter, journalAfter, attributionAfter] = await Promise.all([
-    client.from('moods').select('id'),
-    client.from('journal_entries').select('id'),
-    client.from('acquisition_attribution').select('user_id'),
-  ]);
-  if (moodsAfter.error) throw moodsAfter.error;
-  if (journalAfter.error) throw journalAfter.error;
-  if (attributionAfter.error) throw attributionAfter.error;
-  assert(moodsAfter.data.length === 0, 'Mood rows remained after deletion');
-  assert(
-    journalAfter.data.length === 0,
-    'Journal rows remained after deletion'
+  const deletedTables = [
+    'moods',
+    'assessments',
+    'goals',
+    'habits',
+    'journal_entries',
+    'chat_history',
+    'user_affirmation_history',
+    'user_library_items',
+    'life_plan_items',
+    'focus_sessions',
+    'wellbeing_reminders',
+    'push_subscriptions',
+    'reminder_deliveries',
+    'dismissed_notices',
+    'acquisition_attribution',
+    'ai_response_reports',
+  ];
+  const deletionChecks = await Promise.all(
+    deletedTables.map((table) =>
+      admin.from(table).select('*', { count: 'exact', head: true }).eq(
+        table === 'acquisition_attribution' ? 'user_id' : 'user_id',
+        testUserId
+      )
+    )
   );
-  assert(
-    attributionAfter.data.length === 0,
-    'Attribution remained after deletion'
-  );
+  deletionChecks.forEach((result, index) => {
+    if (result.error) throw result.error;
+    assert(
+      result.count === 0,
+      `${deletedTables[index]} rows remained after deletion`
+    );
+  });
 
   const accountResult = await post('/api/account/delete');
   assert(accountResult.deleted === true, 'Account endpoint did not confirm deletion');
   accountDeleted = true;
 
   console.log(
-    'PASS live data lifecycle: complete export, journal deletion, attribution deletion, and account deletion'
+    'PASS live data lifecycle: tracker RPC, complete export, complete data deletion, and account deletion'
   );
 } finally {
   if (testUserId && !accountDeleted) {

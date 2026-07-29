@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Notification modules are intentionally loaded only after Android opt-in. */
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -14,13 +15,10 @@ const MOOD_REMINDER_IDS_KEY = 'mood_reminder_notification_ids';
 // Default reminder times (hour of day)
 const DEFAULT_REMINDERS = [9, 14, 20]; // 9am, 2pm, 8pm
 
-const MOOD_PROMPTS = [
-  { title: 'How are you feeling?', body: 'Take a moment to check in with yourself.' },
-  { title: 'Mood check-in time', body: 'A quick mood log can help you spot patterns.' },
-  { title: 'Time for a check-in', body: "How's your day going? Log your mood." },
-  { title: 'Pause and reflect', body: 'Your emotional awareness matters. How are you?' },
-  { title: "Hey, how are you?", body: '30 seconds to log your mood can make a difference.' },
-];
+const REMINDER_CONTENT = {
+  title: 'MHtoolkit reminder',
+  body: 'Take a moment for the step you planned.',
+};
 
 let _Notifications: ExpoNotifications | null = null;
 let _handlerConfigured = false;
@@ -78,7 +76,7 @@ export async function requestPermissions(): Promise<boolean> {
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('mood-reminders', {
-      name: 'Mood Reminders',
+      name: 'Wellbeing reminders',
       importance: Notifications.AndroidImportance.DEFAULT,
       sound: 'default',
     });
@@ -116,7 +114,7 @@ export async function scheduleMoodReminders(): Promise<void> {
   await cancelMoodReminders();
 
   const enabled = await AsyncStorage.getItem(NOTIFICATIONS_KEY);
-  if (enabled === 'false') return;
+  if (enabled !== 'true') return;
 
   const timesStr = await AsyncStorage.getItem(REMINDER_TIMES_KEY);
   const times: number[] = timesStr ? JSON.parse(timesStr) : DEFAULT_REMINDERS;
@@ -124,12 +122,10 @@ export async function scheduleMoodReminders(): Promise<void> {
   const scheduledIds: string[] = [];
 
   for (const hour of times) {
-    const prompt = MOOD_PROMPTS[Math.floor(Math.random() * MOOD_PROMPTS.length)];
-
     const id = await Notifications.scheduleNotificationAsync({
       content: {
-        title: prompt.title,
-        body: prompt.body,
+        title: REMINDER_CONTENT.title,
+        body: REMINDER_CONTENT.body,
         data: { screen: '/(tabs)/tracker' },
       },
       trigger: {
@@ -158,7 +154,7 @@ export async function setRemindersEnabled(enabled: boolean): Promise<void> {
 
 export async function areRemindersEnabled(): Promise<boolean> {
   const val = await AsyncStorage.getItem(NOTIFICATIONS_KEY);
-  return val !== 'false';
+  return val === 'true';
 }
 
 export async function setReminderTimes(times: number[]): Promise<void> {

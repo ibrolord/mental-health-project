@@ -104,7 +104,11 @@ export default function GoalsPage() {
     appliedLibraryActionRef.current = true;
     setFramework('simple');
     setSimpleInput(content);
-    setLibrarySourceTitle(params.get('bookTitle')?.slice(0, 200) ?? 'the library');
+    setLibrarySourceTitle(
+      params.get('itemTitle')?.slice(0, 200) ??
+        params.get('bookTitle')?.slice(0, 200) ??
+        'the library'
+    );
     window.history.replaceState({}, '', window.location.pathname);
   }, []);
 

@@ -1,8 +1,12 @@
 import type { LucideIcon } from 'lucide-react';
 import {
+  Anchor,
   BookOpen,
+  Brain,
   ClipboardList,
+  Compass,
   Flame,
+  FlaskConical,
   HeartHandshake,
   Home,
   LifeBuoy,
@@ -12,6 +16,8 @@ import {
   SmilePlus,
   Sparkles,
   Target,
+  Timer,
+  Wind,
 } from 'lucide-react';
 
 export type NavItem = {
@@ -41,6 +47,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: '/tracker', label: 'Mood', icon: SmilePlus, blurb: 'Check in' },
   { href: '/goals', label: 'Goals', icon: Target, blurb: 'What matters now' },
   { href: '/chat', label: 'Chat', icon: MessageCircle, blurb: 'Talk it through' },
+  { href: '/ground', label: 'Ground', icon: Anchor, blurb: 'Return to now' },
 ];
 
 export const MORE_GROUPS: NavGroup[] = [
@@ -59,7 +66,25 @@ export const MORE_GROUPS: NavGroup[] = [
   {
     title: 'Grow',
     items: [
-      { href: '/habits', label: 'Habits', icon: Flame, blurb: 'Daily streaks' },
+      {
+        href: '/habits',
+        label: 'Habits',
+        icon: Flame,
+        blurb: 'Routines and streaks',
+      },
+      { href: '/focus', label: 'Lock In', icon: Timer, blurb: 'Focus and breaks' },
+      {
+        href: '/mind-games',
+        label: 'Mind games',
+        icon: Brain,
+        blurb: 'Local attention practice',
+      },
+      {
+        href: '/planner',
+        label: 'Life planner',
+        icon: Compass,
+        blurb: 'Directions and next steps',
+      },
       {
         href: '/partner',
         label: 'Partner',
@@ -77,12 +102,24 @@ export const MORE_GROUPS: NavGroup[] = [
         icon: LifeBuoy,
         blurb: 'Therapists and support groups',
       },
-      { href: '/library', label: 'Library', icon: BookOpen, blurb: 'Book guides' },
+      {
+        href: '/meditate',
+        label: 'Meditate',
+        icon: Wind,
+        blurb: 'Guided calm and focus',
+      },
+      { href: '/library', label: 'Library', icon: BookOpen, blurb: 'Books and videos' },
       {
         href: '/affirmations',
         label: 'Affirmations',
         icon: Sparkles,
         blurb: 'Daily encouragement',
+      },
+      {
+        href: '/research',
+        label: 'Research',
+        icon: FlaskConical,
+        blurb: 'Evidence and limits',
       },
     ],
   },
@@ -104,7 +141,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [...PRIMARY_NAV, ...MORE_ITEMS];
  * signed-in app chrome.
  */
 const PUBLIC_PREFIXES = ['/onboarding', '/auth'];
-const PUBLIC_EXACT = ['/', '/privacy', '/support'];
+const PUBLIC_EXACT = ['/', '/privacy', '/support', '/research'];
 
 export function isPublicRoute(pathname: string): boolean {
   return (

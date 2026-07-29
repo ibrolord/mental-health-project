@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Lazy loading keeps notification native modules Android-only. */
 import type { NotificationsBundle } from './notifications-types';
 
 export function loadNotificationsBundle(): NotificationsBundle | null {

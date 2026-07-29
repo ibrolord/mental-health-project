@@ -24,7 +24,6 @@ export type NotificationsModuleLike = {
 };
 
 export type NotificationsHelperLike = {
-  requestPermissions: () => Promise<boolean>;
   scheduleMoodReminders: () => Promise<void>;
 };
 

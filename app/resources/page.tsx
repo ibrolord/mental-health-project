@@ -4,17 +4,19 @@ import {
   Globe,
   HeartHandshake,
   LifeBuoy,
+  MessagesSquare,
   Phone,
   ShieldCheck,
   Users,
 } from 'lucide-react';
+import { AfricaSupportFinder } from '@/components/africa-support-finder';
 import {
-  AFRICA_COUNTRY_LOOKUPS,
   AFRICA_SUPPORT,
   COMMUNITY_HELP,
   CRISIS_LINES,
   CRISIS_NOTE,
   GLOBAL_DIRECTORIES,
+  ONLINE_COMMUNITIES,
   RESOURCES_DISCLAIMER,
   SUPPORT_GROUPS,
   THERAPIST_DIRECTORIES,
@@ -24,7 +26,7 @@ import {
 export const metadata: Metadata = {
   title: 'Finding help - MHtoolkit',
   description:
-    'Public directories for finding a therapist, joining a support group, and reaching crisis lines in the United States and Canada.',
+    'Country-specific crisis directories, African support organizations, moderated peer communities, therapist directories, and support groups.',
 };
 
 function RegionChip({ children }: { children: React.ReactNode }) {
@@ -56,6 +58,11 @@ function ResourceCard({ resource }: { resource: ResourceLink }) {
         <p className="text-sm leading-relaxed text-muted-foreground">
           {resource.description}
         </p>
+        {resource.caveat && (
+          <p className="rounded-lg border border-border bg-background px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+            {resource.caveat}
+          </p>
+        )}
         <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-2">
           <RegionChip>{resource.region}</RegionChip>
           {resource.note && (
@@ -125,6 +132,7 @@ export default function ResourcesPage() {
         {/* Crisis block: deliberately the first thing on the page and visually
             separated from the directory cards below. */}
         <section
+          id="crisis"
           aria-labelledby="crisis-heading"
           className="mt-8 overflow-hidden rounded-[var(--radius)] bg-primary text-primary-foreground"
         >
@@ -190,24 +198,7 @@ export default function ResourcesPage() {
         />
 
         <section className="mt-8">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Verified numbers by country
-          </h3>
-          <ul className="flex flex-wrap gap-2">
-            {AFRICA_COUNTRY_LOOKUPS.map((lookup) => (
-              <li key={lookup.url}>
-                <a
-                  href={lookup.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-2 text-sm text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {lookup.region}
-                  <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                </a>
-              </li>
-            ))}
-          </ul>
+          <AfricaSupportFinder />
         </section>
 
         <Section
@@ -222,6 +213,13 @@ export default function ResourcesPage() {
           title="Support groups"
           intro="Peer support is free in most cases and does not require a diagnosis or a referral. Many of these groups meet online."
           resources={SUPPORT_GROUPS}
+        />
+
+        <Section
+          icon={MessagesSquare}
+          title="Moderated online communities"
+          intro="Places to talk or vent with peers when you want conversation rather than a tool. Check each community’s rules, age limits, and moderators before posting, and avoid sharing identifying details."
+          resources={ONLINE_COMMUNITIES}
         />
 
         <Section

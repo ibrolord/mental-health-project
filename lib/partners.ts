@@ -1,65 +1,36 @@
 import { supabase } from '@/lib/supabase/client';
+import type {
+  CelebrationKind,
+  CelebrationSource,
+  PartnerCelebration,
+  RewardKey,
+} from '@/lib/partner-celebrations';
+import type { PartnerScopes, ScopeKey } from '@/lib/partner-sharing';
+
+export {
+  REWARD_COPY,
+  describeCelebration,
+  type CelebrationKind,
+  type CelebrationSource,
+  type PartnerCelebration,
+  type RewardKey,
+} from '@/lib/partner-celebrations';
+export {
+  DEFAULT_SCOPES,
+  PRIVATE_CONTENT,
+  SCOPE_COPY,
+  type PartnerScopes,
+  type ScopeKey,
+} from '@/lib/partner-sharing';
 
 /**
  * Accountability partners.
  *
  * The invite token is generated in the browser, shown to the owner exactly
- * once as a shareable link, and never persisted in raw form. Only its SHA-256
- * hash reaches the database, so reading the table does not yield anything
- * replayable.
+ * once as a shareable link, and never persisted in raw form. The browser sends
+ * SHA-256(raw token), and a database trigger hashes that verifier again before
+ * storage. Reading the table therefore does not yield an acceptable verifier.
  */
-
-export type PartnerScopes = {
-  share_goals: boolean;
-  share_habits: boolean;
-  share_checkins: boolean;
-  share_mood_trend: boolean;
-};
-
-export const DEFAULT_SCOPES: PartnerScopes = {
-  share_goals: true,
-  share_habits: true,
-  share_checkins: true,
-  share_mood_trend: false,
-};
-
-export type ScopeKey = keyof PartnerScopes;
-
-/**
- * The complete set of things a partner can ever be shown. Journal entries, AI
- * chat, assessment scores and mood notes are absent by design and must not be
- * added here without a corresponding change to the database function and the
- * consent copy.
- */
-export const SCOPE_COPY: Record<
-  ScopeKey,
-  { label: string; description: string }
-> = {
-  share_checkins: {
-    label: 'Check-in consistency',
-    description: 'How many days you checked in this week. Never what you wrote.',
-  },
-  share_goals: {
-    label: 'Goal completion',
-    description: 'How many of your goals you finished. Not their contents.',
-  },
-  share_habits: {
-    label: 'Habit streaks',
-    description: 'How many days you logged habits. Not which habits.',
-  },
-  share_mood_trend: {
-    label: 'Mood trend',
-    description: 'The shape of your week as emoji. Never the notes you attach.',
-  },
-};
-
-/** Things that are never shareable, surfaced in the UI so the promise is explicit. */
-export const NEVER_SHARED = [
-  'Journal entries',
-  'AI chat history',
-  'Assessment scores',
-  'Notes on mood entries',
-] as const;
 
 export type PartnerInvite = {
   id: string;
@@ -79,18 +50,28 @@ export type PartnerLink = {
 } & PartnerScopes;
 
 export type PartnerSnapshot = {
-  owner_id: string;
   window_days: number;
   scopes: {
     goals: boolean;
     habits: boolean;
     checkins: boolean;
-    mood_trend: boolean;
+    streaks: boolean;
+    celebrations: boolean;
+    journal: boolean;
+    assessments: boolean;
+    planner: boolean;
+    focus: boolean;
+    library: boolean;
   };
-  goals?: { completed: number; total: number };
-  habits?: { logged_days: number; tracked: number };
+  goals?: { completed: number };
+  habits?: { due_today: number; completed_today: number };
   checkins?: { days: number };
-  mood_trend?: { day: string; emoji: string }[];
+  streaks?: { best_current: number };
+  journal?: { entries: number };
+  assessments?: { completed: number };
+  planner?: { completed: number };
+  focus?: { sessions: number };
+  library?: { items: number };
 };
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -101,7 +82,7 @@ function toBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** SHA-256 hex digest, matching what the database stores. */
+/** SHA-256 verifier. The database hashes this value again before storage. */
 export async function hashInviteToken(token: string): Promise<string> {
   const data = new TextEncoder().encode(token);
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -148,7 +129,7 @@ export async function createInvite(
       invitee_label: label.trim() || null,
       ...scopes,
     })
-    .select('id, invitee_label, status, expires_at, created_at, share_goals, share_habits, share_checkins, share_mood_trend')
+    .select('id, invitee_label, status, expires_at, created_at, share_goals, share_habits, share_checkins, share_mood_trend, share_streaks, allow_celebrations, share_journal_activity, share_assessment_activity, share_planner_progress, share_focus_progress, share_library_activity')
     .single();
 
   if (error) throw new Error(error.message);
@@ -158,7 +139,7 @@ export async function createInvite(
 export async function listInvites(): Promise<PartnerInvite[]> {
   const { data, error } = await supabase
     .from('partner_invites')
-    .select('id, invitee_label, status, expires_at, created_at, share_goals, share_habits, share_checkins, share_mood_trend')
+    .select('id, invitee_label, status, expires_at, created_at, share_goals, share_habits, share_checkins, share_mood_trend, share_streaks, allow_celebrations, share_journal_activity, share_assessment_activity, share_planner_progress, share_focus_progress, share_library_activity')
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
 
@@ -200,13 +181,15 @@ export async function listSupporting(userId: string): Promise<PartnerLink[]> {
   return (data ?? []) as PartnerLink[];
 }
 
-export async function updateScopes(
+export async function updateScope(
   linkId: string,
-  scopes: PartnerScopes
+  scopeKey: ScopeKey,
+  next: boolean
 ): Promise<void> {
+  const update: Partial<PartnerScopes> = { [scopeKey]: next };
   const { error } = await supabase
     .from('partner_links')
-    .update(scopes)
+    .update(update)
     .eq('id', linkId);
   if (error) throw new Error(error.message);
 }
@@ -234,4 +217,42 @@ export async function fetchSnapshot(ownerId: string): Promise<PartnerSnapshot> {
   });
   if (error) throw new Error(error.message);
   return data as PartnerSnapshot;
+}
+
+export async function sendPartnerCelebration(
+  ownerId: string,
+  source: CelebrationSource,
+  kind: CelebrationKind,
+  rewardKey?: RewardKey
+): Promise<string> {
+  const { data, error } = await supabase.rpc('send_partner_celebration', {
+    p_owner_id: ownerId,
+    p_source: source,
+    p_kind: kind,
+    p_reward_key: rewardKey ?? null,
+  });
+  if (error) throw new Error(error.message);
+  return data as string;
+}
+
+export async function listReceivedCelebrations(
+  userId: string
+): Promise<PartnerCelebration[]> {
+  const { data, error } = await supabase
+    .from('partner_celebrations')
+    .select('id, link_id, owner_id, partner_id, kind, source, milestone_count, reward_key, seen_at, created_at')
+    .eq('owner_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as PartnerCelebration[];
+}
+
+export async function markCelebrationSeen(id: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('mark_partner_celebration_seen', {
+    p_celebration_id: id,
+  });
+  if (error) throw new Error(error.message);
+  return data as boolean;
 }

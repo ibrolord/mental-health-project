@@ -1,61 +1,121 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MoodEmoji } from '@/lib/supabase/types';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { format, subDays, startOfDay } from 'date-fns';
 import { saveCheckInWithAttribution } from '@/lib/acquisition';
-import { getLocalCheckInFields } from '@/lib/check-in';
+import {
+  getLatestCheckInForDate,
+  getLocalCheckInFields,
+  getSevenDayHistoryStart,
+} from '@/lib/check-in';
 import { ShareChallengeButton } from '@/components/launch/share-challenge-button';
+import { DismissibleNotice } from '@/components/dismissible-notice';
+import {
+  chooseRandomAffirmation,
+  type AffirmationDisplayRecord,
+} from '@/lib/affirmations';
+import { loadAffirmationCatalog } from '@/lib/affirmations-client';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, sessionId, isAuthenticated } = useAuth();
+  const { user, sessionId, isAuthenticated, loading: authLoading } = useAuth();
   
   const [todayMood, setTodayMood] = useState<MoodEmoji | null>(null);
-  const [weekMoods, setWeekMoods] = useState<any[]>([]);
-  const [affirmation, setAffirmation] = useState<string>('');
+  const [weekMoods, setWeekMoods] = useState<
+    Array<{ emoji: MoodEmoji; created_at: string }>
+  >([]);
+  const [affirmation, setAffirmation] =
+    useState<AffirmationDisplayRecord | null>(null);
   const [savingMood, setSavingMood] = useState(false);
+  const [moodStatus, setMoodStatus] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
+  const moodOwnerKey = queryValue ? `${queryColumn}:${queryValue}` : null;
+  const currentMoodOwnerKeyRef = useRef(moodOwnerKey);
+  const moodLoadRevisionRef = useRef(0);
+  currentMoodOwnerKeyRef.current = moodOwnerKey;
+
   useEffect(() => {
-    if (!queryValue) return;
+    const loadRevision = ++moodLoadRevisionRef.current;
+    const ownerKey = moodOwnerKey;
+    setTodayMood(null);
+    setWeekMoods([]);
+    setSavingMood(false);
+    setMoodStatus(null);
+    if (!queryValue || !ownerKey) return;
 
     const loadData = async () => {
       try {
         const todayStart = startOfDay(new Date()).toISOString();
-        const sevenDaysAgo = subDays(new Date(), 7).toISOString();
+        const sevenDaysAgo = getSevenDayHistoryStart();
 
         const [moodRes, weekRes, affRes] = await Promise.all([
           supabase.from('moods').select('emoji').eq(queryColumn, queryValue).gte('created_at', todayStart).order('created_at', { ascending: false }).limit(1).single(),
-          supabase.from('moods').select('emoji, created_at').eq(queryColumn, queryValue).gte('created_at', sevenDaysAgo).order('created_at', { ascending: true }),
-          supabase.from('affirmations').select('content').limit(1).single()
+          supabase.from('moods').select('emoji, created_at').eq(queryColumn, queryValue).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }),
+          loadAffirmationCatalog(),
         ]);
 
-        if (moodRes.data) setTodayMood(moodRes.data.emoji as MoodEmoji);
-        if (weekRes.data) setWeekMoods(weekRes.data);
-        if (affRes.data) setAffirmation(affRes.data.content);
+        if (
+          currentMoodOwnerKeyRef.current !== ownerKey ||
+          moodLoadRevisionRef.current !== loadRevision
+        ) {
+          return;
+        }
+
+        setTodayMood((moodRes.data?.emoji as MoodEmoji | undefined) ?? null);
+        setWeekMoods(
+          (weekRes.data ?? []).map((entry) => ({
+            emoji: entry.emoji as MoodEmoji,
+            created_at: entry.created_at,
+          }))
+        );
+        if (affRes.records.length > 0) {
+          setAffirmation(chooseRandomAffirmation(affRes.records));
+        }
       } catch (e) {
-        console.error('Dashboard load error:', e);
+        if (
+          currentMoodOwnerKeyRef.current === ownerKey &&
+          moodLoadRevisionRef.current === loadRevision
+        ) {
+          console.error('Dashboard load error:', e);
+        }
       }
     };
 
-    loadData();
-  }, [queryColumn, queryValue]);
+    void loadData();
+  }, [moodOwnerKey, queryColumn, queryValue]);
 
   const saveMood = async (mood: MoodEmoji) => {
-    if (!queryValue || !user?.id || savingMood) return;
+    if (savingMood) return;
+    if (!moodOwnerKey) {
+      setMoodStatus({
+        type: 'error',
+        message: 'Your private profile is not ready. Refresh and try again.',
+      });
+      return;
+    }
+    const ownerKey = moodOwnerKey;
+    const ownerRevision = moodLoadRevisionRef.current;
+    const operationIsCurrent = () =>
+      currentMoodOwnerKeyRef.current === ownerKey &&
+      moodLoadRevisionRef.current === ownerRevision;
     try {
       setSavingMood(true);
+      setMoodStatus(null);
       await saveCheckInWithAttribution({
         emoji: mood,
         ...getLocalCheckInFields(),
       });
+      if (!operationIsCurrent()) return;
       setTodayMood(mood);
       setWeekMoods((current) => [
         ...current.filter(
@@ -65,10 +125,19 @@ export default function DashboardPage() {
         ),
         { emoji: mood, created_at: new Date().toISOString() },
       ]);
+      setMoodStatus({ type: 'success', message: 'Check-in saved.' });
     } catch (e) {
-      console.error('Save mood error:', e);
+      if (operationIsCurrent()) {
+        console.error('Save mood error:', e);
+        setMoodStatus({
+          type: 'error',
+          message: 'Your check-in was not saved. Please try again.',
+        });
+      }
     } finally {
-      setSavingMood(false);
+      if (operationIsCurrent()) {
+        setSavingMood(false);
+      }
     }
   };
 
@@ -80,120 +149,211 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen px-4 py-8 md:px-8 md:py-12">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Welcome back</h1>
-          <p className="text-muted-foreground">Your mental health snapshot</p>
-        </div>
+      <div className="mx-auto max-w-4xl space-y-6">
+        <header>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Today
+          </p>
+          <h1 className="mt-2 font-display text-4xl font-medium leading-[1.05] tracking-[-0.02em] text-foreground md:text-5xl">
+            Welcome back.
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            Check in, notice the pattern, and choose one next step.
+          </p>
+        </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">How are you feeling?</CardTitle>
-              <CardDescription>Track your mood for today</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex justify-between">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <section className="app-panel p-5">
+            <h2 className="font-display text-2xl font-medium text-foreground">
+              How are you feeling?
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Choose what feels closest.
+            </p>
+            <div className="mt-5">
+              <div className="flex justify-between gap-1">
                 {moodEmojis.map((emoji, index) => (
                   <button
                     key={emoji}
+                    type="button"
                     onClick={() => saveMood(emoji)}
-                    disabled={savingMood}
-                    className={`flex flex-col items-center p-2 rounded-lg transition-all ${
-                      todayMood === emoji ? 'bg-secondary ring-2 ring-primary' : 'hover:bg-secondary'
+                    disabled={savingMood || authLoading || !moodOwnerKey}
+                    aria-label={`Feeling ${moodLabels[index]}`}
+                    aria-pressed={todayMood === emoji}
+                    className={`flex min-w-0 flex-1 flex-col items-center rounded-xl p-2 transition-all ${
+                      todayMood === emoji
+                        ? 'bg-secondary ring-2 ring-primary'
+                        : 'hover:bg-secondary'
                     } disabled:cursor-wait disabled:opacity-60`}
                   >
                     <span className="text-2xl">{emoji}</span>
-                    <span className="text-xs text-muted-foreground mt-1">{moodLabels[index]}</span>
+                    <span className="mt-1 text-[0.65rem] text-muted-foreground sm:text-xs">
+                      {moodLabels[index]}
+                    </span>
                   </button>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+              {authLoading ? (
+                <p role="status" className="mt-3 text-sm text-muted-foreground">
+                  Getting your check-in ready…
+                </p>
+              ) : !moodOwnerKey ? (
+                <p role="alert" className="mt-3 text-sm text-destructive">
+                  Your private profile could not be loaded. Refresh and try again.
+                </p>
+              ) : moodStatus ? (
+                <p
+                  role={moodStatus.type === 'error' ? 'alert' : 'status'}
+                  className={`mt-3 text-sm ${
+                    moodStatus.type === 'error'
+                      ? 'text-destructive'
+                      : 'text-primary'
+                  }`}
+                >
+                  {moodStatus.message}
+                </p>
+              ) : null}
+            </div>
+          </section>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">This Week</CardTitle>
-              <CardDescription>Your mood over the last 7 days</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex justify-between items-end h-20">
+          <section className="app-panel p-5">
+            <h2 className="font-display text-2xl font-medium text-foreground">
+              Last 7 days
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your recent check-in rhythm.
+            </p>
+            {weekMoods.length === 0 ? (
+              <div className="mt-5 grid min-h-24 place-items-center rounded-xl border border-dashed border-border bg-secondary/40 px-4 text-center">
+                <p className="max-w-xs text-sm text-muted-foreground">
+                  Your pattern will appear after a few check-ins.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-5 grid grid-cols-7 gap-1.5">
                 {Array.from({ length: 7 }).map((_, i) => {
                   const date = subDays(new Date(), 6 - i);
-                  const dayMood = weekMoods.find(
-                    (m) => format(new Date(m.created_at), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
-                  );
+                  const dayMood = getLatestCheckInForDate(weekMoods, date);
                   return (
-                    <div key={i} className="flex flex-col items-center">
-                      <span className="text-xl">{dayMood?.emoji || '·'}</span>
-                      <span className="text-xs text-muted-foreground mt-1">{format(date, 'EEE')}</span>
+                    <div key={i} className="flex min-w-0 flex-col items-center gap-1.5">
+                      <span
+                        className="grid aspect-square w-full max-w-10 place-items-center rounded-xl border border-border bg-background text-lg"
+                        aria-label={
+                          dayMood
+                            ? `${format(date, 'EEEE')}: ${dayMood.emoji}`
+                            : `${format(date, 'EEEE')}: no check-in`
+                        }
+                      >
+                        {dayMood?.emoji ?? (
+                          <span
+                            className="h-1.5 w-1.5 rounded-full bg-border"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </span>
+                      <span className="text-[0.65rem] text-muted-foreground">
+                        {format(date, 'EEEEE')}
+                      </span>
                     </div>
                   );
                 })}
               </div>
-            </CardContent>
-          </Card>
+            )}
+          </section>
         </div>
 
         {todayMood && (
-          <Card className="overflow-hidden border-[#bfd0c4] bg-[#edf4ea]">
-            <CardContent className="flex flex-col gap-6 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <DismissibleNotice
+            noticeKey="dashboard-seven-day-challenge-v1"
+            dismissLabel="Hide the seven-day check-in card"
+          >
+            <section className="app-panel-quiet flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#a84c34]">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">
                   7-day private check-in
                 </p>
-                <h2 className="mt-2 text-xl font-bold text-[#173d34]">
+                <h2 className="mt-2 font-display text-2xl font-medium text-foreground">
                   {Math.min(challengeDays, 7)} of 7 check-in days
                 </h2>
-                <div className="mt-4 flex gap-2" aria-label={`${Math.min(challengeDays, 7)} of 7 days complete`}>
+                <div
+                  className="mt-4 flex gap-2"
+                  aria-label={`${Math.min(challengeDays, 7)} of 7 days complete`}
+                >
                   {Array.from({ length: 7 }).map((_, index) => (
                     <span
                       key={index}
                       className={`h-2.5 w-8 rounded-full ${
-                        index < challengeDays ? 'bg-[#c65f3d]' : 'bg-[#cbd8ce]'
+                        index < challengeDays ? 'bg-accent' : 'bg-border'
                       }`}
                     />
                   ))}
                 </div>
-                <p className="mt-3 text-sm text-[#587169]">
-                  Keep it light. A missed day does not reset your progress.
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Missed days do not erase progress.
                 </p>
               </div>
               <ShareChallengeButton />
-            </CardContent>
-          </Card>
+            </section>
+          </DismissibleNotice>
         )}
 
         {affirmation && (
-          <Card className="border-brand-sage/40 bg-secondary">
-            <CardContent className="pt-6">
-              <p className="text-center text-lg italic text-foreground">&quot;{affirmation}&quot;</p>
-              <p className="text-center text-sm text-muted-foreground mt-2">Daily Affirmation</p>
-            </CardContent>
-          </Card>
+          <DismissibleNotice
+            noticeKey="dashboard-affirmation-v1"
+            dismissLabel="Hide today's affirmation"
+          >
+            <section className="app-panel-quiet p-6 pr-14 text-center">
+              <p className="font-display text-xl italic text-foreground">
+                &quot;{affirmation.content}&quot;
+              </p>
+              {affirmation.kind === 'quote' && affirmation.attribution_name && (
+                <p className="mt-2 text-sm font-semibold text-foreground">
+                  {affirmation.attribution_name}
+                </p>
+              )}
+              <p className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {affirmation.kind === 'quote'
+                  ? 'Sourced quotation'
+                  : 'Daily affirmation'}
+              </p>
+              {affirmation.kind === 'quote' &&
+                affirmation.source_url &&
+                affirmation.source_title && (
+                  <a
+                    href={affirmation.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-block text-xs font-semibold text-emerald-800 underline underline-offset-4"
+                  >
+                    {affirmation.source_title}
+                  </a>
+                )}
+            </section>
+          </DismissibleNotice>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {[
-                { label: '📊 Track Mood', href: '/tracker' },
-                { label: '💬 AI Chat', href: '/chat' },
-                { label: '📋 Assessments', href: '/assessments' },
-                { label: '🎯 Habits', href: '/habits' },
-                { label: '✅ Goals', href: '/goals' },
-                { label: '📚 Library', href: '/library' },
-              ].map((link) => (
-                <Button key={link.href} variant="outline" className="justify-start" onClick={() => router.push(link.href)}>
-                  {link.label}
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <section className="app-panel p-5">
+          <h2 className="font-display text-2xl font-medium text-foreground">
+            Quick actions
+          </h2>
+          <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+            {[
+              { label: 'Track mood', href: '/tracker' },
+              { label: 'Lock In', href: '/focus' },
+              { label: 'Habits', href: '/habits' },
+              { label: 'Journal', href: '/journal' },
+            ].map((link) => (
+              <Button
+                key={link.href}
+                variant="outline"
+                className="justify-start"
+                onClick={() => router.push(link.href)}
+              >
+                {link.label}
+              </Button>
+            ))}
+          </div>
+        </section>
       </div>
     </main>
   );

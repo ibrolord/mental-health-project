@@ -6,6 +6,8 @@ import { Navigation } from "@/components/navigation";
 import { AppShell } from "@/components/app-shell";
 import { Analytics } from "@vercel/analytics/react";
 import { CampaignCapture } from "@/components/launch/campaign-capture";
+import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
+import { AiConsentProvider } from "@/components/ai-consent-provider";
 
 const sans = DM_Sans({
   subsets: ["latin"],
@@ -45,10 +47,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${sans.variable} ${display.variable} font-sans`}>
+        <ServiceWorkerRegistration />
         <CampaignCapture />
         <AuthProvider>
-          <Navigation />
-          <AppShell>{children}</AppShell>
+          <AiConsentProvider>
+            <Navigation />
+            <AppShell>{children}</AppShell>
+          </AiConsentProvider>
         </AuthProvider>
         <Analytics />
       </body>

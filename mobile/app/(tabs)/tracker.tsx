@@ -30,6 +30,10 @@ export default function TrackerScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [saveStatus, setSaveStatus] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!query) return;
@@ -63,8 +67,16 @@ export default function TrackerScreen() {
   }, [query, filterTag, refreshKey]);
 
   const handleAdd = async () => {
-    if (!newMood || !user?.id || saving) return;
+    if (!newMood || saving) return;
+    if (!user?.id) {
+      setSaveStatus({
+        type: 'error',
+        message: 'Your private profile is not ready. Restart the app and try again.',
+      });
+      return;
+    }
     setSaving(true);
+    setSaveStatus(null);
     try {
       const tags = newTags.split(',').map((t) => t.trim()).filter((t) => t);
       await saveCheckInWithAttribution({
@@ -78,12 +90,17 @@ export default function TrackerScreen() {
       setNewTags('');
       setShowAdd(false);
       setRefreshKey((key) => key + 1);
+      setSaveStatus({ type: 'success', message: 'Mood entry saved.' });
     } catch (error) {
       console.warn('Unable to save check-in:', error);
       Alert.alert(
         'Unable to Save Check-In',
         'Your check-in was not saved. Please try again.'
       );
+      setSaveStatus({
+        type: 'error',
+        message: 'Your mood entry was not saved. Please try again.',
+      });
     } finally {
       setSaving(false);
     }
@@ -98,10 +115,27 @@ export default function TrackerScreen() {
           <Text style={s.title}>Mood Tracker</Text>
           <Text style={s.subtitle}>Your emotional journey over time</Text>
         </View>
-        <TouchableOpacity style={s.addBtn} onPress={() => setShowAdd(!showAdd)}>
+        <TouchableOpacity
+          style={[s.addBtn, !user?.id && s.addBtnDisabled]}
+          onPress={() => setShowAdd(!showAdd)}
+          disabled={!user?.id}
+          accessibilityState={{ disabled: !user?.id }}
+        >
           <Text style={s.addBtnText}>{showAdd ? 'Cancel' : '+ Add'}</Text>
         </TouchableOpacity>
       </View>
+
+      {saveStatus ? (
+        <Text
+          accessibilityRole={saveStatus.type === 'error' ? 'alert' : 'text'}
+          style={[
+            s.saveStatus,
+            saveStatus.type === 'error' && s.saveStatusError,
+          ]}
+        >
+          {saveStatus.message}
+        </Text>
+      ) : null}
 
       {showAdd && (
         <View style={s.card}>
@@ -137,9 +171,12 @@ export default function TrackerScreen() {
             placeholderTextColor={Colors.textSecondary}
           />
           <TouchableOpacity
-            style={[s.saveBtn, (!newMood || saving) && s.saveBtnDisabled]}
+            style={[
+              s.saveBtn,
+              (!newMood || saving || !user?.id) && s.saveBtnDisabled,
+            ]}
             onPress={handleAdd}
-            disabled={!newMood || saving}
+            disabled={!newMood || saving || !user?.id}
           >
             <Text style={s.saveBtnText}>{saving ? 'Saving...' : 'Save Mood'}</Text>
           </TouchableOpacity>
@@ -211,7 +248,10 @@ const s = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '700', color: Colors.text },
   subtitle: { fontSize: 14, color: Colors.textSecondary, marginTop: 4 },
   addBtn: { backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16 },
+  addBtnDisabled: { opacity: 0.5 },
   addBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  saveStatus: { color: Colors.primary, fontSize: 13, marginBottom: 12 },
+  saveStatusError: { color: '#b42318' },
   card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text },
   label: { fontSize: 14, fontWeight: '500', color: Colors.text, marginBottom: 8, marginTop: 16 },

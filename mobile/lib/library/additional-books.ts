@@ -36,7 +36,10 @@ export interface AdditionalBookDraft {
   summary: string;
   centralPremise: string;
   corePremises: AdditionalCorePremise[];
-  practicalTakeaways: AdditionalPracticalTakeaway[];
+  practicalTakeaways: [
+    AdditionalPracticalTakeaway,
+    ...AdditionalPracticalTakeaway[],
+  ];
   reflectionPrompts: string[];
   sources: AdditionalBookSource[];
   medicalCaveat?: string;

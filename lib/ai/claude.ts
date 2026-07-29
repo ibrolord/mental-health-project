@@ -1,4 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { buildContextualPrompt, type UserContext } from './context';
+
+export type { UserContext } from './context';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -26,9 +29,10 @@ If the user mentions:
 - Severe mental health crisis
 
 Respond with empathy AND provide:
-- 988 Suicide & Crisis Lifeline (call or text)
-- Crisis Text Line: Text "HOME" to 741741
-- Encourage speaking with a mental health professional immediately
+- Their local emergency number or nearest emergency department for immediate danger
+- 988 only when they say they are in the United States or Canada
+- A country-specific crisis directory when their location is elsewhere or unknown
+- Encouragement to contact a trusted person who can stay with them
 
 TONE:
 - Warm, non-judgmental, and supportive
@@ -44,90 +48,9 @@ export interface Message {
   content: string;
 }
 
-export interface UserContext {
-  recentMoods?: Array<{ emoji: string; note: string; created_at: string }>;
-  assessments?: Array<{ type: string; score: number; max_score: number; created_at: string }>;
-  goals?: Array<{ content: string; status: string; reflection?: string; date: string }>;
-  habits?: Array<{ name: string; streak_count: number }>;
-}
-
-function buildContextualPrompt(userContext?: UserContext): string {
-  if (!userContext) return BASE_SYSTEM_PROMPT;
-
-  const parts: string[] = [];
-  
-  // Moods
-  if (userContext.recentMoods?.length) {
-    parts.push('Recent Mood Patterns (last 7 days):');
-    userContext.recentMoods.forEach(m => {
-      const date = new Date(m.created_at).toLocaleDateString();
-      parts.push(`- ${date}: ${m.emoji}${m.note ? ' - "' + m.note + '"' : ''}`);
-    });
-  }
-  
-  // Assessments
-  if (userContext.assessments?.length) {
-    parts.push('');
-    parts.push('Assessment Results:');
-    userContext.assessments.forEach(a => {
-      const date = new Date(a.created_at).toLocaleDateString();
-      const percentage = a.max_score > 0 ? Math.round((a.score / a.max_score) * 100) : null;
-      parts.push(`- ${a.type.toUpperCase()} (${date}): Score ${a.score}/${a.max_score}${percentage === null ? '' : ` (${percentage}%)`}`);
-    });
-  }
-  
-  // Goals & Reflections
-  if (userContext.goals?.length) {
-    parts.push('');
-    parts.push('Recent Goals & Reflections:');
-    
-    // Group by date
-    const byDate: Record<string, typeof userContext.goals> = {};
-    userContext.goals.forEach(g => {
-      if (!byDate[g.date]) byDate[g.date] = [];
-      byDate[g.date].push(g);
-    });
-    
-    Object.entries(byDate).forEach(([date, goals]) => {
-      parts.push(`  ${date}:`);
-      goals.forEach(g => {
-        parts.push(`    - [${g.status === 'completed' ? '✓' : ' '}] ${g.content}`);
-      });
-      // Find any reflection for this date
-      const reflection = goals.find(g => g.reflection)?.reflection;
-      if (reflection) {
-        parts.push(`    Reflection: "${reflection}"`);
-      }
-    });
-  }
-  
-  // Habits
-  if (userContext.habits?.length) {
-    parts.push('');
-    parts.push('Active Habits:');
-    userContext.habits.forEach(h => {
-      parts.push(`- ${h.name} (streak: ${h.streak_count} days)`);
-    });
-  }
-  
-  if (parts.length === 0) return BASE_SYSTEM_PROMPT;
-  
-  const contextSection = `
-
---- USER CONTEXT (shared with consent) ---
-
-${parts.join('\n')}
-
---- END USER CONTEXT ---
-
-Use this context to provide personalized support. Reference their patterns, progress, reflections, and challenges when appropriate. Be encouraging about positive trends and gently curious about difficult patterns.`;
-  
-  return BASE_SYSTEM_PROMPT + contextSection;
-}
-
 export async function chat(messages: Message[], userContext?: UserContext): Promise<string> {
   try {
-    const systemPrompt = buildContextualPrompt(userContext);
+    const systemPrompt = buildContextualPrompt(BASE_SYSTEM_PROMPT, userContext);
     
     const response = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL?.trim() || DEFAULT_CLAUDE_MODEL,

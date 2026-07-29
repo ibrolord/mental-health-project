@@ -1,26 +1,52 @@
-import { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, StyleSheet, Alert } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Feather } from '@expo/vector-icons';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
-import { useDataContext } from '@/lib/hooks/use-data-context';
-import { Colors } from '@/lib/constants';
+import { formatISO, subDays } from 'date-fns';
+import {
+  AI_CONTEXT_OPTIONS,
+  createEmptyAiContextSelections,
+  createFullAiContextSelections,
+  hasSelectedAiContext,
+  selectUserContext,
+  summarizeUserContext,
+  type AiContextSelectionKey,
+  type AiContextSelections,
+  type UserContext,
+} from '@/lib/ai-context';
+import {
+  ensureAiDataSharingConsent,
+  hasAiDataSharingConsent,
+} from '@/lib/ai-consent';
 import { apiRequest } from '@/lib/api';
+import { Colors } from '@/lib/constants';
+import {
+  hasFullContextPreference,
+  saveFullContextPreference,
+} from '@/lib/full-context-preference';
+import { useDataContext } from '@/lib/hooks/use-data-context';
+import { UNIFIED_LIBRARY } from '@/lib/library/content';
 import { RequestTimeoutError } from '@/lib/request';
-import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
-import { format, subDays } from 'date-fns';
+import { supabase } from '@/lib/supabase';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   responseId?: string;
   reportToken?: string;
-}
-interface UserContext {
-  recentMoods?: { emoji: string; note: string; created_at: string }[];
-  assessments?: { type: string; score: number; max_score: number; created_at: string }[];
-  goals?: { content: string; status: string; reflection?: string; date: string }[];
-  habits?: { name: string; streak_count: number }[];
 }
 
 interface ChatApiResponse {
@@ -29,113 +55,464 @@ interface ChatApiResponse {
   reportToken?: string;
 }
 
-const quickPrompts = ['I feel anxious', 'Help me reframe a negative thought', 'Ground me', 'I need to talk'];
+const CONTEXT_ORDER: AiContextSelectionKey[] = [
+  'moodPattern',
+  'moodNotes',
+  'assessments',
+  'goals',
+  'habits',
+  'journalEntries',
+  'libraryNotes',
+  'lifePlan',
+  'focusSessions',
+];
+const QUICK_PROMPTS = [
+  'I feel anxious',
+  'Help me reframe a negative thought',
+  'I need one small plan',
+  'I need to talk',
+];
+const CONTEXT_STORAGE_PREFIX = 'mhtoolkit.chat_context.v1';
+
+function contextSelectionKey(ownerKey: string): string {
+  return `${CONTEXT_STORAGE_PREFIX}:${encodeURIComponent(ownerKey)}`;
+}
+
+async function readContextSelections(
+  ownerKey: string
+): Promise<AiContextSelections> {
+  try {
+    const raw = await AsyncStorage.getItem(contextSelectionKey(ownerKey));
+    if (!raw) return createEmptyAiContextSelections();
+    const parsed = JSON.parse(raw) as Partial<AiContextSelections>;
+    return Object.fromEntries(
+      CONTEXT_ORDER.map((key) => [key, parsed[key] === true])
+    ) as AiContextSelections;
+  } catch {
+    return createEmptyAiContextSelections();
+  }
+}
+
+async function storeContextSelections(
+  ownerKey: string,
+  selections: AiContextSelections
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      contextSelectionKey(ownerKey),
+      JSON.stringify(selections)
+    );
+  } catch {
+    // Conversation-scoped controls still work when persistence is unavailable.
+  }
+}
 
 export default function ChatScreen() {
   const router = useRouter();
   const { context, query, authLoading } = useDataContext();
+  const ownerKey = query ? `${query.column}:${query.value}` : null;
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('Thinking...');
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [personalized, setPersonalized] = useState(false);
-  const [userContext, setUserContext] = useState<UserContext | null>(null);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>(
+    'idle'
+  );
   const [reportedResponseIds, setReportedResponseIds] = useState<string[]>([]);
+  const [selections, setSelections] = useState<AiContextSelections>(
+    createEmptyAiContextSelections
+  );
+  const [userContext, setUserContext] = useState<UserContext | null>(null);
+  const [contextStatus, setContextStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle');
+  const [contextExpanded, setContextExpanded] = useState(false);
+  const [disclosureOpen, setDisclosureOpen] = useState(false);
+  const [contextError, setContextError] = useState('');
   const scrollRef = useRef<ScrollView>(null);
-  const fetchedRef = useRef(false);
-  const requestInFlightRef = useRef(false);
-  const saveInFlightRef = useRef(false);
+  const requestRef = useRef(false);
+  const saveRef = useRef(false);
+  const ownerRef = useRef(ownerKey);
+  ownerRef.current = ownerKey;
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
-  }, [messages]);
+  }, [loading, messages]);
 
   useEffect(() => {
     if (!loading) {
       setLoadingMessage('Thinking...');
       return;
     }
-
-    const stillWorking = setTimeout(() => setLoadingMessage('Still working...'), 10_000);
-    const takingLonger = setTimeout(
+    const first = setTimeout(
+      () => setLoadingMessage('Still working...'),
+      10_000
+    );
+    const second = setTimeout(
       () => setLoadingMessage('Taking longer than usual...'),
       25_000
     );
-
     return () => {
-      clearTimeout(stillWorking);
-      clearTimeout(takingLonger);
+      clearTimeout(first);
+      clearTimeout(second);
     };
   }, [loading]);
 
   useEffect(() => {
-    if (!personalized) { setUserContext(null); fetchedRef.current = false; return; }
-    if (authLoading || !query || fetchedRef.current) return;
-    fetchedRef.current = true;
-    (async () => {
-      const ago = format(subDays(new Date(), 7), 'yyyy-MM-dd');
-      const [m, a, g, h] = await Promise.all([
-        supabase.from('moods').select('emoji, note, created_at').eq(query.column, query.value).gte('created_at', ago).order('created_at', { ascending: false }).limit(10),
-        supabase.from('assessments').select('type, score, max_score, created_at').eq(query.column, query.value).order('created_at', { ascending: false }).limit(5),
-        supabase.from('goals').select('content, status, reflection, date').eq(query.column, query.value).gte('date', ago).order('date', { ascending: false }),
-        supabase.from('habits').select('name, streak_count').eq(query.column, query.value).eq('is_active', true),
-      ]);
-      const contextError = m.error || a.error || g.error || h.error;
-      if (contextError) {
-        console.error('Failed to load personalized chat context:', contextError);
-        setPersonalized(false);
-        setUserContext(null);
-        return;
-      }
-      setUserContext({ recentMoods: m.data || [], assessments: a.data || [], goals: g.data || [], habits: h.data || [] });
-    })();
-  }, [personalized, authLoading, query]);
+    setMessages([]);
+    setInput('');
+    setLoading(false);
+    setSaveState('idle');
+    setReportedResponseIds([]);
+    setSelections(createEmptyAiContextSelections());
+    setUserContext(null);
+    setContextStatus('idle');
+    setContextExpanded(false);
+    setContextError('');
+    requestRef.current = false;
+    saveRef.current = false;
 
-  const send = async (text: string) => {
-    if (
-      !text.trim() ||
-      loading ||
-      requestInFlightRef.current ||
-      saveInFlightRef.current
-    ) return;
+    if (!ownerKey || authLoading) return;
+    let active = true;
+    void Promise.all([
+      readContextSelections(ownerKey),
+      hasFullContextPreference(ownerKey),
+      hasAiDataSharingConsent(),
+    ]).then(([saved, full, consented]) => {
+      if (!active || ownerRef.current !== ownerKey || !consented) return;
+      setSelections(full ? createFullAiContextSelections() : saved);
+    });
+    return () => {
+      active = false;
+    };
+  }, [authLoading, ownerKey]);
 
-    requestInFlightRef.current = true;
-    try {
-      const consented = await ensureAiDataSharingConsent();
-      if (!consented) return;
+  useEffect(() => {
+    if (authLoading || !query || !ownerKey || !hasSelectedAiContext(selections)) {
+      setUserContext(null);
+      setContextStatus('idle');
+      setContextError('');
+      return;
+    }
 
-      const newMsg: Message = { role: 'user', content: text };
-      const msgs = [...messages, newMsg];
-      setMessages(msgs);
-      setInput('');
-      setSaveState('idle');
-      setLoading(true);
+    let active = true;
+    const expectedOwner = ownerKey;
+    setUserContext(null);
+    setContextStatus('loading');
+    setContextError('');
+    const since = formatISO(subDays(new Date(), 7));
+
+    const load = async () => {
       try {
-        const d = await apiRequest<ChatApiResponse>('/api/chat', {
-          messages: msgs.map(({ role, content }) => ({ role, content })),
-          userContext: personalized ? userContext : undefined,
-        });
-        if (typeof d.response !== 'string' || !d.response.trim()) {
-          throw new Error('AI response was empty');
+        const loaded: UserContext = {};
+        const requests: Promise<void>[] = [];
+
+        if (selections.moodPattern) {
+          requests.push(
+            (async () => {
+              const result = await supabase
+                .from('moods')
+                .select('emoji, created_at')
+                .eq(query.column, query.value)
+                .gte('created_at', since)
+                .order('created_at', { ascending: false })
+                .limit(14);
+              if (result.error) throw result.error;
+              loaded.recentMoods = result.data ?? [];
+            })()
+          );
+        }
+        if (selections.moodNotes) {
+          requests.push(
+            (async () => {
+              const result = await supabase
+                .from('moods')
+                .select('emoji, note, created_at')
+                .eq(query.column, query.value)
+                .gte('created_at', since)
+                .not('note', 'is', null)
+                .neq('note', '')
+                .order('created_at', { ascending: false })
+                .limit(7);
+              if (result.error) throw result.error;
+              loaded.moodNotes = (result.data ?? [])
+                .filter(
+                  (
+                    row
+                  ): row is {
+                    emoji: string;
+                    note: string;
+                    created_at: string;
+                  } => typeof row.note === 'string' && row.note.trim().length > 0
+                )
+                .map((row) => ({
+                  ...row,
+                  note: row.note.trim().slice(0, 1_000),
+                }));
+            })()
+          );
+        }
+        if (selections.assessments) {
+          requests.push(
+            (async () => {
+              const result = await supabase
+                .from('assessments')
+                .select('type, score, max_score, created_at')
+                .eq(query.column, query.value)
+                .gte('created_at', since)
+                .order('created_at', { ascending: false })
+                .limit(5);
+              if (result.error) throw result.error;
+              loaded.assessments = result.data ?? [];
+            })()
+          );
+        }
+        if (selections.goals) {
+          requests.push(
+            (async () => {
+              const result = await supabase
+                .from('goals')
+                .select('content, status, reflection, date')
+                .eq(query.column, query.value)
+                .gte('date', since.slice(0, 10))
+                .order('date', { ascending: false })
+                .limit(10);
+              if (result.error) throw result.error;
+              loaded.goals = (result.data ?? [])
+                .filter(({ content: value }) => value.trim().length > 0)
+                .map((row) => ({
+                  ...row,
+                  content: row.content.trim().slice(0, 700),
+                  reflection: row.reflection?.slice(0, 700) ?? undefined,
+                }));
+            })()
+          );
+        }
+        if (selections.habits) {
+          requests.push(
+            (async () => {
+              const result = await supabase
+                .from('habits')
+                .select('name, streak_count')
+                .eq(query.column, query.value)
+                .eq('is_active', true)
+                .limit(20);
+              if (result.error) throw result.error;
+              loaded.habits = result.data ?? [];
+            })()
+          );
+        }
+        if (selections.journalEntries) {
+          requests.push(
+            (async () => {
+              const result = await supabase
+                .from('journal_entries')
+                .select('title, content, entry_kind, created_at')
+                .eq('user_id', query.value)
+                .order('created_at', { ascending: false })
+                .limit(3);
+              if (result.error) throw result.error;
+              loaded.journalEntries = (result.data ?? []).map((row) => ({
+                ...row,
+                title: row.title.slice(0, 300),
+                content: row.content.slice(0, 4_000),
+              }));
+            })()
+          );
+        }
+        if (selections.libraryNotes) {
+          requests.push(
+            (async () => {
+              const result = await supabase
+                .from('user_library_items')
+                .select(
+                  'content_id, media_type, custom_notes, updated_at'
+                )
+                .eq('user_id', query.value)
+                .neq('custom_notes', '')
+                .order('updated_at', { ascending: false })
+                .limit(5);
+              if (result.error) throw result.error;
+              loaded.libraryNotes = (result.data ?? []).map((row) => {
+                const item = UNIFIED_LIBRARY_BY_ID[row.content_id];
+                return {
+                  content_id: row.content_id,
+                  title: item?.title ?? 'Library item',
+                  media_type: row.media_type as 'book' | 'video' | 'story',
+                  custom_notes: row.custom_notes.slice(0, 2_000),
+                  updated_at: row.updated_at,
+                };
+              });
+            })()
+          );
+        }
+        if (selections.lifePlan) {
+          requests.push(
+            (async () => {
+              const result = await supabase
+                .from('life_plan_items')
+                .select(
+                  'item_type, horizon, title, reflection, next_step, target_date, status'
+                )
+                .eq('user_id', query.value)
+                .neq('status', 'archived')
+                .order('updated_at', { ascending: false })
+                .limit(10);
+              if (result.error) throw result.error;
+              loaded.lifePlan = (result.data ?? []).map((row) => ({
+                ...row,
+                title: row.title.slice(0, 500),
+                reflection: row.reflection.slice(0, 1_000),
+                next_step: row.next_step.slice(0, 700),
+                target_date: row.target_date ?? undefined,
+              }));
+            })()
+          );
+        }
+        if (selections.focusSessions) {
+          requests.push(
+            (async () => {
+              const result = await supabase
+                .from('focus_sessions')
+                .select(
+                  'task_label, focus_minutes, planned_cycles, completed_cycles, status, completed_at'
+                )
+                .eq('user_id', query.value)
+                .order('created_at', { ascending: false })
+                .limit(10);
+              if (result.error) throw result.error;
+              loaded.focusSessions = (result.data ?? []).map((row) => ({
+                ...row,
+                task_label: row.task_label.slice(0, 500),
+                completed_at: row.completed_at ?? undefined,
+              }));
+            })()
+          );
         }
 
-        setMessages([...msgs, {
-          role: 'assistant',
-          content: d.response.trim(),
-          responseId: d.responseId,
-          reportToken: d.reportToken,
-        }]);
-      } catch (error) {
-        const content = error instanceof RequestTimeoutError
-          ? 'The AI response took too long. Please check your connection and try again.'
-          : 'I could not reach the AI service. Please try again in a moment.';
-        setMessages([...msgs, { role: 'assistant', content }]);
-      } finally {
-        setLoading(false);
+        await Promise.all(requests);
+        if (!active || ownerRef.current !== expectedOwner) return;
+        setUserContext(loaded);
+        setContextStatus('ready');
+      } catch {
+        if (!active || ownerRef.current !== expectedOwner) return;
+        setUserContext(null);
+        setContextStatus('error');
+        setContextError('Selected context could not be loaded.');
       }
+    };
+
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [authLoading, ownerKey, query, selections]);
+
+  const setContextSelection = async (
+    key: AiContextSelectionKey,
+    enabled: boolean
+  ) => {
+    if (!ownerKey) return;
+    if (enabled && !(await ensureAiDataSharingConsent())) return;
+    const next = { ...selections, [key]: enabled };
+    setSelections(next);
+    await Promise.all([
+      storeContextSelections(ownerKey, next),
+      saveFullContextPreference(ownerKey, false),
+    ]);
+  };
+
+  const setFullContext = async (enabled: boolean) => {
+    if (!ownerKey) return;
+    if (enabled && !(await ensureAiDataSharingConsent())) return;
+    const next = enabled
+      ? createFullAiContextSelections()
+      : createEmptyAiContextSelections();
+    setSelections(next);
+    await Promise.all([
+      storeContextSelections(ownerKey, next),
+      saveFullContextPreference(ownerKey, enabled),
+    ]);
+  };
+
+  const send = async (text: string) => {
+    const trimmed = text.trim();
+    if (
+      !trimmed ||
+      loading ||
+      requestRef.current ||
+      saveRef.current ||
+      (hasSelectedAiContext(selections) && contextStatus !== 'ready')
+    ) {
+      return;
+    }
+    if (!(await ensureAiDataSharingConsent())) return;
+    requestRef.current = true;
+    const newMessage: Message = { role: 'user', content: trimmed };
+    const nextMessages = [...messages, newMessage];
+    setMessages(nextMessages);
+    setInput('');
+    setSaveState('idle');
+    setLoading(true);
+    try {
+      const response = await apiRequest<ChatApiResponse>('/api/chat', {
+        messages: nextMessages.map(({ role, content: value }) => ({
+          role,
+          content: value,
+        })),
+        userContext: selectUserContext(userContext, selections),
+      });
+      if (typeof response.response !== 'string' || !response.response.trim()) {
+        throw new Error('AI response was empty');
+      }
+      setMessages([
+        ...nextMessages,
+        {
+          role: 'assistant',
+          content: response.response.trim(),
+          responseId: response.responseId,
+          reportToken: response.reportToken,
+        },
+      ]);
+    } catch (reason) {
+      setMessages([
+        ...nextMessages,
+        {
+          role: 'assistant',
+          content:
+            reason instanceof RequestTimeoutError
+              ? 'The response took too long. Check your connection and try again.'
+              : 'The AI service could not respond. Please try again shortly.',
+        },
+      ]);
     } finally {
-      requestInFlightRef.current = false;
+      requestRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  const save = async () => {
+    if (
+      !context.user_id ||
+      saveRef.current ||
+      requestRef.current ||
+      saveState !== 'idle'
+    ) {
+      return;
+    }
+    saveRef.current = true;
+    setSaveState('saving');
+    try {
+      const { error } = await supabase
+        .from('chat_history')
+        .insert({ ...context, messages, saved: true } as never);
+      if (error) throw error;
+      setSaveState('saved');
+    } catch {
+      setSaveState('idle');
+      Alert.alert('Not saved', 'Try saving this conversation again.');
+    } finally {
+      saveRef.current = false;
     }
   };
 
@@ -151,226 +528,493 @@ export default function ChatScreen() {
         response: message.content,
         reason,
         platform: Platform.OS,
-        appVersion: Constants.expoConfig?.version || 'unknown',
+        appVersion: Constants.expoConfig?.version ?? 'unknown',
       });
-      setReportedResponseIds((current) => [...current, message.responseId!]);
-      Alert.alert('Report Sent', 'Thank you. This response was sent for safety review.');
+      setReportedResponseIds((values) => [...values, message.responseId!]);
     } catch {
-      Alert.alert('Unable to Send Report', 'Please try again or contact support.');
+      Alert.alert('Report not sent', 'Try again or contact support.');
     }
   };
 
   const reportResponse = (message: Message) => {
-    Alert.alert('Report AI Response', 'What is wrong with this response?', [
+    Alert.alert('Report response', 'Choose a reason.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Safety Concern', style: 'destructive', onPress: () => submitReport(message, 'harmful') },
       {
-        text: 'Other Issue',
-        onPress: () => Alert.alert('Report AI Response', 'Choose a reason.', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Incorrect', onPress: () => submitReport(message, 'incorrect') },
-          { text: 'Offensive', onPress: () => submitReport(message, 'offensive') },
-        ]),
+        text: 'Safety concern',
+        style: 'destructive',
+        onPress: () => void submitReport(message, 'harmful'),
+      },
+      {
+        text: 'Incorrect',
+        onPress: () => void submitReport(message, 'incorrect'),
+      },
+      {
+        text: 'Offensive',
+        onPress: () => void submitReport(message, 'offensive'),
       },
     ]);
   };
 
-  const save = async () => {
-    if (!context) {
-      Alert.alert('Unable to Save', 'Your account session is still loading. Please try again.');
-      return;
-    }
-    if (
-      saveState === 'saving' ||
-      saveState === 'saved' ||
-      saveInFlightRef.current ||
-      requestInFlightRef.current
-    ) return;
-
-    saveInFlightRef.current = true;
-    setSaveState('saving');
-    try {
-      const { error } = await supabase
-        .from('chat_history')
-        .insert({ ...context, messages, saved: true } as any);
-      if (error) throw error;
-
-      setSaveState('saved');
-      Alert.alert('Chat Saved', 'This conversation is now in your saved chat history.');
-    } catch (error) {
-      console.error('Failed to save chat:', error);
-      setSaveState('idle');
-      Alert.alert('Unable to Save', 'This chat was not saved. Please try again.');
-    } finally {
-      saveInFlightRef.current = false;
-    }
-  };
-
-  const togglePersonalized = async () => {
-    if (personalized) {
-      setPersonalized(false);
-      fetchedRef.current = false;
-      return;
-    }
-
-    const consented = await ensureAiDataSharingConsent();
-    if (!consented) return;
-    setPersonalized(true);
-    fetchedRef.current = false;
-  };
+  const contextSelected = hasSelectedAiContext(selections);
+  const allContext = CONTEXT_ORDER.every((key) => selections[key]);
+  const contextSummary =
+    contextStatus === 'ready' ? summarizeUserContext(userContext ?? undefined) : [];
+  const sendDisabled =
+    !input.trim() ||
+    loading ||
+    saveState === 'saving' ||
+    (contextSelected && contextStatus !== 'ready');
 
   return (
-    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' && (Platform as any).isPad ? 110 : 90}>
-      {/* Voice Mode Button */}
-      <TouchableOpacity style={s.voiceBar} onPress={() => router.push('/voice')}>
-        <Text style={s.voiceBarText}>🎙️  Switch to Voice Mode</Text>
-      </TouchableOpacity>
-
-      <View style={s.aiDisclosure}>
-        <Text style={s.aiDisclosureTitle}>AI data sharing</Text>
-        <Text style={s.aiDisclosureText}>
-          Chat sends your messages to Google Gemini, Anthropic Claude, or OpenAI through MHtoolkit to generate responses.
-          Personalized Responses also include recent moods, assessments, goals, and habits if you turn it on.
-        </Text>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+    >
+      <View style={styles.topBar}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/voice')}
+          style={styles.topAction}
+        >
+          <Feather name="mic" size={17} color={Colors.primary} />
+          <Text style={styles.topActionText}>Voice</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/ground')}
+          style={styles.topAction}
+        >
+          <Feather name="compass" size={17} color={Colors.primary} />
+          <Text style={styles.topActionText}>Ground me</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/resources')}
+          style={styles.topAction}
+        >
+          <Feather name="life-buoy" size={17} color={Colors.primary} />
+          <Text style={styles.topActionText}>Support</Text>
+        </Pressable>
       </View>
 
-      {/* Personalized Toggle */}
-      <TouchableOpacity style={s.toggleRow} onPress={togglePersonalized}>
-        <View style={[s.toggleTrack, personalized && s.toggleTrackOn]}>
-          <View style={[s.toggleThumb, personalized && s.toggleThumbOn]} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={s.toggleLabel}>Personalized Responses</Text>
-          <Text style={s.toggleSub}>Include recent moods, assessments, goals, and habits in AI requests</Text>
-        </View>
-      </TouchableOpacity>
+      <View style={styles.contextPanel}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: contextExpanded }}
+          onPress={() => setContextExpanded((current) => !current)}
+          style={styles.contextHeader}
+        >
+          <View style={styles.contextTitleRow}>
+            <Feather name="lock" size={16} color={Colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.contextTitle}>Context for this chat</Text>
+              <Text style={styles.contextStatus}>
+                {contextStatus === 'loading'
+                  ? 'Loading selected context'
+                  : contextStatus === 'error'
+                    ? contextError
+                    : contextSummary.length > 0
+                      ? contextSummary.join(' · ')
+                      : 'Off by default'}
+              </Text>
+            </View>
+          </View>
+          <Feather
+            name={contextExpanded ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={Colors.primary}
+          />
+        </Pressable>
 
-      {/* Messages */}
-      <ScrollView ref={scrollRef} style={s.messagesContainer} contentContainerStyle={s.messagesContent}>
+        {contextExpanded ? (
+          <ScrollView
+            style={styles.contextOptions}
+            contentContainerStyle={{ paddingBottom: 4 }}
+            nestedScrollEnabled
+          >
+            <View style={styles.fullContextRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.contextOptionTitle}>
+                  Use all my app context
+                </Text>
+                <Text style={styles.contextOptionDescription}>
+                  You can still turn individual items off.
+                </Text>
+              </View>
+              <Switch
+                value={allContext}
+                onValueChange={(next) => void setFullContext(next)}
+                trackColor={{ false: Colors.border, true: Colors.sage }}
+                thumbColor="#fffef8"
+              />
+            </View>
+            {CONTEXT_ORDER.map((key) => {
+              const option = AI_CONTEXT_OPTIONS[key];
+              return (
+                <View key={key} style={styles.contextOption}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.contextOptionTitle}>
+                      {option.label}
+                    </Text>
+                    <Text style={styles.contextOptionDescription}>
+                      {option.description}
+                    </Text>
+                  </View>
+                  <Switch
+                    accessibilityLabel={`Include ${option.label}`}
+                    value={selections[key]}
+                    onValueChange={(next) =>
+                      void setContextSelection(key, next)
+                    }
+                    trackColor={{ false: Colors.border, true: Colors.sage }}
+                    thumbColor="#fffef8"
+                  />
+                </View>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: disclosureOpen }}
+        onPress={() => setDisclosureOpen((current) => !current)}
+        style={styles.disclosure}
+      >
+        <Text style={styles.disclosureText}>
+          AI can make mistakes. You choose what context it receives.
+        </Text>
+        <Feather
+          name={disclosureOpen ? 'x' : 'info'}
+          size={16}
+          color={Colors.textSecondary}
+        />
+      </Pressable>
+      {disclosureOpen ? (
+        <Text style={styles.disclosureDetail}>
+          Messages and selected context are processed by an AI provider through
+          MHtoolkit. Do not use chat for emergencies or medical decisions.
+        </Text>
+      ) : null}
+
+      <ScrollView
+        ref={scrollRef}
+        style={styles.messages}
+        contentContainerStyle={styles.messagesContent}
+        keyboardShouldPersistTaps="handled"
+      >
         {messages.length === 0 ? (
-          <View style={s.emptyState}>
-            <Text style={s.emptyTitle}>How can I help?</Text>
-            <Text style={s.emptySubtitle}>{"I'm here to listen."}</Text>
-            <View style={s.promptsGrid}>
-              {quickPrompts.map((p) => (
-                <TouchableOpacity key={p} style={s.promptBtn} onPress={() => send(p)}>
-                  <Text style={s.promptText}>{p}</Text>
-                </TouchableOpacity>
+          <View style={styles.empty}>
+            <View style={styles.aiMark}>
+              <Feather name="message-circle" size={23} color={Colors.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>What is on your mind?</Text>
+            <Text style={styles.emptyText}>
+              Talk it through or ask for one practical next step.
+            </Text>
+            <View style={styles.prompts}>
+              {QUICK_PROMPTS.map((prompt) => (
+                <Pressable
+                  key={prompt}
+                  accessibilityRole="button"
+                  disabled={contextSelected && contextStatus !== 'ready'}
+                  onPress={() => void send(prompt)}
+                  style={styles.prompt}
+                >
+                  <Text style={styles.promptText}>{prompt}</Text>
+                </Pressable>
               ))}
             </View>
           </View>
         ) : (
-          messages.map((msg, i) => (
-            <View key={i} style={[s.msgRow, msg.role === 'user' && s.msgRowUser]}>
-              <View style={[s.msgBubble, msg.role === 'user' ? s.msgBubbleUser : s.msgBubbleAssistant]}>
-                <Text style={[s.msgText, msg.role === 'user' && { color: '#fff' }]}>{msg.content}</Text>
-              </View>
-              {msg.role === 'assistant' && msg.responseId && msg.reportToken && (
-                <TouchableOpacity
-                  style={s.reportBtn}
-                  onPress={() => reportResponse(msg)}
-                  disabled={reportedResponseIds.includes(msg.responseId)}
+          messages.map((message, index) => (
+            <View
+              key={`${message.role}:${index}`}
+              style={[
+                styles.messageRow,
+                message.role === 'user' && styles.userRow,
+              ]}
+            >
+              <View
+                style={[
+                  styles.bubble,
+                  message.role === 'user'
+                    ? styles.userBubble
+                    : styles.assistantBubble,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.messageText,
+                    message.role === 'user' && { color: '#fffef8' },
+                  ]}
                 >
-                  <Text style={s.reportBtnText}>
-                    {reportedResponseIds.includes(msg.responseId) ? 'Reported' : 'Report response'}
+                  {message.content}
+                </Text>
+              </View>
+              {message.role === 'assistant' &&
+              message.responseId &&
+              message.reportToken ? (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={reportedResponseIds.includes(message.responseId)}
+                  onPress={() => reportResponse(message)}
+                  style={styles.report}
+                >
+                  <Text style={styles.reportText}>
+                    {reportedResponseIds.includes(message.responseId)
+                      ? 'Reported'
+                      : 'Report response'}
                   </Text>
-                </TouchableOpacity>
-              )}
+                </Pressable>
+              ) : null}
             </View>
           ))
         )}
-        {loading && (
-          <View style={s.msgRow}>
-            <View style={s.msgBubbleAssistant}>
-              <Text style={s.msgText}>{loadingMessage}</Text>
+        {loading ? (
+          <View style={styles.messageRow}>
+            <View style={[styles.bubble, styles.assistantBubble]}>
+              <Text style={styles.messageText}>{loadingMessage}</Text>
             </View>
           </View>
-        )}
+        ) : null}
       </ScrollView>
 
-      {/* Save button */}
-      {messages.length > 0 && (
-        <TouchableOpacity
-          style={[s.saveBtn, (loading || saveState !== 'idle') && s.saveBtnDisabled]}
-          onPress={save}
+      {messages.length > 0 ? (
+        <Pressable
+          accessibilityRole="button"
           disabled={loading || saveState !== 'idle'}
+          onPress={() => void save()}
+          style={styles.saveButton}
         >
-          <Text style={s.saveBtnText}>
-            {loading
-              ? 'Waiting for response...'
-              : saveState === 'saving'
-                ? 'Saving...'
-                : saveState === 'saved'
-                  ? 'Saved'
-                  : 'Save Chat'}
+          <Feather
+            name={saveState === 'saved' ? 'check' : 'save'}
+            size={14}
+            color={Colors.primary}
+          />
+          <Text style={styles.saveText}>
+            {saveState === 'saving'
+              ? 'Saving...'
+              : saveState === 'saved'
+                ? 'Saved'
+                : 'Save chat'}
           </Text>
-        </TouchableOpacity>
-      )}
+        </Pressable>
+      ) : null}
 
-      {/* Input */}
-      <View style={s.inputRow}>
+      <View style={styles.inputRow}>
         <TextInput
-          style={s.input}
-          placeholder="What's on your mind?"
+          style={styles.input}
           value={input}
           onChangeText={setInput}
           multiline
+          maxLength={8_000}
+          placeholder="Message MHtoolkit"
           placeholderTextColor={Colors.textSecondary}
         />
-        <TouchableOpacity
-          style={[s.sendBtn, (!input.trim() || loading) && { opacity: 0.5 }]}
-          onPress={() => send(input)}
-          disabled={!input.trim() || loading || saveState === 'saving'}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Send message"
+          disabled={sendDisabled}
+          onPress={() => void send(input)}
+          style={[styles.sendButton, sendDisabled && { opacity: 0.42 }]}
         >
-          <Text style={s.sendBtnText}>Send</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Disclaimer */}
-      <View style={s.disclaimer}>
-        <Text style={s.disclaimerText}>Not a replacement for therapy. Crisis? Call 988</Text>
+          <Feather name="arrow-up" size={20} color="#fffef8" />
+        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-const s = StyleSheet.create({
+const UNIFIED_LIBRARY_BY_ID = Object.fromEntries(
+  UNIFIED_LIBRARY.map((item) => [item.id, item])
+) as Record<string, { title: string }>;
+
+const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  voiceBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 10, backgroundColor: '#eff6ff', borderBottomWidth: 1, borderBottomColor: Colors.border },
-  voiceBarText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
-  aiDisclosure: { padding: 12, backgroundColor: '#fff7ed', borderBottomWidth: 1, borderBottomColor: '#fed7aa' },
-  aiDisclosureTitle: { fontSize: 13, fontWeight: '700', color: '#9a3412', marginBottom: 4 },
-  aiDisclosureText: { fontSize: 12, color: '#9a3412', lineHeight: 18 },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, backgroundColor: Colors.card, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  toggleTrack: { width: 44, height: 24, borderRadius: 12, backgroundColor: '#d1d5db', justifyContent: 'center', paddingHorizontal: 2 },
-  toggleTrackOn: { backgroundColor: Colors.primary },
-  toggleThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
-  toggleThumbOn: { transform: [{ translateX: 20 }] },
-  toggleLabel: { fontSize: 14, fontWeight: '600', color: Colors.text },
-  toggleSub: { fontSize: 12, color: Colors.textSecondary },
-  messagesContainer: { flex: 1 },
-  messagesContent: { padding: 16, paddingBottom: 8 },
-  emptyState: { alignItems: 'center', paddingTop: 60 },
-  emptyTitle: { fontSize: 24, fontWeight: '600', color: Colors.text, marginBottom: 8 },
-  emptySubtitle: { fontSize: 16, color: Colors.textSecondary, marginBottom: 24 },
-  promptsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 320 },
-  promptBtn: { borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: Colors.card },
-  promptText: { fontSize: 14, color: Colors.text },
-  msgRow: { marginBottom: 12 },
-  msgRowUser: { alignItems: 'flex-end' },
-  msgBubble: { maxWidth: '80%', padding: 14, borderRadius: 16 },
-  msgBubbleUser: { backgroundColor: Colors.primary, borderBottomRightRadius: 4 },
-  msgBubbleAssistant: { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderBottomLeftRadius: 4 },
-  msgText: { fontSize: 15, lineHeight: 22, color: Colors.text },
-  reportBtn: { alignSelf: 'flex-start', marginTop: 5, paddingVertical: 4, paddingHorizontal: 2 },
-  reportBtnText: { fontSize: 12, color: Colors.textSecondary, textDecorationLine: 'underline' },
-  saveBtn: { paddingVertical: 8, paddingHorizontal: 16, alignSelf: 'center' },
-  saveBtnDisabled: { opacity: 0.55 },
-  saveBtnText: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
-  inputRow: { flexDirection: 'row', padding: 12, gap: 10, backgroundColor: Colors.card, borderTopWidth: 1, borderTopColor: Colors.border },
-  input: { flex: 1, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, padding: 12, fontSize: 15, maxHeight: 100, color: Colors.text },
-  sendBtn: { backgroundColor: Colors.primary, borderRadius: 12, paddingHorizontal: 20, justifyContent: 'center' },
-  sendBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  disclaimer: { padding: 8, backgroundColor: '#eff6ff' },
-  disclaimerText: { fontSize: 12, color: Colors.textSecondary, textAlign: 'center', fontWeight: '500' },
+  topBar: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: Colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    paddingHorizontal: 10,
+  },
+  topAction: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    backgroundColor: Colors.primaryLight,
+  },
+  topActionText: { color: Colors.primary, fontSize: 11, fontWeight: '700' },
+  contextPanel: {
+    backgroundColor: Colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  contextHeader: {
+    minHeight: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+  },
+  contextTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  contextTitle: { color: Colors.text, fontSize: 13, fontWeight: '700' },
+  contextStatus: {
+    color: Colors.textSecondary,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  contextOptions: { maxHeight: 330, borderTopWidth: 1, borderTopColor: Colors.border },
+  fullContextRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.primaryLight,
+  },
+  contextOption: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  contextOptionTitle: { color: Colors.text, fontSize: 12, fontWeight: '700' },
+  contextOptionDescription: {
+    color: Colors.textSecondary,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  disclosure: {
+    minHeight: 37,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.accentLight,
+  },
+  disclosureText: { flex: 1, color: Colors.textSecondary, fontSize: 10 },
+  disclosureDetail: {
+    color: Colors.textSecondary,
+    fontSize: 10,
+    lineHeight: 15,
+    backgroundColor: Colors.accentLight,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+  },
+  messages: { flex: 1 },
+  messagesContent: { flexGrow: 1, padding: 15, paddingBottom: 8 },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 35 },
+  aiMark: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primaryLight,
+  },
+  emptyTitle: {
+    color: Colors.text,
+    fontSize: 23,
+    lineHeight: 28,
+    fontWeight: '700',
+    marginTop: 14,
+  },
+  emptyText: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginTop: 5,
+  },
+  prompts: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 20,
+  },
+  prompt: {
+    minHeight: 40,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+    paddingHorizontal: 13,
+    justifyContent: 'center',
+  },
+  promptText: { color: Colors.text, fontSize: 12 },
+  messageRow: { marginBottom: 11, alignItems: 'flex-start' },
+  userRow: { alignItems: 'flex-end' },
+  bubble: { maxWidth: '84%', borderRadius: 16, padding: 13 },
+  userBubble: {
+    backgroundColor: Colors.primary,
+    borderBottomRightRadius: 5,
+  },
+  assistantBubble: {
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderBottomLeftRadius: 5,
+  },
+  messageText: { color: Colors.text, fontSize: 14, lineHeight: 21 },
+  report: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 3 },
+  reportText: {
+    color: Colors.textSecondary,
+    fontSize: 10,
+    textDecorationLine: 'underline',
+  },
+  saveButton: {
+    minHeight: 35,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  saveText: { color: Colors.primary, fontSize: 11, fontWeight: '700' },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 9,
+    backgroundColor: Colors.card,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    padding: 11,
+  },
+  input: {
+    flex: 1,
+    maxHeight: 110,
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 16,
+    backgroundColor: Colors.background,
+    color: Colors.text,
+    fontSize: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+  },
+  sendButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

@@ -1,170 +1,180 @@
-import type { Metadata } from "next";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import {
+  ArrowRight,
+  BookOpenCheck,
+  Bug,
+  LifeBuoy,
+  Mail,
+  ShieldCheck,
+} from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: "Support - MHtoolkit",
+  title: 'Support - MHtoolkit',
   description:
-    "Get help with MHtoolkit. Contact us, report issues, and find answers.",
+    'Contact MHtoolkit support, report an issue, and review common questions.',
 };
+
+const FAQS = [
+  {
+    question: 'Is MHtoolkit medical treatment or a diagnostic service?',
+    answer:
+      'No. MHtoolkit is a self-management and reflection tool. Published screeners retain their original recall periods and scoring, but a score is not a diagnosis and needs clinical context.',
+  },
+  {
+    question: 'Why does a missed habit day not erase my progress?',
+    answer:
+      'Habit formation varies widely between people. MHtoolkit records current and best streaks while keeping total completions, so one missed opportunity does not turn your prior effort into zero.',
+  },
+  {
+    question: 'Do the mind games improve my brain?',
+    answer:
+      'MHtoolkit does not make that claim. The games practice the task in front of you. Research finds small average training effects and limited evidence that gains transfer broadly to everyday life.',
+  },
+  {
+    question: 'Do sounds, tones, or special frequencies improve focus?',
+    answer:
+      'No special frequency is promised. Optional sounds are generated locally and offered for comfort or preference. Evidence for natural sound and performance is mixed.',
+  },
+  {
+    question: 'What appears in a push notification?',
+    answer:
+      'Only generic MHtoolkit reminder text. Habit names, goals, life-plan text, journal entries, moods, assessment results, and AI conversations are not placed on your lock screen.',
+  },
+  {
+    question: 'What can an accountability partner see?',
+    answer:
+      'Only progress categories you explicitly enable, and only as counts or status. Partners can never see journal text, AI chat history, assessment scores, or notes attached to mood entries. These boundaries are enforced by database policies.',
+  },
+  {
+    question: 'Can I use MHtoolkit without a standard account?',
+    answer:
+      'Yes. The app can create an anonymous authenticated session so owner-scoped data and privacy rules still work. Anonymous sessions are not automatically purged.',
+  },
+  {
+    question: 'How do I export or delete my data?',
+    answer:
+      'Open Settings to download a complete export or delete your data. Account deletion removes owner-scoped application records before removing the authentication account.',
+  },
+];
 
 export default function SupportPage() {
   return (
-    <main className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <article className="mx-auto max-w-3xl bg-card rounded-2xl shadow-sm p-8 sm:p-12">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Support</h1>
-        <p className="text-sm text-muted-foreground mb-8">
-          We&apos;re here to help you get the most out of MHtoolkit.
-        </p>
-
-        <p className="text-foreground mb-6 leading-relaxed">
-          MHtoolkit is a free self-reflection tool designed to help you track
-          your mood and notice patterns. If you have questions, feedback, or
-          need assistance, please reach out using the contact details below.
-        </p>
-
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold text-foreground mb-3">
-            Contact Us
-          </h2>
-          <p className="text-foreground leading-relaxed mb-4">
-            For any questions, concerns, or feedback about MHtoolkit, you can
-            contact us directly:
+    <main className="min-h-screen bg-background px-4 py-10 sm:px-6 sm:py-14">
+      <article className="mx-auto max-w-5xl">
+        <header className="max-w-3xl">
+          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <LifeBuoy className="h-3.5 w-3.5" aria-hidden="true" />
+            Support
+          </div>
+          <h1 className="mt-4 font-display text-4xl font-medium leading-[1.05] tracking-[-0.02em] text-foreground md:text-6xl">
+            Answers, evidence, and a real way to reach us.
+          </h1>
+          <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground">
+            Get product help, report a problem, or review why a feature is designed
+            the way it is.
           </p>
-          <ul className="list-disc pl-6 text-foreground space-y-2">
-            <li>
-              <strong>Email:</strong>{" "}
-              <a
-                href="mailto:bolajiag10@gmail.com"
-                className="text-primary hover:underline"
-              >
-                bolajiag10@gmail.com
-              </a>
-            </li>
-            <li>
-              <strong>Response time:</strong> We aim to respond within 48 hours.
-            </li>
-          </ul>
+        </header>
+
+        <section className="mt-8 grid gap-4 md:grid-cols-3">
+          <a
+            href="mailto:bolajiag10@gmail.com"
+            className="app-panel p-5 transition-colors hover:bg-secondary"
+          >
+            <Mail className="h-5 w-5 text-accent" aria-hidden="true" />
+            <h2 className="mt-4 font-display text-xl text-foreground">
+              Contact support
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              bolajiag10@gmail.com
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Target response time: 48 hours
+            </p>
+          </a>
+          <a
+            href="mailto:bolajiag10@gmail.com?subject=MHtoolkit%20bug%20report"
+            className="app-panel p-5 transition-colors hover:bg-secondary"
+          >
+            <Bug className="h-5 w-5 text-accent" aria-hidden="true" />
+            <h2 className="mt-4 font-display text-xl text-foreground">
+              Report a bug
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Include your device, browser or app version, steps, and a screenshot
+              if possible.
+            </p>
+          </a>
+          <Link
+            href="/research"
+            className="app-panel p-5 transition-colors hover:bg-secondary"
+          >
+            <BookOpenCheck className="h-5 w-5 text-accent" aria-hidden="true" />
+            <h2 className="mt-4 font-display text-xl text-foreground">
+              Research guide
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Read the sources, evidence strength, and limits behind each tool.
+            </p>
+          </Link>
         </section>
 
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold text-foreground mb-3">
-            Frequently Asked Questions
+        <section className="mt-10">
+          <h2 className="font-display text-3xl font-medium text-foreground">
+            Frequently asked questions
           </h2>
+          <div className="mt-5 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+            {FAQS.map((faq, index) => (
+              <details key={faq.question} className="group p-5" open={index === 0}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold text-foreground">
+                  {faq.question}
+                  <ArrowRight
+                    className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90"
+                    aria-hidden="true"
+                  />
+                </summary>
+                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+                  {faq.answer}
+                </p>
+              </details>
+            ))}
+          </div>
+        </section>
 
-          <div className="space-y-4">
+        <section className="mt-10 rounded-2xl border border-destructive/20 bg-destructive/5 p-5">
+          <div className="flex items-start gap-3">
+            <ShieldCheck
+              className="mt-0.5 h-5 w-5 shrink-0 text-destructive"
+              aria-hidden="true"
+            />
             <div>
-              <h3 className="font-medium text-foreground">
-                Is MHtoolkit free to use?
-              </h3>
-              <p className="text-foreground mt-1">
-                Yes. MHtoolkit is completely free with no hidden fees or
-                in-app purchases.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-medium text-foreground">
-                Is my data private?
-              </h3>
-              <p className="text-foreground mt-1">
-                Your mood entries, journal notes, and personal data are private.
-                We do not sell your data or share it for advertising. Optional
-                AI features ask for consent before sending chat text, voice
-                audio/transcripts, or personalized context to AI providers. See
-                our{" "}
-                <a href="/privacy" className="text-primary hover:underline">
-                  Privacy Policy
-                </a>{" "}
-                for details.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-medium text-foreground">
-                Can I use MHtoolkit without creating an account?
-              </h3>
-              <p className="text-foreground mt-1">
-                Yes. You can use most features anonymously without providing an
-                email address. Existing account holders can still sign in; new
-                account creation is temporarily unavailable while we upgrade the
-                verification flow.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-medium text-foreground">
-                How do I delete my data or account?
-              </h3>
-              <p className="text-foreground mt-1">
-                Go to Settings in the app and select &quot;Delete All Data&quot;
-                or, if you created an account, &quot;Delete Account&quot; to
-                permanently remove your account and associated data. You can also email us at{" "}
+              <h2 className="font-semibold text-foreground">Urgent support</h2>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                MHtoolkit does not provide crisis care. If you or someone else is
+                in immediate danger, contact local emergency services or go to the
+                nearest emergency department. For urgent emotional support, use an
+                official service for your country or find a verified local option
+                through{' '}
                 <a
-                  href="mailto:bolajiag10@gmail.com"
-                  className="text-primary hover:underline"
+                  href="https://findahelpline.com/"
+                  className="font-medium text-foreground underline"
                 >
-                  bolajiag10@gmail.com
-                </a>{" "}
-                to request data deletion.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-medium text-foreground">
-                Is MHtoolkit a replacement for therapy?
-              </h3>
-              <p className="text-foreground mt-1">
-                No. MHtoolkit is a self-help tool designed to support your
-                mental wellness. It is not a substitute for professional
-                therapy or medical advice. If you are in crisis, please
-                contact your local emergency services or a crisis helpline.
+                  Find A Helpline
+                </a>
+                .
               </p>
             </div>
           </div>
         </section>
 
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold text-foreground mb-3">
-            Report a Bug
-          </h2>
-          <p className="text-foreground leading-relaxed">
-            If you encounter a bug or the app isn&apos;t working as expected,
-            please email us at{" "}
-            <a
-              href="mailto:bolajiag10@gmail.com"
-              className="text-primary hover:underline"
-            >
-              bolajiag10@gmail.com
-            </a>{" "}
-            with a description of the issue, the device you&apos;re using, and
-            any screenshots if possible.
-          </p>
-        </section>
-
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold text-foreground mb-3">
-            Urgent Support
-          </h2>
-          <p className="text-foreground leading-relaxed">
-            MHtoolkit does not provide crisis care. If you or someone else is
-            in immediate danger, contact the emergency services where you are
-            located or go to the nearest emergency department. For urgent
-            emotional support, use an official crisis service published for
-            your country or region, or{" "}
-            <a
-              href="https://findahelpline.com/"
-              className="text-primary hover:underline"
-            >
-              find a verified local helpline
-            </a>
-            .
-          </p>
-        </section>
-
-        <footer className="pt-6 border-t border-gray-200">
-          <p className="text-sm text-muted-foreground">
-            MHtoolkit is developed by Bolaji Agunbiade. Thank you for using
-            the app and for caring about your mental health.
-          </p>
+        <footer className="mt-10 flex flex-wrap gap-x-5 gap-y-2 border-t border-border pt-6 text-sm text-muted-foreground">
+          <Link href="/privacy" className="hover:text-foreground">
+            Privacy policy
+          </Link>
+          <Link href="/research" className="hover:text-foreground">
+            Research and evidence
+          </Link>
+          <span>MHtoolkit is developed by Bolaji Agunbiade.</span>
         </footer>
       </article>
     </main>

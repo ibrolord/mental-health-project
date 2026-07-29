@@ -5,7 +5,7 @@ const AI_CONSENT_KEY = 'mhtoolkit.ai_data_sharing_consent.v1';
 export const PRIVACY_POLICY_URL = 'https://mhtoolkit.vercel.app/privacy';
 
 export const AI_DATA_SHARING_DISCLOSURE =
-  'MHtoolkit AI features send the content you choose to provide to third-party AI providers through the MHtoolkit backend. This can include chat messages, voice recordings/transcripts, and optional recent moods, assessments, goals, or habits when you use personalized features.\n\nRecipients may include Google Gemini, Anthropic Claude, and OpenAI. They process this data to generate chat responses, affirmations, transcription, and spoken responses. We do not sell your data or share it for advertising.\n\nDo you agree to send this data for AI processing?';
+  'MHtoolkit sends the AI content you choose through its backend to Google Gemini, Anthropic Claude, or OpenAI. This can include chat or voice content and any app context you turn on, such as mood notes, assessments, goals, habits, journal entries, library notes, plans, or focus sessions.\n\nThe data is used to generate your response. It is not sold or used for advertising.\n\nDo you agree to this AI processing?';
 
 export async function hasAiDataSharingConsent(): Promise<boolean> {
   try {

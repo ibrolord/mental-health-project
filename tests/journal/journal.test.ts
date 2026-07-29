@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   deriveJournalTitle,
@@ -13,6 +15,15 @@ import {
   JOURNAL_PROMPTS as MOBILE_JOURNAL_PROMPTS,
   prepareJournalDraft as prepareMobileJournalDraft,
 } from '../../mobile/lib/journal';
+
+const webJournalPage = readFileSync(
+  resolve(process.cwd(), 'app/journal/page.tsx'),
+  'utf8'
+);
+const mobileJournalPage = readFileSync(
+  resolve(process.cwd(), 'mobile/app/journal.tsx'),
+  'utf8'
+);
 
 describe('journal helpers', () => {
   it('derives a title from the first meaningful line', () => {
@@ -54,6 +65,7 @@ describe('journal helpers', () => {
       entryKind: 'book_note',
       linkedBookId: ' atomic-habits ',
       linkedBookTitle: ' Atomic Habits ',
+      linkedMediaType: 'book',
       tags: 'habits, Habits, next step',
       isFavorite: true,
     });
@@ -65,6 +77,7 @@ describe('journal helpers', () => {
       entry_kind: 'book_note',
       linked_book_id: 'atomic-habits',
       linked_book_title: 'Atomic Habits',
+      linked_media_type: 'book',
       tags: ['habits', 'next step'],
       is_favorite: true,
     });
@@ -79,6 +92,86 @@ describe('journal helpers', () => {
 
     expect(MOBILE_JOURNAL_LIMITS).toEqual(JOURNAL_LIMITS);
     expect(MOBILE_JOURNAL_PROMPTS).toEqual(JOURNAL_PROMPTS);
-    expect(prepareMobileJournalDraft(draft)).toEqual(prepareJournalDraft(draft));
+    const webPrepared = prepareJournalDraft(draft);
+    expect(webPrepared.linked_media_type).toBeNull();
+    expect(prepareMobileJournalDraft(draft)).toEqual(webPrepared);
+  });
+
+  it('prepares video notes as a distinct library journal entry', () => {
+    const prepared = prepareJournalDraft({
+      ...emptyJournalDraft(),
+      content: 'One idea I want to test',
+      entryKind: 'video_note',
+      linkedBookId: 'video-anxiety-stress-friend',
+      linkedBookTitle: 'How to make stress your friend',
+      linkedMediaType: 'video',
+    });
+
+    expect(prepared.entry_kind).toBe('video_note');
+    expect(prepared.linked_media_type).toBe('video');
+  });
+
+  it('prepares story notes as a distinct library journal entry', () => {
+    const draft = {
+      ...emptyJournalDraft(),
+      content: 'A part of this story that stayed with me',
+      entryKind: 'story_note' as const,
+      linkedBookId: 'story-sangu-delle-mental-health',
+      linkedBookTitle: "There's no shame in taking care of your mental health",
+      linkedMediaType: 'story' as const,
+    };
+
+    const prepared = prepareJournalDraft(draft);
+    expect(prepared.entry_kind).toBe('story_note');
+    expect(prepared.linked_media_type).toBe('story');
+    expect(prepareMobileJournalDraft(draft)).toEqual(prepared);
+  });
+
+  it('rejects library notes without a stable item id or with a mismatched source type', () => {
+    expect(
+      validateJournalDraft({
+        ...emptyJournalDraft(),
+        content: 'A useful reflection',
+        entryKind: 'story_note',
+        linkedMediaType: 'story',
+      })
+    ).toContain('Choose a library item before saving this note.');
+
+    expect(
+      validateJournalDraft({
+        ...emptyJournalDraft(),
+        content: 'A useful reflection',
+        entryKind: 'story_note',
+        linkedBookId: 'story-sangu-delle-mental-health',
+        linkedMediaType: 'book',
+      })
+    ).toContain('This library note does not match its source type.');
+  });
+
+  it('clears stale library linkage from non-library entries', () => {
+    const draft = {
+      ...emptyJournalDraft(),
+      content: 'A standalone note',
+      linkedBookId: 'story-sangu-delle-mental-health',
+      linkedBookTitle: 'A story',
+      linkedMediaType: 'story' as const,
+    };
+
+    const prepared = prepareJournalDraft(draft);
+    expect(prepared.linked_book_id).toBeNull();
+    expect(prepared.linked_book_title).toBeNull();
+    expect(prepared.linked_media_type).toBeNull();
+    expect(prepareMobileJournalDraft(draft)).toEqual(prepared);
+  });
+
+  it('does not clear a linked draft when effects repeat for the same owner', () => {
+    for (const source of [webJournalPage, mobileJournalPage]) {
+      expect(source).toContain(
+        'ownerIdentityRef.current?.userId === context.user_id'
+      );
+      expect(source).toContain(
+        'ownerIdentityRef.current = { userId: context.user_id }'
+      );
+    }
   });
 });

@@ -7,7 +7,11 @@ import { getSessionId } from '@/lib/session';
  * Make an authenticated API request from the web client.
  * Attaches Bearer token or X-Session-Id header.
  */
-export async function apiRequest(path: string, body: any): Promise<any> {
+export async function apiRequest(
+  path: string,
+  body: any,
+  options: { signal?: AbortSignal } = {}
+): Promise<any> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -26,6 +30,7 @@ export async function apiRequest(path: string, body: any): Promise<any> {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
+    signal: options.signal,
   });
 
   const result = await res.json().catch(() => ({ error: 'Request failed' }));

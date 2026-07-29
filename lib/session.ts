@@ -4,10 +4,30 @@ import { supabase } from './supabase/client';
 import type { Session } from '@supabase/supabase-js';
 
 const SESSION_KEY = 'anonymous_session_id';
+const AUTH_SESSION_TIMEOUT_MS = 12_000;
 let anonymousSignIn: Promise<Session> | null = null;
 
+async function withSessionTimeout<T>(operation: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error('Session initialization timed out')),
+          AUTH_SESSION_TIMEOUT_MS
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export async function ensureAnonymousSession(): Promise<Session> {
-  const { data: current, error: sessionError } = await supabase.auth.getSession();
+  const { data: current, error: sessionError } = await withSessionTimeout(
+    supabase.auth.getSession()
+  );
   if (sessionError) throw sessionError;
   if (current.session) return current.session;
 
@@ -21,7 +41,7 @@ export async function ensureAnonymousSession(): Promise<Session> {
     });
   }
 
-  return anonymousSignIn;
+  return withSessionTimeout(anonymousSignIn);
 }
 
 /**

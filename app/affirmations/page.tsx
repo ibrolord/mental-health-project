@@ -1,125 +1,180 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase/client';
-import { useDataContext } from '@/lib/hooks/use-data-context';
-import { apiRequest } from '@/lib/api/client';
-import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { subDays } from 'date-fns';
-
-interface Affirmation {
-  id: string;
-  content: string;
-  category: string;
-}
+import { ExternalLink, Quote, RefreshCw, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { DismissibleNotice } from '@/components/dismissible-notice';
+import { useAiConsent } from '@/components/ai-consent-provider';
+import { apiRequest } from '@/lib/api/client';
+import {
+  chooseRandomAffirmation,
+  type AffirmationDisplayRecord,
+} from '@/lib/affirmations';
+import { loadAffirmationCatalog } from '@/lib/affirmations-client';
+import { useDataContext } from '@/lib/hooks/use-data-context';
+import { supabase } from '@/lib/supabase/client';
 
 export default function AffirmationsPage() {
   const { context, query } = useDataContext();
-  const [currentAffirmation, setCurrentAffirmation] = useState<Affirmation | null>(null);
+  const requestAiConsent = useAiConsent();
+  const [currentAffirmation, setCurrentAffirmation] =
+    useState<AffirmationDisplayRecord | null>(null);
   const [viewedCount, setViewedCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-
-  const MAX_DAILY_VIEWS = 3;
+  const [error, setError] = useState('');
+  const loadingRef = useRef(false);
+  const currentAffirmationIdRef = useRef<string | null>(null);
+  const fallbackIdsShownRef = useRef(new Set<string>());
+  const fallbackViewCountRef = useRef(0);
+  const ownerKey = query ? `${query.column}:${query.value}` : null;
+  const currentOwnerKeyRef = useRef(ownerKey);
+  const loadRevisionRef = useRef(0);
+  const generationRevisionRef = useRef(0);
+  currentOwnerKeyRef.current = ownerKey;
 
   useEffect(() => {
-    loadTodaysAffirmation();
-  }, []);
+    loadRevisionRef.current += 1;
+    generationRevisionRef.current += 1;
+    loadingRef.current = false;
+    currentAffirmationIdRef.current = null;
+    fallbackIdsShownRef.current.clear();
+    fallbackViewCountRef.current = 0;
+    setCurrentAffirmation(null);
+    setViewedCount(0);
+    setLoading(false);
+    setGenerating(false);
+    setError('');
+  }, [ownerKey]);
 
-  const loadTodaysAffirmation = async () => {
-    if (!query) return;
+  const loadNewAffirmation = useCallback(async () => {
+    if (!query || !ownerKey || loadingRef.current) return;
+    const requestOwnerKey = ownerKey;
+    const requestQuery = query;
+    const requestContext = context;
+    const requestRevision = ++loadRevisionRef.current;
+    const isCurrentRequest = () =>
+      currentOwnerKeyRef.current === requestOwnerKey &&
+      loadRevisionRef.current === requestRevision;
 
-    try {
-      setLoading(true);
+    loadingRef.current = true;
+    setLoading(true);
+    setError('');
 
-      // Check how many affirmations viewed today
+    const selectAndRecord = async () => {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
-      const { data: history } = await supabase
+      const historyResult = await supabase
         .from('user_affirmation_history')
-        .select('affirmation_id, shown_at')
-        .eq(query.column, query.value)
+        .select('affirmation_id')
+        .eq(requestQuery.column, requestQuery.value)
         .gte('shown_at', todayStart.toISOString());
+      if (!isCurrentRequest()) return;
+      if (historyResult.error) throw historyResult.error;
 
-      if (history && history.length > 0) {
-        setViewedCount(history.length);
-
-        // Load most recent affirmation
-        const lastShown = history[history.length - 1] as { affirmation_id: string; shown_at: string };
-        const { data: affirmation } = await supabase
-          .from('affirmations')
-          .select('*')
-          .eq('id', lastShown.affirmation_id)
-          .single();
-
-        if (affirmation) {
-          setCurrentAffirmation(affirmation);
-        }
-      } else {
-        setViewedCount(0);
-        // Show first affirmation of the day
-        await loadNewAffirmation();
-      }
-    } catch (error) {
-      console.error('Error loading affirmation:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadNewAffirmation = async () => {
-    if (viewedCount >= MAX_DAILY_VIEWS || !query) return;
-
-    try {
-      setLoading(true);
-
-      // Get user's recent mood to tailor affirmation
       const sevenDaysAgo = subDays(new Date(), 7).toISOString();
-      const { data: recentMoods } = await supabase
+      const moodResult = await supabase
         .from('moods')
         .select('emoji')
-        .eq(query.column, query.value)
+        .eq(requestQuery.column, requestQuery.value)
         .gte('created_at', sevenDaysAgo)
         .order('created_at', { ascending: false })
-        .limit(7);
+        .limit(1);
+      if (!isCurrentRequest()) return;
+      if (moodResult.error) throw moodResult.error;
 
-      // Get a random affirmation (optionally filtered by mood)
-      let queryBuilder = supabase.from('affirmations').select('*');
+      const recentMood = moodResult.data?.[0]?.emoji;
+      let affirmationResult = await loadAffirmationCatalog(recentMood);
+      if (!isCurrentRequest()) return;
 
-      if (recentMoods && recentMoods.length > 0) {
-        const avgMood = (recentMoods[0] as { emoji: string }).emoji; // Use most recent mood for simplicity
-        queryBuilder = queryBuilder.contains('mood_tags', [avgMood]);
+      const history = historyResult.data ?? [];
+      const shownIds = new Set([
+        ...history.map((item) => item.affirmation_id),
+        ...fallbackIdsShownRef.current,
+      ]);
+      const moodMatchedSetIsExhausted =
+        recentMood &&
+        affirmationResult.records.length > 0 &&
+        affirmationResult.records.every((item) => shownIds.has(item.id));
+
+      if (
+        recentMood &&
+        (affirmationResult.records.length === 0 ||
+          moodMatchedSetIsExhausted)
+      ) {
+        affirmationResult = await loadAffirmationCatalog();
+        if (!isCurrentRequest()) return;
       }
 
-      const { data: affirmations } = await queryBuilder;
-
-      if (affirmations && affirmations.length > 0) {
-        const randomIndex = Math.floor(Math.random() * affirmations.length);
-        const affirmation = affirmations[randomIndex] as Affirmation;
-
-        setCurrentAffirmation(affirmation);
-
-        // Record that user viewed this affirmation
-        await supabase.from('user_affirmation_history').insert({
-          ...context,
-          affirmation_id: affirmation.id,
-        } as any);
-
-        setViewedCount(viewedCount + 1);
+      const affirmation = chooseRandomAffirmation(affirmationResult.records, {
+        excludeIds: shownIds,
+        currentId: currentAffirmationIdRef.current,
+      });
+      if (!affirmation) {
+        throw new Error('No affirmations are available right now.');
       }
-    } catch (error) {
-      console.error('Error loading new affirmation:', error);
+
+      let persistedViewIncrement = 0;
+      if (affirmation.historyEligible === false) {
+        fallbackIdsShownRef.current.add(affirmation.id);
+        fallbackViewCountRef.current += 1;
+      } else {
+        const insertResult = await supabase
+          .from('user_affirmation_history')
+          .insert({
+            ...requestContext,
+            affirmation_id: affirmation.id,
+          } as any);
+        if (!isCurrentRequest()) return;
+        if (insertResult.error) throw insertResult.error;
+        persistedViewIncrement = 1;
+      }
+
+      if (!isCurrentRequest()) return;
+      currentAffirmationIdRef.current = affirmation.id;
+      setCurrentAffirmation(affirmation);
+      setViewedCount(
+        history.length + fallbackViewCountRef.current + persistedViewIncrement
+      );
+    };
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.locks) {
+        await navigator.locks.request(
+          `mhtoolkit:affirmation:${query.column}:${query.value}`,
+          selectAndRecord
+        );
+      } else {
+        await selectAndRecord();
+      }
+    } catch (loadError) {
+      console.error('Error loading a random affirmation:', loadError);
+      if (isCurrentRequest()) {
+        setError('A new affirmation could not be loaded. Please try again.');
+      }
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) {
+        loadingRef.current = false;
+        setLoading(false);
+      }
     }
-  };
+  }, [context, ownerKey, query]);
+
+  useEffect(() => {
+    void loadNewAffirmation();
+  }, [loadNewAffirmation]);
 
   const generatePersonalizedAffirmation = async () => {
-    if (!query) return;
-    if (!ensureAiDataSharingConsent()) return;
+    if (!query || !ownerKey) return;
+    if (!(await requestAiConsent())) return;
+    const requestOwnerKey = ownerKey;
+    const requestQuery = query;
+    const requestRevision = ++generationRevisionRef.current;
+    const isCurrentRequest = () =>
+      currentOwnerKeyRef.current === requestOwnerKey &&
+      generationRevisionRef.current === requestRevision;
 
     try {
       setGenerating(true);
@@ -128,27 +183,30 @@ export default function AffirmationsPage() {
       const sevenDaysAgo = subDays(new Date(), 7).toISOString();
       const { data: moods } = await supabase
         .from('moods')
-        .select('emoji, note')
-        .eq(query.column, query.value)
+        .select('emoji')
+        .eq(requestQuery.column, requestQuery.value)
         .gte('created_at', sevenDaysAgo)
         .order('created_at', { ascending: false })
         .limit(7);
+      if (!isCurrentRequest()) return;
 
       // Get recent assessments
       const { data: assessments } = await supabase
         .from('assessments')
         .select('type, score, max_score')
-        .eq(query.column, query.value)
+        .eq(requestQuery.column, requestQuery.value)
         .order('created_at', { ascending: false })
         .limit(3);
+      if (!isCurrentRequest()) return;
 
       // Get recent goals
       const { data: goals } = await supabase
         .from('goals')
         .select('content, status')
-        .eq(query.column, query.value)
+        .eq(requestQuery.column, requestQuery.value)
         .order('created_at', { ascending: false })
         .limit(5);
+      if (!isCurrentRequest()) return;
 
       // Call API to generate personalized affirmation
       const data = await apiRequest('/api/affirmations/generate', {
@@ -156,22 +214,28 @@ export default function AffirmationsPage() {
         assessments,
         goals,
       });
+      if (!isCurrentRequest()) return;
 
       if (data.affirmation) {
+        currentAffirmationIdRef.current = 'personalized';
         setCurrentAffirmation({
           id: 'personalized',
           content: data.affirmation,
           category: 'personalized',
+          kind: 'affirmation',
+          attribution_name: null,
+          source_title: null,
+          source_url: null,
         });
       }
     } catch (error) {
       console.error('Error generating personalized affirmation:', error);
     } finally {
-      setGenerating(false);
+      if (isCurrentRequest()) setGenerating(false);
     }
   };
 
-  if (loading) {
+  if (loading && !currentAffirmation) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -180,80 +244,120 @@ export default function AffirmationsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4 flex items-center justify-center">
-      <div className="max-w-2xl w-full">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-foreground mb-2">Daily Affirmations</h1>
-          <p className="text-muted-foreground">
-            You can view {MAX_DAILY_VIEWS} affirmations per day ({viewedCount}/
-            {MAX_DAILY_VIEWS} today)
+    <main className="min-h-screen bg-[#f4f1e8] px-4 py-10 pb-28 md:py-14">
+      <div className="mx-auto w-full max-w-3xl">
+        <header className="mb-7">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-800">
+            A line for today
           </p>
-        </div>
+          <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl text-slate-950 md:text-6xl">
+            Daily words
+          </h1>
+          <p className="mt-3 max-w-2xl leading-7 text-slate-600">
+            Draw a fresh affirmation or a sourced quotation. Keep what fits and
+            leave what does not.
+          </p>
+        </header>
 
-        <Card className="mb-6">
-          <CardContent className="pt-12 pb-12">
-            {currentAffirmation ? (
-              <div className="text-center">
-                <div className="text-6xl mb-6">✨</div>
-                <blockquote className="text-2xl font-medium text-foreground italic mb-6">
-                  "{currentAffirmation.content}"
-                </blockquote>
-                <div className="text-sm text-muted-foreground">
-                  Category: {currentAffirmation.category}
-                </div>
+        <section className="relative overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-[#173f38] px-6 py-10 text-white shadow-[0_24px_70px_rgba(23,63,56,0.18)] md:px-10 md:py-14">
+          <div className="absolute -right-12 -top-16 h-48 w-48 rounded-full bg-amber-300/20 blur-2xl" />
+          {currentAffirmation ? (
+            <div className="relative">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-emerald-200">
+                <Quote className="h-4 w-4" aria-hidden="true" />
+                {currentAffirmation.kind === 'quote'
+                  ? 'Sourced quotation'
+                  : currentAffirmation.id === 'personalized'
+                    ? 'Personalized affirmation'
+                    : 'Daily affirmation'}
               </div>
-            ) : (
-              <div className="text-center text-muted-foreground">
-                <p>No affirmation loaded yet.</p>
+              <blockquote className="mt-6 font-[family-name:var(--font-display)] text-3xl leading-tight md:text-5xl">
+                &ldquo;{currentAffirmation.content}&rdquo;
+              </blockquote>
+              {currentAffirmation.kind === 'quote' &&
+                currentAffirmation.attribution_name && (
+                  <footer className="mt-7 border-t border-white/15 pt-5">
+                    <p className="font-semibold text-amber-100">
+                      {currentAffirmation.attribution_name}
+                    </p>
+                    {currentAffirmation.source_url &&
+                      currentAffirmation.source_title && (
+                        <a
+                          href={currentAffirmation.source_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center gap-1.5 text-sm text-emerald-100 underline decoration-emerald-200/40 underline-offset-4 hover:text-white"
+                        >
+                          {currentAffirmation.source_title}
+                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                        </a>
+                      )}
+                  </footer>
+                )}
+              <div className="mt-7 flex flex-wrap items-center gap-2 text-xs">
+                <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 capitalize">
+                  {currentAffirmation.category.replaceAll('-', ' ')}
+                </span>
+                {viewedCount > 0 && (
+                  <span className="text-emerald-100/80">
+                    {viewedCount} shown today
+                  </span>
+                )}
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          ) : (
+            <p className="relative text-emerald-50/80">No daily words loaded yet.</p>
+          )}
+        </section>
 
-        <div className="space-y-3">
-          <Button
-            className="w-full"
-            size="lg"
-            onClick={loadNewAffirmation}
-            disabled={viewedCount >= MAX_DAILY_VIEWS || loading}
+        {error && (
+          <p
+            role="alert"
+            className="mb-4 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"
           >
-            {viewedCount >= MAX_DAILY_VIEWS
-              ? 'Daily Limit Reached'
-              : 'Show Another Affirmation'}
+            {error}
+          </p>
+        )}
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <Button
+            className="h-12 bg-emerald-950 text-white hover:bg-emerald-900"
+            size="lg"
+            onClick={() => void loadNewAffirmation()}
+            disabled={loading}
+          >
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+              aria-hidden="true"
+            />
+            {loading ? 'Finding another...' : 'Show another'}
           </Button>
 
           <Button
-            className="w-full"
+            className="h-12 border-emerald-950/20 bg-white text-emerald-950 hover:bg-emerald-50"
             size="lg"
             variant="outline"
             onClick={generatePersonalizedAffirmation}
             disabled={generating}
           >
-            {generating ? 'Generating...' : 'Generate AI Affirmation with My Data'}
+            <Sparkles className="mr-2 h-4 w-4" aria-hidden="true" />
+            {generating ? 'Generating...' : 'Personalize with AI'}
           </Button>
         </div>
 
-        <Card className="mt-4 bg-orange-50 border-orange-200">
-          <CardContent className="pt-6">
-            <h3 className="font-semibold mb-2 text-orange-900">AI data sharing</h3>
-            <p className="text-sm text-orange-900">
-              AI affirmations send recent moods, assessment scores, and goals to Google
-              Gemini through MHtoolkit to generate a personalized affirmation. You will be
-              asked for consent before this data is sent.
-            </p>
-          </CardContent>
-        </Card>
+        <DismissibleNotice
+          noticeKey="affirmations-ai-data-v2"
+          title="AI data sharing"
+          className="mt-5 border-amber-200 bg-amber-50"
+        >
+          Personalized affirmations can use recent mood emojis, assessment scores,
+          and goals after you consent. Mood notes are not sent.
+        </DismissibleNotice>
 
-        <Card className="mt-8 bg-secondary border-border">
-          <CardContent className="pt-6">
-            <h3 className="font-semibold mb-2">Why limit affirmations?</h3>
-            <p className="text-sm text-foreground">
-              Affirmations are most effective when given time to resonate. Viewing too many at
-              once can dilute their impact. We limit it to 3 per day to help you focus and
-              reflect on each one.
-            </p>
-          </CardContent>
-        </Card>
+        <aside className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600">
+          A line should feel believable enough to use. Draw another whenever it
+          does not fit.
+        </aside>
       </div>
     </main>
   );

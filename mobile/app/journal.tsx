@@ -24,15 +24,34 @@ import {
 } from '@/lib/journal';
 import { supabase } from '@/lib/supabase';
 
-type JournalFilter = 'all' | 'favorites' | 'book_notes';
+type JournalFilter = 'all' | 'favorites' | 'library_notes';
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? '' : value ?? '';
 }
 
+function libraryEntryLabel(entry: JournalEntry): 'Book' | 'Video' | 'Story' {
+  if (
+    entry.linked_media_type === 'video' ||
+    entry.entry_kind === 'video_note'
+  ) {
+    return 'Video';
+  }
+  if (
+    entry.linked_media_type === 'story' ||
+    entry.entry_kind === 'story_note'
+  ) {
+    return 'Story';
+  }
+  return 'Book';
+}
+
 export default function JournalScreen() {
   const params = useLocalSearchParams<{
     prompt?: string | string[];
+    item?: string | string[];
+    itemTitle?: string | string[];
+    mediaType?: string | string[];
     book?: string | string[];
     bookTitle?: string | string[];
   }>();
@@ -46,18 +65,80 @@ export default function JournalScreen() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<JournalFilter>('all');
   const [error, setError] = useState('');
+  const [loadedOwnerId, setLoadedOwnerId] = useState<string | null>(null);
+  const [draftOwnerId, setDraftOwnerId] = useState<string | null>(null);
+  const [quoteStorySchemaReady, setQuoteStorySchemaReady] = useState<
+    boolean | null
+  >(null);
   const appliedLinkRef = useRef('');
+  const ownerIdentityRef = useRef<{ userId: string | null } | null>(null);
+  const currentOwnerIdRef = useRef(context.user_id);
+  const ownerGenerationRef = useRef(0);
+  currentOwnerIdRef.current = context.user_id;
+  const ownerEntries = useMemo(
+    () =>
+      context.user_id && loadedOwnerId === context.user_id ? entries : [],
+    [context.user_id, entries, loadedOwnerId]
+  );
+  const draftOwnerMatches = Boolean(
+    context.user_id && draftOwnerId === context.user_id
+  );
+  const storyPersistenceUnavailable =
+    draft.entryKind === 'story_note' && quoteStorySchemaReady !== true;
 
   useEffect(() => {
+    let active = true;
+    const detectSchema = async () => {
+      const { error } = await supabase.from('affirmations').select('kind').limit(1);
+      if (active) setQuoteStorySchemaReady(!error);
+    };
+    void detectSchema();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (ownerIdentityRef.current?.userId === context.user_id) return;
+    ownerGenerationRef.current += 1;
+    ownerIdentityRef.current = { userId: context.user_id };
+    setEntries([]);
+    setLoadedOwnerId(null);
+    setDraft(emptyJournalDraft());
+    setDraftOwnerId(null);
+    setEditingId(null);
+    setEditorOpen(Boolean(context.user_id));
+    setSearch('');
+    setFilter('all');
+    setError('');
+    setSaving(false);
+    appliedLinkRef.current = '';
+  }, [context.user_id]);
+
+  useEffect(() => {
+    if (authLoading || !context.user_id) return;
     const prompt = firstParam(params.prompt).slice(0, JOURNAL_LIMITS.prompt);
-    const linkedBookId = firstParam(params.book).slice(0, 120);
-    const linkedBookTitle = firstParam(params.bookTitle).slice(0, 200);
+    const linkedBookId = (
+      firstParam(params.item) || firstParam(params.book)
+    ).slice(0, 120);
+    const linkedBookTitle = (
+      firstParam(params.itemTitle) || firstParam(params.bookTitle)
+    ).slice(0, 200);
+    const requestedMediaType = firstParam(params.mediaType);
+    const linkedMediaType =
+      requestedMediaType === 'video'
+        ? 'video'
+        : requestedMediaType === 'story'
+          ? 'story'
+          : linkedBookId || linkedBookTitle
+            ? 'book'
+            : '';
     if (!prompt && !linkedBookId && !linkedBookTitle) {
       appliedLinkRef.current = '';
       return;
     }
 
-    const linkIdentity = `${linkedBookId}\u0000${linkedBookTitle}\u0000${prompt}`;
+    const linkIdentity = `${linkedMediaType}\u0000${linkedBookId}\u0000${linkedBookTitle}\u0000${prompt}`;
     if (appliedLinkRef.current === linkIdentity) return;
     appliedLinkRef.current = linkIdentity;
 
@@ -65,35 +146,66 @@ export default function JournalScreen() {
       ...emptyJournalDraft(),
       title: linkedBookTitle ? `Notes on ${linkedBookTitle}` : '',
       prompt,
-      entryKind: linkedBookId || linkedBookTitle ? 'book_note' : 'guided',
+      entryKind:
+        linkedMediaType === 'video'
+          ? 'video_note'
+          : linkedMediaType === 'story'
+            ? 'story_note'
+            : linkedBookId || linkedBookTitle
+              ? 'book_note'
+              : 'guided',
       linkedBookId,
       linkedBookTitle,
+      linkedMediaType,
     });
+    setDraftOwnerId(context.user_id);
     setEditorOpen(true);
-  }, [params.book, params.bookTitle, params.prompt]);
+  }, [
+    authLoading,
+    context.user_id,
+    params.book,
+    params.bookTitle,
+    params.item,
+    params.itemTitle,
+    params.mediaType,
+    params.prompt,
+  ]);
 
   useEffect(() => {
     if (authLoading) return;
     if (!context.user_id) {
+      setEntries([]);
+      setLoadedOwnerId(null);
       setLoading(false);
       return;
     }
 
+    const ownerId = context.user_id;
+    const ownerGeneration = ownerGenerationRef.current;
     let active = true;
     const loadEntries = async () => {
       setLoading(true);
+      setLoadedOwnerId(null);
       const { data, error: loadError } = await supabase
         .from('journal_entries')
         .select('*')
-        .eq('user_id', context.user_id)
+        .eq('user_id', ownerId)
         .order('created_at', { ascending: false });
 
-      if (!active) return;
+      if (
+        !active ||
+        currentOwnerIdRef.current !== ownerId ||
+        ownerGenerationRef.current !== ownerGeneration
+      ) {
+        return;
+      }
       if (loadError) {
         setError('Your journal could not be loaded. Please try again.');
       } else {
         setEntries((data ?? []) as JournalEntry[]);
+        setLoadedOwnerId(ownerId);
       }
+      setDraftOwnerId((current) => current ?? ownerId);
       setLoading(false);
     };
 
@@ -105,9 +217,16 @@ export default function JournalScreen() {
 
   const visibleEntries = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    return entries.filter((entry) => {
+    return ownerEntries.filter((entry) => {
       if (filter === 'favorites' && !entry.is_favorite) return false;
-      if (filter === 'book_notes' && entry.entry_kind !== 'book_note') return false;
+      if (
+        filter === 'library_notes' &&
+        entry.entry_kind !== 'book_note' &&
+        entry.entry_kind !== 'video_note' &&
+        entry.entry_kind !== 'story_note'
+      ) {
+        return false;
+      }
       if (!query) return true;
 
       return [
@@ -118,7 +237,7 @@ export default function JournalScreen() {
         ...entry.tags,
       ].some((value) => value.toLocaleLowerCase().includes(query));
     });
-  }, [entries, filter, search]);
+  }, [filter, ownerEntries, search]);
 
   const resetEditor = () => {
     setDraft(emptyJournalDraft());
@@ -132,6 +251,14 @@ export default function JournalScreen() {
       setError('Your private profile is still loading. Please try again.');
       return;
     }
+    if (!draftOwnerMatches) {
+      setError('Your private profile is still loading. Please try again.');
+      return;
+    }
+    if (storyPersistenceUnavailable) {
+      setError('Story notes will be available after the library update finishes.');
+      return;
+    }
 
     const errors = validateJournalDraft(draft);
     if (errors.length > 0) {
@@ -141,6 +268,7 @@ export default function JournalScreen() {
 
     setSaving(true);
     setError('');
+    const ownerGeneration = ownerGenerationRef.current;
     const prepared = prepareJournalDraft(draft);
     const now = new Date().toISOString();
     const result = editingId
@@ -157,6 +285,12 @@ export default function JournalScreen() {
           .select()
           .single();
 
+    if (
+      currentOwnerIdRef.current !== userId ||
+      ownerGenerationRef.current !== ownerGeneration
+    ) {
+      return;
+    }
     setSaving(false);
     if (result.error || !result.data) {
       setError('This entry could not be saved. Your existing entries were not changed.');
@@ -181,15 +315,28 @@ export default function JournalScreen() {
       entryKind: entry.entry_kind,
       linkedBookId: entry.linked_book_id ?? '',
       linkedBookTitle: entry.linked_book_title ?? '',
+      linkedMediaType:
+        entry.linked_media_type ??
+        (entry.entry_kind === 'video_note'
+          ? 'video'
+          : entry.entry_kind === 'story_note'
+            ? 'story'
+          : entry.entry_kind === 'book_note'
+            ? 'book'
+            : ''),
       tags: entry.tags.join(', '),
       isFavorite: entry.is_favorite,
     });
     setEditingId(entry.id);
+    setDraftOwnerId(context.user_id);
     setEditorOpen(true);
     setError('');
   };
 
   const deleteEntry = (entry: JournalEntry) => {
+    const ownerId = context.user_id;
+    const ownerGeneration = ownerGenerationRef.current;
+    if (!ownerId) return;
     Alert.alert(
       'Delete entry?',
       `"${entry.title}" will be permanently deleted.`,
@@ -199,12 +346,23 @@ export default function JournalScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            if (!context.user_id) return;
+            if (
+              currentOwnerIdRef.current !== ownerId ||
+              ownerGenerationRef.current !== ownerGeneration
+            ) {
+              return;
+            }
             const { error: deleteError } = await supabase
               .from('journal_entries')
               .delete()
               .eq('id', entry.id)
-              .eq('user_id', context.user_id);
+              .eq('user_id', ownerId);
+            if (
+              currentOwnerIdRef.current !== ownerId ||
+              ownerGenerationRef.current !== ownerGeneration
+            ) {
+              return;
+            }
             if (deleteError) {
               setError('The entry could not be deleted.');
               return;
@@ -237,8 +395,7 @@ export default function JournalScreen() {
       <View style={s.privacyBox}>
         <Text style={s.privacyIcon}>🔒</Text>
         <Text style={s.privacyText}>
-          Entries stay in your private profile and are not sent to AI chat. Export or delete them
-          from Settings.
+          Private by default. You choose when AI uses your journal.
         </Text>
       </View>
 
@@ -247,6 +404,7 @@ export default function JournalScreen() {
           style={s.primaryButton}
           onPress={() => {
             resetEditor();
+            setDraftOwnerId(context.user_id);
             setEditorOpen(true);
           }}
         >
@@ -254,7 +412,7 @@ export default function JournalScreen() {
         </TouchableOpacity>
       </View>
 
-      {editorOpen && (
+      {editorOpen && draftOwnerMatches && (
         <View style={s.editor}>
           <View style={s.editorHeader}>
             <View style={{ flex: 1 }}>
@@ -328,7 +486,12 @@ export default function JournalScreen() {
                 setDraft((current) => ({
                   ...current,
                   prompt: prompt.prompt,
-                  entryKind: current.entryKind === 'book_note' ? 'book_note' : 'guided',
+                  entryKind:
+                    current.entryKind === 'book_note' ||
+                    current.entryKind === 'video_note' ||
+                    current.entryKind === 'story_note'
+                      ? current.entryKind
+                      : 'guided',
                 }))
               }
             >
@@ -354,11 +517,19 @@ export default function JournalScreen() {
           </TouchableOpacity>
 
           {error ? <Text style={s.errorText}>{error}</Text> : null}
+          {storyPersistenceUnavailable && !error ? (
+            <Text style={s.errorText}>
+              Story notes will be available after the library update finishes.
+            </Text>
+          ) : null}
 
           <TouchableOpacity
-            style={[s.saveButton, saving && { opacity: 0.6 }]}
+            style={[
+              s.saveButton,
+              (saving || storyPersistenceUnavailable) && { opacity: 0.6 },
+            ]}
             onPress={saveEntry}
-            disabled={saving}
+            disabled={saving || storyPersistenceUnavailable}
           >
             <Text style={s.saveButtonText}>
               {saving ? 'Saving...' : editingId ? 'Save changes' : 'Save entry'}
@@ -370,7 +541,7 @@ export default function JournalScreen() {
       <Text style={[s.sectionKicker, { marginTop: 28 }]}>YOUR WRITING</Text>
       <View style={s.entriesHeading}>
         <Text style={s.entriesTitle}>Entries to return to.</Text>
-        <Text style={s.entryCount}>{entries.length}</Text>
+        <Text style={s.entryCount}>{ownerEntries.length}</Text>
       </View>
 
       <View style={s.filterCard}>
@@ -386,7 +557,7 @@ export default function JournalScreen() {
             [
               ['all', 'All'],
               ['favorites', 'Important'],
-              ['book_notes', 'Book notes'],
+              ['library_notes', 'Library notes'],
             ] as const
           ).map(([value, label]) => (
             <TouchableOpacity
@@ -410,10 +581,12 @@ export default function JournalScreen() {
       ) : visibleEntries.length === 0 ? (
         <View style={s.emptyBox}>
           <Text style={s.emptyTitle}>
-            {entries.length === 0 ? 'Your journal is ready.' : 'No entries match this view.'}
+            {ownerEntries.length === 0
+              ? 'Your journal is ready.'
+              : 'No entries match this view.'}
           </Text>
           <Text style={s.emptyText}>
-            {entries.length === 0
+            {ownerEntries.length === 0
               ? 'Start with a few honest lines. A title is optional.'
               : 'Try a different search or filter.'}
           </Text>
@@ -427,7 +600,9 @@ export default function JournalScreen() {
             </View>
             <Text style={s.entryTitle}>{entry.title}</Text>
             {entry.linked_book_title ? (
-              <Text style={s.bookLabel}>📖 {entry.linked_book_title}</Text>
+              <Text style={s.mediaLabel}>
+                {libraryEntryLabel(entry)}: {entry.linked_book_title}
+              </Text>
             ) : null}
             <Text style={s.entryPreview} numberOfLines={5}>
               {entry.content}
@@ -609,7 +784,7 @@ const s = StyleSheet.create({
   entryDate: { color: Colors.textSecondary, fontSize: 11 },
   heart: { color: '#e11d48', fontSize: 16 },
   entryTitle: { color: Colors.text, fontSize: 19, lineHeight: 24, fontWeight: '700', marginTop: 10 },
-  bookLabel: { color: '#287264', fontSize: 12, fontWeight: '600', marginTop: 6 },
+  mediaLabel: { color: '#287264', fontSize: 12, fontWeight: '600', marginTop: 6 },
   entryPreview: { color: Colors.textSecondary, fontSize: 13, lineHeight: 20, marginTop: 9 },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
   tag: {

@@ -40,7 +40,7 @@ export default function SettingsScreen() {
   } = useAuth();
   const { query } = useDataContext();
   const [loading, setLoading] = useState(false);
-  const [remindersOn, setRemindersOn] = useState(true);
+  const [remindersOn, setRemindersOn] = useState(false);
   const [selectedTimes, setSelectedTimes] = useState<number[]>([9, 14, 20]);
   const [aiConsentGranted, setAiConsentGranted] = useState(false);
 
@@ -209,11 +209,12 @@ export default function SettingsScreen() {
         )}
       </View>
 
-      {/* Notifications — hidden on iOS where the native module is excluded */}
-      {Platform.OS !== 'ios' && (
+      {/* Notifications remain Android-only while the incompatible iOS native
+          modules stay excluded from release builds. */}
+      {Platform.OS !== 'ios' ? (
         <View style={s.card}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <Text style={s.cardTitle}>Mood Reminders</Text>
+            <Text style={s.cardTitle}>Local Reminders</Text>
             <Switch
               value={remindersOn}
               onValueChange={toggleReminders}
@@ -221,7 +222,7 @@ export default function SettingsScreen() {
               thumbColor="#fff"
             />
           </View>
-          <Text style={s.bodyText}>Get gentle reminders to check in with your mood throughout the day.</Text>
+          <Text style={s.bodyText}>Optional, private reminders for the steps you plan.</Text>
 
           {remindersOn && (
             <View style={{ marginTop: 14 }}>
@@ -245,6 +246,13 @@ export default function SettingsScreen() {
               </View>
             </View>
           )}
+        </View>
+      ) : (
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Local Reminders</Text>
+          <Text style={s.bodyText}>
+            iPhone reminders are not available in this release. Your habits and plans still work without them.
+          </Text>
         </View>
       )}
 

@@ -15,6 +15,7 @@ import {
 
 let anonymousSignIn: Promise<Session> | null = null;
 const LEGACY_SESSION_KEY = 'anonymous_session_id';
+const AUTH_SESSION_TIMEOUT_MS = 12_000;
 const USER_DATA_TABLES = [
   'moods',
   'assessments',
@@ -24,6 +25,11 @@ const USER_DATA_TABLES = [
   'chat_history',
   'user_affirmation_history',
   'user_book_favorites',
+  'user_library_items',
+  'life_plan_items',
+  'focus_sessions',
+  'wellbeing_reminders',
+  'push_subscriptions',
 ] as const;
 
 async function assertAnonymousAccountIsEmpty(): Promise<void> {
@@ -74,8 +80,27 @@ const AuthContext = createContext<AuthContextType>({
   deleteAccount: async () => {},
 });
 
+async function withSessionTimeout<T>(operation: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error('Session initialization timed out')),
+          AUTH_SESSION_TIMEOUT_MS
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 async function ensureAnonymousSession(): Promise<Session> {
-  const { data: current, error: sessionError } = await supabase.auth.getSession();
+  const { data: current, error: sessionError } = await withSessionTimeout(
+    supabase.auth.getSession()
+  );
   if (sessionError) throw sessionError;
   if (current.session) return current.session;
 
@@ -89,7 +114,7 @@ async function ensureAnonymousSession(): Promise<Session> {
     });
   }
 
-  return anonymousSignIn;
+  return withSessionTimeout(anonymousSignIn);
 }
 
 async function migrateLegacyData(session: Session): Promise<void> {
@@ -114,13 +139,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initAuth = async () => {
       try {
         const session = await ensureAnonymousSession();
-        try {
-          await migrateLegacyData(session);
-        } catch (error) {
+        if (!active) return;
+
+        // The authenticated profile can save immediately; the legacy migration
+        // is a one-time background task and must not hold the app on its loader.
+        setUser(session.user);
+        setLoading(false);
+        void migrateLegacyData(session).catch((error) => {
           // Keep the local key so the atomic migration can be retried next launch.
           console.error('Legacy data migration error:', error);
-        }
-        if (active) setUser(session.user);
+        });
       } catch (error) {
         console.error('Auth initialization error:', error);
       } finally {
@@ -136,19 +164,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!active) return;
       setUser(session?.user ?? null);
 
-      if (!session) {
+      if (session) {
+        setLoading(false);
+      } else {
+        setLoading(true);
         // Avoid calling another auth method from inside the auth callback lock.
         setTimeout(() => {
           void ensureAnonymousSession()
             .then(async (anonymousSession) => {
-              try {
-                await migrateLegacyData(anonymousSession);
-              } catch (error) {
+              if (!active) return;
+              setUser(anonymousSession.user);
+              setLoading(false);
+              void migrateLegacyData(anonymousSession).catch((error) => {
                 console.error('Legacy data migration error:', error);
-              }
-              if (active) setUser(anonymousSession.user);
+              });
             })
-            .catch((error) => console.error('Anonymous sign-in error:', error));
+            .catch((error) => {
+              console.error('Anonymous sign-in error:', error);
+              if (active) setLoading(false);
+            });
         }, 0);
       }
     });

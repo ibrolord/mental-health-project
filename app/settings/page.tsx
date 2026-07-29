@@ -10,10 +10,11 @@ import { useDataContext } from '@/lib/hooks/use-data-context';
 import { apiRequest } from '@/lib/api/client';
 import { hasAiDataSharingConsent, resetAiDataSharingConsent } from '@/lib/ai-consent';
 import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
+import { PushNotificationSettings } from '@/components/push-notification-settings';
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { user, signOut, isAnonymous } = useAuth();
+  const { user, signOut, isAnonymous, loading: authLoading } = useAuth();
   const { query } = useDataContext();
   const [loading, setLoading] = useState(false);
   const [aiConsentGranted, setAiConsentGranted] = useState(false);
@@ -54,8 +55,9 @@ export default function SettingsPage() {
     const confirmed = confirm(
       'Are you sure you want to delete ALL your data? This action cannot be undone.\n\n' +
       'This will permanently delete:\n' +
-      '- Check-ins, assessments, goals, habits, and chat history\n' +
-      '- Affirmation history and book favorites\n' +
+      '- Check-ins, assessments, goals, habits, journal entries, and chat history\n' +
+      '- Life plans, focus sessions, reminders, and push subscriptions\n' +
+      '- Library state, partner links, and affirmation history\n' +
       '- AI response reports and acquisition attribution\n\n' +
       'Type "DELETE" in the next prompt to confirm.'
     );
@@ -156,25 +158,55 @@ export default function SettingsPage() {
             <CardTitle>Account Information</CardTitle>
           </CardHeader>
           <CardContent>
-            {isAnonymous ? (
+            {authLoading ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                Checking your account status…
+              </p>
+            ) : isAnonymous ? (
               <div>
                 <p className="text-foreground mb-4">
-                  You are currently using the app anonymously. New account creation is temporarily unavailable while email verification is upgraded.
+                  You are using MHtoolkit anonymously. Create an account to keep
+                  this profile across devices, or sign in to an existing account.
                 </p>
-                <Button onClick={() => router.push('/auth/login')}>
-                  Sign In to an Existing Account
-                </Button>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  If this anonymous profile already has saved data, MHtoolkit will
+                  stop before switching identities so nothing is silently stranded.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Button onClick={() => router.push('/auth/signup')}>
+                    Create Account
+                  </Button>
+                  <Button
+                    onClick={() => router.push('/auth/login')}
+                    variant="outline"
+                  >
+                    Sign In
+                  </Button>
+                </div>
               </div>
-            ) : (
+            ) : user ? (
               <div>
                 <p className="text-foreground mb-2">
-                  <strong>Email:</strong> {user?.email}
+                  <strong>Email:</strong> {user.email || 'Connected account'}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Your data is synced across devices
                 </p>
                 <Button onClick={signOut} variant="outline" className="mt-4">
                   Sign Out
+                </Button>
+              </div>
+            ) : (
+              <div>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  We could not load your account status. Your saved data has not
+                  been changed.
+                </p>
+                <Button
+                  onClick={() => window.location.reload()}
+                  variant="outline"
+                >
+                  Try Again
                 </Button>
               </div>
             )}
@@ -191,13 +223,19 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
-              This includes all your moods, assessments, goals, habits, and chat history.
+              This includes your private journal, moods, assessments, goals,
+              habits, life plans, focus sessions, reminders, library state, and
+              chat history.
             </p>
             <Button onClick={handleExportData} disabled={loading}>
               {loading ? 'Exporting...' : 'Export Data (JSON)'}
             </Button>
           </CardContent>
         </Card>
+
+        <div className="mb-6">
+          <PushNotificationSettings />
+        </div>
 
         {/* Privacy Policy */}
         <Card className="mb-6">
@@ -230,9 +268,11 @@ export default function SettingsPage() {
               <h3 className="font-semibold mb-2">📊 What We Store</h3>
               <ul className="list-disc list-inside space-y-1">
                 <li>Mood entries and assessment results</li>
-                <li>Goals, habits, and reflections</li>
+                <li>Goals, habits, life plans, focus sessions, and reminders</li>
+                <li>Private journal entries and reflections</li>
                 <li>Chat conversations with AI (stored securely)</li>
-                <li>Affirmation history, book favorites, and AI response reports</li>
+                <li>Affirmation history, library state, and AI response reports</li>
+                <li>Optional browser push subscription details</li>
                 <li>Allowlisted first-touch campaign labels after your first saved check-in</li>
                 <li>Email address (only if you create an account)</li>
               </ul>
@@ -244,7 +284,7 @@ export default function SettingsPage() {
                 <li>Export all your data at any time</li>
                 <li>Delete your data with one click</li>
                 <li>Use the app completely anonymously</li>
-                <li>Sign in to an existing account after exporting or deleting anonymous data</li>
+                <li>Create an account or sign in after MHtoolkit verifies anonymous data will not be stranded</li>
               </ul>
             </div>
 

@@ -1,31 +1,81 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Feather } from '@expo/vector-icons';
 import {
   Alert,
   Linking,
-  ScrollView,
+  Pressable,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  CURATED_LIBRARY,
-  type CuratedBook,
-  type LibraryIntegration,
+  AppButton,
+  AppCard,
+  AppInput,
+  AppScreen,
+  ChoiceChip,
+  EmptyState,
+  PageHeader,
+  SectionHeader,
+  appUiStyles,
+} from '@/components/AppUI';
+import { Colors } from '@/lib/constants';
+import {
+  UNIFIED_LIBRARY,
+  filterLibraryItems,
+  isBookItem,
+  isStoryItem,
+  isVideoItem,
+  type LibraryItem,
+  type LibraryMediaFilter,
+} from '@/lib/library/content';
+import {
   LIBRARY_TOPICS,
+  type LibraryIntegration,
   type LibraryTopic,
 } from '@/lib/library/editorial';
-import { Colors } from '@/lib/constants';
+import {
+  EMPTY_LIBRARY_ITEM_STATE,
+  hasMeaningfulLibraryState,
+  indexLibraryItemStates,
+  nextLibraryState,
+  type LibraryItemState,
+  type LibraryItemStateDraft,
+} from '@/lib/library/user-state';
+import { useDataContext } from '@/lib/hooks/use-data-context';
+import { supabase } from '@/lib/supabase';
 
-function integrationRoute(book: CuratedBook, integration: LibraryIntegration) {
+const MEDIA_FILTERS: {
+  id: LibraryMediaFilter;
+  label: string;
+}[] = [
+  { id: 'all', label: 'All' },
+  { id: 'book', label: 'Books' },
+  { id: 'video', label: 'Talks' },
+  { id: 'story', label: 'Stories' },
+  { id: 'saved', label: 'Saved' },
+  { id: 'next', label: 'Up next' },
+];
+
+function mediaLabel(item: LibraryItem): string {
+  if (isVideoItem(item)) return 'Talk';
+  if (isStoryItem(item)) return 'Story';
+  return 'Book';
+}
+
+function integrationRoute(
+  item: LibraryItem,
+  integration: LibraryIntegration
+) {
   const baseParams = {
     source: 'library',
-    book: book.id,
-    bookTitle: book.title,
+    item: item.id,
+    itemTitle: item.title,
+    book: item.id,
+    bookTitle: item.title,
+    mediaType: item.mediaType,
   };
-
   if (integration.actionType === 'journal') {
     return {
       pathname: '/journal' as const,
@@ -48,353 +98,685 @@ function integrationRoute(book: CuratedBook, integration: LibraryIntegration) {
   };
 }
 
+function SourceLink({ label, url }: { label: string; url: string }) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      onPress={() =>
+        void Linking.openURL(url).catch(() =>
+          Alert.alert('Unable to open link', 'Try again when you are online.')
+        )
+      }
+      style={styles.sourceLink}
+    >
+      <Text style={styles.sourceText}>{label}</Text>
+      <Feather name="external-link" size={15} color={Colors.primary} />
+    </Pressable>
+  );
+}
+
+function DetailSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.detailSection}>
+      <Text style={styles.detailSectionTitle}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
 export default function LibraryScreen() {
   const router = useRouter();
+  const { context, authLoading } = useDataContext();
   const [search, setSearch] = useState('');
-  const [selectedTopic, setSelectedTopic] = useState<LibraryTopic>('All');
-  const [selected, setSelected] = useState<CuratedBook | null>(null);
+  const [topic, setTopic] = useState<LibraryTopic>('All');
+  const [media, setMedia] = useState<LibraryMediaFilter>('all');
+  const [selected, setSelected] = useState<LibraryItem | null>(null);
+  const [itemStates, setItemStates] = useState<
+    Record<string, LibraryItemState>
+  >({});
+  const [noteDraft, setNoteDraft] = useState('');
+  const [loadingState, setLoadingState] = useState(true);
+  const [savingKey, setSavingKey] = useState('');
+  const [error, setError] = useState('');
+  const ownerRef = useRef(context.user_id);
+  ownerRef.current = context.user_id;
 
-  const filteredBooks = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return CURATED_LIBRARY.filter((book) => {
-      if (selectedTopic !== 'All' && book.topic !== selectedTopic) return false;
-      if (!query) return true;
-      return [
-        book.title,
-        book.author,
-        book.summary,
-        book.centralPremise,
-        book.topic,
-        ...book.displayTags,
-        ...book.corePremises.flatMap(({ title, premise }) => [title, premise]),
-        ...book.practicalTakeaways.flatMap(({ title, description }) => [title, description]),
-      ].some((value) => value.toLowerCase().includes(query));
-    });
-  }, [search, selectedTopic]);
+  useEffect(() => {
+    if (authLoading) return;
+    const ownerId = context.user_id;
+    if (!ownerId) {
+      setItemStates({});
+      setLoadingState(false);
+      return;
+    }
+    let active = true;
+    setLoadingState(true);
+    setError('');
+    void supabase
+      .from('user_library_items')
+      .select(
+        'id, user_id, content_id, media_type, is_saved, priority, custom_notes, created_at, updated_at'
+      )
+      .eq('user_id', ownerId)
+      .order('updated_at', { ascending: false })
+      .then(({ data, error: loadError }) => {
+        if (!active || ownerRef.current !== ownerId) return;
+        if (loadError) {
+          setError('Your saved library items could not be loaded.');
+          setItemStates({});
+        } else {
+          setItemStates(indexLibraryItemStates((data ?? []) as LibraryItemState[]));
+        }
+        setLoadingState(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [authLoading, context.user_id]);
+
+  const savedIds = useMemo(
+    () =>
+      new Set(
+        Object.values(itemStates)
+          .filter(({ is_saved }) => is_saved)
+          .map(({ content_id }) => content_id)
+      ),
+    [itemStates]
+  );
+  const nextIds = useMemo(
+    () =>
+      new Set(
+        Object.values(itemStates)
+          .filter(({ priority }) => priority === 'next')
+          .map(({ content_id }) => content_id)
+      ),
+    [itemStates]
+  );
+  const filtered = useMemo(
+    () =>
+      filterLibraryItems(UNIFIED_LIBRARY, {
+        query: search,
+        topic,
+        media,
+        savedIds,
+        nextIds,
+      }),
+    [media, nextIds, savedIds, search, topic]
+  );
+
+  const stateFor = (item: LibraryItem): LibraryItemStateDraft =>
+    itemStates[item.id] ?? {
+      ...EMPTY_LIBRARY_ITEM_STATE,
+      media_type: item.mediaType,
+    };
+
+  const persistState = async (
+    item: LibraryItem,
+    patch: Partial<LibraryItemStateDraft>
+  ) => {
+    const ownerId = context.user_id;
+    if (!ownerId) return;
+    const current = stateFor(item);
+    const next = nextLibraryState(current, item.mediaType, patch);
+    const key = `${item.id}:${Object.keys(patch).join(',')}`;
+    if (savingKey) return;
+    setSavingKey(key);
+    setError('');
+    try {
+      if (!hasMeaningfulLibraryState(next)) {
+        const { error: deleteError } = await supabase
+          .from('user_library_items')
+          .delete()
+          .eq('user_id', ownerId)
+          .eq('content_id', item.id);
+        if (deleteError) throw deleteError;
+        if (ownerRef.current === ownerId) {
+          setItemStates((values) => {
+            const copy = { ...values };
+            delete copy[item.id];
+            return copy;
+          });
+        }
+        return;
+      }
+
+      const { data, error: saveError } = await supabase
+        .from('user_library_items')
+        .upsert(
+          {
+            user_id: ownerId,
+            content_id: item.id,
+            media_type: item.mediaType,
+            is_saved: next.is_saved,
+            priority: next.priority,
+            custom_notes: next.custom_notes,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,content_id' }
+        )
+        .select(
+          'id, user_id, content_id, media_type, is_saved, priority, custom_notes, created_at, updated_at'
+        )
+        .single();
+      if (saveError) throw saveError;
+      if (ownerRef.current === ownerId) {
+        setItemStates((values) => ({
+          ...values,
+          [item.id]: data as LibraryItemState,
+        }));
+      }
+    } catch {
+      setError('That library change was not saved.');
+    } finally {
+      if (ownerRef.current === ownerId) setSavingKey('');
+    }
+  };
+
+  const openItem = (item: LibraryItem) => {
+    setSelected(item);
+    setNoteDraft(itemStates[item.id]?.custom_notes ?? '');
+    setError('');
+  };
 
   if (selected) {
+    const selectedState = stateFor(selected);
+    const selectedIsBook = isBookItem(selected);
+    const selectedIsStory = isStoryItem(selected);
     return (
-      <ScrollView style={s.container} contentContainerStyle={s.content}>
-        <TouchableOpacity onPress={() => setSelected(null)} style={s.backLink}>
-          <Text style={s.backLinkText}>Back to library</Text>
-        </TouchableOpacity>
-
-        <View style={s.detailHeader}>
-          <Text style={s.kicker}>SOURCE-BACKED READING GUIDE</Text>
-          <Text style={s.detailTitle}>{selected.title}</Text>
-          <Text style={s.detailAuthor}>
-            by {selected.author} · {selected.read_time_minutes} min guide
-          </Text>
-          <View style={s.tagsRow}>
-            {selected.displayTags.map((tag) => (
-              <View key={tag} style={s.headerTag}>
-                <Text style={s.headerTagText}>{tag}</Text>
-              </View>
-            ))}
-          </View>
+      <AppScreen>
+        <AppButton
+          label="Back to library"
+          icon="arrow-left"
+          variant="quiet"
+          onPress={() => setSelected(null)}
+          style={{ alignSelf: 'flex-start', marginBottom: 18 }}
+        />
+        <PageHeader
+          eyebrow={`${mediaLabel(selected)} · ${selected.topic}`}
+          title={selected.title}
+          description={`${selected.creator} · ${selected.durationLabel}`}
+          icon={selectedIsBook ? 'book' : selectedIsStory ? 'user' : 'play'}
+        />
+        <View style={styles.actions}>
+          <AppButton
+            label={selectedState.is_saved ? 'Saved' : 'Save'}
+            icon={selectedState.is_saved ? 'bookmark' : 'bookmark'}
+            loading={savingKey.startsWith(`${selected.id}:is_saved`)}
+            variant={selectedState.is_saved ? 'primary' : 'secondary'}
+            onPress={() =>
+              void persistState(selected, {
+                is_saved: !selectedState.is_saved,
+                priority: selectedState.is_saved
+                  ? 'none'
+                  : selectedState.priority,
+              })
+            }
+          />
+          <AppButton
+            label={selectedState.priority === 'next' ? 'Up next' : 'Add next'}
+            icon="list"
+            loading={savingKey.startsWith(`${selected.id}:priority`)}
+            variant={
+              selectedState.priority === 'next' ? 'primary' : 'secondary'
+            }
+            onPress={() =>
+              void persistState(selected, {
+                priority:
+                  selectedState.priority === 'next' ? 'none' : 'next',
+              })
+            }
+          />
+          {!selectedIsBook ? (
+            <AppButton
+              label={isVideoItem(selected) ? 'Watch' : 'Original source'}
+              icon="external-link"
+              variant="secondary"
+              onPress={() =>
+                void Linking.openURL(selected.sourceUrl).catch(() =>
+                  setError('That source could not be opened.')
+                )
+              }
+            />
+          ) : null}
         </View>
 
-        <View style={s.detailBody}>
-          <View style={s.sourceNotice}>
-            <Text style={s.sourceNoticeText}>
-              Premises are paraphrased and linked to author, publisher, research, or
-              clinical-context sources. They are not quotations.
-            </Text>
-          </View>
+        {!selectedIsBook && selected.contentNote ? (
+          <AppCard quiet>
+            <Text style={appUiStyles.muted}>{selected.contentNote}</Text>
+          </AppCard>
+        ) : null}
 
-          <Text style={s.sectionTitle}>A useful orientation</Text>
-          <Text style={s.leadText}>{selected.summary}</Text>
+        <DetailSection title="A useful orientation">
+          <Text style={appUiStyles.body}>{selected.summary}</Text>
+        </DetailSection>
+        <AppCard style={styles.premiseCard}>
+          <Text style={appUiStyles.label}>Central premise</Text>
+          <Text style={styles.premiseText}>{selected.centralPremise}</Text>
+        </AppCard>
 
-          <View style={s.centralPremiseBox}>
-            <Text style={s.centralPremiseLabel}>CENTRAL PREMISE</Text>
-            <Text style={s.centralPremiseText}>{selected.centralPremise}</Text>
-          </View>
-
-          <Text style={s.sectionTitle}>Core premises, unpacked</Text>
-          {selected.corePremises.map((idea, index) => (
-            <View key={idea.title} style={s.ideaCard}>
-              <View style={s.ideaHeader}>
-                <View style={s.takeawayNumber}>
-                  <Text style={s.takeawayNumberText}>{index + 1}</Text>
+        {selectedIsStory ? (
+          <>
+            <DetailSection title="The story">
+              {selected.storySections.map((section) => (
+                <View key={section.heading} style={styles.readingBlock}>
+                  <Text style={styles.blockTitle}>{section.heading}</Text>
+                  <Text style={styles.readingText}>{section.body}</Text>
                 </View>
-                <Text style={s.ideaTitle}>{idea.title}</Text>
-              </View>
-              <Text style={s.ideaPremise}>{idea.premise}</Text>
-              <View style={s.ideaDivider} />
-              <Text style={s.ideaLabel}>WHY IT MATTERS</Text>
-              <Text style={s.ideaDetail}>{idea.whyItMatters}</Text>
-              <Text style={[s.ideaLabel, { marginTop: 12 }]}>TRY IT</Text>
-              <Text style={s.ideaDetail}>{idea.practice}</Text>
-            </View>
-          ))}
+              ))}
+            </DetailSection>
+            <DetailSection title="Timeline">
+              {selected.timeline.map((milestone) => (
+                <View
+                  key={`${milestone.period}:${milestone.title}`}
+                  style={styles.timelineRow}
+                >
+                  <Text style={styles.timelinePeriod}>{milestone.period}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.blockTitle}>{milestone.title}</Text>
+                    <Text style={appUiStyles.muted}>
+                      {milestone.description}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </DetailSection>
+          </>
+        ) : null}
 
-          <Text style={s.sectionTitle}>Takeaways you can use</Text>
-          {selected.practicalTakeaways.map((takeaway) => (
-            <View key={takeaway.title} style={s.takeawayCard}>
-              <Text style={s.takeawayTitle}>{takeaway.title}</Text>
-              <Text style={s.takeawayDescription}>{takeaway.description}</Text>
-              <Text style={s.takeawayNext}>{takeaway.nextStep}</Text>
-            </View>
-          ))}
-
-          <Text style={s.sectionTitle}>Use it in MHtoolkit</Text>
-          <Text style={s.integrationIntro}>
-            Each action opens a prefilled draft. Nothing is saved until you choose to save it.
-          </Text>
-          {selected.integrations.map((integration) => (
-            <TouchableOpacity
-              key={integration.title}
-              style={[
-                s.integrationCard,
-                integration.actionType === 'journal'
-                  ? s.integrationJournal
-                  : integration.actionType === 'goal'
-                    ? s.integrationGoal
-                    : s.integrationHabit,
-              ]}
-              onPress={() => router.push(integrationRoute(selected, integration))}
-            >
-              <Text style={s.integrationType}>{integration.actionType.toUpperCase()}</Text>
-              <Text style={s.integrationTitle}>{integration.title}</Text>
-              <Text style={s.integrationText}>{integration.description}</Text>
-              <Text style={s.integrationAction}>{integration.actionLabel} →</Text>
-            </TouchableOpacity>
-          ))}
-
-          <View style={s.reflectionBox}>
-            <Text style={s.reflectionTitle}>Questions to carry forward</Text>
-            {selected.reflectionPrompts.map((prompt, index) => (
-              <View key={prompt} style={s.reflectionRow}>
-                <Text style={s.reflectionNumber}>{index + 1}.</Text>
-                <Text style={s.reflectionText}>{prompt}</Text>
-              </View>
+        {selectedIsBook ? (
+          <DetailSection title="Core premises">
+            {selected.corePremises.map((idea, index) => (
+              <AppCard key={idea.title}>
+                <Text style={appUiStyles.label}>Idea {index + 1}</Text>
+                <Text style={styles.blockTitle}>{idea.title}</Text>
+                <Text style={styles.readingText}>{idea.premise}</Text>
+                <Text style={[appUiStyles.label, { marginTop: 13 }]}>
+                  Why it matters
+                </Text>
+                <Text style={appUiStyles.muted}>{idea.whyItMatters}</Text>
+                <Text style={[appUiStyles.label, { marginTop: 13 }]}>
+                  Try it
+                </Text>
+                <Text style={appUiStyles.muted}>{idea.practice}</Text>
+              </AppCard>
             ))}
-          </View>
+          </DetailSection>
+        ) : null}
 
-          {selected.medicalCaveat ? (
-            <View style={s.caveatBox}>
-              <Text style={s.caveatTitle}>Important clinical boundary</Text>
-              <Text style={s.caveatText}>{selected.medicalCaveat}</Text>
-            </View>
-          ) : null}
+        <DetailSection title="Takeaways">
+          {selected.practicalTakeaways.map((takeaway) => (
+            <AppCard key={takeaway.title} quiet>
+              <Text style={styles.blockTitle}>{takeaway.title}</Text>
+              <Text style={appUiStyles.muted}>{takeaway.description}</Text>
+              <View style={styles.nextStep}>
+                <Feather name="arrow-right" size={15} color={Colors.accent} />
+                <Text style={styles.nextStepText}>{takeaway.nextStep}</Text>
+              </View>
+            </AppCard>
+          ))}
+        </DetailSection>
 
-          <Text style={s.sectionTitle}>Sources and further reading</Text>
-          {selected.sources.map((source) => (
-            <TouchableOpacity
-              key={source.url}
-              style={s.sourceLink}
+        <AppCard>
+          <SectionHeader
+            title="Your private note"
+            description="Use this in AI chat only when you turn on library notes there."
+          />
+          <AppInput
+            value={noteDraft}
+            onChangeText={setNoteDraft}
+            maxLength={4000}
+            multiline
+            placeholder="What do you want to remember?"
+          />
+          <AppButton
+            label="Save note"
+            icon="save"
+            loading={savingKey.startsWith(`${selected.id}:custom_notes`)}
+            onPress={() =>
+              void persistState(selected, { custom_notes: noteDraft })
+            }
+          />
+        </AppCard>
+
+        <DetailSection title="Use it in MHtoolkit">
+          {selected.integrations.map((integration) => (
+            <Pressable
+              key={integration.title}
+              accessibilityRole="button"
               onPress={() =>
-                void Linking.openURL(source.url).catch(() => {
-                  Alert.alert('Unable to open link', 'Please try again when you are online.');
-                })
+                router.push(integrationRoute(selected, integration))
               }
+              style={styles.integration}
             >
               <View style={{ flex: 1 }}>
-                <Text style={s.sourceTitle}>{source.label}</Text>
-                <Text style={s.sourceType}>{source.sourceType.replace('-', ' ')}</Text>
+                <Text style={appUiStyles.label}>
+                  {integration.actionType}
+                </Text>
+                <Text style={styles.blockTitle}>{integration.title}</Text>
+                <Text style={appUiStyles.muted}>
+                  {integration.description}
+                </Text>
               </View>
-              <Text style={s.sourceArrow}>↗</Text>
-            </TouchableOpacity>
+              <Feather name="arrow-right" size={18} color={Colors.primary} />
+            </Pressable>
           ))}
+        </DetailSection>
 
-          <View style={s.editorialBox}>
-            <Text style={s.editorialTitle}>Editorial scope</Text>
-            <Text style={s.editorialText}>{selected.editorialNote}</Text>
-          </View>
-        </View>
-      </ScrollView>
+        <DetailSection title="Questions to carry forward">
+          {selected.reflectionPrompts.map((prompt, index) => (
+            <View key={prompt} style={styles.promptRow}>
+              <Text style={styles.promptNumber}>{index + 1}</Text>
+              <Text style={styles.promptText}>{prompt}</Text>
+            </View>
+          ))}
+        </DetailSection>
+
+        {selected.medicalCaveat ? (
+          <AppCard style={styles.caveat}>
+            <Text style={styles.blockTitle}>Keep in mind</Text>
+            <Text style={appUiStyles.muted}>{selected.medicalCaveat}</Text>
+          </AppCard>
+        ) : null}
+
+        <DetailSection title="Sources">
+          {selected.sources.map((source) => (
+            <SourceLink
+              key={`${source.url}:${source.label}`}
+              label={source.label}
+              url={source.url}
+            />
+          ))}
+        </DetailSection>
+        <Text style={[appUiStyles.muted, { marginBottom: 16 }]}>
+          {selected.editorialNote}
+        </Text>
+        {error ? <Text style={appUiStyles.error}>{error}</Text> : null}
+      </AppScreen>
     );
   }
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <View style={s.hero}>
-        <Text style={s.kicker}>RESOURCE LIBRARY</Text>
-        <Text style={s.heroTitle}>Start with what you need.</Text>
-        <Text style={s.heroText}>
-          Explore source-backed guides that explain a book&apos;s premises, turn useful ideas into
-          practical next steps, and keep claims within appropriate limits.
-        </Text>
-      </View>
-
-      <Text style={s.sectionKicker}>SOURCE-BACKED READING GUIDES</Text>
-      <Text style={s.listTitle}>Browse by need, not raw tags.</Text>
-      <Text style={s.guideCount}>{CURATED_LIBRARY.length} in-depth guides</Text>
-
-      <View style={s.searchBox}>
-        <TextInput
-          style={s.searchInput}
-          placeholder="Search title, author, or topic"
+    <AppScreen>
+      <PageHeader
+        eyebrow="Library"
+        title="Ideas, talks, and real stories."
+        description="Open the full guide, keep private notes, and turn useful ideas into action."
+        icon="book-open"
+      />
+      <AppCard>
+        <AppInput
           value={search}
           onChangeText={setSearch}
-          placeholderTextColor={Colors.textSecondary}
+          placeholder="Search all resources"
+          accessibilityLabel="Search the library"
         />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {LIBRARY_TOPICS.map((topic) => (
-            <TouchableOpacity
-              key={topic}
-              style={[s.filterBtn, selectedTopic === topic && s.filterBtnActive]}
-              onPress={() => setSelectedTopic(topic)}
-            >
-              <Text style={[s.filterText, selectedTopic === topic && s.filterTextActive]}>
-                {topic}
-              </Text>
-            </TouchableOpacity>
+        <View style={styles.chips}>
+          {MEDIA_FILTERS.map((filter) => (
+            <ChoiceChip
+              key={filter.id}
+              label={filter.label}
+              selected={media === filter.id}
+              onPress={() => setMedia(filter.id)}
+            />
           ))}
-        </ScrollView>
-      </View>
-
-      {filteredBooks.length === 0 && (
-        <View style={s.emptyBox}>
-          <Text style={s.emptyTitle}>No reviewed notes match that search.</Text>
-          <TouchableOpacity
-            onPress={() => {
-              setSearch('');
-              setSelectedTopic('All');
-            }}
-          >
-            <Text style={s.clearText}>Clear filters</Text>
-          </TouchableOpacity>
         </View>
+        <View style={[styles.chips, { marginTop: 9 }]}>
+          {LIBRARY_TOPICS.map((filterTopic) => (
+            <ChoiceChip
+              key={filterTopic}
+              label={filterTopic}
+              selected={topic === filterTopic}
+              onPress={() => setTopic(filterTopic)}
+            />
+          ))}
+        </View>
+      </AppCard>
+      <SectionHeader
+        title={`${filtered.length} resources`}
+        description={`${UNIFIED_LIBRARY.length} reviewed items across books, talks, and original profiles.`}
+      />
+      {error ? <Text style={appUiStyles.error}>{error}</Text> : null}
+      {loadingState ? (
+        <Text style={appUiStyles.muted}>Loading your library...</Text>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon="search"
+          title="No matching resources"
+          description="Clear a filter or try a different phrase."
+          action={
+            <AppButton
+              label="Clear filters"
+              onPress={() => {
+                setSearch('');
+                setTopic('All');
+                setMedia('all');
+              }}
+            />
+          }
+        />
+      ) : (
+        filtered.map((item) => {
+          const itemState = stateFor(item);
+          return (
+            <Pressable
+              key={item.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${item.title}`}
+              onPress={() => openItem(item)}
+              style={({ pressed }) => [
+                styles.resourceCard,
+                pressed && { opacity: 0.76 },
+              ]}
+            >
+              <View style={styles.resourceTop}>
+                <View style={styles.mediaBadge}>
+                  <Feather
+                    name={
+                      isBookItem(item)
+                        ? 'book'
+                        : isStoryItem(item)
+                          ? 'user'
+                          : 'play'
+                    }
+                    size={13}
+                    color={Colors.primary}
+                  />
+                  <Text style={styles.mediaBadgeText}>{mediaLabel(item)}</Text>
+                </View>
+                <Text style={styles.duration}>{item.durationLabel}</Text>
+              </View>
+              <Text style={styles.resourceTitle}>{item.title}</Text>
+              <Text style={styles.creator}>{item.creator}</Text>
+              <Text style={styles.summary} numberOfLines={3}>
+                {item.summary}
+              </Text>
+              <View style={styles.resourceFooter}>
+                <Text style={styles.topic}>{item.topic}</Text>
+                <View style={styles.statuses}>
+                  {itemState.priority === 'next' ? (
+                    <Feather name="list" size={15} color={Colors.accent} />
+                  ) : null}
+                  {itemState.is_saved ? (
+                    <Feather name="bookmark" size={15} color={Colors.accent} />
+                  ) : null}
+                  {itemState.custom_notes ? (
+                    <Feather name="edit-3" size={15} color={Colors.accent} />
+                  ) : null}
+                  <Feather
+                    name="arrow-right"
+                    size={17}
+                    color={Colors.primary}
+                  />
+                </View>
+              </View>
+            </Pressable>
+          );
+        })
       )}
-
-      {filteredBooks.map((book) => (
-        <TouchableOpacity key={book.id} style={s.bookCard} onPress={() => setSelected(book)}>
-          <View style={s.bookMeta}>
-            <Text style={s.topicBadge}>{book.topic}</Text>
-            <Text style={s.readTime}>{book.read_time_minutes} min note</Text>
-          </View>
-          <Text style={s.bookTitle}>{book.title}</Text>
-          <Text style={s.bookAuthor}>by {book.author}</Text>
-          <Text style={s.summaryPreview} numberOfLines={3}>
-            {book.summary}
-          </Text>
-          <Text style={s.readAction}>Open the full guide</Text>
-        </TouchableOpacity>
-      ))}
-
-      <View style={s.libraryNote}>
-        <Text style={s.libraryNoteText}>
-          Guides paraphrase authors&apos; premises, link their sources, and flag important
-          limitations. They are not diagnoses, treatment recommendations, or substitutes for the
-          complete books or professional care.
-        </Text>
-      </View>
-    </ScrollView>
+    </AppScreen>
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f1e8' },
-  content: { padding: 16, paddingBottom: 40 },
-  hero: { backgroundColor: '#173f38', borderRadius: 24, padding: 22, marginBottom: 28 },
-  kicker: { color: '#a7f3d0', fontSize: 11, fontWeight: '700', letterSpacing: 1.1 },
-  heroTitle: { color: '#fff', fontSize: 31, lineHeight: 37, fontWeight: '700', marginTop: 8 },
-  heroText: { color: '#d1fae5', fontSize: 14, lineHeight: 21, marginTop: 10 },
-  sectionKicker: { color: '#287264', fontSize: 11, fontWeight: '700', letterSpacing: 1.1 },
-  listTitle: { color: Colors.text, fontSize: 24, lineHeight: 30, fontWeight: '700', marginTop: 5 },
-  guideCount: { color: Colors.textSecondary, fontSize: 12, marginTop: 6 },
-  searchBox: { backgroundColor: '#fff', borderRadius: 16, padding: 12, marginTop: 16 },
-  searchInput: {
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    padding: 13,
-    fontSize: 14,
-    marginBottom: 12,
+const styles = StyleSheet.create({
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  actions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  detailSection: { marginTop: 16, marginBottom: 6 },
+  detailSectionTitle: {
     color: Colors.text,
+    fontSize: 21,
+    lineHeight: 26,
+    fontWeight: '700',
+    marginBottom: 11,
   },
-  filterBtn: {
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginRight: 7,
-    backgroundColor: '#f1f5f9',
+  premiseCard: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
-  filterBtnActive: { backgroundColor: '#173f38' },
-  filterText: { fontSize: 12, color: Colors.text },
-  filterTextActive: { color: '#fff', fontWeight: '600' },
-  bookCard: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 19,
-    marginTop: 13,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  premiseText: {
+    color: '#fffef8',
+    fontSize: 18,
+    lineHeight: 27,
+    fontWeight: '600',
+    marginTop: 8,
   },
-  bookMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  topicBadge: {
-    color: '#166534',
-    backgroundColor: '#ecfdf5',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    overflow: 'hidden',
+  readingBlock: { marginBottom: 20 },
+  blockTitle: {
+    color: Colors.text,
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '700',
+    marginBottom: 5,
+  },
+  readingText: {
+    color: Colors.textSecondary,
+    fontSize: 15,
+    lineHeight: 24,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    gap: 13,
+    borderLeftWidth: 2,
+    borderLeftColor: Colors.sage,
+    paddingLeft: 12,
+    paddingBottom: 17,
+  },
+  timelinePeriod: {
+    width: 82,
+    color: Colors.accent,
     fontSize: 11,
+    fontWeight: '800',
+  },
+  nextStep: {
+    flexDirection: 'row',
+    gap: 7,
+    alignItems: 'flex-start',
+    marginTop: 10,
+  },
+  nextStepText: {
+    flex: 1,
+    color: Colors.accent,
+    fontSize: 13,
+    lineHeight: 19,
     fontWeight: '600',
   },
-  readTime: { color: Colors.textSecondary, fontSize: 11 },
-  bookTitle: { color: Colors.text, fontSize: 23, lineHeight: 28, fontWeight: '700', marginTop: 16 },
-  bookAuthor: { color: Colors.textSecondary, fontSize: 13, marginTop: 3 },
-  summaryPreview: { color: Colors.textSecondary, fontSize: 14, lineHeight: 21, marginTop: 12 },
-  readAction: { color: '#287264', fontSize: 13, fontWeight: '700', marginTop: 14 },
-  emptyBox: { backgroundColor: '#fff', borderRadius: 14, padding: 24, marginTop: 18, alignItems: 'center' },
-  emptyTitle: { color: Colors.text, fontWeight: '600', textAlign: 'center' },
-  clearText: { color: '#287264', fontWeight: '700', marginTop: 10 },
-  libraryNote: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginTop: 18 },
-  libraryNoteText: { color: Colors.textSecondary, fontSize: 12, lineHeight: 18 },
-  backLink: { marginBottom: 16 },
-  backLinkText: { color: '#173f38', fontSize: 15, fontWeight: '600' },
-  detailHeader: { backgroundColor: '#173f38', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22 },
-  detailTitle: { color: '#fff', fontSize: 31, lineHeight: 37, fontWeight: '700', marginTop: 8 },
-  detailAuthor: { color: '#d1fae5', fontSize: 14, marginTop: 7 },
-  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 16 },
-  headerTag: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
-  headerTagText: { color: '#fff', fontSize: 11 },
-  detailBody: { backgroundColor: '#fff', borderBottomLeftRadius: 24, borderBottomRightRadius: 24, padding: 22 },
-  sourceNotice: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bae6fd', borderRadius: 13, padding: 14 },
-  sourceNoticeText: { color: '#0c4a6e', fontSize: 12, lineHeight: 19 },
-  leadText: { color: Colors.textSecondary, fontSize: 16, lineHeight: 25, marginTop: 10 },
-  sectionTitle: { color: Colors.text, fontSize: 23, fontWeight: '700', marginTop: 28, marginBottom: 14 },
-  centralPremiseBox: { backgroundColor: '#173f38', borderRadius: 14, padding: 17, marginTop: 22 },
-  centralPremiseLabel: { color: '#a7f3d0', fontSize: 10, fontWeight: '700', letterSpacing: 0.9 },
-  centralPremiseText: { color: '#ecfdf5', fontSize: 15, lineHeight: 24, marginTop: 8 },
-  ideaCard: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: Colors.border, borderRadius: 14, padding: 15, marginBottom: 11 },
-  ideaHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  ideaTitle: { flex: 1, color: Colors.text, fontSize: 16, fontWeight: '700' },
-  ideaPremise: { color: Colors.textSecondary, fontSize: 13, lineHeight: 21, marginTop: 11 },
-  ideaDivider: { height: 1, backgroundColor: Colors.border, marginVertical: 13 },
-  ideaLabel: { color: Colors.textSecondary, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
-  ideaDetail: { color: Colors.textSecondary, fontSize: 12, lineHeight: 19, marginTop: 4 },
-  takeawayNumber: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#173f38', alignItems: 'center', justifyContent: 'center' },
-  takeawayNumberText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  takeawayCard: { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 14, padding: 15, marginBottom: 10 },
-  takeawayTitle: { color: '#78350f', fontSize: 15, fontWeight: '700' },
-  takeawayDescription: { color: '#92400e', fontSize: 13, lineHeight: 20, marginTop: 6 },
-  takeawayNext: { color: '#78350f', fontSize: 13, lineHeight: 20, fontWeight: '600', borderTopWidth: 1, borderTopColor: '#fde68a', paddingTop: 10, marginTop: 10 },
-  integrationIntro: { color: Colors.textSecondary, fontSize: 12, lineHeight: 19, marginTop: -7, marginBottom: 11 },
-  integrationCard: { borderWidth: 1, borderRadius: 14, padding: 15, marginBottom: 10 },
-  integrationJournal: { backgroundColor: '#fff1f2', borderColor: '#fecdd3' },
-  integrationGoal: { backgroundColor: '#f0f9ff', borderColor: '#bae6fd' },
-  integrationHabit: { backgroundColor: '#fffbeb', borderColor: '#fde68a' },
-  integrationType: { color: Colors.textSecondary, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
-  integrationTitle: { color: Colors.text, fontSize: 15, fontWeight: '700', marginTop: 7 },
-  integrationText: { color: Colors.textSecondary, fontSize: 12, lineHeight: 19, marginTop: 5 },
-  integrationAction: { color: '#287264', fontSize: 12, fontWeight: '700', marginTop: 11 },
-  reflectionBox: { borderWidth: 1, borderColor: Colors.border, borderRadius: 14, padding: 16, marginTop: 20 },
-  reflectionTitle: { color: Colors.text, fontSize: 18, fontWeight: '700', marginBottom: 10 },
-  reflectionRow: { flexDirection: 'row', gap: 8, marginTop: 7 },
-  reflectionNumber: { color: '#287264', fontSize: 12, fontWeight: '700' },
-  reflectionText: { flex: 1, color: Colors.textSecondary, fontSize: 12, lineHeight: 19 },
-  caveatBox: { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', borderRadius: 14, padding: 16, marginTop: 18 },
-  caveatTitle: { color: '#7f1d1d', fontSize: 14, fontWeight: '700' },
-  caveatText: { color: '#991b1b', fontSize: 12, lineHeight: 19, marginTop: 6 },
-  sourceLink: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, padding: 13, marginBottom: 8 },
-  sourceTitle: { color: '#166534', fontSize: 12, lineHeight: 18, fontWeight: '700' },
-  sourceType: { color: Colors.textSecondary, fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.7, marginTop: 3 },
-  sourceArrow: { color: '#287264', fontSize: 18 },
-  editorialBox: { borderWidth: 1, borderColor: Colors.border, borderRadius: 14, padding: 16, marginTop: 18 },
-  editorialTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' },
-  editorialText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 7 },
+  integration: {
+    minHeight: 92,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 9,
+  },
+  promptRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  promptNumber: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.primaryLight,
+    color: Colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+    paddingTop: 5,
+  },
+  promptText: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  caveat: { backgroundColor: '#fff8e7', borderColor: '#e7cf9a' },
+  sourceLink: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    paddingVertical: 11,
+  },
+  sourceText: { flex: 1, color: Colors.primary, fontSize: 13, fontWeight: '600' },
+  resourceCard: {
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 17,
+    padding: 17,
+    marginBottom: 11,
+  },
+  resourceTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  mediaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  mediaBadgeText: { color: Colors.primary, fontSize: 10, fontWeight: '800' },
+  duration: { color: Colors.textSecondary, fontSize: 10 },
+  resourceTitle: {
+    color: Colors.text,
+    fontSize: 20,
+    lineHeight: 25,
+    fontWeight: '700',
+    marginTop: 13,
+  },
+  creator: { color: Colors.accent, fontSize: 12, marginTop: 3 },
+  summary: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 10,
+  },
+  resourceFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 14,
+  },
+  topic: { flex: 1, color: Colors.textSecondary, fontSize: 10 },
+  statuses: { flexDirection: 'row', alignItems: 'center', gap: 9 },
 });

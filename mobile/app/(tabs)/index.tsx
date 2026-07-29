@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, View, Text, ScrollView, TouchableOpacity, StyleSheet, Share } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
@@ -7,7 +8,14 @@ import { Colors } from '@/lib/constants';
 import { format, subDays, startOfDay } from 'date-fns';
 import type { MoodEmoji } from '@/lib/types';
 import { saveCheckInWithAttribution } from '@/lib/acquisition';
-import { getLocalCheckInFields } from '@/lib/check-in';
+import {
+  getLatestCheckInForDate,
+  getLocalCheckInFields,
+  getSevenDayHistoryStart,
+} from '@/lib/check-in';
+import { chooseRandomAffirmation } from '@/lib/affirmations';
+import { loadAffirmationCatalog } from '@/lib/affirmations-client';
+import type { ComponentProps } from 'react';
 
 const moodEmojis: MoodEmoji[] = ['\u{1F604}', '\u{1F642}', '\u{1F610}', '\u{1F61E}', '\u{1F622}'];
 const moodLabels = ['Great', 'Good', 'Okay', 'Low', 'Very Low'];
@@ -20,30 +28,55 @@ export default function DashboardScreen() {
   const [todayMood, setTodayMood] = useState<MoodEmoji | null>(null);
   const [weekMoods, setWeekMoods] = useState<any[]>([]);
   const [affirmation, setAffirmation] = useState('');
+  const [affirmationBy, setAffirmationBy] = useState('');
   const [savingMood, setSavingMood] = useState(false);
+  const [moodStatus, setMoodStatus] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
+  const canSaveMood = Boolean(queryValue && user?.id);
   useEffect(() => {
     if (!queryValue) return;
     const loadData = async () => {
       const todayStart = startOfDay(new Date()).toISOString();
-      const sevenDaysAgo = subDays(new Date(), 7).toISOString();
-      const [moodRes, weekRes, affRes] = await Promise.all([
+      const sevenDaysAgo = getSevenDayHistoryStart();
+      const [moodRes, weekRes] = await Promise.all([
         supabase.from('moods').select('emoji').eq(queryColumn, queryValue).gte('created_at', todayStart).order('created_at', { ascending: false }).limit(1).single(),
-        supabase.from('moods').select('emoji, created_at').eq(queryColumn, queryValue).gte('created_at', sevenDaysAgo).order('created_at', { ascending: true }),
-        supabase.from('affirmations').select('content').limit(1).single(),
+        supabase.from('moods').select('emoji, created_at').eq(queryColumn, queryValue).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }),
       ]);
       if (moodRes.data) setTodayMood(moodRes.data.emoji as MoodEmoji);
       if (weekRes.data) setWeekMoods(weekRes.data);
-      if (affRes.data) setAffirmation(affRes.data.content);
+      try {
+        const catalog = await loadAffirmationCatalog(
+          moodRes.data?.emoji ?? null
+        );
+        const selected = chooseRandomAffirmation(catalog.records);
+        if (selected) {
+          setAffirmation(selected.content);
+          setAffirmationBy(selected.attribution_name ?? '');
+        }
+      } catch {
+        setAffirmation('');
+        setAffirmationBy('');
+      }
     };
     loadData();
   }, [queryColumn, queryValue]);
 
   const saveMood = async (mood: MoodEmoji) => {
-    if (!queryValue || !user?.id || savingMood) return;
+    if (savingMood) return;
+    if (!canSaveMood) {
+      setMoodStatus({
+        type: 'error',
+        message: 'Your private profile is not ready. Restart the app and try again.',
+      });
+      return;
+    }
     setSavingMood(true);
+    setMoodStatus(null);
     try {
       await saveCheckInWithAttribution({
         emoji: mood,
@@ -58,24 +91,33 @@ export default function DashboardScreen() {
         ),
         { emoji: mood, created_at: new Date().toISOString() },
       ]);
+      setMoodStatus({ type: 'success', message: 'Check-in saved.' });
     } catch (error) {
       console.warn('Unable to save check-in:', error);
       Alert.alert(
         'Unable to Save Check-In',
         'Your check-in was not saved. Please try again.'
       );
+      setMoodStatus({
+        type: 'error',
+        message: 'Your check-in was not saved. Please try again.',
+      });
     } finally {
       setSavingMood(false);
     }
   };
 
-  const quickActions = [
-    { label: '📊 Track Mood', route: '/(tabs)/tracker' as const },
-    { label: '💬 AI Chat', route: '/(tabs)/chat' as const },
-    { label: '📋 Assessments', route: '/(tabs)/assessments' as const },
-    { label: '🎯 Habits', route: '/habits' as const },
-    { label: '✅ Goals', route: '/goals' as const },
-    { label: '📚 Library', route: '/library' as const },
+  const quickActions: {
+    label: string;
+    icon: ComponentProps<typeof Feather>['name'];
+    route: '/ground' | '/focus' | '/habits' | '/planner' | '/library' | '/partner';
+  }[] = [
+    { label: 'Ground me', icon: 'compass', route: '/ground' },
+    { label: 'Focus', icon: 'clock', route: '/focus' },
+    { label: 'Habits', icon: 'repeat', route: '/habits' },
+    { label: 'Life planner', icon: 'map', route: '/planner' },
+    { label: 'Library', icon: 'book-open', route: '/library' },
+    { label: 'Accountability', icon: 'users', route: '/partner' },
   ];
   const challengeDays = new Set(
     weekMoods.map((entry) => format(new Date(entry.created_at), 'yyyy-MM-dd'))
@@ -107,14 +149,29 @@ export default function DashboardScreen() {
             <TouchableOpacity
               key={emoji}
               onPress={() => saveMood(emoji)}
-              disabled={savingMood}
+              disabled={savingMood || !canSaveMood}
               style={[s.moodBtn, todayMood === emoji && s.moodBtnActive]}
+              accessibilityState={{
+                disabled: savingMood || !canSaveMood,
+                selected: todayMood === emoji,
+              }}
             >
               <Text style={s.moodEmoji}>{emoji}</Text>
               <Text style={s.moodLabel}>{moodLabels[i]}</Text>
             </TouchableOpacity>
           ))}
         </View>
+        {moodStatus ? (
+          <Text
+            accessibilityRole={moodStatus.type === 'error' ? 'alert' : 'text'}
+            style={[
+              s.moodStatus,
+              moodStatus.type === 'error' && s.moodStatusError,
+            ]}
+          >
+            {moodStatus.message}
+          </Text>
+        ) : null}
       </View>
 
       {/* Week Overview */}
@@ -124,9 +181,7 @@ export default function DashboardScreen() {
         <View style={s.weekRow}>
           {Array.from({ length: 7 }).map((_, i) => {
             const date = subDays(new Date(), 6 - i);
-            const dayMood = weekMoods.find(
-              (m) => format(new Date(m.created_at), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
-            );
+            const dayMood = getLatestCheckInForDate(weekMoods, date);
             return (
               <View key={i} style={s.weekDay}>
                 <Text style={s.weekEmoji}>{dayMood?.emoji || '·'}</Text>
@@ -166,9 +221,17 @@ export default function DashboardScreen() {
 
       {/* Affirmation */}
       {affirmation ? (
-        <View style={[s.card, { backgroundColor: '#eff6ff' }]}>
-          <Text style={s.affirmationText}>{`"${affirmation}"`}</Text>
-          <Text style={s.affirmationLabel}>Daily Affirmation</Text>
+        <View style={[s.card, { backgroundColor: Colors.primaryLight }]}>
+          <Feather
+            name={affirmationBy ? 'message-circle' : 'sun'}
+            size={21}
+            color={Colors.primary}
+            style={{ alignSelf: 'center', marginBottom: 12 }}
+          />
+          <Text style={s.affirmationText}>{affirmation}</Text>
+          <Text style={s.affirmationLabel}>
+            {affirmationBy || 'Daily affirmation'}
+          </Text>
         </View>
       ) : null}
 
@@ -182,6 +245,7 @@ export default function DashboardScreen() {
               style={s.actionBtn}
               onPress={() => router.push(action.route)}
             >
+              <Feather name={action.icon} size={18} color={Colors.primary} />
               <Text style={s.actionLabel}>{action.label}</Text>
             </TouchableOpacity>
           ))}
@@ -201,9 +265,11 @@ const s = StyleSheet.create({
   cardSubtitle: { fontSize: 14, color: Colors.textSecondary, marginBottom: 16 },
   moodRow: { flexDirection: 'row', justifyContent: 'space-between' },
   moodBtn: { alignItems: 'center', padding: 10, borderRadius: 12 },
-  moodBtnActive: { backgroundColor: '#dbeafe', borderWidth: 2, borderColor: Colors.primary },
+  moodBtnActive: { backgroundColor: Colors.primaryLight, borderWidth: 2, borderColor: Colors.primary },
   moodEmoji: { fontSize: 28 },
   moodLabel: { fontSize: 11, color: Colors.textSecondary, marginTop: 4 },
+  moodStatus: { color: Colors.primary, fontSize: 13, marginTop: 12 },
+  moodStatusError: { color: '#b42318' },
   weekRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 60 },
   weekDay: { alignItems: 'center' },
   weekEmoji: { fontSize: 22 },
@@ -220,6 +286,6 @@ const s = StyleSheet.create({
   affirmationText: { fontSize: 18, fontStyle: 'italic', color: Colors.text, textAlign: 'center', marginBottom: 8 },
   affirmationLabel: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center' },
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  actionBtn: { backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, width: '48%' as any },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, width: '48%' as any },
   actionLabel: { fontSize: 14, color: Colors.text, fontWeight: '500' },
 });

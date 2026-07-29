@@ -1,0 +1,3 @@
+-- The clean-install goal migration immediately before this file contains the
+-- final hardened trigger and backfill produced during the staged rollout.
+-- Retain this no-op migration so local and production migration histories align.

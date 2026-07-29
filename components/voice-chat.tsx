@@ -3,14 +3,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
+import { useAiConsent } from '@/components/ai-consent-provider';
+import type { UserContext } from '@/lib/ai/context';
 
 interface VoiceChatProps {
-  userContext?: any;
+  userContext?: UserContext;
   onClose?: () => void;
 }
 
 export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
+  const requestAiConsent = useAiConsent();
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -25,6 +27,8 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
+  const streamRef = useRef<MediaStream | null>(null);
+  const mountedRef = useRef(true);
 
   const setupAudioVisualization = async (stream: MediaStream) => {
     const audioContext = new AudioContext();
@@ -54,9 +58,10 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
 
   const startListening = async () => {
     try {
-      if (!ensureAiDataSharingConsent()) return;
+      if (!(await requestAiConsent())) return;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
       
       await setupAudioVisualization(stream);
       
@@ -72,12 +77,16 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await processVoiceInput(audioBlob);
+        if (mountedRef.current) {
+          await processVoiceInput(audioBlob);
+        }
         
         stream.getTracks().forEach(track => track.stop());
-        if (audioContextRef.current) {
-          audioContextRef.current.close();
+        streamRef.current = null;
+        if (audioContextRef.current?.state !== 'closed') {
+          await audioContextRef.current?.close();
         }
+        audioContextRef.current = null;
         if (animationFrameRef.current) {
           cancelAnimationFrame(animationFrameRef.current);
         }
@@ -101,6 +110,8 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
   };
 
   const processVoiceInput = async (audioBlob: Blob) => {
+    const previousMessages = messages;
+    let pendingUserMessage = false;
     try {
       setIsProcessing(true);
       
@@ -123,6 +134,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       // Step 2: Get AI response
       const newMessages = [...messages, { role: 'user' as const, content: transcription }];
       setMessages(newMessages);
+      pendingUserMessage = true;
       
       const chatResponse = await fetch('/api/chat', {
         method: 'POST',
@@ -138,8 +150,12 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       }
 
       const { response } = await chatResponse.json();
+      if (typeof response !== 'string' || !response.trim()) {
+        throw new Error('The AI service returned an empty response.');
+      }
       setAiResponse(response);
       setMessages([...newMessages, { role: 'assistant', content: response }]);
+      pendingUserMessage = false;
       
       // Step 3: Speak the response
       await speakResponse(response);
@@ -147,6 +163,9 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       setIsProcessing(false);
     } catch (err) {
       console.error('Voice processing error:', err);
+      if (pendingUserMessage) {
+        setMessages(previousMessages);
+      }
       setError('Failed to process your voice. Please try again.');
       setIsProcessing(false);
     }
@@ -187,11 +206,19 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
 
   useEffect(() => {
     return () => {
+      mountedRef.current = false;
+      const recorder = mediaRecorderRef.current;
+      if (recorder?.state === 'recording') {
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        recorder.stop();
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop());
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      if (audioContextRef.current?.state !== 'closed') {
+        void audioContextRef.current?.close();
       }
     };
   }, []);

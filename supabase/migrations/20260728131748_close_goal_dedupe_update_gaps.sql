@@ -1,0 +1,2 @@
+-- The clean-install goal migration already includes the final update-path
+-- collision guard. Retain this no-op migration for production history parity.

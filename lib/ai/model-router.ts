@@ -1,9 +1,40 @@
 import * as gemini from './gemini';
 import * as claude from './claude';
-import { Message, UserContext } from './claude';
+import type { Message } from './claude';
+import type { UserContext } from './context';
 import { containsExplicitCrisis, CRISIS_RESPONSE } from './crisis';
 
 export type ChatModel = 'gemini' | 'claude' | 'safety';
+type ModelProvider = Exclude<ChatModel, 'safety'>;
+
+function hasProviderCredential(provider: ModelProvider): boolean {
+  const value =
+    provider === 'gemini'
+      ? process.env.GOOGLE_API_KEY
+      : process.env.ANTHROPIC_API_KEY;
+  return Boolean(value?.trim());
+}
+
+function configuredPrimaryProvider(): ModelProvider {
+  const configured = process.env.AI_PRIMARY_PROVIDER?.trim().toLowerCase();
+  if (configured === 'gemini' || configured === 'claude') {
+    if (hasProviderCredential(configured)) return configured;
+  }
+
+  if (hasProviderCredential('claude')) return 'claude';
+  if (hasProviderCredential('gemini')) return 'gemini';
+  throw new Error('No AI provider is configured');
+}
+
+async function callProvider(
+  provider: ModelProvider,
+  messages: Message[],
+  userContext?: UserContext
+): Promise<string> {
+  return provider === 'gemini'
+    ? gemini.chat(messages, userContext)
+    : claude.chat(messages, userContext);
+}
 
 /**
  * Detects if a conversation requires the more sophisticated Claude model
@@ -53,8 +84,7 @@ function requiresClaudeModel(messages: Message[]): boolean {
     return true;
   }
   
-  // Default to Gemini (free)
-  console.log('[Model Router] Standard conversation → Using Gemini (free)');
+  console.log('[Model Router] Standard conversation');
   return false;
 }
 
@@ -67,30 +97,28 @@ export async function chat(messages: Message[], userContext?: UserContext): Prom
     return { response: CRISIS_RESPONSE, model: 'safety' };
   }
 
-  const useClaude = requiresClaudeModel(messages);
+  const prefersClaude = requiresClaudeModel(messages);
+  const primary: ModelProvider =
+    prefersClaude && hasProviderCredential('claude')
+      ? 'claude'
+      : configuredPrimaryProvider();
+  const fallback: ModelProvider = primary === 'claude' ? 'gemini' : 'claude';
   
   try {
-    if (useClaude) {
-      const response = await claude.chat(messages, userContext);
-      return { response, model: 'claude' };
-    } else {
-      const response = await gemini.chat(messages, userContext);
-      return { response, model: 'gemini' };
-    }
+    console.log(`[Model Router] Using ${primary}`);
+    const response = await callProvider(primary, messages, userContext);
+    return { response, model: primary };
   } catch (error) {
-    console.error(`[Model Router] ${useClaude ? 'Claude' : 'Gemini'} failed, falling back to alternative:`, error);
-    
-    // Fallback: if one model fails, try the other
+    console.error(`[Model Router] ${primary} failed:`, error);
+
+    if (!hasProviderCredential(fallback)) {
+      throw new Error('AI service temporarily unavailable');
+    }
+
     try {
-      if (useClaude) {
-        console.log('[Model Router] Falling back to Gemini');
-        const response = await gemini.chat(messages, userContext);
-        return { response, model: 'gemini' };
-      } else {
-        console.log('[Model Router] Falling back to Claude');
-        const response = await claude.chat(messages, userContext);
-        return { response, model: 'claude' };
-      }
+      console.log(`[Model Router] Falling back to ${fallback}`);
+      const response = await callProvider(fallback, messages, userContext);
+      return { response, model: fallback };
     } catch (fallbackError) {
       console.error('[Model Router] Both models failed:', fallbackError);
       throw new Error('AI service temporarily unavailable');

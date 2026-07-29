@@ -36,6 +36,16 @@ export async function POST(request: NextRequest) {
       chatHistoryResult,
       affirmationHistoryResult,
       bookFavoritesResult,
+      libraryItemsResult,
+      partnerInvitesResult,
+      partnerLinksResult,
+      partnerCelebrationsResult,
+      lifePlanItemsResult,
+      focusSessionsResult,
+      wellbeingRemindersResult,
+      pushSubscriptionsResult,
+      reminderDeliveriesResult,
+      dismissedNoticesResult,
     ] = await Promise.all([
       supabaseAdmin.from('moods').select('*').eq(ownerColumn, ownerValue),
       supabaseAdmin.from('assessments').select('*').eq(ownerColumn, ownerValue),
@@ -56,6 +66,68 @@ export async function POST(request: NextRequest) {
         .from('user_book_favorites')
         .select('*')
         .eq(ownerColumn, ownerValue),
+      auth.userId
+        ? supabaseAdmin
+            .from('user_library_items')
+            .select('*')
+            .eq('user_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('partner_invites')
+            .select(
+              'id, owner_id, invitee_label, status, share_goals, share_habits, share_checkins, share_mood_trend, share_streaks, allow_celebrations, share_journal_activity, share_assessment_activity, share_planner_progress, share_focus_progress, share_library_activity, expires_at, created_at, accepted_at'
+            )
+            .eq('owner_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('partner_links')
+            .select('*')
+            .or(`owner_id.eq.${auth.userId},partner_id.eq.${auth.userId}`)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('partner_celebrations')
+            .select('*')
+            .or(`owner_id.eq.${auth.userId},partner_id.eq.${auth.userId}`)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('life_plan_items')
+            .select('*')
+            .eq('user_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('focus_sessions')
+            .select('*')
+            .eq('user_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('wellbeing_reminders')
+            .select('*')
+            .eq('user_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('push_subscriptions')
+            .select('id, endpoint, user_agent, failed_count, created_at, updated_at')
+            .eq('user_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('reminder_deliveries')
+            .select('*')
+            .eq('user_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('dismissed_notices')
+            .select('*')
+            .eq('user_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     const habits = requireQuery('habits', habitsResult);
@@ -146,6 +218,31 @@ export async function POST(request: NextRequest) {
           affirmationHistoryResult
         ),
         book_favorites: requireQuery('book favorites', bookFavoritesResult),
+        library_items: requireQuery('library items', libraryItemsResult),
+        partner_invites: requireQuery('partner invites', partnerInvitesResult),
+        partner_links: requireQuery('partner links', partnerLinksResult),
+        partner_celebrations: requireQuery(
+          'partner celebrations',
+          partnerCelebrationsResult
+        ),
+        life_plan_items: requireQuery('life plan items', lifePlanItemsResult),
+        focus_sessions: requireQuery('focus sessions', focusSessionsResult),
+        wellbeing_reminders: requireQuery(
+          'wellbeing reminders',
+          wellbeingRemindersResult
+        ),
+        push_subscriptions: requireQuery(
+          'push subscriptions',
+          pushSubscriptionsResult
+        ),
+        reminder_deliveries: requireQuery(
+          'reminder deliveries',
+          reminderDeliveriesResult
+        ),
+        dismissed_notices: requireQuery(
+          'dismissed notices',
+          dismissedNoticesResult
+        ),
         acquisition_attribution: requireQuery(
           'acquisition attribution',
           attributionResult

@@ -1,44 +1,234 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import type { ComponentProps } from 'react';
 import { useRouter } from 'expo-router';
+import {
+  AppScreen,
+  PageHeader,
+  SectionHeader,
+  appUiStyles,
+} from '@/components/AppUI';
 import { Colors } from '@/lib/constants';
 
-const menuItems = [
-  { label: 'Voice Support', icon: '🎙️', desc: 'Talk to your AI companion', route: '/voice' as const },
-  { label: 'Goals', icon: '✅', desc: 'Plan your day with intention', route: '/goals' as const },
-  { label: 'Journal', icon: '🖋️', desc: 'Write private notes and reflections', route: '/journal' as const },
-  { label: 'Habits', icon: '🎯', desc: 'Build positive habits', route: '/habits' as const },
-  { label: 'Affirmations', icon: '✨', desc: 'Daily affirmations', route: '/affirmations' as const },
-  { label: 'Library', icon: '📚', desc: 'Source-backed book guides', route: '/library' as const },
-  { label: 'Settings', icon: '⚙️', desc: 'Account & privacy', route: '/settings' as const },
+type FeatherName = ComponentProps<typeof Feather>['name'];
+type Route =
+  | '/goals'
+  | '/habits'
+  | '/planner'
+  | '/focus'
+  | '/ground'
+  | '/meditate'
+  | '/mind-games'
+  | '/journal'
+  | '/affirmations'
+  | '/library'
+  | '/partner'
+  | '/resources'
+  | '/research'
+  | '/voice'
+  | '/support'
+  | '/settings';
+
+const GROUPS: {
+  title: string;
+  items: {
+    label: string;
+    description: string;
+    icon: FeatherName;
+    route: Route;
+  }[];
+}[] = [
+  {
+    title: 'Plan and progress',
+    items: [
+      {
+        label: 'Goals',
+        description: 'Priorities and next steps',
+        icon: 'check-circle',
+        route: '/goals',
+      },
+      {
+        label: 'Habits and routines',
+        description: 'Cues, streaks, and rewards',
+        icon: 'repeat',
+        route: '/habits',
+      },
+      {
+        label: 'Life planner',
+        description: 'Dreams, fears, and time-bound plans',
+        icon: 'map',
+        route: '/planner',
+      },
+      {
+        label: 'Focus mode',
+        description: 'Time blocks with real breaks',
+        icon: 'clock',
+        route: '/focus',
+      },
+    ],
+  },
+  {
+    title: 'Calm and reflect',
+    items: [
+      {
+        label: 'Ground me now',
+        description: 'Immediate guided grounding',
+        icon: 'compass',
+        route: '/ground',
+      },
+      {
+        label: 'Meditation',
+        description: 'Breathing and guided practices',
+        icon: 'wind',
+        route: '/meditate',
+      },
+      {
+        label: 'Mind games',
+        description: 'Five offline attention exercises',
+        icon: 'grid',
+        route: '/mind-games',
+      },
+      {
+        label: 'Private journal',
+        description: 'Freeform and guided notes',
+        icon: 'edit-3',
+        route: '/journal',
+      },
+      {
+        label: 'Affirmations',
+        description: 'Random affirmations and sourced quotes',
+        icon: 'sun',
+        route: '/affirmations',
+      },
+    ],
+  },
+  {
+    title: 'Learn and connect',
+    items: [
+      {
+        label: 'Library',
+        description: 'Books, talks, and real stories',
+        icon: 'book-open',
+        route: '/library',
+      },
+      {
+        label: 'Accountability',
+        description: 'Share counts and celebrate progress',
+        icon: 'users',
+        route: '/partner',
+      },
+      {
+        label: 'Find support',
+        description: 'Country directories and communities',
+        icon: 'life-buoy',
+        route: '/resources',
+      },
+      {
+        label: 'Research',
+        description: 'Evidence and limitations',
+        icon: 'file-text',
+        route: '/research',
+      },
+      {
+        label: 'Voice support',
+        description: 'Talk with the AI companion',
+        icon: 'mic',
+        route: '/voice',
+      },
+      {
+        label: 'Support and FAQ',
+        description: 'Contact, bug reports, and answers',
+        icon: 'help-circle',
+        route: '/support',
+      },
+      {
+        label: 'Settings',
+        description: 'Account, privacy, export, and deletion',
+        icon: 'settings',
+        route: '/settings',
+      },
+    ],
+  },
 ];
 
 export default function MoreScreen() {
   const router = useRouter();
-
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <Text style={s.title}>More</Text>
-      {menuItems.map((item) => (
-        <TouchableOpacity key={item.route} style={s.row} onPress={() => router.push(item.route)}>
-          <Text style={s.icon}>{item.icon}</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={s.rowTitle}>{item.label}</Text>
-            <Text style={s.rowDesc}>{item.desc}</Text>
+    <AppScreen>
+      <PageHeader
+        eyebrow="MHtoolkit"
+        title="Everything in one place."
+        description="Choose a tool based on what you need right now."
+        icon="grid"
+      />
+      {GROUPS.map((group) => (
+        <View key={group.title}>
+          <SectionHeader title={group.title} />
+          <View style={styles.group}>
+            {group.items.map((item) => (
+              <Pressable
+                key={item.route}
+                accessibilityRole="button"
+                onPress={() => router.push(item.route)}
+                style={({ pressed }) => [
+                  styles.row,
+                  pressed && { opacity: 0.76 },
+                ]}
+              >
+                <View style={styles.icon}>
+                  <Feather name={item.icon} size={19} color={Colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title}>{item.label}</Text>
+                  <Text style={appUiStyles.muted}>{item.description}</Text>
+                </View>
+                <Feather name="chevron-right" size={19} color={Colors.sage} />
+              </Pressable>
+            ))}
           </View>
-          <Text style={s.arrow}>›</Text>
-        </TouchableOpacity>
+        </View>
       ))}
-    </ScrollView>
+    </AppScreen>
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 16, paddingBottom: 40 },
-  title: { fontSize: 28, fontWeight: '700', color: Colors.text, marginBottom: 20 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: Colors.card, borderRadius: 14, padding: 18, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
-  icon: { fontSize: 28 },
-  rowTitle: { fontSize: 17, fontWeight: '600', color: Colors.text },
-  rowDesc: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
-  arrow: { fontSize: 24, color: Colors.textSecondary },
+const styles = StyleSheet.create({
+  group: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 16,
+    backgroundColor: Colors.card,
+    marginBottom: 10,
+  },
+  row: {
+    minHeight: 75,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  icon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    color: Colors.text,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
 });
