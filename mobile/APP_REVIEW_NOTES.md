@@ -1,59 +1,98 @@
-# App Review Response Notes - May 12, 2026
+# App Review Notes - Version 1.0.1
 
-## Rejection Addressed
+Last updated: July 29, 2026
 
-Submission ID: 416226a1-16ae-422d-93a8-edb47fbfe654
-Version reviewed: 1.0 (24)
-Review device: iPad Air 11-inch (M3)
+## Build Under Review
 
-Apple cited:
+- Version: 1.0.1
+- iOS build: 34
+- Bundle ID: `com.mhtoolkit.app`
+- Support URL: https://mhtoolkit.vercel.app/support
+- Support email: bolajiag10@gmail.com
 
-- Guideline 1.4.1: App description needed a medical disclaimer reminding users to seek a doctor's advice in addition to using the app and before making medical decisions.
-- Guideline 1.4.1: The Assess section needed easy-to-find citations for medical or health information, including recommendations, calculations, wellness reports, and assessment references.
+No login is required for the core review path. MHtoolkit creates a private
+anonymous session so check-ins and other entries can be saved. Accountability
+partner features require a permanent account because two verified accounts are
+needed to establish a partnership.
 
-Changes made:
-
-- Updated the App Store description and promotional text with a direct medical disclaimer: MHtoolkit does not provide diagnoses or treatment advice, and users should seek a doctor's or licensed professional's advice before medical decisions.
-- Added visible clinical source citations in the mobile Assess list, before each screener begins, and on each result screen.
-- Updated result copy to describe "symptom ranges" from screeners instead of diagnostic conclusions.
-- Retained the previous AI data-sharing consent and anonymous review access fixes.
-
-## Reviewer Notes Draft
-
-No login is required to review MHtoolkit. Full functionality is available in anonymous mode.
-
-Suggested review path:
+## Suggested Review Path
 
 1. Launch the app and continue anonymously.
-2. Open Assess. Each tool identifies its recall period, measure type, and published source.
-3. Start PHQ-9, GAD-7, or the CBI Personal Burnout measure. The app explains the medical limitations before questions begin. PHQ-9 and GAD-7 include the published daily-functioning follow-up, which is shown separately and is not added to the total score.
-4. Complete a tool. The result page shows the scoring limitation, published source, and non-diagnostic wording.
-5. On PHQ-9 item 9, choose any option above "Not at all" to verify that immediate safety guidance and U.S./Canada 988 actions appear before the result.
-6. Use mood tracking, goals, habits, library, and settings without an account.
-7. Open AI Chat. The app shows an AI data-sharing disclosure and asks for consent before sending any chat text or personalized context to third-party AI providers.
-8. Turn on Personalized Responses only if you want to verify that recent moods, assessment results, goals, and habits can be included in AI requests after consent.
-9. Open Voice Support. The app explains voice AI data sharing and asks for consent before requesting microphone permission or sending audio for transcription.
-10. Open Daily Affirmations and tap "Generate AI Affirmation with My Data." The app asks for consent before sending mood, assessment, and goal context for AI generation.
-11. Settings > Privacy & Data Protection shows AI consent status and allows consent revocation.
-12. Settings > Support & Feedback shows the developer email and links directly to the public support and crisis-resources page.
+2. Save a mood check-in, return to the dashboard, and reopen the mood tracker.
+   The new entry appears in mood history.
+3. Open Assess. PHQ-9, GAD-7, and CBI identify their recall period, scoring
+   method, limitations, and published source before questions begin and again
+   on the result screen.
+4. Add goals and habits. Repeated taps are guarded and duplicate active entries
+   are rejected by the database.
+5. Open Library. The release contains books, videos, and original in-app
+   profiles of public figures, with citations and actions that can be added to
+   goals, habits, or private notes.
+6. Review Journal, Life Planner, Focus Mode, Meditation, Mind Games, and Ground
+   Me. These tools work without an account.
+7. Open AI Chat. Sending a message first displays the AI data-sharing consent
+   flow. Personal context is off by default and can be enabled category by
+   category from the collapsible "Context for this chat" panel.
+8. Open Settings. The user can revoke AI consent, export data, delete saved
+   data, delete a permanent account, contact support, and open crisis resources.
 
-Assessment sources shown in app:
+## Medical And Safety Boundaries
 
-- PHQ-9: Kroenke K, Spitzer RL, Williams JB. The PHQ-9: validity of a brief depression severity measure. J Gen Intern Med. 2001. https://pubmed.ncbi.nlm.nih.gov/11556941/
-- GAD-7: Spitzer RL, Kroenke K, Williams JB, Lowe B. A brief measure for assessing generalized anxiety disorder: the GAD-7. Arch Intern Med. 2006. https://pubmed.ncbi.nlm.nih.gov/16717171/
-- CBI Personal Burnout: Kristensen TS, Borritz M, Villadsen E, Christensen KB. The Copenhagen Burnout Inventory: A new tool for the assessment of burnout. Work & Stress. 2005. https://nfa.dk/media/hl5nbers/cbi-first-edition.pdf
+MHtoolkit is a self-management and reflection tool. It does not diagnose,
+treat, or replace a doctor or licensed professional. Users are told to seek
+professional advice before medical decisions.
 
-The PSS-4 is not exposed in this release because MHtoolkit does not have a documented usage permission from the rights administrator. Historical stored PSS-4 results remain part of user exports.
+Assessment sources shown in the app:
 
-AI data-sharing update:
+- PHQ-9: Kroenke K, Spitzer RL, Williams JB. The PHQ-9: validity of a brief
+  depression severity measure. J Gen Intern Med. 2001.
+  https://pubmed.ncbi.nlm.nih.gov/11556941/
+- GAD-7: Spitzer RL, Kroenke K, Williams JB, Lowe B. A brief measure for
+  assessing generalized anxiety disorder: the GAD-7. Arch Intern Med. 2006.
+  https://pubmed.ncbi.nlm.nih.gov/16717171/
+- CBI Personal Burnout: Kristensen TS, Borritz M, Villadsen E, Christensen KB.
+  The Copenhagen Burnout Inventory: a new tool for the assessment of burnout.
+  Work & Stress. 2005.
+  https://nfa.dk/media/hl5nbers/cbi-first-edition.pdf
 
-- Chat messages are sent through the MHtoolkit backend to Google Gemini or Anthropic Claude to generate responses.
-- Voice recordings/transcripts are sent through the MHtoolkit backend to OpenAI for transcription and spoken playback, and transcripts are sent to an AI provider for responses.
-- Personalized AI features can include recent moods, assessment scores, goals, and habits.
+PSS-4 is not exposed because MHtoolkit does not have documented usage
+permission from the rights administrator. Historical stored PSS-4 results
+remain available in user exports.
+
+If PHQ-9 item 9 is above "Not at all," the app shows immediate safety guidance
+and crisis-resource actions before the result. AI chat also intercepts explicit
+crisis language with a deterministic safety response instead of relying on a
+model-generated answer.
+
+## AI Data Sharing
+
+- Chat messages are sent through the MHtoolkit backend to Anthropic Claude or
+  Google Gemini to generate a response.
+- Voice audio is sent through the backend to OpenAI for transcription. The
+  transcript is then handled like a chat message.
+- Optional chat context can include recent mood patterns, mood notes,
+  assessment names and scores, goals and reflections, habit names and streaks,
+  journal entries, private library notes, life-planner items, and focus
+  sessions.
+- Context is off by default, each category has its own toggle, and the current
+  toggles are reapplied immediately before every request.
+- AI consent can be revoked from Settings. AI features ask again before sending
+  new data after revocation.
 - MHtoolkit does not sell user data or share it for advertising.
-- The privacy policy at https://mhtoolkit.vercel.app/privacy now identifies the AI providers, data categories, purposes, and consent/revocation path.
 
-Support contact:
+The privacy policy at https://mhtoolkit.vercel.app/privacy identifies the AI
+providers, data categories, purposes, and consent controls.
 
-- Email: bolajiag10@gmail.com
-- Support URL: https://mhtoolkit.vercel.app/support
+## Accountability Partner Privacy
+
+Partners receive only user-enabled activity counts and fixed-format
+celebrations. Database authorization prevents a partner from reading raw mood
+notes, journal text, AI chat history, assessment scores or responses, goal
+text, habit names, planner text, focus-task text, or library notes.
+
+## iPad Compatibility
+
+The app is distributed as iPhone-only and requires fullscreen. It has also been
+tested in iPhone compatibility mode on an iPad Air 11-inch (M3) simulator. The
+iOS native build excludes the notification and device modules that caused the
+earlier iPad launch crash; notification reminders remain available on Android.
