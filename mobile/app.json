@@ -44,6 +44,7 @@
         "backgroundColor": "#3b82f6"
       },
       "package": "com.mhtoolkit.app",
+      "allowBackup": false,
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
