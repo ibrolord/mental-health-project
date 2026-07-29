@@ -241,12 +241,18 @@ else
   pass "App/support/privacy copy avoids absolute no-sharing wording"
 fi
 
-if [ -f "$ROOT_DIR/fastlane/screenshots/en-US/02_mood.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/06_goals.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/07_habits.png" ]; then
-  pass "Fastlane screenshots cover mood, goals, and habits"
+if [ -f "$ROOT_DIR/fastlane/screenshots/en-US/01_dashboard.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/02_library.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/03_chat.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/04_assessments.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/05_journal.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/06_ground.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/07_focus.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/08_habits.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/09_meditation.png" ]; then
+  pass "Fastlane screenshots cover the current nine-feature store set"
 else
-  fail "Fastlane screenshots are missing mood, goals, or habits coverage"
+  fail "Fastlane screenshots are missing one or more current feature screens"
 fi
 
 promo_chars="$(wc -m < "$ROOT_DIR/fastlane/metadata/en-US/promotional_text.txt" | tr -d ' ')"

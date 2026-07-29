@@ -1,43 +1,33 @@
-MHtoolkit is a free, private mental health companion with published-source self-assessment screeners, AI-powered conversation support, mood tracking, and daily habit-building features - all in one app. No subscriptions. No ads. No data sold.
+MHtoolkit is a free, private wellbeing companion for reflection, planning, and day-to-day mental health self-management. No subscriptions. No ads. No data sold.
 
-Medical disclaimer: MHtoolkit does not provide medical diagnoses or treatment advice. Seek a doctor's advice in addition to using this app and before making medical decisions, especially if you have symptoms, safety concerns, or plan to change care.
+IMPORTANT MEDICAL INFORMATION
+MHtoolkit does not diagnose, treat, or replace a doctor or licensed mental health professional. Seek a doctor's advice in addition to using this app and before making medical decisions. If you may be in immediate danger, contact local emergency services or use the crisis resources in the app.
 
-MENTAL HEALTH SUPPORT SHOULD BE ACCESSIBLE TO EVERYONE
-
-Whether you're between care options, on a waitlist, managing day-to-day stress, or simply want better tools for self-awareness, MHtoolkit meets you where you are.
-
-AI CHAT COMPANION
-Have a conversation with an AI companion that can use your mood patterns, assessment history, and personal context when you choose personalized responses. The app asks for consent before sending chat text, voice audio/transcripts, or personalized context to third-party AI providers. Voice support mode lets you speak naturally and hear responses aloud.
+AI CHAT WITH YOUR CHOICE OF CONTEXT
+Chat with an AI companion for general reflection and practical support. Before any message, voice transcript, or selected personal context is sent to an AI provider, the app asks for consent. Personal context is off by default and can be enabled separately for mood, assessments, goals, habits, journal entries, library notes, planner items, and focus sessions. Consent can be revoked in Settings.
 
 PUBLISHED-SOURCE SELF-ASSESSMENTS
-Track symptom and exhaustion patterns with published self-report tools. The app shows the recall period, scoring limitations, and source citation before and after each tool:
-- PHQ-9 - Depression symptom screener
-- GAD-7 - Anxiety symptom screener
-- CBI - Personal burnout self-report measure
+Review recall periods, scoring limitations, and source citations before and after:
+- PHQ-9 depression symptom screener
+- GAD-7 anxiety symptom screener
+- CBI personal burnout self-report measure
+These tools report non-diagnostic symptom ranges. A positive PHQ-9 self-harm response immediately shows safety guidance and crisis actions.
 
-MOOD TRACKING
-Log your mood in seconds with emoji-based check-ins. View trend charts that reveal patterns you might not notice on your own.
+MOOD, GOALS, AND HABITS
+Save mood check-ins, view patterns, plan goals using several frameworks, and build or reduce habits with streaks, routines, rewards, and optional accountability.
 
-PRIVATE JOURNAL
-Write free-form or guided entries that stay in your private profile and are not sent to AI chat. Search your writing, mark important entries, add tags, and connect book reflections to your own notes.
+JOURNAL AND LIFE PLANNING
+Write and organize private journal entries, map dreams and priorities, plan morning, afternoon, and evening routines, and turn selected ideas into goals or habits.
 
-SOURCE-BACKED READING GUIDES
-Explore in-depth guides to popular self-help books. Each guide clearly labels paraphrased premises, practical takeaways, reflection prompts, primary sources, and important clinical limitations. Turn an idea into a journal entry, priority, or habit only after reviewing the prefilled draft.
+LIBRARY AND WELLBEING TOOLS
+Explore 100+ source-backed books, videos, and original profiles of public figures. Each resource includes premises, takeaways, citations, and practical actions. Use meditation, grounding, breathing, focus timers, cognitive games, affirmations, and support resources.
 
-GOAL SETTING THAT ACTUALLY WORKS
-Choose from five planning frameworks: Eisenhower Matrix, Ivy Lee Method, 1-3-5 Rule, ABCDE Method, or free-form goals.
+PRIVACY CONTROLS
+- Use anonymously for the core experience
+- Explicit AI data-sharing consent
+- Optional per-category AI context
+- Export or delete saved data
+- Delete a permanent account in the app
+- Accountability partners receive only user-enabled activity counts and fixed-format celebrations, not raw private content
 
-HABIT TRACKING WITH STREAKS
-Build daily practices that support your mental health. Track habits and watch your consistency grow.
-
-PERSONALIZED DAILY AFFIRMATIONS
-AI-generated affirmations drawn from your actual mood data, assessment results, and goals.
-
-PRIVACY BY DESIGN
-- Use anonymously — no account required
-- Export all your data anytime
-- Delete everything with one tap
-- No data sold to third parties
-- AI features ask before sharing selected data with AI providers for processing
-
-MHtoolkit is not a replacement for professional care, diagnosis, or treatment. Seek advice from a doctor or licensed mental health professional in addition to using MHtoolkit and before making medical decisions. A PHQ-9 response about thoughts of death or self-harm displays immediate safety guidance and 988 contact options for the U.S. and Canada.
+MHtoolkit supports self-management and reflection. It is not medical care or emergency response.

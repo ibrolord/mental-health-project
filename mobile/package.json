@@ -7,6 +7,8 @@
     "ios": "expo run:ios",
     "android": "expo run:android",
     "lint": "eslint .",
+    "generate:icons": "node scripts/generate-icons.mjs",
+    "generate:store-screenshots": "node scripts/generate-store-screenshots.mjs",
     "review:ios": "bash scripts/verify-ios-review-build.sh"
   },
   "dependencies": {

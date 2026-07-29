@@ -13,6 +13,7 @@ async function generate() {
   // App icon (1024x1024)
   await sharp(iconSvg)
     .resize(1024, 1024)
+    .removeAlpha()
     .png()
     .toFile(join(assetsDir, 'icon.png'));
   console.log('Generated icon.png (1024x1024)');
@@ -25,27 +26,13 @@ async function generate() {
     .toFile(join(assetsDir, 'adaptive-icon.png'));
   console.log('Generated adaptive-icon.png (1024x1024)');
 
-  // Android adaptive icon foreground (brain+heart only, centered with padding)
+  // Android adaptive icon foreground: the same mark without a baked-in mask.
   const foregroundSvg = `<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#3b82f6"/>
-        <stop offset="50%" style="stop-color:#6366f1"/>
-        <stop offset="100%" style="stop-color:#8b5cf6"/>
-      </linearGradient>
-    </defs>
-    <!-- Left brain hemisphere -->
-    <path d="M 400 340 C 340 340, 290 390, 290 450 C 290 490, 310 520, 340 540 C 320 560, 310 590, 310 620 C 310 680, 360 730, 420 730 L 500 730 L 500 340 C 460 340, 430 340, 400 340 Z" fill="white" opacity="0.95"/>
-    <path d="M 624 340 C 684 340, 734 390, 734 450 C 734 490, 714 520, 684 540 C 704 560, 714 590, 714 620 C 714 680, 664 730, 604 730 L 524 730 L 524 340 C 564 340, 594 340, 624 340 Z" fill="white" opacity="0.95"/>
-    <path d="M 360 420 C 400 410, 440 440, 480 420" stroke="url(#bg2)" stroke-width="8" fill="none" stroke-linecap="round"/>
-    <path d="M 340 500 C 380 490, 420 520, 480 500" stroke="url(#bg2)" stroke-width="8" fill="none" stroke-linecap="round"/>
-    <path d="M 360 580 C 400 570, 440 600, 480 580" stroke="url(#bg2)" stroke-width="8" fill="none" stroke-linecap="round"/>
-    <path d="M 380 660 C 410 650, 440 670, 480 660" stroke="url(#bg2)" stroke-width="8" fill="none" stroke-linecap="round"/>
-    <path d="M 544 420 C 584 410, 624 440, 664 420" stroke="url(#bg2)" stroke-width="8" fill="none" stroke-linecap="round"/>
-    <path d="M 544 500 C 584 490, 624 520, 684 500" stroke="url(#bg2)" stroke-width="8" fill="none" stroke-linecap="round"/>
-    <path d="M 544 580 C 584 570, 624 600, 664 580" stroke="url(#bg2)" stroke-width="8" fill="none" stroke-linecap="round"/>
-    <path d="M 544 660 C 574 650, 604 670, 644 660" stroke="url(#bg2)" stroke-width="8" fill="none" stroke-linecap="round"/>
-    <path d="M 512 370 C 512 360, 500 345, 488 345 C 472 345, 462 360, 462 372 C 462 395, 512 420, 512 420 C 512 420, 562 395, 562 372 C 562 360, 552 345, 536 345 C 524 345, 512 360, 512 370 Z" fill="#f472b6"/>
+    <path d="M395 318c-78 0-139 59-139 135 0 45 20 81 53 105-25 26-38 59-38 98 0 82 65 144 151 144h76V318H395Z" fill="#fffef8"/>
+    <path d="M629 318c78 0 139 59 139 135 0 45-20 81-53 105 25 26 38 59 38 98 0 82-65 144-151 144h-76V318h103Z" fill="#fffef8"/>
+    <path d="M330 438c49-17 98 17 139 0M313 540c50-17 101 17 156 0M333 642c49-17 96 17 136 0M357 731c42-14 79 13 112 0" fill="none" stroke="#c65f3d" stroke-width="18" stroke-linecap="round"/>
+    <path d="M555 438c41-17 90 17 139 0M555 540c55-17 106 17 156 0M555 642c40-17 87 17 136 0M555 731c33-13 70 14 112 0" fill="none" stroke="#c65f3d" stroke-width="18" stroke-linecap="round"/>
+    <path d="M512 354c-14-27-36-41-62-41-43 0-70 31-70 67 0 61 71 105 132 146 61-41 132-85 132-146 0-36-27-67-70-67-26 0-48 14-62 41Z" fill="#c65f3d"/>
   </svg>`;
 
   await sharp(Buffer.from(foregroundSvg))
@@ -54,16 +41,9 @@ async function generate() {
     .toFile(join(assetsDir, 'android-icon-foreground.png'));
   console.log('Generated android-icon-foreground.png (1024x1024)');
 
-  // Android background (solid gradient as PNG)
+  // Android background.
   const bgSvg = `<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="bg3" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#3b82f6"/>
-        <stop offset="50%" style="stop-color:#6366f1"/>
-        <stop offset="100%" style="stop-color:#8b5cf6"/>
-      </linearGradient>
-    </defs>
-    <rect width="1024" height="1024" fill="url(#bg3)"/>
+    <rect width="1024" height="1024" fill="#163a32"/>
   </svg>`;
 
   await sharp(Buffer.from(bgSvg))
@@ -74,9 +54,9 @@ async function generate() {
 
   // Monochrome icon (white silhouette on transparent)
   const monoSvg = `<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
-    <path d="M 400 340 C 340 340, 290 390, 290 450 C 290 490, 310 520, 340 540 C 320 560, 310 590, 310 620 C 310 680, 360 730, 420 730 L 500 730 L 500 340 C 460 340, 430 340, 400 340 Z" fill="white"/>
-    <path d="M 624 340 C 684 340, 734 390, 734 450 C 734 490, 714 520, 684 540 C 704 560, 714 590, 714 620 C 714 680, 664 730, 604 730 L 524 730 L 524 340 C 564 340, 594 340, 624 340 Z" fill="white"/>
-    <path d="M 512 370 C 512 360, 500 345, 488 345 C 472 345, 462 360, 462 372 C 462 395, 512 420, 512 420 C 512 420, 562 395, 562 372 C 562 360, 552 345, 536 345 C 524 345, 512 360, 512 370 Z" fill="white"/>
+    <path d="M395 318c-78 0-139 59-139 135 0 45 20 81 53 105-25 26-38 59-38 98 0 82 65 144 151 144h76V318H395Z" fill="white"/>
+    <path d="M629 318c78 0 139 59 139 135 0 45-20 81-53 105 25 26 38 59 38 98 0 82-65 144-151 144h-76V318h103Z" fill="white"/>
+    <path d="M512 354c-14-27-36-41-62-41-43 0-70 31-70 67 0 61 71 105 132 146 61-41 132-85 132-146 0-36-27-67-70-67-26 0-48 14-62 41Z" fill="white"/>
   </svg>`;
 
   await sharp(Buffer.from(monoSvg))
@@ -102,4 +82,7 @@ async function generate() {
   console.log('\nAll icons generated!');
 }
 
-generate().catch(console.error);
+generate().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

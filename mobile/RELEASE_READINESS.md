@@ -48,14 +48,16 @@ to `auth.uid()`, and perform object-level authorization.
 - [x] Clean simulator installs render on iPhone and iPad Air 11-inch (M3).
 - [x] Launch stress passes 20/20 on iPhone and 20/20 on iPad with no crash,
   fatal, exception, abort, keychain, or auth-init log pattern.
-- [ ] Confirm Apple agreements are active in App Store Connect.
-- [ ] Upload build 34 to App Store Connect.
+- [x] Apple agreements are active in App Store Connect.
+- [x] Build 34 uploaded to App Store Connect.
 - [ ] Install the processed build from TestFlight on a physical iPhone and, if
   available, an iPad in compatibility mode.
-- [ ] Select build 34 for version 1.0.1 and submit it for review.
+- [x] Build 34 selected for version 1.0.1 and submitted for review.
 
-No App Store Connect upload or review submission has been performed for build
-34.
+App Store Connect submission `1d9febf2-6e1d-4350-b798-ececd1c53025` is
+Waiting for Review. EAS upload `72330965-7667-4889-a32d-122e582e50cd`
+completed successfully. The refreshed icon and store screenshots are prepared
+for the next version and are not part of build 34.
 
 ## Android 1.0.1
 
@@ -102,8 +104,7 @@ No Google Play upload has been performed.
 
 ## Release Decision
 
-The source and iOS artifact are release candidates. Android is not releasable
+The iOS artifact is submitted and Waiting for Review. Android is not releasable
 until replacement build 13 finishes and the exact AAB passes artifact
-inspection plus an installed-device smoke test. Store upload,
-TestFlight/Play installation, and review submission remain separate operator
-actions.
+inspection plus an installed-device smoke test. TestFlight/Play installation,
+store review, and public release remain separate states.

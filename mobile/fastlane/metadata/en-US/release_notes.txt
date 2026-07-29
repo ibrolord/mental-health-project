@@ -1,16 +1,9 @@
-What's new in MHtoolkit v1.0.1:
+What's new:
 
-- AI chat companion with explicit AI data-sharing consent
-- Voice support with clearer microphone, AI processing, and self-help guidance
-- Mood tracking with emoji check-ins and trend charts
-- Private journaling with guided prompts, tags, important entries, search, export, and deletion
-- Corrected PHQ-9 and GAD-7 recall instructions, unscored functioning follow-up, scoring context, and in-app citations
-- Corrected five-option, 0-100 scoring for the CBI personal burnout measure
-- Immediate safety guidance for any positive PHQ-9 item 9 response
-- Clear medical disclaimer reminding users to seek a doctor's advice before medical decisions
-- Goal setting with 5 proven frameworks
-- Habit tracking with daily streaks
-- AI-generated affirmations based on your data after consent
-- Expanded, source-backed book guides with paraphrased premises, practical takeaways, reflection prompts, and links into Journal, Goals, and Habits
-- Full data export, in-app data deletion, and account deletion
-- Anonymous use — no account required
+- Expanded Library to 100+ source-backed books, videos, and real-life profiles with takeaways, citations, notes, and practical actions.
+- Added Journal, Life Planner, Meditation, Ground Me, Focus Mode, routines, mind games, and daily affirmations.
+- Added explicit per-conversation AI context controls, with every category off by default.
+- Improved AI chat reliability, mood saving, account setup, and duplicate protection for goals and habits.
+- Improved assessment guidance, non-diagnostic wording, safety actions, and source citations.
+- Added accountability sharing controls and streak celebrations while keeping raw private content protected.
+- Hardened iOS launch stability, including iPad compatibility mode.
