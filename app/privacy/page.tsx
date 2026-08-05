@@ -73,7 +73,7 @@ export default function PrivacyPolicyPage() {
             <li>
               <strong>Voice recordings and transcripts:</strong> Audio recorded
               during voice support conversations and the resulting transcript,
-              used to provide transcription, AI responses, and spoken playback.
+              used to provide transcription and AI responses.
             </li>
             <li>
               <strong>AI personalization context:</strong> If you turn on
@@ -118,7 +118,8 @@ export default function PrivacyPolicyPage() {
               you consent to AI data sharing in the App.
             </li>
             <li>
-              Transcribing voice recordings and generating spoken responses.
+              Transcribing voice recordings and playing responses aloud on your
+              device.
             </li>
             <li>Tracking your goals, habits, and streaks.</li>
             <li>
@@ -165,17 +166,18 @@ export default function PrivacyPolicyPage() {
           </p>
           <ul className="list-disc list-inside text-foreground space-y-2 ml-2">
             <li>
-              <strong>Google Gemini:</strong> Processes standard chat messages
-              and may generate personalized affirmations.
+              <strong>Google Gemini:</strong> Processes standard chat messages,
+              may generate personalized affirmations, and transcribes push-to-talk
+              recordings.
             </li>
             <li>
               <strong>Anthropic Claude:</strong> Handles complex or
               crisis-related chat interactions.
             </li>
             <li>
-              <strong>OpenAI:</strong> Transcribes voice recordings
-              (speech-to-text) and generates spoken responses
-              (text-to-speech).
+              <strong>OpenAI:</strong> Powers live voice transcription and is a
+              fallback for compatible push-to-talk recordings. Live voice may also
+              return OpenAI-generated audio.
             </li>
           </ul>
           <p className="text-foreground mt-3 leading-relaxed">
@@ -247,16 +249,22 @@ export default function PrivacyPolicyPage() {
               page view analytics (no cookies, no personal identifiers).
             </li>
             <li>
-              <strong>Google (Gemini API)</strong> &mdash; AI chat and
-              affirmation generation.
+              <strong>Google (Gemini API)</strong> &mdash; AI chat,
+              affirmation generation, and push-to-talk transcription.
             </li>
             <li>
               <strong>Anthropic (Claude API)</strong> &mdash; AI chat for complex
               interactions.
             </li>
             <li>
-              <strong>OpenAI (Whisper & TTS APIs)</strong> &mdash; Voice
-              transcription and text-to-speech.
+              <strong>OpenAI</strong> &mdash; Live voice transcription and
+              fallback transcription for compatible push-to-talk recordings; live
+              voice may also return provider-generated audio.
+            </li>
+            <li>
+              <strong>Operating-system speech services</strong> &mdash; Mobile
+              push-to-talk responses may be read aloud using voices configured on
+              the device. Processing depends on the selected device voice.
             </li>
             <li>
               <strong>Browser push services</strong> &mdash; If you explicitly
@@ -282,7 +290,7 @@ export default function PrivacyPolicyPage() {
               anonymous session remains active.
             </li>
             <li>
-              Voice recordings are processed in real time for transcription and
+              Voice recordings are processed after each turn for transcription and
               are not permanently stored by MHtoolkit.
             </li>
             <li>

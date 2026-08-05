@@ -3,9 +3,11 @@ import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Speech from 'expo-speech';
 import {
   Alert,
   Animated,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -52,6 +54,41 @@ type NativeEventTarget<TEvent = unknown> = {
 type NativeMessageEvent = { data: unknown };
 
 const CONNECT_TIMEOUT_MS = 15_000;
+const MAX_FALLBACK_RECORDING_MS = 90_000;
+const MAX_FALLBACK_AUDIO_BYTES = 4 * 1024 * 1024;
+const FALLBACK_RECORDING_OPTIONS: Audio.RecordingOptions = {
+  isMeteringEnabled: true,
+  android: {
+    extension: '.aac',
+    outputFormat: Audio.AndroidOutputFormat.AAC_ADTS,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 16_000,
+    numberOfChannels: 1,
+    bitRate: 64_000,
+    maxFileSize: MAX_FALLBACK_AUDIO_BYTES,
+  },
+  ios: {
+    extension: '.wav',
+    outputFormat: Audio.IOSOutputFormat.LINEARPCM,
+    audioQuality: Audio.IOSAudioQuality.HIGH,
+    sampleRate: 16_000,
+    numberOfChannels: 1,
+    bitRate: 256_000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: {
+    mimeType: 'audio/webm',
+    bitsPerSecond: 64_000,
+  },
+};
+
+function getFallbackUploadMetadata() {
+  return Platform.OS === 'ios'
+    ? { type: 'audio/wav', name: 'recording.wav' }
+    : { type: 'audio/aac', name: 'recording.aac' };
+}
 
 function asEventTarget<TEvent>(target: unknown): NativeEventTarget<TEvent> {
   // react-native-webrtc implements EventTarget at runtime, but v124's generated
@@ -80,7 +117,7 @@ export default function VoiceSupportScreen() {
   const channelRef = useRef<RealtimeDataChannel | null>(null);
   const streamRef = useRef<RealtimeMediaStream | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const fallbackRecordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesRef = useRef<Message[]>([]);
   const sessionGenerationRef = useRef(0);
   const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -138,6 +175,9 @@ export default function VoiceSupportScreen() {
       sessionGenerationRef.current += 1;
       if (sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+      if (fallbackRecordingTimerRef.current) {
+        clearTimeout(fallbackRecordingTimerRef.current);
+      }
       channelRef.current?.close();
       peerRef.current?.close();
       streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -154,9 +194,7 @@ export default function VoiceSupportScreen() {
             }
           });
       }
-      if (soundRef.current) {
-        void soundRef.current.unloadAsync().catch(() => {});
-      }
+      void Speech.stop().catch(() => {});
     };
   }, []);
 
@@ -254,61 +292,32 @@ export default function VoiceSupportScreen() {
   }
 
   async function speakText(text: string, returnToListening: boolean) {
-    const API_URL =
-      process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';
-    let tempPath: string | null = null;
-    let playbackSound: Audio.Sound | null = null;
     try {
       setStatus('speaking');
       setMicrophoneEnabled(false);
-      const authHeaders = await getAuthHeaders();
-      const response = await fetch(`${API_URL}/api/voice`, {
-        method: 'POST',
-        headers: {
-          ...authHeaders,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text, voice: 'nova' }),
-      });
-      if (!response.ok) throw new Error('Speech playback failed');
-
-      const audioData = await response.arrayBuffer();
-      const bytes = new Uint8Array(audioData);
-      const chunks: string[] = [];
-      for (let index = 0; index < bytes.length; index += 8_192) {
-        chunks.push(String.fromCharCode(...bytes.subarray(index, index + 8_192)));
-      }
-      tempPath = `${FileSystem.cacheDirectory}voice-response-${Date.now()}.mp3`;
-      await FileSystem.writeAsStringAsync(tempPath, btoa(chunks.join('')), {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync().catch(() => {});
-        soundRef.current = null;
-      }
-      const { sound } = await Audio.Sound.createAsync({ uri: tempPath });
-      playbackSound = sound;
-      soundRef.current = sound;
-      await new Promise<void>((resolve) => {
-        const timeout = setTimeout(resolve, 60_000);
-        sound.setOnPlaybackStatusUpdate((playback) => {
-          if (playback.isLoaded && playback.didJustFinish) {
-            clearTimeout(timeout);
-            resolve();
-          }
-        });
-        void sound.playAsync().catch(() => {
+      await Speech.stop();
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const finish = (error?: Error) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timeout);
-          resolve();
+          if (error) reject(error);
+          else resolve();
+        };
+        const timeout = setTimeout(() => {
+          void Speech.stop();
+          finish(new Error('Speech playback timed out'));
+        }, 60_000);
+        Speech.speak(text, {
+          language: 'en-US',
+          rate: 0.9,
+          onDone: () => finish(),
+          onStopped: () => finish(),
+          onError: () => finish(new Error('Speech playback failed')),
         });
       });
     } finally {
-      if (playbackSound) await playbackSound.unloadAsync().catch(() => {});
-      if (soundRef.current === playbackSound) soundRef.current = null;
-      if (tempPath) {
-        await FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
-      }
       if (returnToListening && peerRef.current) {
         setMicrophoneEnabled(!mutedRef.current);
         setStatus('listening');
@@ -650,9 +659,14 @@ export default function VoiceSupportScreen() {
         playsInSilentModeIOS: true,
       });
       const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
+        FALLBACK_RECORDING_OPTIONS
       );
       recordingRef.current = recording;
+      fallbackRecordingTimerRef.current = setTimeout(() => {
+        if (recordingRef.current === recording) {
+          void stopFallbackRecording();
+        }
+      }, MAX_FALLBACK_RECORDING_MS);
       setStatus('listening');
     } catch {
       setError('Could not start recording. Check microphone access.');
@@ -665,20 +679,33 @@ export default function VoiceSupportScreen() {
   async function stopFallbackRecording() {
     const recording = recordingRef.current;
     if (!recording) return;
-    recordingRef.current = null;
+    if (fallbackRecordingTimerRef.current) {
+      clearTimeout(fallbackRecordingTimerRef.current);
+      fallbackRecordingTimerRef.current = null;
+    }
     setStatus('processing');
     const uri = recording.getURI();
     try {
       await recording.stopAndUnloadAsync();
-      if (!uri) throw new Error('No audio recorded');
-      await processFallbackVoice(uri);
     } catch {
+      await recording.stopAndUnloadAsync().catch(() => {});
+      if (recordingRef.current === recording) recordingRef.current = null;
       if (uri) {
         await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
       }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
       setError('That recording could not be processed. Please try again.');
       setStatus('idle');
+      return;
     }
+    if (recordingRef.current === recording) recordingRef.current = null;
+    if (!uri) {
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+      setError('That recording could not be processed. Please try again.');
+      setStatus('idle');
+      return;
+    }
+    await processFallbackVoice(uri);
   }
 
   async function processFallbackVoice(audioUri: string) {
@@ -687,12 +714,19 @@ export default function VoiceSupportScreen() {
     try {
       const fileInfo = await FileSystem.getInfoAsync(audioUri);
       if (!fileInfo.exists) throw new Error('Audio file not found');
+      if (
+        typeof fileInfo.size === 'number'
+        && fileInfo.size > MAX_FALLBACK_AUDIO_BYTES
+      ) {
+        throw new Error('Audio file is too large');
+      }
 
       const formData = new FormData();
+      const upload = getFallbackUploadMetadata();
       formData.append('audio', {
         uri: audioUri,
-        type: 'audio/m4a',
-        name: 'recording.m4a',
+        type: upload.type,
+        name: upload.name,
       } as never);
       const transcribe = await fetch(`${API_URL}/api/voice`, {
         method: 'POST',
@@ -800,8 +834,8 @@ export default function VoiceSupportScreen() {
           <View style={styles.disclosureCopy}>
             <Feather name="lock" size={15} color="#675b47" />
             <Text style={styles.disclosureText}>
-              OpenAI transcribes live audio. MHtoolkit checks each turn before the
-              AI answers and does not save this session or share it with partners.
+              Live audio uses OpenAI. Push-to-talk uses Gemini; compatible recordings
+              can fall back to OpenAI. Replies use your phone&apos;s speech service.
             </Text>
           </View>
           <TouchableOpacity

@@ -68,8 +68,12 @@ model-generated answer.
 
 - Chat messages are sent through the MHtoolkit backend to Anthropic Claude or
   Google Gemini to generate a response.
-- Voice audio is sent through the backend to OpenAI for transcription. The
-  transcript is then handled like a chat message.
+- Live voice audio is sent through the backend to OpenAI for transcription.
+  Push-to-talk audio is sent to Google Gemini; compatible recordings may use
+  OpenAI as a fallback. The transcript is then handled like a chat message.
+  Push-to-talk playback uses
+  the operating-system speech service; processing depends on the voice installed
+  and selected on the device.
 - Optional chat context can include recent mood patterns, mood notes,
   assessment names and scores, goals and reflections, habit names and streaks,
   journal entries, private library notes, life-planner items, and focus

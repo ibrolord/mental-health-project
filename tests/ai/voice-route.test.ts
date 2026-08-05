@@ -1,6 +1,10 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAudioFile, getAudioFile } from '../../lib/ai/voice-input';
+import {
+  createAudioFile,
+  getAudioFile,
+  MAX_VOICE_AUDIO_BYTES,
+} from '../../lib/ai/voice-input';
 import { POST } from '../../app/api/voice/route';
 
 const mocks = vi.hoisted(() => ({
@@ -42,6 +46,8 @@ describe('voice API multipart validation', () => {
   it('passes a valid audio file to transcription', () => {
     const audio = new File(['audio-bytes'], 'voice.m4a', { type: 'audio/mp4' });
     expect(getAudioFile({ get: () => audio })).toBe(audio);
+    const androidAudio = new File(['audio-bytes'], 'voice.aac', { type: 'audio/aac' });
+    expect(getAudioFile({ get: () => androidAudio })).toBe(androidAudio);
   });
 
   it('wraps a non-empty raw audio body as a named file', () => {
@@ -59,6 +65,14 @@ describe('voice API multipart validation', () => {
     expect(createAudioFile(new Blob([]), 'audio/mpeg')).toBeNull();
     expect(createAudioFile(new Blob(['text']), 'text/plain')).toBeNull();
     expect(createAudioFile(new Blob(['bytes']), 'audio/unknown')).toBeNull();
+  });
+
+  it('rejects decoded audio bodies above the platform-safe limit', () => {
+    const oversized = new Blob(
+      [new Uint8Array(MAX_VOICE_AUDIO_BYTES + 1)],
+      { type: 'audio/wav' }
+    );
+    expect(createAudioFile(oversized, 'audio/wav')).toBeNull();
   });
 
   it('transcribes multipart audio through the route', async () => {
@@ -148,7 +162,7 @@ describe('voice API multipart validation', () => {
       new NextRequest('https://mhtoolkit.test/api/voice', {
         body: new Blob(['small'], { type: 'audio/mpeg' }),
         headers: {
-          'content-length': String(10 * 1024 * 1024 + 1),
+          'content-length': String(MAX_VOICE_AUDIO_BYTES + 1),
           'content-type': 'audio/mpeg',
         },
         method: 'POST',

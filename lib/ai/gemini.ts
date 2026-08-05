@@ -1,8 +1,7 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import type { Message } from './claude';
 import { buildContextualPrompt, type UserContext } from './context';
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
 const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash';
 
 const BASE_SYSTEM_PROMPT = `You are a compassionate self-help support coach. Your role is to:
@@ -41,23 +40,25 @@ Keep responses focused and actionable. Ask one question at a time. Match the use
 
 export async function chat(messages: Message[], userContext?: UserContext): Promise<string> {
   try {
+    const genAI = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! });
     const modelName = process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
-    const model = genAI.getGenerativeModel({ 
+    const conversation = genAI.chats.create({
       model: modelName,
-      systemInstruction: buildContextualPrompt(BASE_SYSTEM_PROMPT, userContext)
+      config: {
+        systemInstruction: buildContextualPrompt(BASE_SYSTEM_PROMPT, userContext),
+      },
+      history: messages.slice(0, -1).map((message) => ({
+        role: message.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: message.content }],
+      })),
     });
 
-    // Convert messages to Gemini format
-    const history = messages.slice(0, -1).map(msg => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: msg.content }],
-    }));
-
-    const chat = model.startChat({ history });
     const lastMessage = messages[messages.length - 1];
-    const result = await chat.sendMessage(lastMessage.content);
-    
-    return result.response.text();
+    if (!lastMessage) throw new Error('At least one message is required');
+    const result = await conversation.sendMessage({ message: lastMessage.content });
+    const response = result.text?.trim();
+    if (!response) throw new Error('Gemini returned an empty response');
+    return response;
   } catch (error) {
     console.error('Gemini API error:', error);
     throw new Error('Failed to get AI response from Gemini');

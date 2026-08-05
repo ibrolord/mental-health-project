@@ -2,9 +2,11 @@ type ReadableFormData = {
   get(name: string): unknown;
 };
 
-export const MAX_VOICE_AUDIO_BYTES = 10 * 1024 * 1024;
+export { MAX_VOICE_AUDIO_BYTES } from './voice-limits';
+import { MAX_VOICE_AUDIO_BYTES } from './voice-limits';
 
 const AUDIO_EXTENSIONS: Record<string, string> = {
+  'audio/aac': 'aac',
   'audio/flac': 'flac',
   'audio/m4a': 'm4a',
   'audio/mp4': 'm4a',

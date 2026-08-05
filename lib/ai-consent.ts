@@ -12,7 +12,7 @@ function consentKey(subjectId: string): string | null {
 export const AI_DATA_SHARING_TITLE = 'AI Data Sharing Consent';
 
 export const AI_DATA_SHARING_DISCLOSURE =
-  'Your message and any MHtoolkit context you turn on may be sent securely to AI providers including Google Gemini, Anthropic Claude, and OpenAI. Voice features also send audio for transcription and playback. We do not sell this data or use it for advertising.';
+  'Your message and any MHtoolkit context you turn on may be sent securely to AI providers including Google Gemini, Anthropic Claude, and OpenAI. Voice features also send recordings for transcription, live voice may return provider-generated audio, and mobile push-to-talk may use your operating system\'s speech service. We do not sell this data or use it for advertising.';
 
 export function hasAiDataSharingConsent(subjectId: string): boolean {
   if (typeof window === 'undefined') return false;

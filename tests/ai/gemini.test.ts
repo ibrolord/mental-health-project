@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getGenerativeModel, sendMessage, startChat } = vi.hoisted(() => ({
-  getGenerativeModel: vi.fn(),
+const { createChat, sendMessage } = vi.hoisted(() => ({
+  createChat: vi.fn(),
   sendMessage: vi.fn(),
-  startChat: vi.fn(),
 }));
 
-vi.mock('@google/generative-ai', () => ({
-  GoogleGenerativeAI: vi.fn(() => ({ getGenerativeModel })),
+vi.mock('@google/genai', () => ({
+  GoogleGenAI: vi.fn(() => ({ chats: { create: createChat } })),
 }));
 
 import { chat } from '../../lib/ai/gemini';
@@ -15,15 +14,11 @@ import { chat } from '../../lib/ai/gemini';
 describe('Gemini chat adapter', () => {
   beforeEach(() => {
     delete process.env.GEMINI_MODEL;
-    getGenerativeModel.mockReset();
+    createChat.mockReset();
     sendMessage.mockReset();
-    startChat.mockReset();
 
-    sendMessage.mockResolvedValue({
-      response: { text: () => 'A supportive response' },
-    });
-    startChat.mockReturnValue({ sendMessage });
-    getGenerativeModel.mockReturnValue({ startChat });
+    sendMessage.mockResolvedValue({ text: 'A supportive response' });
+    createChat.mockReturnValue({ sendMessage });
   });
 
   afterEach(() => {
@@ -34,11 +29,10 @@ describe('Gemini chat adapter', () => {
     const response = await chat([{ role: 'user', content: 'Hello' }]);
 
     expect(response).toBe('A supportive response');
-    expect(getGenerativeModel).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'gemini-3.5-flash' }),
+    expect(createChat).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'gemini-3.5-flash', history: [] })
     );
-    expect(startChat).toHaveBeenCalledWith({ history: [] });
-    expect(sendMessage).toHaveBeenCalledWith('Hello');
+    expect(sendMessage).toHaveBeenCalledWith({ message: 'Hello' });
   });
 
   it('uses the configured model override', async () => {
@@ -46,7 +40,7 @@ describe('Gemini chat adapter', () => {
 
     await chat([{ role: 'user', content: 'Hello' }]);
 
-    expect(getGenerativeModel).toHaveBeenCalledWith(
+    expect(createChat).toHaveBeenCalledWith(
       expect.objectContaining({ model: 'gemini-custom' }),
     );
   });

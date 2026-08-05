@@ -63,4 +63,18 @@ describe('audio-only Realtime native config', () => {
       "process.env.EXPO_PUBLIC_REALTIME_VOICE_ENABLED === 'true'"
     );
   });
+
+  it('keeps push-to-talk independent from paid server speech and Gemini-compatible', () => {
+    expect(voiceScreen).toContain("import * as Speech from 'expo-speech'");
+    expect(voiceScreen).toContain('Speech.speak(text');
+    expect(voiceScreen).toContain("extension: '.wav'");
+    expect(voiceScreen).toContain('Audio.IOSOutputFormat.LINEARPCM');
+    expect(voiceScreen).toContain("extension: '.aac'");
+    expect(voiceScreen).toContain('Audio.AndroidOutputFormat.AAC_ADTS');
+    expect(voiceScreen).toContain('MAX_FALLBACK_RECORDING_MS');
+    expect(voiceScreen).toMatch(
+      /catch \{[\s\S]*recording\.stopAndUnloadAsync\(\)\.catch[\s\S]*Audio\.setAudioModeAsync/
+    );
+    expect(voiceScreen).not.toContain("body: JSON.stringify({ text, voice: 'nova' })");
+  });
 });

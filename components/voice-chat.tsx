@@ -5,10 +5,72 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAiConsent } from '@/components/ai-consent-provider';
 import type { UserContext } from '@/lib/ai/context';
+import { getApiAuthHeaders } from '@/lib/api/auth-headers';
+import { convertRecordingToWav } from '@/lib/ai/browser-audio';
+import {
+  MAX_VOICE_AUDIO_BYTES,
+  MAX_VOICE_RECORDING_MS,
+} from '@/lib/ai/voice-limits';
 
 interface VoiceChatProps {
   userContext?: UserContext;
   onClose?: () => void;
+}
+
+const RECORDING_MIME_TYPES = [
+  'audio/webm;codecs=opus',
+  'audio/webm',
+  'audio/mp4',
+] as const;
+
+function getRecordingMimeType() {
+  if (typeof MediaRecorder === 'undefined') return undefined;
+  return RECORDING_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
+}
+
+function getRecordingFileName(mimeType: string) {
+  if (mimeType.startsWith('audio/mp4') || mimeType.startsWith('audio/m4a')) {
+    return 'recording.m4a';
+  }
+  if (mimeType.startsWith('audio/ogg')) return 'recording.ogg';
+  if (mimeType.startsWith('audio/wav')) return 'recording.wav';
+  return 'recording.webm';
+}
+
+async function getResponseError(response: Response, fallback: string) {
+  const body = await response.json().catch(() => null) as { error?: unknown } | null;
+  return typeof body?.error === 'string' && body.error.trim()
+    ? body.error
+    : fallback;
+}
+
+async function getLocalSpeechVoice(): Promise<SpeechSynthesisVoice | undefined> {
+  const findVoice = () => {
+    const localVoices = window.speechSynthesis
+      .getVoices()
+      .filter((voice) => voice.localService);
+    const language = navigator.language.toLowerCase();
+    const languageBase = language.split('-', 1)[0];
+    return localVoices.find((voice) => voice.lang.toLowerCase() === language)
+      || localVoices.find((voice) => (
+        voice.lang.toLowerCase().split('-', 1)[0] === languageBase
+      ))
+      || localVoices[0];
+  };
+  const available = findVoice();
+  if (available) return available;
+
+  await new Promise<void>((resolve) => {
+    let timeout = 0;
+    const finish = () => {
+      window.clearTimeout(timeout);
+      window.speechSynthesis.removeEventListener('voiceschanged', finish);
+      resolve();
+    };
+    timeout = window.setTimeout(finish, 500);
+    window.speechSynthesis.addEventListener('voiceschanged', finish, { once: true });
+  });
+  return findVoice();
 }
 
 export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
@@ -28,7 +90,29 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
   const streamRef = useRef<MediaStream | null>(null);
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
+
+  const teardownCapture = async () => {
+    if (recordingTimerRef.current !== null) {
+      window.clearTimeout(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (animationFrameRef.current !== undefined) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = undefined;
+    }
+    analyserRef.current = null;
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    const context = audioContextRef.current;
+    audioContextRef.current = null;
+    if (context && context.state !== 'closed') {
+      await context.close();
+    }
+    setVolume(0);
+  };
 
   const setupAudioVisualization = async (stream: MediaStream) => {
     const audioContext = new AudioContext();
@@ -65,7 +149,10 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       
       await setupAudioVisualization(stream);
       
-      const mediaRecorder = new MediaRecorder(stream);
+      const recordingMimeType = getRecordingMimeType();
+      const mediaRecorder = recordingMimeType
+        ? new MediaRecorder(stream, { mimeType: recordingMimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -76,27 +163,28 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const mimeType = mediaRecorder.mimeType || audioChunksRef.current[0]?.type || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        mediaRecorderRef.current = null;
+        await teardownCapture();
         if (mountedRef.current) {
           await processVoiceInput(audioBlob);
-        }
-        
-        stream.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-        if (audioContextRef.current?.state !== 'closed') {
-          await audioContextRef.current?.close();
-        }
-        audioContextRef.current = null;
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
         }
       };
 
       mediaRecorder.start();
+      recordingTimerRef.current = window.setTimeout(() => {
+        if (mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+          void teardownCapture();
+          setIsListening(false);
+        }
+      }, MAX_VOICE_RECORDING_MS);
       setIsListening(true);
       setError('');
     } catch (err) {
       console.error('Microphone error:', err);
+      await teardownCapture();
       setError('Could not access microphone. Please check permissions.');
     }
   };
@@ -104,8 +192,8 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
   const stopListening = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
+      void teardownCapture();
       setIsListening(false);
-      setVolume(0);
     }
   };
 
@@ -116,19 +204,27 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       setIsProcessing(true);
       
       // Step 1: Transcribe audio
+      const uploadBlob = await convertRecordingToWav(audioBlob);
+      if (uploadBlob.size > MAX_VOICE_AUDIO_BYTES) {
+        throw new Error('That recording is too long. Please try a shorter message.');
+      }
       const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
+      formData.append('audio', uploadBlob, getRecordingFileName(uploadBlob.type));
 
       const transcribeResponse = await fetch('/api/voice', {
         method: 'POST',
+        headers: await getApiAuthHeaders(),
         body: formData,
       });
 
       if (!transcribeResponse.ok) {
-        throw new Error('Transcription failed');
+        throw new Error(await getResponseError(transcribeResponse, 'Transcription failed.'));
       }
 
       const { transcription } = await transcribeResponse.json();
+      if (typeof transcription !== 'string' || !transcription.trim()) {
+        throw new Error('I could not hear any speech. Please try again.');
+      }
       setTranscript(transcription);
       
       // Step 2: Get AI response
@@ -138,7 +234,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       
       const chatResponse = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getApiAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ 
           messages: newMessages,
           userContext 
@@ -146,7 +242,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       });
 
       if (!chatResponse.ok) {
-        throw new Error('AI response failed');
+        throw new Error(await getResponseError(chatResponse, 'AI response failed.'));
       }
 
       const { response } = await chatResponse.json();
@@ -166,7 +262,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       if (pendingUserMessage) {
         setMessages(previousMessages);
       }
-      setError('Failed to process your voice. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to process your voice. Please try again.');
       setIsProcessing(false);
     }
   };
@@ -174,33 +270,37 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
   const speakResponse = async (text: string) => {
     try {
       setIsSpeaking(true);
-      
-      const response = await fetch('/api/voice', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text, voice: 'nova' }),
-      });
 
-      if (!response.ok) {
-        throw new Error('Voice generation failed');
+      if (!('speechSynthesis' in window)) {
+        throw new Error('Spoken playback is not supported by this browser.');
       }
 
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      
-      audio.onended = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-      };
-      
-      await audio.play();
+      window.speechSynthesis.cancel();
+      const localVoice = await getLocalSpeechVoice();
+      if (!localVoice) {
+        throw new Error(
+          'Spoken playback is unavailable, but the response is shown above.'
+        );
+      }
+      await new Promise<void>((resolve, reject) => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        speechRef.current = utterance;
+        utterance.voice = localVoice;
+        utterance.rate = 0.9;
+        utterance.onend = () => resolve();
+        utterance.onerror = () => reject(new Error('Spoken playback failed.'));
+        window.speechSynthesis.speak(utterance);
+      });
+      speechRef.current = null;
+      setIsSpeaking(false);
     } catch (err) {
       console.error('Speech error:', err);
-      setError('Failed to generate voice. Please try again.');
-      setIsSpeaking(false);
+      if (mountedRef.current) {
+        setError(
+          err instanceof Error ? err.message : 'Spoken playback failed.'
+        );
+        setIsSpeaking(false);
+      }
     }
   };
 
@@ -208,17 +308,27 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
     return () => {
       mountedRef.current = false;
       const recorder = mediaRecorderRef.current;
+      if (recordingTimerRef.current !== null) {
+        window.clearTimeout(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
       if (recorder?.state === 'recording') {
         recorder.ondataavailable = null;
         recorder.onstop = null;
         recorder.stop();
       }
       streamRef.current?.getTracks().forEach((track) => track.stop());
-      if (animationFrameRef.current) {
+      if (animationFrameRef.current !== undefined) {
         cancelAnimationFrame(animationFrameRef.current);
       }
       if (audioContextRef.current?.state !== 'closed') {
         void audioContextRef.current?.close();
+      }
+      if (speechRef.current && 'speechSynthesis' in window) {
+        speechRef.current.onend = null;
+        speechRef.current.onerror = null;
+        window.speechSynthesis.cancel();
+        speechRef.current = null;
       }
     };
   }, []);
@@ -272,9 +382,10 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
           <div className="w-full p-4 bg-orange-50 border border-orange-200 rounded-lg">
             <p className="text-sm font-semibold text-orange-900 mb-1">Voice AI data sharing</p>
             <p className="text-xs text-orange-900">
-              Voice Support sends your recording to OpenAI through MHtoolkit for
-              transcription. The transcript is then sent to an AI provider to generate a
-              response, and the response may be sent to OpenAI for speech playback.
+              Voice Support sends your recording through MHtoolkit to Google Gemini for
+              transcription, with OpenAI used as a fallback. The transcript is sent to an
+              AI provider for a response. Spoken playback uses a local browser voice when
+              one is available.
             </p>
           </div>
 

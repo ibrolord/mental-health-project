@@ -6,7 +6,7 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8'
 
 describe('privacy activity routing', () => {
   it('labels web and mobile requests without user-supplied metadata', () => {
-    expect(read('lib/api/client.ts')).toContain("'X-Client-Platform': 'web'");
+    expect(read('lib/api/auth-headers.ts')).toContain("'X-Client-Platform': 'web'");
     const mobile = read('mobile/lib/api.ts');
     expect(mobile).toContain("'X-Client-Platform'");
     expect(mobile).toContain("Platform.OS === 'android' ? 'android' : 'ios'");
