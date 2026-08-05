@@ -28,11 +28,9 @@ async function generate() {
 
   // Android adaptive icon foreground: the same mark without a baked-in mask.
   const foregroundSvg = `<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
-    <path d="M395 318c-78 0-139 59-139 135 0 45 20 81 53 105-25 26-38 59-38 98 0 82 65 144 151 144h76V318H395Z" fill="#fffef8"/>
-    <path d="M629 318c78 0 139 59 139 135 0 45-20 81-53 105 25 26 38 59 38 98 0 82-65 144-151 144h-76V318h103Z" fill="#fffef8"/>
-    <path d="M330 438c49-17 98 17 139 0M313 540c50-17 101 17 156 0M333 642c49-17 96 17 136 0M357 731c42-14 79 13 112 0" fill="none" stroke="#c65f3d" stroke-width="18" stroke-linecap="round"/>
-    <path d="M555 438c41-17 90 17 139 0M555 540c55-17 106 17 156 0M555 642c40-17 87 17 136 0M555 731c33-13 70 14 112 0" fill="none" stroke="#c65f3d" stroke-width="18" stroke-linecap="round"/>
-    <path d="M512 354c-14-27-36-41-62-41-43 0-70 31-70 67 0 61 71 105 132 146 61-41 132-85 132-146 0-36-27-67-70-67-26 0-48 14-62 41Z" fill="#c65f3d"/>
+    <rect x="332" y="570" width="360" height="150" rx="75" fill="#fffef8"/>
+    <rect x="352" y="425" width="300" height="130" rx="65" fill="#84ac95"/>
+    <rect x="407" y="300" width="230" height="110" rx="55" fill="#c65f3d"/>
   </svg>`;
 
   await sharp(Buffer.from(foregroundSvg))
@@ -54,9 +52,9 @@ async function generate() {
 
   // Monochrome icon (white silhouette on transparent)
   const monoSvg = `<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
-    <path d="M395 318c-78 0-139 59-139 135 0 45 20 81 53 105-25 26-38 59-38 98 0 82 65 144 151 144h76V318H395Z" fill="white"/>
-    <path d="M629 318c78 0 139 59 139 135 0 45-20 81-53 105 25 26 38 59 38 98 0 82-65 144-151 144h-76V318h103Z" fill="white"/>
-    <path d="M512 354c-14-27-36-41-62-41-43 0-70 31-70 67 0 61 71 105 132 146 61-41 132-85 132-146 0-36-27-67-70-67-26 0-48 14-62 41Z" fill="white"/>
+    <rect x="332" y="570" width="360" height="150" rx="75" fill="white"/>
+    <rect x="352" y="425" width="300" height="130" rx="65" fill="white"/>
+    <rect x="407" y="300" width="230" height="110" rx="55" fill="white"/>
   </svg>`;
 
   await sharp(Buffer.from(monoSvg))

@@ -16,6 +16,11 @@ import {
 import { hasAiDataSharingConsent, resetAiDataSharingConsent, PRIVACY_POLICY_URL } from '@/lib/ai-consent';
 import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
 import { SUPPORT_EMAIL, SUPPORT_EMAIL_URL, SUPPORT_URL } from '@/lib/support';
+import { PrivacyActivity } from '@/components/PrivacyActivity';
+import { VisitBriefBuilder } from '@/components/VisitBriefBuilder';
+import { offlineSafetyPlanCache } from '@/lib/offline-safety-plan-cache';
+import { clearFullContextPreference } from '@/lib/full-context-preference';
+import { clearContextSelections } from '@/lib/chat-context-preference';
 
 const HOUR_OPTIONS = [
   { label: '7 AM', value: 7 },
@@ -39,18 +44,20 @@ export default function SettingsScreen() {
     deleteAccount,
   } = useAuth();
   const { query } = useDataContext();
+  const consentSubjectId = query ? `${query.column}:${query.value}` : '';
   const [loading, setLoading] = useState(false);
   const [remindersOn, setRemindersOn] = useState(false);
   const [selectedTimes, setSelectedTimes] = useState<number[]>([9, 14, 20]);
   const [aiConsentGranted, setAiConsentGranted] = useState(false);
+  const [dataGeneration, setDataGeneration] = useState(0);
 
   useEffect(() => {
     (async () => {
       setRemindersOn(await areRemindersEnabled());
       setSelectedTimes(await getReminderTimes());
-      setAiConsentGranted(await hasAiDataSharingConsent());
+      setAiConsentGranted(await hasAiDataSharingConsent(consentSubjectId));
     })();
-  }, []);
+  }, [consentSubjectId]);
 
   const toggleReminders = async (val: boolean) => {
     setRemindersOn(val);
@@ -100,10 +107,24 @@ export default function SettingsScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              await clearStoredAcquisitionAttribution();
               const result = await apiRequest('/api/data/delete', {});
               if (!result?.deleted) throw new Error(result?.error || 'Deletion failed');
-              Alert.alert('Done', 'All data deleted.');
+              const cleanup = await Promise.allSettled([
+                clearStoredAcquisitionAttribution(),
+                resetAiDataSharingConsent(consentSubjectId),
+                clearFullContextPreference(consentSubjectId),
+                clearContextSelections(consentSubjectId),
+                setRemindersEnabled(false),
+                user ? offlineSafetyPlanCache.clear(user.id) : Promise.resolve(),
+              ]);
+              setDataGeneration((current) => current + 1);
+              const cleanupFailed = cleanup.some((item) => item.status === 'rejected');
+              Alert.alert(
+                cleanupFailed ? 'Online data deleted' : 'Done',
+                cleanupFailed
+                  ? 'Online data was deleted, but local cleanup was incomplete. Sign out before continuing.'
+                  : 'All data deleted.'
+              );
             } catch {
               Alert.alert('Error', 'Data could not be fully deleted. Please try again or contact support.');
             } finally {
@@ -155,7 +176,7 @@ export default function SettingsScreen() {
           text: 'Revoke Consent',
           style: 'destructive',
           onPress: async () => {
-            await resetAiDataSharingConsent();
+            await resetAiDataSharingConsent(consentSubjectId);
             setAiConsentGranted(false);
             Alert.alert('Done', 'AI data sharing consent was revoked.');
           },
@@ -179,7 +200,7 @@ export default function SettingsScreen() {
           <>
             <Text style={s.bodyText}>Your account setup is waiting to be finished.</Text>
             <Text style={[s.bodyText, { marginTop: 4 }]}>
-              Use the confirmation email to create your password, then return here. Your saved data remains attached to this profile.
+              Confirm your email, then create your password in MHtoolkit. Your saved data stays with this profile.
             </Text>
             <TouchableOpacity style={s.btn} onPress={() => router.push('/auth/signup')}>
               <Text style={s.btnText}>Finish Account Setup</Text>
@@ -290,6 +311,9 @@ export default function SettingsScreen() {
           <Text style={s.btnOutlineText}>View Privacy Policy</Text>
         </TouchableOpacity>
       </View>
+
+      <VisitBriefBuilder key={`visit-brief-${user?.id ?? 'signed-out'}-${dataGeneration}`} ownerId={user?.id ?? null} />
+      <PrivacyActivity key={`privacy-activity-${user?.id ?? 'signed-out'}-${dataGeneration}`} ownerId={user?.id ?? null} />
 
       {/* Support */}
       <View style={s.card}>

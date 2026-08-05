@@ -47,10 +47,14 @@ function readAttribution(): CampaignAttribution {
   }
 }
 
-export function clearStoredAcquisitionAttribution(): void {
-  if (typeof window === 'undefined') return;
-
-  window.localStorage.removeItem(ACQUISITION_STORAGE_KEY);
+export function clearStoredAcquisitionAttribution(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    window.localStorage.removeItem(ACQUISITION_STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export interface AttributedCheckIn extends LocalCheckInFields {

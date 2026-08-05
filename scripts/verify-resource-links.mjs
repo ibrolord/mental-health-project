@@ -68,8 +68,9 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// These pages were opened and checked in Chrome on 2026-07-29. Keep this list
-// explicit so a 401/403 is never silently promoted to a passing link.
+// These pages were opened and checked in a browser on the recorded dates. Keep
+// this list explicit so an auth/content-negotiation response is never silently
+// promoted to a passing link.
 const BROWSER_VERIFIED_URLS = new Set([
   'https://www.mind.org.uk/information-support/your-stories/workplace-wellbeing/',
   'https://www.mind.org.uk/information-support/your-stories/my-mental-health-as-an-entrepreneur-success-failure-recovery/',
@@ -78,6 +79,13 @@ const BROWSER_VERIFIED_URLS = new Set([
   'https://www.nami.org/personal-stories/hope-and-help/',
   'https://www.nami.org/personal-stories/pursuing-my-dream-career-while-in-recovery/',
   'https://www.nami.org/personal-stories/what-a-life-i-live/',
+  // Browser-verified on 2026-08-03; TIME returns 406 to automated probes.
+  'https://time.com/6077128/naomi-osaka-essay-tokyo-olympics/',
+  'https://time.com/5402066/michael-phelps-mental-health-activism/',
+  'https://time.com/4295181/arianna-huffingtons-rules-for-better-sleep/',
+  // Browser-verified on 2026-08-05; CMHA serves the locator but intermittently
+  // terminates Node fetches before returning an HTTP status.
+  'https://cmha.ca/find-help/find-cmha-in-your-area/',
 ]);
 
 async function probe(url) {
@@ -101,7 +109,7 @@ async function probe(url) {
           }
           if (
             method === 'GET' &&
-            (res.status === 401 || res.status === 403)
+            (res.status === 401 || res.status === 403 || res.status === 406)
           ) {
             return {
               url,
@@ -128,7 +136,11 @@ async function probe(url) {
     }
   }
 
-  return { url, status: lastStatus, state: 'broken' };
+  return {
+    url,
+    status: lastStatus,
+    state: BROWSER_VERIFIED_URLS.has(url) ? 'browser-verified' : 'broken',
+  };
 }
 
 async function probeAll(inputUrls) {
@@ -180,7 +192,7 @@ console.log(
   `\n${directlyReachable.length}/${results.length} directly reachable`
 );
 if (browserVerified.length > 0) {
-  console.log(`${browserVerified.length} source(s) verified in Chrome`);
+  console.log(`${browserVerified.length} source(s) verified in a browser`);
 }
 
 if (broken.length > 0 || browserUnverified.length > 0) {

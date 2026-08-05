@@ -33,13 +33,14 @@ describe('AI data sharing consent', () => {
       },
     });
 
-    expect(hasAiDataSharingConsent()).toBe(false);
-    expect(grantAiDataSharingConsent()).toBe(true);
-    expect(hasAiDataSharingConsent()).toBe(true);
+    expect(hasAiDataSharingConsent('user_id:owner-a')).toBe(false);
+    expect(grantAiDataSharingConsent('user_id:owner-a')).toBe(true);
+    expect(hasAiDataSharingConsent('user_id:owner-a')).toBe(true);
+    expect(hasAiDataSharingConsent('user_id:owner-b')).toBe(false);
     expect(confirm).not.toHaveBeenCalled();
 
-    resetAiDataSharingConsent();
-    expect(hasAiDataSharingConsent()).toBe(false);
+    resetAiDataSharingConsent('user_id:owner-a');
+    expect(hasAiDataSharingConsent('user_id:owner-a')).toBe(false);
   });
 
   it('renders one accessible, dismissible consent dialog at the app root', () => {

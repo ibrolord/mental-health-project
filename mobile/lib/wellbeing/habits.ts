@@ -37,6 +37,12 @@ export type RoutineTemplate = {
   caution?: string;
 };
 
+export function isUnexpectedHabitInsertError(
+  error: { code?: string } | null | undefined
+): boolean {
+  return Boolean(error && error.code !== '23505');
+}
+
 export const HABIT_CATEGORIES: {
   id: HabitCategory;
   label: string;

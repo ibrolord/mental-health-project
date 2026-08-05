@@ -14,6 +14,7 @@ export async function apiRequest(
 ): Promise<any> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Client-Platform': 'web',
   };
 
   const { data: { session } } = await supabase.auth.getSession();

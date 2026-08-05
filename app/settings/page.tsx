@@ -10,18 +10,37 @@ import { useDataContext } from '@/lib/hooks/use-data-context';
 import { apiRequest } from '@/lib/api/client';
 import { hasAiDataSharingConsent, resetAiDataSharingConsent } from '@/lib/ai-consent';
 import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
+import { clearFullContextPreference } from '@/lib/ai/full-context-preference';
 import { PushNotificationSettings } from '@/components/push-notification-settings';
+import { PrivacyActivity } from '@/components/privacy-activity';
+import { VisitBriefBuilder } from '@/components/visit-brief-builder';
 
 export default function SettingsPage() {
   const router = useRouter();
   const { user, signOut, isAnonymous, loading: authLoading } = useAuth();
   const { query } = useDataContext();
+  const consentSubjectId = query ? `${query.column}:${query.value}` : '';
   const [loading, setLoading] = useState(false);
   const [aiConsentGranted, setAiConsentGranted] = useState(false);
 
+  const clearLocalPrivacyState = (ownerKey: string): boolean => {
+    const results = [
+      () => clearStoredAcquisitionAttribution(),
+      () => resetAiDataSharingConsent(ownerKey),
+      () => clearFullContextPreference(ownerKey),
+    ].map((operation) => {
+      try {
+        return operation();
+      } catch {
+        return false;
+      }
+    });
+    return results.every(Boolean);
+  };
+
   useEffect(() => {
-    setAiConsentGranted(hasAiDataSharingConsent());
-  }, []);
+    setAiConsentGranted(hasAiDataSharingConsent(consentSubjectId));
+  }, [consentSubjectId]);
 
   const handleExportData = async () => {
     if (!query) return;
@@ -73,12 +92,17 @@ export default function SettingsPage() {
     try {
       setLoading(true);
 
-      clearStoredAcquisitionAttribution();
       const result = await apiRequest('/api/data/delete', {});
       if (!result?.deleted) {
         throw new Error(result?.error || 'Deletion failed');
       }
-      alert('All data deleted successfully');
+      const localCleanupComplete = clearLocalPrivacyState(consentSubjectId);
+      setAiConsentGranted(false);
+      alert(
+        localCleanupComplete
+          ? 'All data deleted successfully'
+          : 'Online data was deleted, but this browser could not remove all local privacy settings. Sign out and clear site data before continuing.'
+      );
 
       router.push('/');
     } catch (error) {
@@ -111,17 +135,22 @@ export default function SettingsPage() {
     try {
       setLoading(true);
 
-      clearStoredAcquisitionAttribution();
       const result = await apiRequest('/api/account/delete', {});
       if (!result?.deleted) {
         throw new Error(result?.error || 'Failed to delete account');
       }
 
+      const localCleanupComplete = clearLocalPrivacyState(consentSubjectId);
       const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
       const { data: clearedSession, error: sessionError } = await supabase.auth.getSession();
       if (signOutError || sessionError || clearedSession.session) {
         throw new Error(
           'Your account was deleted, but this browser session could not be cleared. Close this tab and contact support before continuing.'
+        );
+      }
+      if (!localCleanupComplete) {
+        throw new Error(
+          'Your account was deleted and this browser session was cleared, but local privacy settings could not be fully removed. Clear site data before continuing.'
         );
       }
       alert('Your account and associated data have been deleted.');
@@ -139,7 +168,7 @@ export default function SettingsPage() {
       'Revoke AI consent? AI chat, voice support, and AI affirmations will ask again before sending text, audio, or personal context to third-party AI providers.'
     );
     if (!confirmed) return;
-    resetAiDataSharingConsent();
+    resetAiDataSharingConsent(consentSubjectId);
     setAiConsentGranted(false);
     alert('AI data sharing consent was revoked.');
   };
@@ -232,6 +261,16 @@ export default function SettingsPage() {
             </Button>
           </CardContent>
         </Card>
+
+        <VisitBriefBuilder
+          key={`visit-brief-${user?.id ?? 'signed-out'}`}
+          ownerId={user?.id ?? null}
+        />
+
+        <PrivacyActivity
+          key={`privacy-activity-${user?.id ?? 'signed-out'}`}
+          ownerId={user?.id ?? null}
+        />
 
         <div className="mb-6">
           <PushNotificationSettings />

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
+import {
+  privacyPlatformFromRequest,
+  recordServerPrivacyEvent,
+} from '@/lib/privacy-events/server';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
@@ -12,6 +16,20 @@ export async function POST(request: NextRequest) {
     if (!auth.valid) return unauthorizedResponse();
 
     if (!auth.userId && !auth.sessionId) return unauthorizedResponse();
+
+    if (auth.userId) {
+      try {
+        await recordServerPrivacyEvent({
+          userId: auth.userId,
+          eventType: 'deletion_requested',
+          platform: privacyPlatformFromRequest(request),
+          metadata: { method: 'account_settings' },
+        });
+      } catch (error) {
+        // Deletion must not depend on an audit row removed by the same request.
+        console.error('Deletion privacy event could not be recorded:', error);
+      }
+    }
 
     const { data, error } = await supabaseAdmin.rpc('delete_owned_data', {
       p_user_id: auth.userId ?? null,

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { fetchWithTimeout } from './request';
+import { Platform } from 'react-native';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';
 
@@ -18,6 +19,7 @@ export async function apiRequest<T = any>(
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Client-Platform': Platform.OS === 'android' ? 'android' : 'ios',
   };
 
   const { data: { session } } = await supabase.auth.getSession();

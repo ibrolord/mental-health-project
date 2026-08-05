@@ -1,37 +1,44 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
-import { GoogleButton } from '@/components/auth/google-button';
+import { SocialAuthButtons } from '@/components/auth/social-auth-buttons';
+import { authPathWithNext, getSafeAuthRedirect } from '@/lib/auth/redirect';
 
 const FIELD_CLASS =
   'w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const LABEL_CLASS =
   'mb-1.5 block text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground';
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signIn } = useAuth();
+  const nextPath = getSafeAuthRedirect(searchParams.get('next'));
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const submissionRef = useRef(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (submissionRef.current) return;
+    submissionRef.current = true;
     setError('');
     setLoading(true);
 
     try {
       await signIn(email, password);
-      router.push('/dashboard');
+      router.push(nextPath);
     } catch (err) {
       setError((err as Error).message || 'Failed to sign in');
     } finally {
+      submissionRef.current = false;
       setLoading(false);
     }
   };
@@ -102,13 +109,13 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-5">
-            <GoogleButton label="Sign in with Google" />
+            <SocialAuthButtons intent="sign-in" nextPath={nextPath} />
           </div>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             New here?{' '}
             <Link
-              href="/auth/signup"
+              href={authPathWithNext('/auth/signup', nextPath)}
               className="text-foreground underline underline-offset-4"
             >
               Create an account
@@ -126,5 +133,13 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen" />}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

@@ -8,6 +8,11 @@ const mobilePlanner = fs.readFileSync(
   'utf8'
 );
 const webPlanner = fs.readFileSync(path.join(root, 'app/planner/page.tsx'), 'utf8');
+const onboarding = fs.readFileSync(path.join(root, 'app/onboarding/page.tsx'), 'utf8');
+const moodSelector = fs.readFileSync(
+  path.join(root, 'components/mood/mood-selector.tsx'),
+  'utf8'
+);
 
 describe('life planner status actions', () => {
   it('lets paused native items resume or complete', () => {
@@ -27,5 +32,19 @@ describe('life planner status actions', () => {
     expect(webPlanner).toContain(
       "{item.status === 'paused' ? 'Resume' : 'Make active'}"
     );
+  });
+});
+
+describe('onboarding check-in idempotency', () => {
+  it('guards concurrent saves and does not insert again after navigating back', () => {
+    expect(onboarding).toContain('moodSaveInFlightRef.current');
+    expect(onboarding).toContain('if (moodSaved)');
+    expect(onboarding).toContain('setMoodSaved(true)');
+    expect(onboarding).toContain('moodSaveInFlightRef.current = false');
+  });
+
+  it('locks the saved mood and note while the user reviews the prior step', () => {
+    expect(onboarding.match(/disabled=\{loading \|\| moodSaved\}/g)).toHaveLength(2);
+    expect(moodSelector).toContain('disabled={disabled}');
   });
 });

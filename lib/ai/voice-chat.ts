@@ -45,6 +45,16 @@ export interface VoiceSessionConfig {
   maxDuration?: number; // in seconds
 }
 
+export const VOICE_NAMES = [
+  'alloy',
+  'echo',
+  'fable',
+  'onyx',
+  'nova',
+  'shimmer',
+] as const;
+export type VoiceName = (typeof VOICE_NAMES)[number];
+
 export async function createVoiceSession(config: VoiceSessionConfig = {}) {
   const {
     voice = 'nova', // Warm, empathetic voice
@@ -62,11 +72,14 @@ export async function createVoiceSession(config: VoiceSessionConfig = {}) {
 }
 
 // Server-side streaming for voice responses
-export async function generateVoiceResponse(text: string, voice: string = 'nova') {
+export async function generateVoiceResponse(
+  text: string,
+  voice: VoiceName = 'nova'
+) {
   try {
     const mp3 = await openai.audio.speech.create({
       model: 'tts-1-hd',
-      voice: voice as any,
+      voice,
       input: text,
       speed: 0.9, // Slightly slower for a calmer support tone
     });

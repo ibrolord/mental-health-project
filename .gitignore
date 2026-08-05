@@ -43,6 +43,8 @@ supabase/.temp/
 
 # mobile
 mobile/node_modules/
+mobile/qa/runs/*
+!mobile/qa/runs/.gitkeep
 
 # Internal go-to-market material. prospects.csv and outreach-log.csv hold
 # named contacts, job titles, work emails and outreach history for ~100 real

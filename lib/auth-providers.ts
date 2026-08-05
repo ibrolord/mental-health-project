@@ -2,12 +2,9 @@
  * Which third-party sign-in providers this Supabase project actually has
  * enabled.
  *
- * Google requires an OAuth client to be created in Google Cloud and its
- * credentials pasted into the Supabase dashboard. Until that happens the
- * provider is off and `signInWithOAuth` fails. Rather than shipping a button
- * that errors, the UI asks the project at runtime and gates on the answer,
- * which also means the button starts working the moment the provider is
- * switched on, with no redeploy.
+ * OAuth providers require external credentials in Supabase. Rather than
+ * shipping buttons that error, the UI asks the project at runtime and only
+ * exposes providers that are actually enabled.
  *
  * The settings endpoint is public and safe to call with the anon key.
  */

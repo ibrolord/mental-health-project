@@ -186,9 +186,17 @@ export function quoteFallbacksForMood(
   mood: string | null | undefined
 ): AffirmationDisplayRecord[] {
   if (!mood) return SOURCED_QUOTE_FALLBACKS;
-  return SOURCED_QUOTE_FALLBACKS.filter(({ mood_tags }) =>
+  const matchingQuotes = SOURCED_QUOTE_FALLBACKS.filter(({ mood_tags }) =>
     mood_tags?.includes(mood)
   );
+  return matchingQuotes.length > 0 ? matchingQuotes : SOURCED_QUOTE_FALLBACKS;
+}
+
+export function resolveAffirmationCatalog(
+  records: readonly AffirmationDisplayRecord[],
+  mood: string | null | undefined
+): AffirmationDisplayRecord[] {
+  return records.length > 0 ? [...records] : quoteFallbacksForMood(mood);
 }
 
 type RandomAffirmationOptions = {

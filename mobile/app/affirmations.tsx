@@ -111,7 +111,7 @@ export default function AffirmationsScreen() {
 
   const generateAi = async () => {
     if (!query || generating) return;
-    if (!(await ensureAiDataSharingConsent())) return;
+    if (!(await ensureAiDataSharingConsent(`${query.column}:${query.value}`))) return;
     setGenerating(true);
     setError('');
     try {

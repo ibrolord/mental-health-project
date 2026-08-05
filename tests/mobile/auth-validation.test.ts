@@ -4,6 +4,7 @@ import {
   ACCOUNT_UPGRADE_EMAIL_FIELD,
   ACCOUNT_UPGRADE_STARTED_FLAG,
   getPendingAccountUpgradeEmail,
+  isAccountEmailConfirmed,
   isAccountUpgradeComplete,
   isAccountUpgradePending,
   normalizeEmail,
@@ -41,6 +42,19 @@ describe('mobile signup validation', () => {
       email_confirmed_at: '2026-07-27T12:00:00Z',
       user_metadata: { [ACCOUNT_UPGRADE_COMPLETION_FLAG]: true },
     })).toBe(true);
+  });
+
+  it('allows a confirmed upgrade to finish its password inside the app', () => {
+    expect(isAccountEmailConfirmed({
+      is_anonymous: false,
+      email_confirmed_at: '2026-07-30T18:19:09Z',
+      user_metadata: { [ACCOUNT_UPGRADE_STARTED_FLAG]: true },
+    })).toBe(true);
+    expect(isAccountEmailConfirmed({
+      is_anonymous: true,
+      email_confirmed_at: '2026-07-30T18:19:09Z',
+      user_metadata: { [ACCOUNT_UPGRADE_STARTED_FLAG]: true },
+    })).toBe(false);
   });
 
   it('keeps incomplete account upgrades recoverable after a restart', () => {

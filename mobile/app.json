@@ -16,9 +16,10 @@
     "ios": {
       "supportsTablet": false,
       "requireFullScreen": true,
+      "usesAppleSignIn": true,
       "bundleIdentifier": "com.mhtoolkit.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "MHtoolkit uses the microphone only when you tap the mic button in Voice Support to record what you say so it can be transcribed and answered.",
+        "NSMicrophoneUsageDescription": "MHtoolkit uses the microphone only during a live voice session so the AI can hear and respond to you.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "privacyManifests": {
@@ -52,9 +53,10 @@
         "android.permission.POST_NOTIFICATIONS"
       ],
       "blockedPermissions": [
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.SYSTEM_ALERT_WINDOW"
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+      "android.permission.SYSTEM_ALERT_WINDOW",
+      "android.permission.CAMERA"
       ]
     },
     "plugins": [
@@ -64,10 +66,19 @@
       [
         "expo-av",
         {
-          "microphonePermission": "MHtoolkit uses the microphone only when you tap the mic button in Voice Support to record what you say so it can be transcribed and answered."
+          "microphonePermission": "MHtoolkit uses the microphone only during a live voice session so the AI can hear and respond to you."
         }
       ],
-      "expo-font"
+      "./plugins/audio-only-webrtc",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "microphonePermission": "MHtoolkit uses the microphone only during a live voice session so the AI can hear and respond to you."
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

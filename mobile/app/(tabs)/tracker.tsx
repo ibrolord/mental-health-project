@@ -3,10 +3,12 @@ import { Alert, View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet,
 import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
+import { SleepDiary } from '@/components/SleepDiary';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import type { MoodEmoji } from '@/lib/types';
 import { saveCheckInWithAttribution } from '@/lib/acquisition';
 import { getLocalCheckInFields } from '@/lib/check-in';
+import { collectMoodTags, filterMoodEntriesByTag } from '@/lib/mood-filter';
 
 const moodEmojis: MoodEmoji[] = ['\u{1F604}', '\u{1F642}', '\u{1F610}', '\u{1F61E}', '\u{1F622}'];
 const moodLabels = ['Great', 'Good', 'Okay', 'Low', 'Very Low'];
@@ -52,8 +54,6 @@ export default function TrackerScreen() {
         .lte('created_at', monthEnd)
         .order('created_at', { ascending: false });
 
-      if (filterTag) qb = qb.contains('tags', [filterTag]);
-
       const { data } = await qb;
       if (active && data) setMoods(data);
       if (active) setLoading(false);
@@ -64,7 +64,7 @@ export default function TrackerScreen() {
     return () => {
       active = false;
     };
-  }, [query, filterTag, refreshKey]);
+  }, [query, refreshKey]);
 
   const handleAdd = async () => {
     if (!newMood || saving) return;
@@ -106,7 +106,8 @@ export default function TrackerScreen() {
     }
   };
 
-  const allTags = [...new Set(moods.flatMap((m) => m.tags))];
+  const allTags = collectMoodTags(moods);
+  const filteredMoods = filterMoodEntriesByTag(moods, filterTag);
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
@@ -212,10 +213,10 @@ export default function TrackerScreen() {
         <Text style={s.cardTitle}>Mood History</Text>
         {loading ? (
           <ActivityIndicator style={{ marginTop: 20 }} color={Colors.primary} />
-        ) : moods.length === 0 ? (
+        ) : filteredMoods.length === 0 ? (
           <Text style={s.empty}>No mood entries for this period</Text>
         ) : (
-          moods.map((mood) => (
+          filteredMoods.map((mood) => (
             <View key={mood.id} style={s.moodEntry}>
               <Text style={s.entryEmoji}>{mood.emoji}</Text>
               <View style={{ flex: 1 }}>
@@ -237,6 +238,7 @@ export default function TrackerScreen() {
           ))
         )}
       </View>
+      <SleepDiary />
     </ScrollView>
   );
 }

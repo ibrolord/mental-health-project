@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   chooseRandomAffirmation,
   quoteFallbacksForMood,
+  resolveAffirmationCatalog,
   SOURCED_QUOTE_FALLBACKS,
 } from '../../lib/affirmations';
 
@@ -66,6 +67,7 @@ describe('random affirmation selection', () => {
   it('keeps a sourced quote fallback available during additive schema rollout', () => {
     expect(SOURCED_QUOTE_FALLBACKS).toHaveLength(12);
     expect(quoteFallbacksForMood('😢').length).toBeGreaterThan(0);
+    expect(quoteFallbacksForMood('😁')).toEqual(SOURCED_QUOTE_FALLBACKS);
 
     for (const quote of SOURCED_QUOTE_FALLBACKS) {
       expect(quote.kind).toBe('quote');
@@ -73,5 +75,12 @@ describe('random affirmation selection', () => {
       expect(quote.source_url).toMatch(/^https:\/\//);
       expect(quote.historyEligible).toBe(false);
     }
+  });
+
+  it('uses sourced quotes when a valid catalog has no row for the current mood', () => {
+    expect(resolveAffirmationCatalog([], '😁')).toEqual(SOURCED_QUOTE_FALLBACKS);
+    expect(resolveAffirmationCatalog([SOURCED_QUOTE_FALLBACKS[0]], '😁')).toEqual([
+      SOURCED_QUOTE_FALLBACKS[0],
+    ]);
   });
 });

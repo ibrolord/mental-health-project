@@ -1,6 +1,7 @@
 import {
   normalizeLegacyAffirmations,
   quoteFallbacksForMood,
+  resolveAffirmationCatalog,
   type AffirmationDisplayRecord,
 } from '@/lib/affirmations';
 import { isQuoteStorySchemaMissingError } from '@/lib/release-capabilities';
@@ -21,12 +22,13 @@ export async function loadAffirmationCatalog(
   if (mood) query = query.contains('mood_tags', [mood]);
   const attributed = await query;
   if (!attributed.error) {
+    const records = (attributed.data ?? []).map((record) => ({
+      ...record,
+      kind: record.kind as 'affirmation' | 'quote',
+      historyEligible: true,
+    }));
     return {
-      records: (attributed.data ?? []).map((record) => ({
-        ...record,
-        kind: record.kind as 'affirmation' | 'quote',
-        historyEligible: true,
-      })),
+      records: resolveAffirmationCatalog(records, mood),
       attributionSchemaReady: true,
     };
   }

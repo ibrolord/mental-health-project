@@ -249,6 +249,170 @@ check() { # label, actual, expected_regex
   else echo "  FAIL  $1"; echo "        got: $(echo "$2" | head -2 | tr '\n' ' ')"; fail=$((fail+1)); fi
 }
 
+ACTIVITY_PLAN_ID=11111111-1111-4111-8111-111111111111
+ACTIVITY_STEP_ID=11111111-1111-4111-8111-111111111112
+SAFETY_PLAN_ID=22222222-2222-4222-8222-222222222221
+SAFETY_ITEM_ID=22222222-2222-4222-8222-222222222222
+STAYING_WELL_PLAN_ID=33333333-3333-4333-8333-333333333331
+STAYING_WELL_ITEM_ID=33333333-3333-4333-8333-333333333332
+SLEEP_ENTRY_ID=44444444-4444-4444-8444-444444444441
+
+echo ""
+echo "== PRIVATE WELLBEING: owner A can create and read every owned row =="
+check "A creates an activity plan" \
+  "$(run_as $A "INSERT INTO public.activity_plans (id, user_id, plan_date, activity_kind, title, details, planned_minutes) VALUES ('$ACTIVITY_PLAN_ID', '$A', CURRENT_DATE, 'movement', 'PRIVATE ACTIVITY', 'PRIVATE ACTIVITY DETAILS', 20) RETURNING id;")" \
+  "^$ACTIVITY_PLAN_ID$"
+check "A creates an activity plan step" \
+  "$(run_as $A "INSERT INTO public.activity_plan_steps (id, plan_id, user_id, action, timing, location, estimated_minutes, position) VALUES ('$ACTIVITY_STEP_ID', '$ACTIVITY_PLAN_ID', '$A', 'PRIVATE STEP', 'morning', 'home', 10, 1) RETURNING id;")" \
+  "^$ACTIVITY_STEP_ID$"
+check "A creates a safety plan" \
+  "$(run_as $A "INSERT INTO public.safety_plans (id, user_id, title, status) VALUES ('$SAFETY_PLAN_ID', '$A', 'PRIVATE SAFETY PLAN', 'draft') RETURNING id;")" \
+  "^$SAFETY_PLAN_ID$"
+check "A creates a safety plan item" \
+  "$(run_as $A "INSERT INTO public.safety_plan_items (id, plan_id, user_id, item_kind, label, details, position) VALUES ('$SAFETY_ITEM_ID', '$SAFETY_PLAN_ID', '$A', 'warning_sign', 'PRIVATE WARNING', 'PRIVATE SAFETY DETAILS', 0) RETURNING id;")" \
+  "^$SAFETY_ITEM_ID$"
+check "A creates a staying-well plan" \
+  "$(run_as $A "INSERT INTO public.staying_well_plans (id, user_id, title, status) VALUES ('$STAYING_WELL_PLAN_ID', '$A', 'PRIVATE STAYING WELL PLAN', 'draft') RETURNING id;")" \
+  "^$STAYING_WELL_PLAN_ID$"
+check "A creates a staying-well plan item" \
+  "$(run_as $A "INSERT INTO public.staying_well_plan_items (id, plan_id, user_id, item_kind, label, details, position) VALUES ('$STAYING_WELL_ITEM_ID', '$STAYING_WELL_PLAN_ID', '$A', 'trigger', 'PRIVATE TRIGGER', 'PRIVATE STAYING WELL DETAILS', 0) RETURNING id;")" \
+  "^$STAYING_WELL_ITEM_ID$"
+check "A creates a sleep diary entry" \
+  "$(run_as $A "INSERT INTO public.sleep_diary_entries (id, user_id, entry_date, went_to_bed_at, tried_to_sleep_at, fell_asleep_at, woke_up_at, got_out_of_bed_at, awakenings, awake_minutes, sleep_quality, restedness, notes) VALUES ('$SLEEP_ENTRY_ID', '$A', CURRENT_DATE, NOW() - INTERVAL '9 hours', NOW() - INTERVAL '8 hours 45 minutes', NOW() - INTERVAL '8 hours 30 minutes', NOW() - INTERVAL '30 minutes', NOW() - INTERVAL '15 minutes', 1, 10, 4, 3, 'PRIVATE SLEEP NOTES') RETURNING id;")" \
+  "^$SLEEP_ENTRY_ID$"
+check "A creates partner support preferences" \
+  "$(run_as $A "INSERT INTO public.partner_support_preferences (user_id, support_style, check_in_frequency, advice_mode) VALUES ('$A', 'listening', 'weekly', 'ask_first') RETURNING user_id;")" \
+  "^$A$"
+check "A reads all eight private wellbeing row types" \
+  "$(run_as $A "SELECT (SELECT count(*) FROM public.activity_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.activity_plan_steps WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.safety_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.safety_plan_items WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.staying_well_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.staying_well_plan_items WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.sleep_diary_entries WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.partner_support_preferences WHERE user_id='$A');")" \
+  '^1:1:1:1:1:1:1:1$'
+
+echo ""
+echo "== PRIVATE WELLBEING: owner A can update every mutable row =="
+check "A updates an activity plan" \
+  "$(run_as $A "UPDATE public.activity_plans SET title='UPDATED PRIVATE ACTIVITY' WHERE id='$ACTIVITY_PLAN_ID' RETURNING title;")" \
+  '^UPDATED PRIVATE ACTIVITY$'
+check "A updates an activity plan step" \
+  "$(run_as $A "UPDATE public.activity_plan_steps SET action='UPDATED PRIVATE STEP' WHERE id='$ACTIVITY_STEP_ID' RETURNING action;")" \
+  '^UPDATED PRIVATE STEP$'
+check "A updates a safety plan" \
+  "$(run_as $A "UPDATE public.safety_plans SET title='UPDATED PRIVATE SAFETY PLAN' WHERE id='$SAFETY_PLAN_ID' RETURNING title;")" \
+  '^UPDATED PRIVATE SAFETY PLAN$'
+check "A updates a safety plan item" \
+  "$(run_as $A "UPDATE public.safety_plan_items SET label='UPDATED PRIVATE WARNING' WHERE id='$SAFETY_ITEM_ID' RETURNING label;")" \
+  '^UPDATED PRIVATE WARNING$'
+check "A updates a staying-well plan" \
+  "$(run_as $A "UPDATE public.staying_well_plans SET title='UPDATED PRIVATE STAYING WELL PLAN' WHERE id='$STAYING_WELL_PLAN_ID' RETURNING title;")" \
+  '^UPDATED PRIVATE STAYING WELL PLAN$'
+check "A updates a staying-well plan item" \
+  "$(run_as $A "UPDATE public.staying_well_plan_items SET label='UPDATED PRIVATE TRIGGER' WHERE id='$STAYING_WELL_ITEM_ID' RETURNING label;")" \
+  '^UPDATED PRIVATE TRIGGER$'
+check "A updates a sleep diary entry" \
+  "$(run_as $A "UPDATE public.sleep_diary_entries SET notes='UPDATED PRIVATE SLEEP NOTES' WHERE id='$SLEEP_ENTRY_ID' RETURNING notes;")" \
+  '^UPDATED PRIVATE SLEEP NOTES$'
+check "A updates partner support preferences" \
+  "$(run_as $A "UPDATE public.partner_support_preferences SET support_style='encouragement' WHERE user_id='$A' RETURNING support_style;")" \
+  '^encouragement$'
+
+echo ""
+echo "== PRIVATE WELLBEING: owner A can delete and recreate every mutable row =="
+check "A deletes an activity plan step" \
+  "$(run_as $A "DELETE FROM public.activity_plan_steps WHERE id='$ACTIVITY_STEP_ID' RETURNING id;")" \
+  "^$ACTIVITY_STEP_ID$"
+check "A deletes an activity plan" \
+  "$(run_as $A "DELETE FROM public.activity_plans WHERE id='$ACTIVITY_PLAN_ID' RETURNING id;")" \
+  "^$ACTIVITY_PLAN_ID$"
+check "A deletes a safety plan item" \
+  "$(run_as $A "DELETE FROM public.safety_plan_items WHERE id='$SAFETY_ITEM_ID' RETURNING id;")" \
+  "^$SAFETY_ITEM_ID$"
+check "A deletes a safety plan" \
+  "$(run_as $A "DELETE FROM public.safety_plans WHERE id='$SAFETY_PLAN_ID' RETURNING id;")" \
+  "^$SAFETY_PLAN_ID$"
+check "A deletes a staying-well plan item" \
+  "$(run_as $A "DELETE FROM public.staying_well_plan_items WHERE id='$STAYING_WELL_ITEM_ID' RETURNING id;")" \
+  "^$STAYING_WELL_ITEM_ID$"
+check "A deletes a staying-well plan" \
+  "$(run_as $A "DELETE FROM public.staying_well_plans WHERE id='$STAYING_WELL_PLAN_ID' RETURNING id;")" \
+  "^$STAYING_WELL_PLAN_ID$"
+check "A deletes a sleep diary entry" \
+  "$(run_as $A "DELETE FROM public.sleep_diary_entries WHERE id='$SLEEP_ENTRY_ID' RETURNING id;")" \
+  "^$SLEEP_ENTRY_ID$"
+check "A deletes partner support preferences" \
+  "$(run_as $A "DELETE FROM public.partner_support_preferences WHERE user_id='$A' RETURNING user_id;")" \
+  "^$A$"
+check "A recreates the private rows for denial and lifecycle tests" \
+  "$(run_as $A "INSERT INTO public.activity_plans (id, user_id, plan_date, activity_kind, title, details, planned_minutes) VALUES ('$ACTIVITY_PLAN_ID', '$A', CURRENT_DATE, 'movement', 'PRIVATE ACTIVITY', 'PRIVATE ACTIVITY DETAILS', 20); INSERT INTO public.activity_plan_steps (id, plan_id, user_id, action, position) VALUES ('$ACTIVITY_STEP_ID', '$ACTIVITY_PLAN_ID', '$A', 'PRIVATE STEP', 1); INSERT INTO public.safety_plans (id, user_id, title) VALUES ('$SAFETY_PLAN_ID', '$A', 'PRIVATE SAFETY PLAN'); INSERT INTO public.safety_plan_items (id, plan_id, user_id, item_kind, label, details, position) VALUES ('$SAFETY_ITEM_ID', '$SAFETY_PLAN_ID', '$A', 'warning_sign', 'PRIVATE WARNING', 'PRIVATE SAFETY DETAILS', 0); INSERT INTO public.staying_well_plans (id, user_id, title) VALUES ('$STAYING_WELL_PLAN_ID', '$A', 'PRIVATE STAYING WELL PLAN'); INSERT INTO public.staying_well_plan_items (id, plan_id, user_id, item_kind, label, details, position) VALUES ('$STAYING_WELL_ITEM_ID', '$STAYING_WELL_PLAN_ID', '$A', 'trigger', 'PRIVATE TRIGGER', 'PRIVATE STAYING WELL DETAILS', 0); INSERT INTO public.sleep_diary_entries (id, user_id, entry_date, notes) VALUES ('$SLEEP_ENTRY_ID', '$A', CURRENT_DATE, 'PRIVATE SLEEP NOTES'); INSERT INTO public.partner_support_preferences (user_id, support_style) VALUES ('$A', 'listening'); SELECT (SELECT count(*) FROM public.activity_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.activity_plan_steps WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.safety_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.safety_plan_items WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.staying_well_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.staying_well_plan_items WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.sleep_diary_entries WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.partner_support_preferences WHERE user_id='$A');")" \
+  '^1:1:1:1:1:1:1:1$'
+
+echo ""
+echo "== PRIVATE WELLBEING: active partner B cannot read A's raw rows =="
+check "B reads 0 of A's activity plans" "$(run_as $B "SELECT count(*) FROM public.activity_plans WHERE user_id='$A';")" '^0$'
+check "B reads 0 of A's activity steps" "$(run_as $B "SELECT count(*) FROM public.activity_plan_steps WHERE user_id='$A';")" '^0$'
+check "B reads 0 of A's safety plans" "$(run_as $B "SELECT count(*) FROM public.safety_plans WHERE user_id='$A';")" '^0$'
+check "B reads 0 of A's safety items" "$(run_as $B "SELECT count(*) FROM public.safety_plan_items WHERE user_id='$A';")" '^0$'
+check "B reads 0 of A's staying-well plans" "$(run_as $B "SELECT count(*) FROM public.staying_well_plans WHERE user_id='$A';")" '^0$'
+check "B reads 0 of A's staying-well items" "$(run_as $B "SELECT count(*) FROM public.staying_well_plan_items WHERE user_id='$A';")" '^0$'
+check "B reads 0 of A's sleep diary" "$(run_as $B "SELECT count(*) FROM public.sleep_diary_entries WHERE user_id='$A';")" '^0$'
+check "B reads 0 of A's support preferences" "$(run_as $B "SELECT count(*) FROM public.partner_support_preferences WHERE user_id='$A';")" '^0$'
+
+echo ""
+echo "== PRIVATE WELLBEING: outsider C cannot read A's raw rows =="
+check "C reads 0 of A's activity plans" "$(run_as $C "SELECT count(*) FROM public.activity_plans WHERE user_id='$A';")" '^0$'
+check "C reads 0 of A's activity steps" "$(run_as $C "SELECT count(*) FROM public.activity_plan_steps WHERE user_id='$A';")" '^0$'
+check "C reads 0 of A's safety plans" "$(run_as $C "SELECT count(*) FROM public.safety_plans WHERE user_id='$A';")" '^0$'
+check "C reads 0 of A's safety items" "$(run_as $C "SELECT count(*) FROM public.safety_plan_items WHERE user_id='$A';")" '^0$'
+check "C reads 0 of A's staying-well plans" "$(run_as $C "SELECT count(*) FROM public.staying_well_plans WHERE user_id='$A';")" '^0$'
+check "C reads 0 of A's staying-well items" "$(run_as $C "SELECT count(*) FROM public.staying_well_plan_items WHERE user_id='$A';")" '^0$'
+check "C reads 0 of A's sleep diary" "$(run_as $C "SELECT count(*) FROM public.sleep_diary_entries WHERE user_id='$A';")" '^0$'
+check "C reads 0 of A's support preferences" "$(run_as $C "SELECT count(*) FROM public.partner_support_preferences WHERE user_id='$A';")" '^0$'
+
+echo ""
+echo "== PRIVATE WELLBEING: partner B cannot mutate A's rows =="
+check "B cannot insert an activity plan for A" "$(run_as $B "INSERT INTO public.activity_plans (user_id, plan_date, activity_kind, title) VALUES ('$A', CURRENT_DATE, 'other', 'CRAFTED');")" 'row-level security|permission denied|ERROR'
+check "B cannot insert an activity step for A" "$(run_as $B "INSERT INTO public.activity_plan_steps (plan_id, user_id, action, position) VALUES ('$ACTIVITY_PLAN_ID', '$A', 'CRAFTED', 2);")" 'row-level security|permission denied|ERROR'
+check "B cannot insert a safety plan for A" "$(run_as $B "INSERT INTO public.safety_plans (user_id, title) VALUES ('$A', 'CRAFTED');")" 'row-level security|permission denied|ERROR'
+check "B cannot insert a safety item for A" "$(run_as $B "INSERT INTO public.safety_plan_items (plan_id, user_id, item_kind, label, position) VALUES ('$SAFETY_PLAN_ID', '$A', 'other', 'CRAFTED', 1);")" 'row-level security|permission denied|ERROR'
+check "B cannot insert a staying-well plan for A" "$(run_as $B "INSERT INTO public.staying_well_plans (user_id, title) VALUES ('$A', 'CRAFTED');")" 'row-level security|permission denied|ERROR'
+check "B cannot insert a staying-well item for A" "$(run_as $B "INSERT INTO public.staying_well_plan_items (plan_id, user_id, item_kind, label, position) VALUES ('$STAYING_WELL_PLAN_ID', '$A', 'other', 'CRAFTED', 1);")" 'row-level security|permission denied|ERROR'
+check "B cannot insert a sleep entry for A" "$(run_as $B "INSERT INTO public.sleep_diary_entries (user_id, entry_date) VALUES ('$A', CURRENT_DATE - 1);")" 'row-level security|permission denied|ERROR'
+check "B cannot insert support preferences for A" "$(run_as $B "INSERT INTO public.partner_support_preferences (user_id) VALUES ('$A');")" 'row-level security|permission denied|duplicate key|ERROR'
+check "B updates 0 of A's activity plans" "$(run_as $B "UPDATE public.activity_plans SET title='CRAFTED' WHERE user_id='$A' RETURNING id;")" '^$'
+check "B updates 0 of A's activity steps" "$(run_as $B "UPDATE public.activity_plan_steps SET action='CRAFTED' WHERE user_id='$A' RETURNING id;")" '^$'
+check "B updates 0 of A's safety plans" "$(run_as $B "UPDATE public.safety_plans SET title='CRAFTED' WHERE user_id='$A' RETURNING id;")" '^$'
+check "B updates 0 of A's safety items" "$(run_as $B "UPDATE public.safety_plan_items SET label='CRAFTED' WHERE user_id='$A' RETURNING id;")" '^$'
+check "B updates 0 of A's staying-well plans" "$(run_as $B "UPDATE public.staying_well_plans SET title='CRAFTED' WHERE user_id='$A' RETURNING id;")" '^$'
+check "B updates 0 of A's staying-well items" "$(run_as $B "UPDATE public.staying_well_plan_items SET label='CRAFTED' WHERE user_id='$A' RETURNING id;")" '^$'
+check "B updates 0 of A's sleep diary" "$(run_as $B "UPDATE public.sleep_diary_entries SET notes='CRAFTED' WHERE user_id='$A' RETURNING id;")" '^$'
+check "B updates 0 of A's support preferences" "$(run_as $B "UPDATE public.partner_support_preferences SET support_style='mixed' WHERE user_id='$A' RETURNING user_id;")" '^$'
+check "B deletes 0 of A's eight private row types" \
+  "$(run_as $B "WITH d1 AS (DELETE FROM public.activity_plan_steps WHERE user_id='$A' RETURNING 1), d2 AS (DELETE FROM public.activity_plans WHERE user_id='$A' RETURNING 1), d3 AS (DELETE FROM public.safety_plan_items WHERE user_id='$A' RETURNING 1), d4 AS (DELETE FROM public.safety_plans WHERE user_id='$A' RETURNING 1), d5 AS (DELETE FROM public.staying_well_plan_items WHERE user_id='$A' RETURNING 1), d6 AS (DELETE FROM public.staying_well_plans WHERE user_id='$A' RETURNING 1), d7 AS (DELETE FROM public.sleep_diary_entries WHERE user_id='$A' RETURNING 1), d8 AS (DELETE FROM public.partner_support_preferences WHERE user_id='$A' RETURNING 1) SELECT (SELECT count(*) FROM d1) || ':' || (SELECT count(*) FROM d2) || ':' || (SELECT count(*) FROM d3) || ':' || (SELECT count(*) FROM d4) || ':' || (SELECT count(*) FROM d5) || ':' || (SELECT count(*) FROM d6) || ':' || (SELECT count(*) FROM d7) || ':' || (SELECT count(*) FROM d8);")" \
+  '^0:0:0:0:0:0:0:0$'
+
+echo ""
+echo "== PRIVACY EVENTS: approved RPC append only, raw DML refused =="
+PRIVACY_EVENT_ID="$(run_as $A "SELECT public.record_privacy_event('consent_granted', 'ios', '{\"policy_version\":\"2026.08\",\"method\":\"privacy_settings\"}'::jsonb);")"
+check "A appends a privacy event through the approved RPC" "$PRIVACY_EVENT_ID" '^[0-9a-f-]{36}$'
+check "A reads its appended privacy event" \
+  "$(run_as $A "SELECT event_type || ':' || platform FROM public.privacy_events WHERE id='$PRIVACY_EVENT_ID';")" \
+  '^consent_granted:ios$'
+check "B reads 0 of A's privacy events" "$(run_as $B "SELECT count(*) FROM public.privacy_events WHERE user_id='$A';")" '^0$'
+check "C reads 0 of A's privacy events" "$(run_as $C "SELECT count(*) FROM public.privacy_events WHERE user_id='$A';")" '^0$'
+check "A cannot directly insert a privacy event" \
+  "$(run_as $A "INSERT INTO public.privacy_events (user_id, event_type, platform) VALUES ('$A', 'consent_withdrawn', 'web');")" \
+  'row-level security|permission denied|ERROR'
+check "A cannot directly update a privacy event" \
+  "$(run_as $A "UPDATE public.privacy_events SET event_type='consent_withdrawn' WHERE id='$PRIVACY_EVENT_ID' RETURNING id;")" \
+  '^$'
+check "A cannot directly delete a privacy event" \
+  "$(run_as $A "DELETE FROM public.privacy_events WHERE id='$PRIVACY_EVENT_ID' RETURNING id;")" \
+  '^$'
+check "direct privacy-event DML left the append unchanged" \
+  "$(run_as $A "SELECT event_type || ':' || count(*) FROM public.privacy_events WHERE id='$PRIVACY_EVENT_ID' GROUP BY event_type;")" \
+  '^consent_granted:1$'
+check "privacy RPC rejects arbitrary metadata" \
+  "$(run_as $A "SELECT public.record_privacy_event('consent_granted', 'ios', '{\"private_note\":\"must not be logged\"}'::jsonb);")" \
+  'privacy_events_metadata_shape_check|violates check constraint|ERROR'
+
 echo ""
 echo "== NEGATIVE: partner B must not reach A's raw rows =="
 check "B reads 0 of A's moods"       "$(run_as $B "SELECT count(*) FROM public.moods WHERE user_id='$A';")" '^0$'
@@ -413,6 +577,59 @@ check "permanent partner cannot snapshot anonymous owner" \
 check "anonymous partner cannot read permanent-owner link" \
   "$(run_as_anonymous $D "SELECT count(*) FROM public.partner_links WHERE owner_id='$A';")" \
   '^0$'
+
+echo ""
+echo "== TRANSACTIONAL PLAN AND SLEEP CONSTRAINTS =="
+check "activity RPC rejects a fourth step before writing" \
+  "$(run_as $A "SELECT public.save_activity_plan(NULL, CURRENT_DATE, 'movement', 'TOO MANY STEPS', '', 'anytime', 20, '[{\"action\":\"one\",\"timing\":\"\",\"estimated_minutes\":null,\"position\":1},{\"action\":\"two\",\"timing\":\"\",\"estimated_minutes\":null,\"position\":2},{\"action\":\"three\",\"timing\":\"\",\"estimated_minutes\":null,\"position\":3},{\"action\":\"four\",\"timing\":\"\",\"estimated_minutes\":null,\"position\":4}]'::jsonb);")" \
+  'at most 3 steps|ERROR'
+check "rejected activity RPC leaves no parent behind" \
+  "$(run_as $A "SELECT count(*) FROM public.activity_plans WHERE title='TOO MANY STEPS';")" \
+  '^0$'
+check "activity RPC rolls back parent when a child is invalid" \
+  "$(run_as $A "SELECT public.save_activity_plan(NULL, CURRENT_DATE, 'movement', 'ROLLBACK ACTIVITY', '', 'anytime', 20, '[{\"action\":\"\",\"timing\":\"\",\"estimated_minutes\":null,\"position\":1}]'::jsonb);")" \
+  'invalid|ERROR'
+check "invalid child rollback leaves no activity parent" \
+  "$(run_as $A "SELECT count(*) FROM public.activity_plans WHERE title='ROLLBACK ACTIVITY';")" \
+  '^0$'
+ATOMIC_SAFETY_ID="$(run_as $A "SELECT public.save_safety_plan(NULL, 'ATOMIC SAFETY', '[{\"item_kind\":\"warning_sign\",\"label\":\"notice isolation\",\"details\":\"\",\"position\":0}]'::jsonb);")"
+check "first safety save creates parent and item atomically" \
+  "$(run_as $A "SELECT (SELECT count(*) FROM public.safety_plans WHERE id='$ATOMIC_SAFETY_ID') || ':' || (SELECT count(*) FROM public.safety_plan_items WHERE plan_id='$ATOMIC_SAFETY_ID');")" \
+  '^1:1$'
+check "sleep chronology compares non-adjacent entered fields" \
+  "$(run_as $A "INSERT INTO public.sleep_diary_entries (user_id, entry_date, went_to_bed_at, fell_asleep_at) VALUES ('$A', CURRENT_DATE - 2, NOW(), NOW() - INTERVAL '1 hour');")" \
+  'sleep_diary_entries_timeline_check|violates check constraint|ERROR'
+check "sleep timezone rejects malformed IANA identifiers" \
+  "$(run_as $A "INSERT INTO public.sleep_diary_entries (user_id, entry_date, timezone_name) VALUES ('$A', CURRENT_DATE - 3, 'Not/A Valid Zone');")" \
+  'sleep_diary_entries_timezone_check|violates check constraint|ERROR'
+
+echo ""
+echo "== SESSION DATA LIFECYCLE =="
+psql -q <<SQL
+INSERT INTO public.anonymous_sessions (session_id) VALUES ('mapped-owner-a'), ('session-lifecycle');
+INSERT INTO public.user_data_migration (session_id, user_id) VALUES
+  ('mapped-owner-a', '$A'),
+  ('session-lifecycle', '$C');
+INSERT INTO public.moods (session_id, emoji) VALUES ('session-lifecycle', '😐');
+SQL
+check "service role deletes a session-owned profile" \
+  "$(docker exec -i -e PGPASSWORD="$PGPASSWORD" "$CONTAINER" psql -U postgres -d postgres -tAq -c "SET ROLE service_role; SELECT public.delete_owned_data(NULL, 'session-lifecycle');")" \
+  '"deleted": true'
+check "session deletion removes content, mapping, and anonymous owner" \
+  "$(psql -tAq -c "SELECT (SELECT count(*) FROM public.moods WHERE session_id='session-lifecycle') || ':' || (SELECT count(*) FROM public.user_data_migration WHERE session_id='session-lifecycle') || ':' || (SELECT count(*) FROM public.anonymous_sessions WHERE session_id='session-lifecycle');")" \
+  '^0:0:0$'
+
+echo ""
+echo "== DATA LIFECYCLE: delete_owned_data removes every new A-owned row =="
+check "service role deletes A's owned data" \
+  "$(docker exec -i -e PGPASSWORD="$PGPASSWORD" "$CONTAINER" psql -U postgres -d postgres -tAq -c "SET ROLE service_role; SELECT public.delete_owned_data('$A', NULL);")" \
+  '"deleted": true'
+check "all A-owned private wellbeing and privacy rows are gone" \
+  "$(psql -tAq -c "SELECT (SELECT count(*) FROM public.activity_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.activity_plan_steps WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.safety_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.safety_plan_items WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.staying_well_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.staying_well_plan_items WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.sleep_diary_entries WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.partner_support_preferences WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.privacy_events WHERE user_id='$A');")" \
+  '^0:0:0:0:0:0:0:0:0$'
+check "user deletion removes its migration mapping and orphaned anonymous owner" \
+  "$(psql -tAq -c "SELECT (SELECT count(*) FROM public.user_data_migration WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.anonymous_sessions WHERE session_id='mapped-owner-a');")" \
+  '^0:0$'
 
 echo ""
 echo "================================"

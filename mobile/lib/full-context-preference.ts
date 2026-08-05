@@ -28,3 +28,10 @@ export async function saveFullContextPreference(
     // The current conversation remains fail-closed when storage is unavailable.
   }
 }
+
+export async function clearFullContextPreference(
+  ownerKey: string | null
+): Promise<void> {
+  if (!ownerKey) return;
+  await AsyncStorage.removeItem(key(ownerKey));
+}

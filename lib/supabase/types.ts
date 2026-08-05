@@ -55,6 +55,56 @@ export type FocusSessionStatus =
   | 'complete'
   | 'abandoned';
 export type ReminderKind = 'habit' | 'routine' | 'focus' | 'planner';
+export type ActivityKind =
+  | 'movement'
+  | 'social'
+  | 'creative'
+  | 'outdoors'
+  | 'self_care'
+  | 'learning'
+  | 'rest'
+  | 'other';
+export type ActivityPlanStatus = 'planned' | 'in_progress' | 'completed' | 'skipped';
+export type WellbeingPlanStatus = 'draft' | 'active' | 'archived';
+export type SafetyPlanItemKind =
+  | 'warning_sign'
+  | 'coping_strategy'
+  | 'distraction'
+  | 'safe_environment'
+  | 'support_contact'
+  | 'professional_support'
+  | 'reason_to_live'
+  | 'other';
+export type StayingWellItemKind =
+  | 'protective_routine'
+  | 'trigger'
+  | 'early_warning_sign'
+  | 'coping_strategy'
+  | 'support_step'
+  | 'clinical_step'
+  | 'other';
+export type PartnerSupportStyle =
+  | 'not_set'
+  | 'encouragement'
+  | 'listening'
+  | 'accountability'
+  | 'practical_help'
+  | 'mixed';
+export type PartnerCheckInFrequency =
+  | 'never'
+  | 'daily'
+  | 'few_times_week'
+  | 'weekly'
+  | 'as_needed';
+export type PartnerAdviceMode = 'ask_first' | 'when_requested' | 'welcome';
+export type PrivacyEventType =
+  | 'privacy_notice_viewed'
+  | 'consent_granted'
+  | 'consent_withdrawn'
+  | 'sharing_enabled'
+  | 'sharing_disabled'
+  | 'export_requested'
+  | 'deletion_requested';
 
 export interface Database {
   public: {
@@ -925,6 +975,149 @@ export interface Database {
         Update: {
           seen_at?: string | null;
         };
+      };
+      activity_plans: {
+        Row: {
+          id: string; user_id: string; plan_date: string; activity_kind: ActivityKind;
+          title: string; details: string; time_of_day: RoutineSlot;
+          planned_minutes: number; status: ActivityPlanStatus; completed_at: string | null;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; user_id: string; plan_date: string; activity_kind: ActivityKind;
+          title: string; details?: string; time_of_day?: RoutineSlot;
+          planned_minutes?: number; status?: ActivityPlanStatus; completed_at?: string | null;
+          created_at?: string; updated_at?: string;
+        };
+        Update: {
+          plan_date?: string; activity_kind?: ActivityKind; title?: string; details?: string;
+          time_of_day?: RoutineSlot; planned_minutes?: number; status?: ActivityPlanStatus;
+          completed_at?: string | null; updated_at?: string;
+        };
+      };
+      activity_plan_steps: {
+        Row: {
+          id: string; plan_id: string; user_id: string; action: string; timing: string;
+          location: string; estimated_minutes: number | null; position: number;
+          completed: boolean; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; plan_id: string; user_id: string; action: string; timing?: string;
+          location?: string; estimated_minutes?: number | null; position: number;
+          completed?: boolean; created_at?: string; updated_at?: string;
+        };
+        Update: {
+          action?: string; timing?: string; location?: string; estimated_minutes?: number | null;
+          position?: number; completed?: boolean; updated_at?: string;
+        };
+      };
+      safety_plans: {
+        Row: {
+          id: string; user_id: string; title: string; status: WellbeingPlanStatus;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; user_id: string; title?: string; status?: WellbeingPlanStatus;
+          created_at?: string; updated_at?: string;
+        };
+        Update: { title?: string; status?: WellbeingPlanStatus; updated_at?: string };
+      };
+      safety_plan_items: {
+        Row: {
+          id: string; plan_id: string; user_id: string; item_kind: SafetyPlanItemKind;
+          label: string; details: string; position: number; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; plan_id: string; user_id: string; item_kind: SafetyPlanItemKind;
+          label: string; details?: string; position: number; created_at?: string; updated_at?: string;
+        };
+        Update: {
+          item_kind?: SafetyPlanItemKind; label?: string; details?: string;
+          position?: number; updated_at?: string;
+        };
+      };
+      staying_well_plans: {
+        Row: {
+          id: string; user_id: string; title: string; status: WellbeingPlanStatus;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; user_id: string; title?: string; status?: WellbeingPlanStatus;
+          created_at?: string; updated_at?: string;
+        };
+        Update: { title?: string; status?: WellbeingPlanStatus; updated_at?: string };
+      };
+      staying_well_plan_items: {
+        Row: {
+          id: string; plan_id: string; user_id: string; item_kind: StayingWellItemKind;
+          label: string; details: string; position: number; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; plan_id: string; user_id: string; item_kind: StayingWellItemKind;
+          label: string; details?: string; position: number; created_at?: string; updated_at?: string;
+        };
+        Update: {
+          item_kind?: StayingWellItemKind; label?: string; details?: string;
+          position?: number; updated_at?: string;
+        };
+      };
+      sleep_diary_entries: {
+        Row: {
+          id: string; user_id: string; entry_date: string; went_to_bed_at: string | null;
+          tried_to_sleep_at: string | null; fell_asleep_at: string | null; woke_up_at: string | null;
+          got_out_of_bed_at: string | null; awakenings: number | null; awake_minutes: number | null;
+          nap_minutes: number | null; timezone_offset_minutes: number | null; timezone_name: string | null;
+          sleep_quality: number | null; restedness: number | null;
+          notes: string; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; user_id: string; entry_date: string; went_to_bed_at?: string | null;
+          tried_to_sleep_at?: string | null; fell_asleep_at?: string | null; woke_up_at?: string | null;
+          got_out_of_bed_at?: string | null; awakenings?: number | null; awake_minutes?: number | null;
+          nap_minutes?: number | null; timezone_offset_minutes?: number | null; timezone_name?: string | null;
+          sleep_quality?: number | null; restedness?: number | null;
+          notes?: string; created_at?: string; updated_at?: string;
+        };
+        Update: {
+          went_to_bed_at?: string | null; tried_to_sleep_at?: string | null;
+          fell_asleep_at?: string | null; woke_up_at?: string | null;
+          got_out_of_bed_at?: string | null; awakenings?: number | null; awake_minutes?: number | null;
+          nap_minutes?: number | null; timezone_offset_minutes?: number | null; timezone_name?: string | null;
+          sleep_quality?: number | null; restedness?: number | null;
+          notes?: string; updated_at?: string;
+        };
+      };
+      partner_support_preferences: {
+        Row: {
+          user_id: string; support_style: PartnerSupportStyle;
+          check_in_frequency: PartnerCheckInFrequency; advice_mode: PartnerAdviceMode;
+          celebrate_progress: boolean; gentle_reminders: boolean;
+          acknowledge_setbacks: boolean; created_at: string; updated_at: string;
+        };
+        Insert: {
+          user_id: string; support_style?: PartnerSupportStyle;
+          check_in_frequency?: PartnerCheckInFrequency; advice_mode?: PartnerAdviceMode;
+          celebrate_progress?: boolean; gentle_reminders?: boolean;
+          acknowledge_setbacks?: boolean; created_at?: string; updated_at?: string;
+        };
+        Update: {
+          support_style?: PartnerSupportStyle; check_in_frequency?: PartnerCheckInFrequency;
+          advice_mode?: PartnerAdviceMode; celebrate_progress?: boolean;
+          gentle_reminders?: boolean; acknowledge_setbacks?: boolean; updated_at?: string;
+        };
+      };
+      privacy_events: {
+        Row: {
+          id: string; user_id: string; event_type: PrivacyEventType;
+          platform: 'web' | 'ios' | 'android'; metadata: Record<string, string>;
+          occurred_at: string;
+        };
+        Insert: {
+          id?: string; user_id: string; event_type: PrivacyEventType;
+          platform: 'web' | 'ios' | 'android'; metadata?: Record<string, string>;
+          occurred_at?: string;
+        };
+        Update: never;
       };
       user_data_migration: {
         Row: {

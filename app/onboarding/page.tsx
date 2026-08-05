@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,10 +32,17 @@ export default function OnboardingPage() {
   const [selectedIntentions, setSelectedIntentions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [moodSaved, setMoodSaved] = useState(false);
+  const moodSaveInFlightRef = useRef(false);
 
   const handleMoodNext = async () => {
-    if (!mood || !user?.id) return;
+    if (!mood || !user?.id || moodSaveInFlightRef.current) return;
+    if (moodSaved) {
+      setStep('intention');
+      return;
+    }
 
+    moodSaveInFlightRef.current = true;
     try {
       setLoading(true);
       setSaveError('');
@@ -46,12 +53,14 @@ export default function OnboardingPage() {
         ...getLocalCheckInFields(),
       });
 
+      setMoodSaved(true);
       setStep('intention');
     } catch (error) {
       console.error('Error saving mood:', error);
       setSaveError('Your check-in was not saved. Please try again.');
     } finally {
       setLoading(false);
+      moodSaveInFlightRef.current = false;
     }
   };
 
@@ -123,7 +132,11 @@ export default function OnboardingPage() {
               </div>
 
               <div className="mb-8">
-                <MoodSelector selected={mood} onSelect={setMood} />
+                <MoodSelector
+                  selected={mood}
+                  onSelect={setMood}
+                  disabled={loading || moodSaved}
+                />
               </div>
 
               <div className="mb-6">
@@ -133,9 +146,16 @@ export default function OnboardingPage() {
                   placeholder="What's affecting your mood? (e.g., slept 3 hrs, work stress)"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
+                  disabled={loading || moodSaved}
                   className="mt-2"
                 />
               </div>
+
+              {moodSaved && (
+                <p role="status" className="mb-4 text-center text-sm text-muted-foreground">
+                  Day one is saved. Continue to choose what you want support with.
+                </p>
+              )}
 
               <Button
                 size="lg"
@@ -143,7 +163,13 @@ export default function OnboardingPage() {
                 onClick={handleMoodNext}
                 disabled={!mood || !user || authLoading || loading}
               >
-                {authLoading ? 'Preparing your private space...' : loading ? 'Saving...' : 'Save day one'}
+                {authLoading
+                  ? 'Preparing your private space...'
+                  : loading
+                    ? 'Saving...'
+                    : moodSaved
+                      ? 'Continue'
+                      : 'Save day one'}
               </Button>
               {saveError && (
                 <p role="alert" className="mt-3 text-center text-sm text-red-700">

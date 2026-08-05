@@ -23,6 +23,10 @@ const mobileAuthSource = readFileSync(
   resolve(process.cwd(), 'mobile/lib/auth-context.tsx'),
   'utf8'
 );
+const mobileSessionSource = readFileSync(
+  resolve(process.cwd(), 'mobile/lib/session-bootstrap.ts'),
+  'utf8'
+);
 const webSessionSource = readFileSync(
   resolve(process.cwd(), 'lib/session.ts'),
   'utf8'
@@ -72,7 +76,7 @@ describe('session and mood readiness', () => {
       expect(source).toContain('setLoading(false)');
     }
     expect(webSessionSource).toContain('Session initialization timed out');
-    expect(mobileAuthSource).toContain('Session initialization timed out');
+    expect(mobileSessionSource).toContain('Session initialization timed out');
   });
 
   it('never presents mood save controls as ready without an owner', () => {

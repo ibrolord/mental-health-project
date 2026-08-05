@@ -44,6 +44,7 @@ import {
   type RewardKey,
   type ScopeKey,
 } from '@/lib/partners';
+import { PartnerSupportPreferences } from '@/components/partner-support-preferences';
 
 const CORE_SCOPE_ORDER: ScopeKey[] = [
   'share_checkins',
@@ -739,6 +740,8 @@ export default function PartnerPage() {
             Sharing sends counts only. Private text stays private.
           </p>
         </details>
+
+        {canUse && <div className="mt-8"><PartnerSupportPreferences /></div>}
 
         {!canUse ? (
           <section className="app-panel mt-8 p-6">

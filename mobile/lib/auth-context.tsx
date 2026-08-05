@@ -1,21 +1,62 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { clearPersistedSupabaseSession, supabase } from './supabase';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
+import * as WebBrowser from 'expo-web-browser';
+import {
+  anonymousSignInState,
+  clearPersistedSupabaseSession,
+  supabase,
+} from './supabase';
 import type { Session, User } from '@supabase/supabase-js';
 import { apiRequest } from './api';
 import { clearStoredAcquisitionAttribution } from './acquisition';
+import { resetAiDataSharingConsent } from './ai-consent';
 import {
+  ACCOUNT_UPGRADE_COMPLETION_FLAG,
   ACCOUNT_UPGRADE_EMAIL_FIELD,
   ACCOUNT_UPGRADE_STARTED_FLAG,
   getPendingAccountUpgradeEmail,
+  isAccountEmailConfirmed,
   isAccountUpgradeComplete,
   isAccountUpgradePending,
 } from './auth-validation';
+import {
+  appleProfileMetadata,
+  isAppleAuthCancellation,
+  linkedProviderVerificationError,
+  parseOAuthCallback,
+} from './social-auth';
+import { createAnonymousSessionManager } from './session-bootstrap';
+import {
+  clearDeletedAccountSession,
+  runDeletedAccountLocalCleanup,
+} from './session-cleanup';
+import { offlineSafetyPlanCache } from './offline-safety-plan-cache';
+import { clearFullContextPreference } from './full-context-preference';
+import { clearContextSelections } from './chat-context-preference';
+import { setRemindersEnabled } from './notifications';
+import { Colors } from './constants';
 
-let anonymousSignIn: Promise<Session> | null = null;
+WebBrowser.maybeCompleteAuthSession();
+
+export type AccountUpgradeStatus = 'complete' | 'password-required';
+export type SocialAuthProvider = 'google' | 'apple';
+export type SocialAuthIntent = 'sign-in' | 'upgrade';
+
 const LEGACY_SESSION_KEY = 'anonymous_session_id';
 const AUTH_SESSION_TIMEOUT_MS = 12_000;
+const AUTH_INIT_ERROR_MESSAGE =
+  'Your private profile could not be started. Check your connection and try again.';
+const MOBILE_AUTH_REDIRECT = 'mhtoolkit://auth/callback';
 const USER_DATA_TABLES = [
   'moods',
   'assessments',
@@ -35,7 +76,10 @@ const USER_DATA_TABLES = [
 async function assertAnonymousAccountIsEmpty(): Promise<void> {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw sessionError;
-  if (!session?.user.is_anonymous) return;
+  if (session && !session.user.is_anonymous) {
+    throw new Error('This device is already signed in. Sign out before using another account.');
+  }
+  if (!session) return;
 
   const results = await Promise.all(
     USER_DATA_TABLES.map((table) => supabase.from(table).select('id').limit(1))
@@ -50,6 +94,40 @@ async function assertAnonymousAccountIsEmpty(): Promise<void> {
   }
 }
 
+async function applyOAuthSessionFromUrl(url: string): Promise<void> {
+  const { accessToken, refreshToken } = parseOAuthCallback(url);
+  const { error } = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+  if (error) throw error;
+}
+
+async function verifyLinkedProvider(
+  provider: SocialAuthProvider,
+  expectedUserId?: string
+): Promise<User> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  if (!userData.user || userData.user.is_anonymous) {
+    throw new Error(`Continue with ${provider === 'google' ? 'Google' : 'Apple'} did not finish.`);
+  }
+  if (expectedUserId && userData.user.id !== expectedUserId) {
+    throw new Error('Account setup did not preserve the profile that started it.');
+  }
+
+  const { data, error } = await supabase.auth.getUserIdentities();
+  if (error) throw error;
+  const verificationError = linkedProviderVerificationError(
+    userData.user,
+    data.identities,
+    provider,
+    expectedUserId
+  );
+  if (verificationError) throw new Error(verificationError);
+  return userData.user;
+}
+
 interface AuthContextType {
   user: User | null;
   sessionId: string | null;
@@ -60,7 +138,12 @@ interface AuthContextType {
   pendingAccountUpgradeEmail: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   startAccountUpgrade: (email: string) => Promise<void>;
-  completeAccountUpgrade: () => Promise<void>;
+  completeAccountUpgrade: () => Promise<AccountUpgradeStatus>;
+  finishAccountUpgrade: (password: string) => Promise<void>;
+  continueWithProvider: (
+    provider: SocialAuthProvider,
+    intent: SocialAuthIntent
+  ) => Promise<boolean>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
@@ -75,47 +158,24 @@ const AuthContext = createContext<AuthContextType>({
   pendingAccountUpgradeEmail: null,
   signIn: async () => {},
   startAccountUpgrade: async () => {},
-  completeAccountUpgrade: async () => {},
+  completeAccountUpgrade: async () => 'complete',
+  finishAccountUpgrade: async () => {},
+  continueWithProvider: async () => false,
   signOut: async () => {},
   deleteAccount: async () => {},
 });
 
-async function withSessionTimeout<T>(operation: Promise<T>): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(
-          () => reject(new Error('Session initialization timed out')),
-          AUTH_SESSION_TIMEOUT_MS
-        );
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
+const anonymousSessionManager = createAnonymousSessionManager(
+  {
+    getSession: () => supabase.auth.getSession(),
+    signInAnonymously: () => supabase.auth.signInAnonymously(),
+  },
+  AUTH_SESSION_TIMEOUT_MS,
+  anonymousSignInState
+);
 
-async function ensureAnonymousSession(): Promise<Session> {
-  const { data: current, error: sessionError } = await withSessionTimeout(
-    supabase.auth.getSession()
-  );
-  if (sessionError) throw sessionError;
-  if (current.session) return current.session;
-
-  if (!anonymousSignIn) {
-    anonymousSignIn = supabase.auth.signInAnonymously().then(({ data, error }) => {
-      if (error) throw error;
-      if (!data.session) throw new Error('Anonymous sign-in did not return a session');
-      return data.session;
-    }).finally(() => {
-      anonymousSignIn = null;
-    });
-  }
-
-  return withSessionTimeout(anonymousSignIn);
-}
+const ensureAnonymousSession = (): Promise<Session> =>
+  anonymousSessionManager.ensureSession();
 
 async function migrateLegacyData(session: Session): Promise<void> {
   const legacySessionId = await AsyncStorage.getItem(LEGACY_SESSION_KEY);
@@ -132,11 +192,15 @@ async function migrateLegacyData(session: Session): Promise<void> {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initializationError, setInitializationError] = useState('');
+  const [authAttempt, setAuthAttempt] = useState(0);
+  const accountDeletionInProgress = useRef(false);
 
   useEffect(() => {
     let active = true;
 
     const initAuth = async () => {
+      setInitializationError('');
       try {
         const session = await ensureAnonymousSession();
         if (!active) return;
@@ -151,6 +215,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       } catch (error) {
         console.error('Auth initialization error:', error);
+        if (active) setInitializationError(AUTH_INIT_ERROR_MESSAGE);
       } finally {
         if (active) setLoading(false);
       }
@@ -162,12 +227,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
-      setUser(session?.user ?? null);
 
       if (session) {
+        setUser(session.user);
+        setInitializationError('');
         setLoading(false);
       } else {
+        if (accountDeletionInProgress.current) return;
         setLoading(true);
+        setUser(null);
+        setInitializationError('');
         // Avoid calling another auth method from inside the auth callback lock.
         setTimeout(() => {
           void ensureAnonymousSession()
@@ -181,7 +250,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             })
             .catch((error) => {
               console.error('Anonymous sign-in error:', error);
-              if (active) setLoading(false);
+              if (active) {
+                setInitializationError(AUTH_INIT_ERROR_MESSAGE);
+                setLoading(false);
+              }
             });
         }, 0);
       }
@@ -191,7 +263,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [authAttempt]);
 
   const isAuthenticated = !!user;
   const isAnonymous = user?.is_anonymous === true;
@@ -213,9 +285,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Link the email to the current anonymous user so its ID and saved data
-    // remain unchanged. The confirmation page sets a password in the browser.
+    // remain unchanged. Password creation happens in the app after verification.
     const redirectUrl =
-      `https://mhtoolkit.vercel.app/auth/mobile-confirmed?upgrade_user_id=${encodeURIComponent(current.session.user.id)}`;
+      `https://mhtoolkit.vercel.app/auth/mobile-confirmed?source=mobile&upgrade_user_id=${encodeURIComponent(current.session.user.id)}`;
     const { data, error } = await supabase.auth.updateUser(
       {
         email: email.trim(),
@@ -230,16 +302,190 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
   };
 
-  const completeAccountUpgrade = async (): Promise<void> => {
+  const completeAccountUpgrade = async (): Promise<AccountUpgradeStatus> => {
     const { data, error } = await supabase.auth.refreshSession();
     if (error) throw error;
+    if (isAccountUpgradeComplete(data.user)) {
+      setUser(data.user);
+      return 'complete';
+    }
+
+    if (!isAccountEmailConfirmed(data.user)) {
+      throw new Error('Your email is not confirmed yet. Open the link in your inbox, then return here.');
+    }
+
+    setUser(data.user);
+    return 'password-required';
+  };
+
+  const finishAccountUpgrade = async (password: string): Promise<void> => {
+    const { data: current, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    if (!isAccountEmailConfirmed(current.user)) {
+      throw new Error('Confirm your email before creating a password.');
+    }
+
+    const { data, error } = await supabase.auth.updateUser({
+      password,
+      data: {
+        [ACCOUNT_UPGRADE_COMPLETION_FLAG]: true,
+        [ACCOUNT_UPGRADE_STARTED_FLAG]: false,
+        [ACCOUNT_UPGRADE_EMAIL_FIELD]: null,
+      },
+    });
+    if (error) throw error;
     if (!isAccountUpgradeComplete(data.user)) {
-      throw new Error('Account setup is not complete yet. Finish the email and password steps in your browser, then try again.');
+      throw new Error('Your password was saved, but account setup could not be verified.');
     }
     setUser(data.user);
   };
 
+  const continueWithOAuth = async (
+    provider: SocialAuthProvider,
+    intent: SocialAuthIntent
+  ): Promise<boolean> => {
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const startingUserId =
+      intent === 'upgrade' ? current.session?.user.id : undefined;
+
+    let authorizationUrl: string | null = null;
+    if (intent === 'upgrade') {
+      if (!current.session?.user.is_anonymous) {
+        throw new Error('This device is already signed in to an account.');
+      }
+      const { data, error } = await supabase.auth.linkIdentity({
+        provider,
+        options: {
+          redirectTo: MOBILE_AUTH_REDIRECT,
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) throw error;
+      authorizationUrl = data.url;
+    } else {
+      await assertAnonymousAccountIsEmpty();
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: MOBILE_AUTH_REDIRECT,
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) throw error;
+      authorizationUrl = data.url;
+    }
+
+    if (!authorizationUrl) {
+      throw new Error(
+        `${provider === 'google' ? 'Google' : 'Apple'} sign-in is not available right now.`
+      );
+    }
+    const result = await WebBrowser.openAuthSessionAsync(
+      authorizationUrl,
+      MOBILE_AUTH_REDIRECT
+    );
+    if (result.type !== 'success') return false;
+
+    await applyOAuthSessionFromUrl(result.url);
+    const verifiedUser = await verifyLinkedProvider(provider, startingUserId);
+    setUser(verifiedUser);
+    return true;
+  };
+
+  const continueWithApple = async (intent: SocialAuthIntent): Promise<boolean> => {
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const startingUserId =
+      intent === 'upgrade' ? current.session?.user.id : undefined;
+    if (intent === 'upgrade') {
+      if (!current.session?.user.is_anonymous) {
+        throw new Error('This device is already signed in to an account.');
+      }
+    } else {
+      await assertAnonymousAccountIsEmpty();
+    }
+
+    const rawNonce = Crypto.randomUUID();
+    const hashedNonce = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      rawNonce
+    );
+
+    let credential: AppleAuthentication.AppleAuthenticationCredential;
+    try {
+      credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+        nonce: hashedNonce,
+      });
+    } catch (error) {
+      if (isAppleAuthCancellation(error)) return false;
+      throw error;
+    }
+
+    if (!credential.identityToken) {
+      throw new Error('Apple did not return a valid identity token.');
+    }
+
+    const response =
+      intent === 'upgrade'
+        ? await supabase.auth.linkIdentity({
+            provider: 'apple',
+            token: credential.identityToken,
+            nonce: rawNonce,
+          })
+        : await supabase.auth.signInWithIdToken({
+            provider: 'apple',
+            token: credential.identityToken,
+            nonce: rawNonce,
+          });
+    if (response.error) throw response.error;
+
+    const verifiedUser = await verifyLinkedProvider('apple', startingUserId);
+    setUser(verifiedUser);
+
+    const profileMetadata = appleProfileMetadata(credential.fullName);
+    if (profileMetadata) {
+      const { data, error } = await supabase.auth.updateUser({
+        data: profileMetadata,
+      });
+      if (error) {
+        // Authentication succeeded. Name enrichment must not turn it into a
+        // false sign-in failure because Apple may never return the name again.
+        console.warn('Unable to save Apple profile name:', error);
+      } else {
+        setUser(data.user);
+      }
+    }
+    return true;
+  };
+
+  const continueWithProvider = (
+    provider: SocialAuthProvider,
+    intent: SocialAuthIntent
+  ): Promise<boolean> =>
+    provider === 'apple' && Platform.OS === 'ios'
+      ? continueWithApple(intent)
+      : continueWithOAuth(provider, intent);
+
   const signOut = async () => {
+    if (user) {
+      const ownerKey = `user_id:${user.id}`;
+      await runDeletedAccountLocalCleanup(
+        [
+          clearStoredAcquisitionAttribution(),
+          resetAiDataSharingConsent(ownerKey),
+          clearFullContextPreference(ownerKey),
+          clearContextSelections(ownerKey),
+          setRemindersEnabled(false),
+          offlineSafetyPlanCache.clear(user.id),
+        ],
+        (error) => console.error('Sign-out local cleanup failed:', error)
+      );
+    }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   };
@@ -249,31 +495,84 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('No authenticated account to delete');
     }
 
-    await clearStoredAcquisitionAttribution();
+    const deletedOwnerId = user.id;
     const result = await apiRequest('/api/account/delete', {});
     if (!result?.deleted) {
       throw new Error(result?.error || 'Failed to delete account');
     }
 
-    let { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
-    if (signOutError) {
-      await clearPersistedSupabaseSession();
-      ({ error: signOutError } = await supabase.auth.signOut({ scope: 'local' }));
-    }
-    const { data: clearedSession, error: sessionError } = await supabase.auth.getSession();
-    if (signOutError || sessionError || clearedSession.session) {
-      throw new Error(
-        'Your account was deleted, but this device session could not be cleared. Close the app and contact support before continuing.'
+    accountDeletionInProgress.current = true;
+    try {
+      const deletedOwnerKey = `user_id:${deletedOwnerId}`;
+      const localCleanupComplete = await runDeletedAccountLocalCleanup(
+        [
+          clearStoredAcquisitionAttribution(),
+          resetAiDataSharingConsent(deletedOwnerKey),
+          clearFullContextPreference(deletedOwnerKey),
+          clearContextSelections(deletedOwnerKey),
+          setRemindersEnabled(false),
+          offlineSafetyPlanCache.clear(deletedOwnerId),
+        ],
+        (error) => console.error('Deleted-account local cleanup failed:', error)
       );
+      const sessionCleared = await clearDeletedAccountSession(
+        supabase.auth,
+        clearPersistedSupabaseSession,
+        (error) => console.error('Unable to clear persisted session after deletion:', error)
+      );
+      if (!sessionCleared) {
+        throw new Error(
+          'Your account was deleted, but this device session could not be cleared. Close the app and contact support before continuing.'
+        );
+      }
+      if (!localCleanupComplete) {
+        throw new Error(
+          'Your account was deleted and this session was cleared, but local privacy data could not be fully removed. Delete and reinstall MHtoolkit before continuing.'
+        );
+      }
+      const anonymousSession = await ensureAnonymousSession();
+      setUser(anonymousSession.user);
+    } catch (error) {
+      setUser(null);
+      setLoading(false);
+      setInitializationError(
+        error instanceof Error ? error.message : AUTH_INIT_ERROR_MESSAGE
+      );
+      throw error;
+    } finally {
+      accountDeletionInProgress.current = false;
     }
-    const anonymousSession = await ensureAnonymousSession();
-    setUser(anonymousSession.user);
   };
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
+      <View style={authStyles.centered}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  if (initializationError || !user) {
+    return (
+      <View style={authStyles.centered}>
+        <View style={authStyles.errorCard} accessibilityRole="alert">
+          <Text style={authStyles.errorTitle}>Unable to start securely</Text>
+          <Text style={authStyles.errorMessage}>
+            {initializationError || AUTH_INIT_ERROR_MESSAGE}
+          </Text>
+          <TouchableOpacity
+            style={authStyles.retryButton}
+            onPress={() => {
+              setLoading(true);
+              setInitializationError('');
+              setAuthAttempt((attempt) => attempt + 1);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Try authentication again"
+          >
+            <Text style={authStyles.retryText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -291,6 +590,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         startAccountUpgrade,
         completeAccountUpgrade,
+        finishAccountUpgrade,
+        continueWithProvider,
         signOut,
         deleteAccount,
       }}
@@ -303,3 +604,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   return useContext(AuthContext);
 }
+
+const authStyles = StyleSheet.create({
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.background,
+    padding: 24,
+  },
+  errorCard: {
+    width: '100%',
+    maxWidth: 420,
+    alignItems: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+    padding: 24,
+  },
+  errorTitle: {
+    color: Colors.text,
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  errorMessage: {
+    color: Colors.textSecondary,
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  retryButton: {
+    minHeight: 48,
+    minWidth: 150,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    marginTop: 20,
+    paddingHorizontal: 20,
+  },
+  retryText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});

@@ -1,34 +1,48 @@
 'use client';
 
-const AI_CONSENT_KEY = 'mhtoolkit.ai_data_sharing_consent.v1';
+const AI_CONSENT_PREFIX = 'mhtoolkit.ai_data_sharing_consent.v2';
+
+function consentKey(subjectId: string): string | null {
+  const normalized = subjectId.trim();
+  return normalized
+    ? `${AI_CONSENT_PREFIX}:${encodeURIComponent(normalized)}`
+    : null;
+}
 
 export const AI_DATA_SHARING_TITLE = 'AI Data Sharing Consent';
 
 export const AI_DATA_SHARING_DISCLOSURE =
   'Your message and any MHtoolkit context you turn on may be sent securely to AI providers including Google Gemini, Anthropic Claude, and OpenAI. Voice features also send audio for transcription and playback. We do not sell this data or use it for advertising.';
 
-export function hasAiDataSharingConsent(): boolean {
+export function hasAiDataSharingConsent(subjectId: string): boolean {
   if (typeof window === 'undefined') return false;
+  const key = consentKey(subjectId);
+  if (!key) return false;
   try {
-    return window.localStorage.getItem(AI_CONSENT_KEY) === 'granted';
+    return window.localStorage.getItem(key) === 'granted';
   } catch {
     return false;
   }
 }
 
-export function resetAiDataSharingConsent(): void {
-  if (typeof window === 'undefined') return;
+export function resetAiDataSharingConsent(subjectId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  const key = consentKey(subjectId);
+  if (!key) return false;
   try {
-    window.localStorage.removeItem(AI_CONSENT_KEY);
+    window.localStorage.removeItem(key);
+    return true;
   } catch {
-    // Fail closed if storage is unavailable.
+    return false;
   }
 }
 
-export function grantAiDataSharingConsent(): boolean {
+export function grantAiDataSharingConsent(subjectId: string): boolean {
   if (typeof window === 'undefined') return false;
+  const key = consentKey(subjectId);
+  if (!key) return false;
   try {
-    window.localStorage.setItem(AI_CONSENT_KEY, 'granted');
+    window.localStorage.setItem(key, 'granted');
     return true;
   } catch {
     return false;

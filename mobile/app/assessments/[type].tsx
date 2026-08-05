@@ -9,6 +9,7 @@ import type { Assessment } from '@/lib/assessments/types';
 import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
+import { goBackOrReplace } from '@/lib/navigation';
 
 type AssessmentResult = ReturnType<Assessment['interpret']> & {
   score: number;
@@ -57,7 +58,10 @@ export default function AssessmentTakeScreen() {
     return (
       <View style={s.centered}>
         <Text style={s.errorText}>Assessment not found</Text>
-        <TouchableOpacity style={s.btn} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={s.btn}
+          onPress={() => goBackOrReplace(router, '/(tabs)/assessments')}
+        >
           <Text style={s.btnText}>Go back</Text>
         </TouchableOpacity>
       </View>
@@ -122,7 +126,10 @@ export default function AssessmentTakeScreen() {
   if (!started) {
     return (
       <ScrollView style={s.container} contentContainerStyle={s.content}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backLink}>
+        <TouchableOpacity
+          onPress={() => goBackOrReplace(router, '/(tabs)/assessments')}
+          style={s.backLink}
+        >
           <Text style={s.backLinkText}>Back to assessments</Text>
         </TouchableOpacity>
 

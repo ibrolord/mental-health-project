@@ -174,6 +174,104 @@ try {
   });
   if (planError) throw planError;
 
+  const { data: activityPlan, error: activityPlanError } = await client
+    .from('activity_plans')
+    .insert({
+      user_id: testUserId,
+      plan_date: localDate,
+      activity_kind: 'movement',
+      title: 'Lifecycle test activity',
+      details: 'Temporary activity details',
+      time_of_day: 'morning',
+      planned_minutes: 10,
+    })
+    .select('id')
+    .single();
+  if (activityPlanError) throw activityPlanError;
+
+  const { error: activityStepError } = await client.from('activity_plan_steps').insert({
+    plan_id: activityPlan.id,
+    user_id: testUserId,
+    action: 'Temporary activity step',
+    timing: 'After breakfast',
+    location: 'Home',
+    estimated_minutes: 5,
+    position: 1,
+  });
+  if (activityStepError) throw activityStepError;
+
+  const { data: safetyPlan, error: safetyPlanError } = await client
+    .from('safety_plans')
+    .insert({ user_id: testUserId, title: 'Lifecycle safety plan', status: 'active' })
+    .select('id')
+    .single();
+  if (safetyPlanError) throw safetyPlanError;
+
+  const { error: safetyItemError } = await client.from('safety_plan_items').insert({
+    plan_id: safetyPlan.id,
+    user_id: testUserId,
+    item_kind: 'warning_sign',
+    label: 'Temporary warning sign',
+    details: 'Temporary safety details',
+    position: 0,
+  });
+  if (safetyItemError) throw safetyItemError;
+
+  const { data: stayingWellPlan, error: stayingWellPlanError } = await client
+    .from('staying_well_plans')
+    .insert({ user_id: testUserId, title: 'Lifecycle staying-well plan', status: 'active' })
+    .select('id')
+    .single();
+  if (stayingWellPlanError) throw stayingWellPlanError;
+
+  const { error: stayingWellItemError } = await client
+    .from('staying_well_plan_items')
+    .insert({
+      plan_id: stayingWellPlan.id,
+      user_id: testUserId,
+      item_kind: 'protective_routine',
+      label: 'Temporary helpful routine',
+      details: 'Temporary staying-well details',
+      position: 0,
+    });
+  if (stayingWellItemError) throw stayingWellItemError;
+
+  const wake = new Date(now);
+  const outOfBed = new Date(wake.getTime() + 15 * 60_000);
+  const fellAsleep = new Date(wake.getTime() - 8 * 60 * 60_000);
+  const triedToSleep = new Date(fellAsleep.getTime() - 20 * 60_000);
+  const wentToBed = new Date(triedToSleep.getTime() - 15 * 60_000);
+  const { error: sleepError } = await client.from('sleep_diary_entries').insert({
+    user_id: testUserId,
+    entry_date: localDate,
+    went_to_bed_at: wentToBed.toISOString(),
+    tried_to_sleep_at: triedToSleep.toISOString(),
+    fell_asleep_at: fellAsleep.toISOString(),
+    woke_up_at: wake.toISOString(),
+    got_out_of_bed_at: outOfBed.toISOString(),
+    awakenings: 1,
+    awake_minutes: 10,
+    notes: 'Temporary sleep note',
+  });
+  if (sleepError) throw sleepError;
+
+  const { error: preferencesError } = await client
+    .from('partner_support_preferences')
+    .insert({
+      user_id: testUserId,
+      support_style: 'listening',
+      check_in_frequency: 'weekly',
+      advice_mode: 'ask_first',
+    });
+  if (preferencesError) throw preferencesError;
+
+  const { error: privacyEventError } = await client.rpc('record_privacy_event', {
+    p_event_type: 'privacy_notice_viewed',
+    p_platform: 'web',
+    p_metadata: { method: 'privacy_settings' },
+  });
+  if (privacyEventError) throw privacyEventError;
+
   const { error: focusError } = await client.from('focus_sessions').insert({
     user_id: testUserId,
     task_label: 'Lifecycle test focus',
@@ -264,6 +362,15 @@ try {
     'push_subscriptions',
     'reminder_deliveries',
     'dismissed_notices',
+    'activity_plans',
+    'activity_plan_steps',
+    'safety_plans',
+    'safety_plan_items',
+    'staying_well_plans',
+    'staying_well_plan_items',
+    'sleep_diary_entries',
+    'partner_support_preferences',
+    'privacy_events',
     'acquisition_attribution',
     'ai_response_reports',
     'migration_history',
@@ -299,6 +406,14 @@ try {
     'push_subscriptions',
     'reminder_deliveries',
     'dismissed_notices',
+    'activity_plans',
+    'activity_plan_steps',
+    'safety_plans',
+    'safety_plan_items',
+    'staying_well_plans',
+    'staying_well_plan_items',
+    'sleep_diary_entries',
+    'partner_support_preferences',
     'ai_response_reports',
   ];
   for (const section of expectedSingleRowSections) {
@@ -307,6 +422,10 @@ try {
       `Export section ${section} did not contain its owned row`
     );
   }
+  assert(
+    exported.privacy_events.length === 2,
+    'Export did not contain the test privacy event and export request event'
+  );
   assert(
     !('p256dh' in exported.push_subscriptions[0]) &&
       !('auth_key' in exported.push_subscriptions[0]),
@@ -331,6 +450,15 @@ try {
     'push_subscriptions',
     'reminder_deliveries',
     'dismissed_notices',
+    'activity_plans',
+    'activity_plan_steps',
+    'safety_plans',
+    'safety_plan_items',
+    'staying_well_plans',
+    'staying_well_plan_items',
+    'sleep_diary_entries',
+    'partner_support_preferences',
+    'privacy_events',
     'acquisition_attribution',
     'ai_response_reports',
   ];

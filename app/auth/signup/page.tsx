@@ -1,55 +1,44 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Loader2, MailCheck } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
-import { GoogleButton } from '@/components/auth/google-button';
-
-const MIN_PASSWORD_LENGTH = 8;
+import { SocialAuthButtons } from '@/components/auth/social-auth-buttons';
+import { authPathWithNext, getSafeAuthRedirect } from '@/lib/auth/redirect';
+import { signupErrorMessage } from '@/mobile/lib/auth-validation';
 
 const FIELD_CLASS =
   'w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const LABEL_CLASS =
   'mb-1.5 block text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground';
 
-export default function SignupPage() {
-  const router = useRouter();
+function SignupPageInner() {
+  const searchParams = useSearchParams();
   const { signUp } = useAuth();
+  const nextPath = getSafeAuthRedirect(searchParams.get('next'));
 
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const submissionRef = useRef(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (submissionRef.current) return;
+    submissionRef.current = true;
     setError('');
-
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
-      return;
-    }
-    if (password !== confirm) {
-      setError('Those passwords do not match.');
-      return;
-    }
 
     setLoading(true);
     try {
-      const hasSession = await signUp(email, password);
-      if (hasSession) {
-        router.push('/dashboard');
-      } else {
-        // The project requires email confirmation, so there is no session yet.
-        setAwaitingConfirmation(true);
-      }
+      await signUp(email, nextPath);
+      setAwaitingConfirmation(true);
     } catch (err) {
-      setError((err as Error).message || 'Could not create your account.');
+      setError(signupErrorMessage(err));
     } finally {
+      submissionRef.current = false;
       setLoading(false);
     }
   };
@@ -77,7 +66,7 @@ export default function SignupPage() {
               Continue anonymously
             </Link>
             <Link
-              href="/auth/login"
+              href={authPathWithNext('/auth/login', nextPath)}
               className="rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
             >
               Sign in
@@ -96,8 +85,7 @@ export default function SignupPage() {
             Create an account
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Keeps your check-ins with you across devices. Everything works
-            anonymously too, if you would rather not.
+            Keep what you have already saved and use it across devices.
           </p>
         </div>
 
@@ -128,57 +116,24 @@ export default function SignupPage() {
               />
             </div>
 
-            <div>
-              <label htmlFor="password" className={LABEL_CLASS}>
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                minLength={MIN_PASSWORD_LENGTH}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
-                className={FIELD_CLASS}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="confirm" className={LABEL_CLASS}>
-                Confirm password
-              </label>
-              <input
-                id="confirm"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={confirm}
-                onChange={(event) => setConfirm(event.target.value)}
-                placeholder="Type it again"
-                className={FIELD_CLASS}
-              />
-            </div>
-
             <button
               type="submit"
               disabled={loading}
               className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-              {loading ? 'Creating your account' : 'Create account'}
+              {loading ? 'Sending confirmation' : 'Continue with email'}
             </button>
           </form>
 
           <div className="mt-5">
-            <GoogleButton label="Continue with Google" />
+            <SocialAuthButtons intent="upgrade" nextPath={nextPath} />
           </div>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Already have an account?{' '}
             <Link
-              href="/auth/login"
+              href={authPathWithNext('/auth/login', nextPath)}
               className="text-foreground underline underline-offset-4"
             >
               Sign in
@@ -196,5 +151,13 @@ export default function SignupPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen" />}>
+      <SignupPageInner />
+    </Suspense>
   );
 }

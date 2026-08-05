@@ -49,6 +49,7 @@ import {
   type RewardKey,
   type ScopeKey,
 } from '@/lib/partners';
+import { PartnerSupportPreferences } from '@/components/PartnerSupportPreferences';
 
 const CORE_SCOPES: ScopeKey[] = [
   'share_checkins',
@@ -267,7 +268,12 @@ function SupportingCard({
 
 export default function PartnerScreen() {
   const router = useRouter();
-  const { user, isAnonymous, loading: authLoading } = useAuth();
+  const {
+    user,
+    isAnonymous,
+    accountUpgradePending,
+    loading: authLoading,
+  } = useAuth();
   const [scopes, setScopes] = useState<PartnerScopes>({ ...DEFAULT_SCOPES });
   const [label, setLabel] = useState('');
   const [inviteUrl, setInviteUrl] = useState('');
@@ -281,7 +287,7 @@ export default function PartnerScreen() {
   const [busyScope, setBusyScope] = useState('');
   const [error, setError] = useState('');
   const createRef = useRef(false);
-  const permanentUser = Boolean(user && !isAnonymous);
+  const permanentUser = Boolean(user && !isAnonymous && !accountUpgradePending);
 
   const refresh = async () => {
     if (!user || isAnonymous) {
@@ -403,23 +409,43 @@ export default function PartnerScreen() {
       <AppScreen>
         <PageHeader
           eyebrow="Accountability"
-          title="Create an account to connect."
-          description="A permanent account keeps partner controls tied to you across devices."
+          title={
+            accountUpgradePending
+              ? 'Finish your account to connect.'
+              : 'Create an account to connect.'
+          }
+          description={
+            accountUpgradePending
+              ? 'Confirm your email and create a password, then your partner setup will continue here.'
+              : 'A permanent account keeps partner controls tied to you across devices.'
+          }
           icon="users"
         />
         <AppCard>
           <View style={styles.accountActions}>
             <AppButton
-              label="Create account"
+              label={accountUpgradePending ? 'Finish account setup' : 'Create account'}
               icon="user-plus"
-              onPress={() => router.push('/auth/signup')}
+              onPress={() =>
+                router.push({
+                  pathname: '/auth/signup',
+                  params: { returnTo: '/partner' },
+                })
+              }
             />
-            <AppButton
-              label="Sign in"
-              icon="log-in"
-              variant="secondary"
-              onPress={() => router.push('/auth/login')}
-            />
+            {!accountUpgradePending ? (
+              <AppButton
+                label="Sign in"
+                icon="log-in"
+                variant="secondary"
+                onPress={() =>
+                  router.push({
+                    pathname: '/auth/login',
+                    params: { returnTo: '/partner' },
+                  })
+                }
+              />
+            ) : null}
           </View>
         </AppCard>
       </AppScreen>
@@ -434,6 +460,8 @@ export default function PartnerScreen() {
         description="Choose the counts a partner can see. Private text and scores stay private."
         icon="users"
       />
+
+      <PartnerSupportPreferences />
 
       <AppCard>
         <SectionHeader

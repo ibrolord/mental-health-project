@@ -12,7 +12,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { formatISO, subDays } from 'date-fns';
@@ -37,6 +36,10 @@ import {
   hasFullContextPreference,
   saveFullContextPreference,
 } from '@/lib/full-context-preference';
+import {
+  readContextSelections,
+  storeContextSelections,
+} from '@/lib/chat-context-preference';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { UNIFIED_LIBRARY } from '@/lib/library/content';
 import { RequestTimeoutError } from '@/lib/request';
@@ -72,41 +75,6 @@ const QUICK_PROMPTS = [
   'I need one small plan',
   'I need to talk',
 ];
-const CONTEXT_STORAGE_PREFIX = 'mhtoolkit.chat_context.v1';
-
-function contextSelectionKey(ownerKey: string): string {
-  return `${CONTEXT_STORAGE_PREFIX}:${encodeURIComponent(ownerKey)}`;
-}
-
-async function readContextSelections(
-  ownerKey: string
-): Promise<AiContextSelections> {
-  try {
-    const raw = await AsyncStorage.getItem(contextSelectionKey(ownerKey));
-    if (!raw) return createEmptyAiContextSelections();
-    const parsed = JSON.parse(raw) as Partial<AiContextSelections>;
-    return Object.fromEntries(
-      CONTEXT_ORDER.map((key) => [key, parsed[key] === true])
-    ) as AiContextSelections;
-  } catch {
-    return createEmptyAiContextSelections();
-  }
-}
-
-async function storeContextSelections(
-  ownerKey: string,
-  selections: AiContextSelections
-): Promise<void> {
-  try {
-    await AsyncStorage.setItem(
-      contextSelectionKey(ownerKey),
-      JSON.stringify(selections)
-    );
-  } catch {
-    // Conversation-scoped controls still work when persistence is unavailable.
-  }
-}
-
 export default function ChatScreen() {
   const router = useRouter();
   const { context, query, authLoading } = useDataContext();
@@ -177,7 +145,7 @@ export default function ChatScreen() {
     void Promise.all([
       readContextSelections(ownerKey),
       hasFullContextPreference(ownerKey),
-      hasAiDataSharingConsent(),
+      hasAiDataSharingConsent(ownerKey),
     ]).then(([saved, full, consented]) => {
       if (!active || ownerRef.current !== ownerKey || !consented) return;
       setSelections(full ? createFullAiContextSelections() : saved);
@@ -413,7 +381,7 @@ export default function ChatScreen() {
     enabled: boolean
   ) => {
     if (!ownerKey) return;
-    if (enabled && !(await ensureAiDataSharingConsent())) return;
+    if (enabled && !(await ensureAiDataSharingConsent(ownerKey))) return;
     const next = { ...selections, [key]: enabled };
     setSelections(next);
     await Promise.all([
@@ -424,7 +392,7 @@ export default function ChatScreen() {
 
   const setFullContext = async (enabled: boolean) => {
     if (!ownerKey) return;
-    if (enabled && !(await ensureAiDataSharingConsent())) return;
+    if (enabled && !(await ensureAiDataSharingConsent(ownerKey))) return;
     const next = enabled
       ? createFullAiContextSelections()
       : createEmptyAiContextSelections();
@@ -446,7 +414,7 @@ export default function ChatScreen() {
     ) {
       return;
     }
-    if (!(await ensureAiDataSharingConsent())) return;
+    if (!ownerKey || !(await ensureAiDataSharingConsent(ownerKey))) return;
     requestRef.current = true;
     const newMessage: Message = { role: 'user', content: trimmed };
     const nextMessages = [...messages, newMessage];

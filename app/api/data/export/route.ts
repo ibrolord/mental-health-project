@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
+import {
+  privacyPlatformFromRequest,
+  recordServerPrivacyEvent,
+} from '@/lib/privacy-events/server';
 
 type QueryResult = {
   data: unknown[] | null;
@@ -27,6 +31,15 @@ export async function POST(request: NextRequest) {
     const ownerColumn = auth.userId ? 'user_id' : 'session_id';
     const ownerValue = auth.userId ?? auth.sessionId!;
 
+    if (auth.userId) {
+      await recordServerPrivacyEvent({
+        userId: auth.userId,
+        eventType: 'export_requested',
+        platform: privacyPlatformFromRequest(request),
+        metadata: { method: 'account_settings' },
+      });
+    }
+
     const [
       moodsResult,
       assessmentsResult,
@@ -46,6 +59,15 @@ export async function POST(request: NextRequest) {
       pushSubscriptionsResult,
       reminderDeliveriesResult,
       dismissedNoticesResult,
+      activityPlansResult,
+      activityPlanStepsResult,
+      safetyPlansResult,
+      safetyPlanItemsResult,
+      stayingWellPlansResult,
+      stayingWellPlanItemsResult,
+      sleepDiaryEntriesResult,
+      partnerSupportPreferencesResult,
+      privacyEventsResult,
     ] = await Promise.all([
       supabaseAdmin.from('moods').select('*').eq(ownerColumn, ownerValue),
       supabaseAdmin.from('assessments').select('*').eq(ownerColumn, ownerValue),
@@ -128,6 +150,15 @@ export async function POST(request: NextRequest) {
             .select('*')
             .eq('user_id', auth.userId)
         : Promise.resolve({ data: [], error: null }),
+      auth.userId ? supabaseAdmin.from('activity_plans').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
+      auth.userId ? supabaseAdmin.from('activity_plan_steps').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
+      auth.userId ? supabaseAdmin.from('safety_plans').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
+      auth.userId ? supabaseAdmin.from('safety_plan_items').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
+      auth.userId ? supabaseAdmin.from('staying_well_plans').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
+      auth.userId ? supabaseAdmin.from('staying_well_plan_items').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
+      auth.userId ? supabaseAdmin.from('sleep_diary_entries').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
+      auth.userId ? supabaseAdmin.from('partner_support_preferences').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
+      auth.userId ? supabaseAdmin.from('privacy_events').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
     ]);
 
     const habits = requireQuery('habits', habitsResult);
@@ -243,6 +274,15 @@ export async function POST(request: NextRequest) {
           'dismissed notices',
           dismissedNoticesResult
         ),
+        activity_plans: requireQuery('activity plans', activityPlansResult),
+        activity_plan_steps: requireQuery('activity plan steps', activityPlanStepsResult),
+        safety_plans: requireQuery('safety plans', safetyPlansResult),
+        safety_plan_items: requireQuery('safety plan items', safetyPlanItemsResult),
+        staying_well_plans: requireQuery('staying-well plans', stayingWellPlansResult),
+        staying_well_plan_items: requireQuery('staying-well plan items', stayingWellPlanItemsResult),
+        sleep_diary_entries: requireQuery('sleep diary entries', sleepDiaryEntriesResult),
+        partner_support_preferences: requireQuery('partner support preferences', partnerSupportPreferencesResult),
+        privacy_events: requireQuery('privacy events', privacyEventsResult),
         acquisition_attribution: requireQuery(
           'acquisition attribution',
           attributionResult

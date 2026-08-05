@@ -7,6 +7,7 @@ interface MoodSelectorProps {
   selected: MoodEmoji | null;
   onSelect: (mood: MoodEmoji) => void;
   size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
 }
 
 const moods: { emoji: MoodEmoji; label: string }[] = [
@@ -23,15 +24,22 @@ const sizeClasses = {
   lg: 'text-4xl sm:text-6xl',
 };
 
-export function MoodSelector({ selected, onSelect, size = 'lg' }: MoodSelectorProps) {
+export function MoodSelector({
+  selected,
+  onSelect,
+  size = 'lg',
+  disabled = false,
+}: MoodSelectorProps) {
   return (
     <div className="grid w-full grid-cols-5 gap-1 sm:flex sm:justify-center sm:gap-4">
       {moods.map(({ emoji, label }) => (
         <button
           key={emoji}
           onClick={() => onSelect(emoji)}
+          disabled={disabled}
           className={cn(
             'flex min-w-0 flex-col items-center gap-2 rounded-lg px-1 py-3 transition-all sm:p-4 sm:hover:scale-110',
+            disabled && 'cursor-not-allowed opacity-60 sm:hover:scale-100',
             selected === emoji
               ? 'bg-primary/10 ring-2 ring-primary sm:scale-110'
               : 'hover:bg-secondary'
@@ -46,4 +54,3 @@ export function MoodSelector({ selected, onSelect, size = 'lg' }: MoodSelectorPr
     </div>
   );
 }
-

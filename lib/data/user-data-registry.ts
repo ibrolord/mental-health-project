@@ -1,0 +1,40 @@
+export type UserDataClassification = {
+  owner: 'user' | 'user-or-session' | 'relationship';
+  export: boolean;
+  delete: boolean;
+  partner: 'none' | 'aggregate-only' | 'relationship-record';
+  ai: 'never' | 'explicit-context-only';
+};
+
+export const USER_DATA_REGISTRY = {
+  anonymous_sessions: { owner: 'user-or-session', export: false, delete: true, partner: 'none', ai: 'never' },
+  user_data_migration: { owner: 'relationship', export: false, delete: true, partner: 'none', ai: 'never' },
+  moods: { owner: 'user-or-session', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
+  assessments: { owner: 'user-or-session', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
+  goals: { owner: 'user-or-session', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
+  habits: { owner: 'user-or-session', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
+  habit_logs: { owner: 'relationship', export: true, delete: true, partner: 'aggregate-only', ai: 'never' },
+  journal_entries: { owner: 'user', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
+  chat_history: { owner: 'user-or-session', export: true, delete: true, partner: 'none', ai: 'never' },
+  user_affirmation_history: { owner: 'user-or-session', export: true, delete: true, partner: 'none', ai: 'never' },
+  user_book_favorites: { owner: 'user-or-session', export: true, delete: true, partner: 'none', ai: 'never' },
+  user_library_items: { owner: 'user', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
+  partner_invites: { owner: 'user', export: true, delete: true, partner: 'relationship-record', ai: 'never' },
+  partner_links: { owner: 'relationship', export: true, delete: true, partner: 'relationship-record', ai: 'never' },
+  partner_celebrations: { owner: 'relationship', export: true, delete: true, partner: 'relationship-record', ai: 'never' },
+  life_plan_items: { owner: 'user', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
+  focus_sessions: { owner: 'user', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
+  wellbeing_reminders: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  push_subscriptions: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  reminder_deliveries: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  dismissed_notices: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  activity_plans: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  activity_plan_steps: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  safety_plans: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  safety_plan_items: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  staying_well_plans: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  staying_well_plan_items: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  sleep_diary_entries: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  partner_support_preferences: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  privacy_events: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+} as const satisfies Record<string, UserDataClassification>;

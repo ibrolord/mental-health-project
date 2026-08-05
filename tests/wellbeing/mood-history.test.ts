@@ -7,6 +7,10 @@ import {
   getLatestCheckInForDate as getLatestMobileCheckInForDate,
   getSevenDayHistoryStart as getMobileSevenDayHistoryStart,
 } from '../../mobile/lib/check-in';
+import {
+  collectMoodTags,
+  filterMoodEntriesByTag,
+} from '../../mobile/lib/mood-filter';
 
 const implementations = [
   {
@@ -42,5 +46,25 @@ describe.each(implementations)('$name mood history', ({ getLatest, getStart }) =
     ];
 
     expect(getLatest(entries, target)?.emoji).toBe('🙂');
+  });
+});
+
+describe('mobile mood tag filtering', () => {
+  const entries = [
+    { id: 'one', tags: ['sleep', 'work'] },
+    { id: 'two', tags: ['exercise'] },
+    { id: 'three', tags: ['work'] },
+  ];
+
+  it('keeps the complete tag list independent of the active filter', () => {
+    expect(collectMoodTags(entries)).toEqual(['sleep', 'work', 'exercise']);
+  });
+
+  it('returns only entries that contain the selected tag', () => {
+    expect(filterMoodEntriesByTag(entries, 'work').map((entry) => entry.id)).toEqual([
+      'one',
+      'three',
+    ]);
+    expect(filterMoodEntriesByTag(entries, null)).toBe(entries);
   });
 });

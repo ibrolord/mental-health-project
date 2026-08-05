@@ -6,6 +6,15 @@ import { clearLegacySession, ensureAnonymousSession, getSessionId } from './sess
 import type { User } from '@supabase/supabase-js';
 import type { Session } from '@supabase/supabase-js';
 import { apiRequest } from './api/client';
+import { getSafeAuthRedirect } from './auth/redirect';
+import {
+  ACCOUNT_UPGRADE_EMAIL_FIELD,
+  ACCOUNT_UPGRADE_STARTED_FLAG,
+} from '@/mobile/lib/auth-validation';
+import { resetAiDataSharingConsent } from './ai-consent';
+
+export type SocialAuthProvider = 'google' | 'apple';
+export type SocialAuthIntent = 'sign-in' | 'upgrade';
 
 const USER_DATA_TABLES = [
   'moods',
@@ -26,7 +35,10 @@ const USER_DATA_TABLES = [
 async function assertAnonymousAccountIsEmpty(): Promise<void> {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw sessionError;
-  if (!session?.user.is_anonymous) return;
+  if (session && !session.user.is_anonymous) {
+    throw new Error('This browser is already signed in. Sign out before using another account.');
+  }
+  if (!session) return;
 
   const results = await Promise.all(
     USER_DATA_TABLES.map((table) => supabase.from(table).select('id').limit(1))
@@ -92,9 +104,12 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAnonymous: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  /** Resolves true if a session was returned, false if email confirmation is required. */
-  signUp: (email: string, password: string) => Promise<boolean>;
-  signInWithGoogle: () => Promise<void>;
+  signUp: (email: string, next?: string) => Promise<void>;
+  continueWithProvider: (
+    provider: SocialAuthProvider,
+    intent: SocialAuthIntent,
+    next?: string
+  ) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -105,8 +120,8 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   isAnonymous: false,
   signIn: async () => {},
-  signUp: async () => false,
-  signInWithGoogle: async () => {},
+  signUp: async () => {},
+  continueWithProvider: async () => {},
   signOut: async () => {},
 });
 
@@ -182,45 +197,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  /**
-   * Returns true when Supabase handed back a session immediately, which means
-   * the project autoconfirms addresses. Returns false when confirmation by
-   * email is required, so the caller can say so instead of pretending the
-   * account is ready. This keeps the flow correct whether or not custom SMTP
-   * is ever configured.
-   */
-  const signUp = async (email: string, password: string): Promise<boolean> => {
-    // Same guard as signIn: creating an account while an anonymous profile
-    // holds unsaved data would strand that data under an identity the user is
-    // about to stop using.
-    await assertAnonymousAccountIsEmpty();
+  const signUp = async (email: string, next?: string): Promise<void> => {
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    if (!current.session?.user.is_anonymous) {
+      throw new Error('This browser is already signed in to an account.');
+    }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo:
-          typeof window !== 'undefined'
-            ? `${window.location.origin}/auth/callback`
-            : undefined,
+    const normalizedEmail = email.trim().toLowerCase();
+    const safeNext = getSafeAuthRedirect(next);
+    const confirmationUrl =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/auth/mobile-confirmed?source=web&upgrade_user_id=${encodeURIComponent(current.session.user.id)}&next=${encodeURIComponent(safeNext)}`
+        : undefined;
+    const { error } = await supabase.auth.updateUser(
+      {
+        email: normalizedEmail,
+        data: {
+          [ACCOUNT_UPGRADE_STARTED_FLAG]: true,
+          [ACCOUNT_UPGRADE_EMAIL_FIELD]: normalizedEmail,
+        },
       },
-    });
+      { emailRedirectTo: confirmationUrl }
+    );
     if (error) throw error;
-
-    return data.session !== null;
   };
 
-  const signInWithGoogle = async () => {
-    await assertAnonymousAccountIsEmpty();
+  const continueWithProvider = async (
+    provider: SocialAuthProvider,
+    intent: SocialAuthIntent,
+    next?: string
+  ) => {
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const safeNext = getSafeAuthRedirect(next);
+    const callbackUrl =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`
+        : undefined;
 
+    if (intent === 'upgrade') {
+      if (!current.session?.user.is_anonymous) {
+        throw new Error('This browser is already signed in to an account.');
+      }
+      const redirectTo = callbackUrl
+        ? `${callbackUrl}&upgrade_user_id=${encodeURIComponent(current.session.user.id)}`
+        : undefined;
+      const { error } = await supabase.auth.linkIdentity({
+        provider,
+        options: { redirectTo },
+      });
+      if (error) throw error;
+      return;
+    }
+
+    await assertAnonymousAccountIsEmpty();
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo:
-          typeof window !== 'undefined'
-            ? `${window.location.origin}/auth/callback`
-            : undefined,
-      },
+      provider,
+      options: { redirectTo: callbackUrl },
     });
     if (error) throw error;
   };
@@ -228,6 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     if (user) {
       await removeCurrentDevicePushSubscription(user.id);
+      resetAiDataSharingConsent(`user_id:${user.id}`);
     }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
@@ -243,7 +278,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAnonymous,
         signIn,
         signUp,
-        signInWithGoogle,
+        continueWithProvider,
         signOut,
       }}
     >

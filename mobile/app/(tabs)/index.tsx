@@ -30,6 +30,7 @@ export default function DashboardScreen() {
   const [affirmation, setAffirmation] = useState('');
   const [affirmationBy, setAffirmationBy] = useState('');
   const [savingMood, setSavingMood] = useState(false);
+  const [lowEnergyMode, setLowEnergyMode] = useState(false);
   const [moodStatus, setMoodStatus] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -110,14 +111,19 @@ export default function DashboardScreen() {
   const quickActions: {
     label: string;
     icon: ComponentProps<typeof Feather>['name'];
-    route: '/ground' | '/focus' | '/habits' | '/planner' | '/library' | '/partner';
+    route: '/ground' | '/focus' | '/habits' | '/journal' | '/plans' | '/library' | '/partner';
   }[] = [
     { label: 'Ground me', icon: 'compass', route: '/ground' },
     { label: 'Focus', icon: 'clock', route: '/focus' },
     { label: 'Habits', icon: 'repeat', route: '/habits' },
-    { label: 'Life planner', icon: 'map', route: '/planner' },
+    { label: 'My plans', icon: 'clipboard', route: '/plans' },
     { label: 'Library', icon: 'book-open', route: '/library' },
     { label: 'Accountability', icon: 'users', route: '/partner' },
+  ];
+  const lowEnergyActions = [
+    { label: 'Ground me', icon: 'compass' as const, route: '/ground' as const },
+    { label: 'One small step', icon: 'repeat' as const, route: '/habits' as const },
+    { label: 'Write a note', icon: 'edit-3' as const, route: '/journal' as const },
   ];
   const challengeDays = new Set(
     weekMoods.map((entry) => format(new Date(entry.created_at), 'yyyy-MM-dd'))
@@ -137,8 +143,24 @@ export default function DashboardScreen() {
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <Text style={s.title}>Welcome back</Text>
-      <Text style={s.subtitle}>Your mental health snapshot</Text>
+      <View style={s.headerRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.title}>{lowEnergyMode ? 'Keep it simple' : 'Welcome back'}</Text>
+          <Text style={s.subtitle}>
+            {lowEnergyMode ? 'Choose one thing. You can stop there.' : 'Your mental health snapshot'}
+          </Text>
+        </View>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={{ selected: lowEnergyMode }}
+          accessibilityLabel={lowEnergyMode ? 'Show full dashboard' : 'Use low-energy view'}
+          style={s.energyToggle}
+          onPress={() => setLowEnergyMode((current) => !current)}
+        >
+          <Feather name={lowEnergyMode ? 'sun' : 'battery'} size={17} color={Colors.primary} />
+          <Text style={s.energyToggleText}>{lowEnergyMode ? 'Full view' : 'Low energy'}</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Mood Check-in */}
       <View style={s.card}>
@@ -175,7 +197,7 @@ export default function DashboardScreen() {
       </View>
 
       {/* Week Overview */}
-      <View style={s.card}>
+      {!lowEnergyMode ? <View style={s.card}>
         <Text style={s.cardTitle}>This Week</Text>
         <Text style={s.cardSubtitle}>Your mood over the last 7 days</Text>
         <View style={s.weekRow}>
@@ -190,9 +212,9 @@ export default function DashboardScreen() {
             );
           })}
         </View>
-      </View>
+      </View> : null}
 
-      {todayMood ? (
+      {todayMood && !lowEnergyMode ? (
         <View style={s.challengeCard}>
           <Text style={s.challengeEyebrow}>7-DAY PRIVATE CHECK-IN</Text>
           <Text style={s.challengeTitle}>{Math.min(challengeDays, 7)} of 7 check-in days</Text>
@@ -220,7 +242,7 @@ export default function DashboardScreen() {
       ) : null}
 
       {/* Affirmation */}
-      {affirmation ? (
+      {affirmation && !lowEnergyMode ? (
         <View style={[s.card, { backgroundColor: Colors.primaryLight }]}>
           <Feather
             name={affirmationBy ? 'message-circle' : 'sun'}
@@ -239,7 +261,7 @@ export default function DashboardScreen() {
       <View style={s.card}>
         <Text style={s.cardTitle}>Quick Actions</Text>
         <View style={s.actionsGrid}>
-          {quickActions.map((action) => (
+          {(lowEnergyMode ? lowEnergyActions : quickActions).map((action) => (
             <TouchableOpacity
               key={action.route}
               style={s.actionBtn}
@@ -258,8 +280,11 @@ export default function DashboardScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: 16, paddingBottom: 40 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 20 },
   title: { fontSize: 28, fontWeight: '700', color: Colors.text, marginBottom: 4 },
-  subtitle: { fontSize: 16, color: Colors.textSecondary, marginBottom: 20 },
+  subtitle: { fontSize: 16, color: Colors.textSecondary },
+  energyToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: Colors.border, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 9, backgroundColor: Colors.card },
+  energyToggleText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
   card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 4 },
   cardSubtitle: { fontSize: 14, color: Colors.textSecondary, marginBottom: 16 },

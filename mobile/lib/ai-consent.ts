@@ -1,30 +1,39 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Linking } from 'react-native';
 
-const AI_CONSENT_KEY = 'mhtoolkit.ai_data_sharing_consent.v1';
+const AI_CONSENT_PREFIX = 'mhtoolkit.ai_data_sharing_consent.v2';
 export const PRIVACY_POLICY_URL = 'https://mhtoolkit.vercel.app/privacy';
+
+function consentKey(subjectId: string): string | null {
+  const normalized = subjectId.trim();
+  return normalized
+    ? `${AI_CONSENT_PREFIX}:${encodeURIComponent(normalized)}`
+    : null;
+}
 
 export const AI_DATA_SHARING_DISCLOSURE =
   'MHtoolkit sends the AI content you choose through its backend to Google Gemini, Anthropic Claude, or OpenAI. This can include chat or voice content and any app context you turn on, such as mood notes, assessments, goals, habits, journal entries, library notes, plans, or focus sessions.\n\nThe data is used to generate your response. It is not sold or used for advertising.\n\nDo you agree to this AI processing?';
 
-export async function hasAiDataSharingConsent(): Promise<boolean> {
+export async function hasAiDataSharingConsent(subjectId: string): Promise<boolean> {
+  const key = consentKey(subjectId);
+  if (!key) return false;
   try {
-    return (await AsyncStorage.getItem(AI_CONSENT_KEY)) === 'granted';
+    return (await AsyncStorage.getItem(key)) === 'granted';
   } catch {
     return false;
   }
 }
 
-export async function resetAiDataSharingConsent(): Promise<void> {
-  try {
-    await AsyncStorage.removeItem(AI_CONSENT_KEY);
-  } catch {
-    // Fail closed: a storage failure should not preserve assumed consent.
-  }
+export async function resetAiDataSharingConsent(subjectId: string): Promise<void> {
+  const key = consentKey(subjectId);
+  if (!key) return;
+  await AsyncStorage.removeItem(key);
 }
 
-export async function ensureAiDataSharingConsent(): Promise<boolean> {
-  if (await hasAiDataSharingConsent()) {
+export async function ensureAiDataSharingConsent(subjectId: string): Promise<boolean> {
+  const key = consentKey(subjectId);
+  if (!key) return false;
+  if (await hasAiDataSharingConsent(subjectId)) {
     return true;
   }
 
@@ -49,7 +58,7 @@ export async function ensureAiDataSharingConsent(): Promise<boolean> {
           text: 'I Agree',
           onPress: async () => {
             try {
-              await AsyncStorage.setItem(AI_CONSENT_KEY, 'granted');
+              await AsyncStorage.setItem(key, 'granted');
               resolve(true);
             } catch {
               resolve(false);

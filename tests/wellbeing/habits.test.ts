@@ -6,6 +6,7 @@ import {
   habitMomentum,
   isRewardUnlocked,
 } from '../../lib/wellbeing/habits';
+import { isUnexpectedHabitInsertError } from '../../mobile/lib/wellbeing/habits';
 
 const habitsPage = readFileSync(
   resolve(process.cwd(), 'app/habits/page.tsx'),
@@ -46,6 +47,13 @@ describe('habit identity and progress', () => {
     expect(isRewardUnlocked(6, 7, 'Watch a movie')).toBe(false);
     expect(isRewardUnlocked(7, 7, 'Watch a movie')).toBe(true);
     expect(isRewardUnlocked(20, 7, '   ')).toBe(false);
+  });
+
+  it('only treats genuine routine insert errors as failures', () => {
+    expect(isUnexpectedHabitInsertError(null)).toBe(false);
+    expect(isUnexpectedHabitInsertError(undefined)).toBe(false);
+    expect(isUnexpectedHabitInsertError({ code: '23505' })).toBe(false);
+    expect(isUnexpectedHabitInsertError({ code: '42501' })).toBe(true);
   });
 
   it('renders newly inserted habits from the returned database row', () => {

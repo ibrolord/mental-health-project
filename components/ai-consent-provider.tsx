@@ -16,6 +16,7 @@ import {
   grantAiDataSharingConsent,
   hasAiDataSharingConsent,
 } from '@/lib/ai-consent';
+import { useDataContext } from '@/lib/hooks/use-data-context';
 
 type ConsentResolver = (granted: boolean) => void;
 type RequestConsent = () => Promise<boolean>;
@@ -23,21 +24,30 @@ type RequestConsent = () => Promise<boolean>;
 const AiConsentContext = createContext<RequestConsent | null>(null);
 
 export function AiConsentProvider({ children }: { children: ReactNode }) {
+  const { query } = useDataContext();
+  const subjectId = query ? `${query.column}:${query.value}` : '';
   const [open, setOpen] = useState(false);
   const pendingResolvers = useRef(new Set<ConsentResolver>());
+  const requestSubjectRef = useRef('');
 
   const resolvePending = (granted: boolean) => {
-    const resolvedValue = granted ? grantAiDataSharingConsent() : false;
+    const requestedSubject = requestSubjectRef.current;
+    const resolvedValue = granted && requestedSubject === subjectId
+      ? grantAiDataSharingConsent(requestedSubject)
+      : false;
     for (const resolve of pendingResolvers.current) {
       resolve(resolvedValue);
     }
     pendingResolvers.current.clear();
+    requestSubjectRef.current = '';
     setOpen(false);
   };
 
   const requestConsent: RequestConsent = () => {
-    if (hasAiDataSharingConsent()) return Promise.resolve(true);
+    if (hasAiDataSharingConsent(subjectId)) return Promise.resolve(true);
+    if (!subjectId) return Promise.resolve(false);
 
+    requestSubjectRef.current = subjectId;
     setOpen(true);
     return new Promise<boolean>((resolve) => {
       pendingResolvers.current.add(resolve);
@@ -51,6 +61,14 @@ export function AiConsentProvider({ children }: { children: ReactNode }) {
       pending.clear();
     };
   }, []);
+
+  useEffect(() => {
+    if (open && requestSubjectRef.current !== subjectId) {
+      resolvePending(false);
+    }
+    // Identity changes must cancel, never transfer, an open consent request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, subjectId]);
 
   return (
     <AiConsentContext.Provider value={requestConsent}>

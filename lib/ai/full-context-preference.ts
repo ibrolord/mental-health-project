@@ -31,3 +31,13 @@ export function saveFullContextPreference(
     // The current conversation still works when storage is unavailable.
   }
 }
+
+export function clearFullContextPreference(ownerKey: string | null): boolean {
+  if (typeof window === 'undefined' || !ownerKey) return false;
+  try {
+    window.localStorage.removeItem(fullContextPreferenceKey(ownerKey));
+    return true;
+  } catch {
+    return false;
+  }
+}

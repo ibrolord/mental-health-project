@@ -21,6 +21,14 @@ export function isAccountUpgradeComplete(user: AccountUpgradeUser | null): boole
   );
 }
 
+export function isAccountEmailConfirmed(user: AccountUpgradeUser | null): boolean {
+  return Boolean(
+    user &&
+    user.is_anonymous === false &&
+    user.email_confirmed_at
+  );
+}
+
 export function isAccountUpgradePending(user: AccountUpgradeUser | null): boolean {
   return Boolean(
     user &&

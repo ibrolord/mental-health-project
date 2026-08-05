@@ -32,6 +32,7 @@ export default function DashboardPage() {
   const [affirmation, setAffirmation] =
     useState<AffirmationDisplayRecord | null>(null);
   const [savingMood, setSavingMood] = useState(false);
+  const [lowEnergyMode, setLowEnergyMode] = useState(false);
   const [moodStatus, setMoodStatus] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -150,19 +151,31 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen px-4 py-8 md:px-8 md:py-12">
       <div className="mx-auto max-w-4xl space-y-6">
-        <header>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Today
-          </p>
-          <h1 className="mt-2 font-display text-4xl font-medium leading-[1.05] tracking-[-0.02em] text-foreground md:text-5xl">
-            Welcome back.
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            Check in, notice the pattern, and choose one next step.
-          </p>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Today
+            </p>
+            <h1 className="mt-2 font-display text-4xl font-medium leading-[1.05] tracking-[-0.02em] text-foreground md:text-5xl">
+              {lowEnergyMode ? 'Keep it simple.' : 'Welcome back.'}
+            </h1>
+            <p className="mt-2 text-muted-foreground">
+              {lowEnergyMode
+                ? 'Choose one thing. You can stop there.'
+                : 'Check in, notice the pattern, and choose one next step.'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            aria-pressed={lowEnergyMode}
+            onClick={() => setLowEnergyMode((current) => !current)}
+          >
+            {lowEnergyMode ? 'Show full view' : 'Use low-energy view'}
+          </Button>
         </header>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className={`grid grid-cols-1 gap-4 ${lowEnergyMode ? '' : 'md:grid-cols-2'}`}>
           <section className="app-panel p-5">
             <h2 className="font-display text-2xl font-medium text-foreground">
               How are you feeling?
@@ -216,7 +229,7 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          <section className="app-panel p-5">
+          {!lowEnergyMode && <section className="app-panel p-5">
             <h2 className="font-display text-2xl font-medium text-foreground">
               Last 7 days
             </h2>
@@ -259,10 +272,10 @@ export default function DashboardPage() {
                 })}
               </div>
             )}
-          </section>
+          </section>}
         </div>
 
-        {todayMood && (
+        {todayMood && !lowEnergyMode && (
           <DismissibleNotice
             noticeKey="dashboard-seven-day-challenge-v1"
             dismissLabel="Hide the seven-day check-in card"
@@ -297,7 +310,7 @@ export default function DashboardPage() {
           </DismissibleNotice>
         )}
 
-        {affirmation && (
+        {affirmation && !lowEnergyMode && (
           <DismissibleNotice
             noticeKey="dashboard-affirmation-v1"
             dismissLabel="Hide today's affirmation"
@@ -337,12 +350,19 @@ export default function DashboardPage() {
             Quick actions
           </h2>
           <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
-            {[
-              { label: 'Track mood', href: '/tracker' },
-              { label: 'Lock In', href: '/focus' },
-              { label: 'Habits', href: '/habits' },
-              { label: 'Journal', href: '/journal' },
-            ].map((link) => (
+            {(lowEnergyMode
+              ? [
+                  { label: 'Ground me', href: '/ground' },
+                  { label: 'One small step', href: '/habits' },
+                  { label: 'Write a note', href: '/journal' },
+                ]
+              : [
+                  { label: 'Track mood', href: '/tracker' },
+                  { label: 'Lock In', href: '/focus' },
+                  { label: 'Habits', href: '/habits' },
+                  { label: 'Journal', href: '/journal' },
+                ]
+            ).map((link) => (
               <Button
                 key={link.href}
                 variant="outline"

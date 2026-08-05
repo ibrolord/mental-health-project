@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Loader2, LockKeyhole, TriangleAlert } from 'lucide-react';
-import type { Session } from '@supabase/supabase-js';
+import type { EmailOtpType, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase/client';
 import {
   ACCOUNT_UPGRADE_COMPLETION_FLAG,
   ACCOUNT_UPGRADE_EMAIL_FIELD,
   ACCOUNT_UPGRADE_STARTED_FLAG,
 } from '@/mobile/lib/auth-validation';
+import { getSafeAuthRedirect } from '@/lib/auth/redirect';
 
 const MIN_PASSWORD_LENGTH = 8;
 const FIELD_CLASS =
@@ -24,6 +25,8 @@ export default function MobileAccountConfirmationPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [completionNote, setCompletionNote] = useState('');
+  const [source, setSource] = useState<'mobile' | 'web'>('mobile');
+  const [nextPath, setNextPath] = useState('/dashboard');
 
   useEffect(() => {
     let active = true;
@@ -32,6 +35,9 @@ export default function MobileAccountConfirmationPage() {
     let sessionResolved = false;
     const params = new URLSearchParams(window.location.search);
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const confirmationSource = params.get('source') === 'web' ? 'web' : 'mobile';
+    setSource(confirmationSource);
+    setNextPath(getSafeAuthRedirect(params.get('next')));
     const expectedUserId = params.get('upgrade_user_id');
     const hasAuthCallbackPayload =
       params.has('code') ||
@@ -66,7 +72,16 @@ export default function MobileAccountConfirmationPage() {
       }
       stopWaiting();
       sessionResolved = true;
-      setPageState('password');
+      if (confirmationSource === 'web') {
+        setPageState('password');
+      } else {
+        setPageState('done');
+        void supabase.auth.signOut({ scope: 'local' }).then(({ error: signOutError }) => {
+          if (signOutError && active) {
+            setCompletionNote('Close this browser window before returning to MHtoolkit.');
+          }
+        });
+      }
       return true;
     };
 
@@ -81,6 +96,29 @@ export default function MobileAccountConfirmationPage() {
         setError(providerError);
         setPageState('error');
         return;
+      }
+
+      const tokenHash = params.get('token_hash');
+      const otpType = params.get('type') as EmailOtpType | null;
+      if (tokenHash) {
+        if (!otpType) {
+          setError('This confirmation link is missing its verification type.');
+          setPageState('error');
+          return;
+        }
+
+        const { data: verification, error: verificationError } =
+          await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: otpType,
+          });
+        if (!active) return;
+        if (verificationError) {
+          setError(verificationError.message);
+          setPageState('error');
+          return;
+        }
+        if (acceptSession(verification.session, true)) return;
       }
 
       const { data, error: sessionError } = await supabase.auth.getSession();
@@ -146,12 +184,6 @@ export default function MobileAccountConfirmationPage() {
       });
       if (passwordError) throw passwordError;
 
-      // Do not leave the account signed in inside a mail-link browser. The
-      // original mobile session remains active and can refresh independently.
-      const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
-      if (signOutError) {
-        setCompletionNote('Your account is ready. Close this browser window to protect your session.');
-      }
       setPassword('');
       setConfirmPassword('');
       setPageState('done');
@@ -234,8 +266,18 @@ export default function MobileAccountConfirmationPage() {
             <LockKeyhole className="mx-auto mb-4 h-7 w-7 text-primary" aria-hidden="true" />
             <h1 className="font-display text-3xl font-medium text-foreground">Your account is ready</h1>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              Return to MHtoolkit and tap “I Finished Setup in Browser.” Your saved data will stay with this account.
+              {source === 'web'
+                ? 'Your account is ready and your saved data stayed with it.'
+                : 'Return to MHtoolkit and tap “I Confirmed My Email” to create your password.'}
             </p>
+            {source === 'web' && (
+              <Link
+                href={nextPath}
+                className="mt-6 inline-flex rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground"
+              >
+                Continue to MHtoolkit
+              </Link>
+            )}
             {completionNote && (
               <p role="status" className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-foreground">
                 {completionNote}

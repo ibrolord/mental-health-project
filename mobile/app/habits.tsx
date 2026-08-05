@@ -29,6 +29,7 @@ import {
   ROUTINE_TEMPLATES,
   createHabitDedupeKey,
   habitMomentum,
+  isUnexpectedHabitInsertError,
   isRewardUnlocked,
   type HabitCategory,
   type HabitDraft,
@@ -308,7 +309,9 @@ export default function HabitsScreen() {
           return [...current, ...created.filter(({ id }) => !known.has(id))];
         });
       }
-      const failures = results.filter(({ error }) => error?.code !== '23505');
+      const failures = results.filter(({ error }) =>
+        isUnexpectedHabitInsertError(error)
+      );
       if (failures.length > 0) {
         setError('Some routine items could not be added.');
       } else if (created.length === 0) {

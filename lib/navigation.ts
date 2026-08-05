@@ -80,10 +80,10 @@ export const MORE_GROUPS: NavGroup[] = [
         blurb: 'Local attention practice',
       },
       {
-        href: '/planner',
-        label: 'Life planner',
+        href: '/plans',
+        label: 'My plans',
         icon: Compass,
-        blurb: 'Directions and next steps',
+        blurb: 'Activity, safety, and staying well',
       },
       {
         href: '/partner',

@@ -3,6 +3,7 @@
 import {
   normalizeLegacyAffirmations,
   quoteFallbacksForMood,
+  resolveAffirmationCatalog,
   type AffirmationDisplayRecord,
 } from './affirmations';
 import { isQuoteStorySchemaMissingError } from './release-capabilities';
@@ -28,11 +29,12 @@ export async function loadAffirmationCatalog(
 
   const attributedResult = await attributedQuery;
   if (!attributedResult.error) {
+    const records = (attributedResult.data ?? []).map((record) => ({
+      ...record,
+      historyEligible: true,
+    }));
     return {
-      records: (attributedResult.data ?? []).map((record) => ({
-        ...record,
-        historyEligible: true,
-      })),
+      records: resolveAffirmationCatalog(records, mood),
       attributionSchemaReady: true,
     };
   }

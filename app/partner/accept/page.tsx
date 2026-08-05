@@ -1,11 +1,12 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle2, HeartHandshake, Loader2, TriangleAlert } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { acceptInvite } from '@/lib/partners';
+import { authPathWithNext } from '@/lib/auth/redirect';
 
 type State =
   | { kind: 'loading' }
@@ -20,8 +21,16 @@ function AcceptInviteInner() {
   const router = useRouter();
   const { user, isAnonymous, loading } = useAuth();
   const [state, setState] = useState<State>({ kind: 'loading' });
+  const acceptanceRef = useRef<{
+    token: string;
+    promise: Promise<string>;
+  } | null>(null);
+  const userId = user?.id;
 
   const token = searchParams.get('token');
+  const returnPath = token
+    ? `/partner/accept?token=${encodeURIComponent(token)}`
+    : '/partner';
 
   useEffect(() => {
     if (loading) return;
@@ -33,14 +42,22 @@ function AcceptInviteInner() {
 
     // An anonymous session has a JWT but no durable identity, so the
     // partnership would evaporate. Require a real account first.
-    if (!user || isAnonymous) {
+    if (!userId || isAnonymous) {
       setState({ kind: 'needs-account' });
       return;
     }
 
+    if (acceptanceRef.current?.token !== token) {
+      acceptanceRef.current = {
+        token,
+        promise: acceptInvite(token),
+      };
+    }
+    const acceptance = acceptanceRef.current;
+
     let active = true;
     setState({ kind: 'accepting' });
-    acceptInvite(token)
+    acceptance.promise
       .then(() => {
         if (active) setState({ kind: 'accepted' });
       })
@@ -51,7 +68,7 @@ function AcceptInviteInner() {
     return () => {
       active = false;
     };
-  }, [token, user, isAnonymous, loading]);
+  }, [token, userId, isAnonymous, loading]);
 
   useEffect(() => {
     if (state.kind !== 'accepted') return;
@@ -101,17 +118,17 @@ function AcceptInviteInner() {
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
               Being someone&apos;s accountability partner needs an account on
               both sides so the connection survives across devices. Your invite
-              link still works afterwards, so open it again once you are in.
+              will bring you back to this invite after setup.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Link
-                href="/auth/signup"
+                href={authPathWithNext('/auth/signup', returnPath)}
                 className="rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
               >
                 Create an account
               </Link>
               <Link
-                href="/auth/login"
+                href={authPathWithNext('/auth/login', returnPath)}
                 className="rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
               >
                 Sign in

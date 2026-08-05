@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { MoodSelector } from '@/components/mood/mood-selector';
 import { MoodEmoji } from '@/lib/supabase/types';
 import { supabase } from '@/lib/supabase/client';
+import { SleepDiary } from '@/components/sleep-diary';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, subMonths } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -371,6 +372,9 @@ export default function TrackerPage() {
             )}
           </CardContent>
         </Card>
+        <div className="mt-6">
+          <SleepDiary />
+        </div>
       </div>
     </main>
   );

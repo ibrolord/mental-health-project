@@ -9,9 +9,16 @@
     "lint": "eslint .",
     "generate:icons": "node scripts/generate-icons.mjs",
     "generate:store-screenshots": "node scripts/generate-store-screenshots.mjs",
-    "review:ios": "bash scripts/verify-ios-review-build.sh"
+    "review:ios": "bash scripts/verify-ios-review-build.sh",
+    "qa:ios:inventory": "node scripts/qa-release-gate.mjs inventory",
+    "qa:ios:init": "node scripts/qa-release-gate.mjs init",
+    "qa:ios:record": "node scripts/qa-release-gate.mjs record",
+    "qa:ios:status": "node scripts/qa-release-gate.mjs status",
+    "qa:ios:digest": "node scripts/qa-release-gate.mjs digest",
+    "qa:ios:verify": "node scripts/qa-release-gate.mjs verify"
   },
   "dependencies": {
+    "@config-plugins/react-native-webrtc": "13.0.0",
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.0.0",
@@ -19,6 +26,7 @@
     "@supabase/supabase-js": "^2.50.1",
     "date-fns": "^4.1.0",
     "expo": "~54.0.36",
+    "expo-apple-authentication": "~8.0.8",
     "expo-av": "~16.0.8",
     "expo-constants": "~18.0.13",
     "expo-crypto": "~15.0.9",
@@ -32,13 +40,15 @@
     "expo-secure-store": "~15.0.8",
     "expo-sharing": "~14.0.8",
     "expo-status-bar": "~3.0.9",
+    "expo-web-browser": "~15.0.11",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-gifted-charts": "^1.4.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",
-    "react-native-url-polyfill": "^2.0.0"
+    "react-native-url-polyfill": "^2.0.0",
+    "react-native-webrtc": "124.0.6"
   },
   "devDependencies": {
     "@types/react": "~19.1.10",
@@ -52,6 +62,15 @@
     "tar": "7.5.21",
     "xcode": {
       "uuid": "11.1.1"
+    }
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-webrtc"
+        ]
+      }
     }
   },
   "private": true

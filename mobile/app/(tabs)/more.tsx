@@ -19,6 +19,7 @@ type FeatherName = ComponentProps<typeof Feather>['name'];
 type Route =
   | '/goals'
   | '/habits'
+  | '/plans'
   | '/planner'
   | '/focus'
   | '/ground'
@@ -59,10 +60,10 @@ const GROUPS: {
         route: '/habits',
       },
       {
-        label: 'Life planner',
-        description: 'Dreams, fears, and time-bound plans',
-        icon: 'map',
-        route: '/planner',
+        label: 'My plans',
+        description: 'Activity, safety, and staying well',
+        icon: 'clipboard',
+        route: '/plans',
       },
       {
         label: 'Focus mode',

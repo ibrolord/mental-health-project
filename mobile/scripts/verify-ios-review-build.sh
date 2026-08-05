@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IPA_PATH=""
 EXPECTED_BUILD=""
 RUN_ISOLATED_DOCTOR=1
-MIC_PERMISSION="MHtoolkit uses the microphone only when you tap the mic button in Voice Support to record what you say so it can be transcribed and answered."
+MIC_PERMISSION="MHtoolkit uses the microphone only during a live voice session so the AI can hear and respond to you."
 AI_CONSENT_TITLE="AI Data Sharing Consent"
 AI_PROVIDER_COPY="Google Gemini, Anthropic Claude, or OpenAI"
 
@@ -17,8 +17,9 @@ Runs the App Review pre-submit checks that caught prior MHtoolkit issues:
 - TypeScript compile
 - Expo Doctor in a mobile-only temp checkout
 - EAS production env variable presence
+- live Google/Apple provider and redirect readiness
 - live support/privacy URL and contact email checks
-- IPA Info.plist and bundle inspection
+- IPA Info.plist, entitlement, and bundle inspection
 USAGE
 }
 
@@ -193,6 +194,20 @@ else
   fail "Microphone permission purpose string is missing or too generic"
 fi
 
+if (cd "$ROOT_DIR/.." && npm run verify:social-auth); then
+  pass "Google and Apple production auth configuration"
+else
+  fail "Google or Apple production auth configuration is incomplete"
+fi
+
+if grep -Fq '"usesAppleSignIn": true' "$ROOT_DIR/app.json" &&
+  grep -Fq '"expo-apple-authentication"' "$ROOT_DIR/app.json" &&
+  grep -Fq '"scheme": "mhtoolkit"' "$ROOT_DIR/app.json"; then
+  pass "Mobile source configures Apple capability and OAuth callback scheme"
+else
+  fail "Mobile Apple capability or OAuth callback scheme is missing"
+fi
+
 if grep -Fq "$AI_CONSENT_TITLE" "$ROOT_DIR/lib/ai-consent.ts" &&
   grep -Fq "$AI_PROVIDER_COPY" "$ROOT_DIR/app/settings.tsx" &&
   grep -Fq 'ensureAiDataSharingConsent' "$ROOT_DIR/app/(tabs)/chat.tsx" &&
@@ -364,6 +379,12 @@ if [ -n "$IPA_PATH" ]; then
     encryption="$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$APP_DIR/Info.plist")"
     device_family="$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily' "$APP_DIR/Info.plist")"
     mic_description="$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$APP_DIR/Info.plist")"
+    ENTITLEMENTS_PATH="$IPA_TMP/entitlements.plist"
+    if codesign -d --entitlements - "$APP_DIR" >"$ENTITLEMENTS_PATH" 2>/dev/null; then
+      apple_sign_in_entitlement="$(grep -A3 -F 'com.apple.developer.applesignin' "$ENTITLEMENTS_PATH" || true)"
+    else
+      apple_sign_in_entitlement=""
+    fi
 
     if [ "$bundle_id" = "com.mhtoolkit.app" ]; then
       pass "IPA bundle identifier is com.mhtoolkit.app"
@@ -401,6 +422,12 @@ if [ -n "$IPA_PATH" ]; then
       fail "IPA microphone permission string is not the expected specific text"
     fi
 
+    if printf '%s\n' "$apple_sign_in_entitlement" | grep -q 'Default'; then
+      pass "IPA contains the Sign in with Apple entitlement"
+    else
+      fail "IPA is missing the Sign in with Apple entitlement"
+    fi
+
     if [ -n "$BUNDLE_PATH" ] && grep -aFq '.supabase.co' "$BUNDLE_PATH"; then
       pass "IPA bundle embeds production Supabase URL"
     else
@@ -410,7 +437,7 @@ if [ -n "$IPA_PATH" ]; then
     if grep -aFq 'ExpoPushTokenManager' "$BUNDLE_PATH" ||
       grep -aFq 'expo-notifications' "$BUNDLE_PATH" ||
       grep -aFq 'expo-device' "$BUNDLE_PATH" ||
-      strings "$APP_DIR/$EXECUTABLE" | grep -Eq 'ExpoPushTokenManager|EXNotifications|ExpoNotifications|expo-notifications|expo-device|ExpoDevice'; then
+      strings "$APP_DIR/$EXECUTABLE" | grep -Eq 'ExpoPushTokenManager|EXNotifications|ExpoNotifications|expo-notifications|expo-device|ExpoDevice|EXDeviceModule'; then
       fail "IPA still contains excluded notifications/device native symbols"
     else
       pass "IPA omits excluded notifications/device native symbols"
@@ -422,6 +449,14 @@ if [ -n "$IPA_PATH" ]; then
       pass "IPA includes account deletion and PHQ-9 crisis UI"
     else
       fail "IPA does not include account deletion and PHQ-9 crisis UI"
+    fi
+
+    if grep -aFq 'with Google' "$BUNDLE_PATH" &&
+      grep -aFq 'AppleAuthenticationButton' "$BUNDLE_PATH" &&
+      grep -aFq 'mhtoolkit://auth/callback' "$BUNDLE_PATH"; then
+      pass "IPA includes Google, Apple, and exact OAuth callback paths"
+    else
+      fail "IPA is missing Google, Apple, or OAuth callback code"
     fi
 
     if grep -aFq "$AI_CONSENT_TITLE" "$BUNDLE_PATH" &&

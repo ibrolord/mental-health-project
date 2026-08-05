@@ -10,6 +10,7 @@ import type {
   NotificationSubscription,
 } from '@/lib/notifications-types';
 import { AcquisitionCapture } from '@/components/AcquisitionCapture';
+import { AppBackButton } from '@/components/AppBackButton';
 
 // NOTE: Shared iOS-loaded files must not reference expo-notifications or
 // expo-device at all. Those modules are resolved through platform-specific
@@ -108,29 +109,43 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="auth/login" options={{ presentation: 'modal', headerShown: true, title: 'Sign In' }} />
-          <Stack.Screen name="auth/signup" options={{ presentation: 'modal', headerShown: true, title: 'Sign Up' }} />
-          <Stack.Screen name="assessments/[type]" options={{ headerShown: true, title: 'Assessment' }} />
-          <Stack.Screen name="goals" options={{ headerShown: true, title: 'Life Organizer' }} />
-          <Stack.Screen name="habits" options={{ headerShown: true, title: 'Habit Tracker' }} />
-          <Stack.Screen name="journal" options={{ headerShown: true, title: 'Private Journal' }} />
-          <Stack.Screen name="affirmations" options={{ headerShown: true, title: 'Affirmations' }} />
-          <Stack.Screen name="library" options={{ headerShown: true, title: 'Library' }} />
-          <Stack.Screen name="ground" options={{ headerShown: true, title: 'Grounding' }} />
-          <Stack.Screen name="meditate" options={{ headerShown: true, title: 'Meditation' }} />
-          <Stack.Screen name="mind-games" options={{ headerShown: true, title: 'Mind Games' }} />
-          <Stack.Screen name="planner" options={{ headerShown: true, title: 'Life Planner' }} />
-          <Stack.Screen name="focus" options={{ headerShown: true, title: 'Focus Mode' }} />
-          <Stack.Screen name="partner" options={{ headerShown: true, title: 'Accountability' }} />
-          <Stack.Screen name="resources" options={{ headerShown: true, title: 'Find Support' }} />
-          <Stack.Screen name="research" options={{ headerShown: true, title: 'Research' }} />
-          <Stack.Screen name="support" options={{ headerShown: true, title: 'Support' }} />
-          <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings' }} />
-          <Stack.Screen name="voice" options={{ headerShown: true, title: 'Voice Support' }} />
+          <Stack.Screen name="auth/login" options={stackScreenOptions('Sign In', '/settings', true)} />
+          <Stack.Screen name="auth/signup" options={stackScreenOptions('Sign Up', '/settings', true)} />
+          <Stack.Screen name="assessments/[type]" options={stackScreenOptions('Assessment', '/(tabs)/assessments')} />
+          <Stack.Screen name="goals" options={stackScreenOptions('Life Organizer')} />
+          <Stack.Screen name="habits" options={stackScreenOptions('Habit Tracker')} />
+          <Stack.Screen name="journal" options={stackScreenOptions('Private Journal')} />
+          <Stack.Screen name="affirmations" options={stackScreenOptions('Affirmations')} />
+          <Stack.Screen name="library" options={stackScreenOptions('Library')} />
+          <Stack.Screen name="ground" options={stackScreenOptions('Grounding')} />
+          <Stack.Screen name="meditate" options={stackScreenOptions('Meditation')} />
+          <Stack.Screen name="mind-games" options={stackScreenOptions('Mind Games')} />
+          <Stack.Screen name="planner" options={stackScreenOptions('Life Planner')} />
+          <Stack.Screen name="plans" options={stackScreenOptions('My Plans')} />
+          <Stack.Screen name="focus" options={stackScreenOptions('Focus Mode')} />
+          <Stack.Screen name="partner" options={stackScreenOptions('Accountability')} />
+          <Stack.Screen name="resources" options={stackScreenOptions('Find Support')} />
+          <Stack.Screen name="research" options={stackScreenOptions('Research')} />
+          <Stack.Screen name="support" options={stackScreenOptions('Support')} />
+          <Stack.Screen name="settings" options={stackScreenOptions('Settings')} />
+          <Stack.Screen name="voice" options={stackScreenOptions('Voice Support')} />
         </Stack>
       </AuthProvider>
     </ErrorBoundary>
   );
+}
+
+function stackScreenOptions(
+  title: string,
+  fallback: '/(tabs)' | '/(tabs)/assessments' | '/settings' = '/(tabs)',
+  modal = false
+) {
+  return {
+    headerLeft: () => <AppBackButton fallback={fallback} />,
+    headerShown: true,
+    presentation: modal ? ('modal' as const) : ('card' as const),
+    title,
+  };
 }
 
 // Helper to capture router ref inside the navigation context

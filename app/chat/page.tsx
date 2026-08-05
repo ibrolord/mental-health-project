@@ -184,7 +184,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (authLoading || !queryKey) return;
     if (
-      hasAiDataSharingConsent() &&
+      hasAiDataSharingConsent(queryKey) &&
       hasFullContextPreference(queryKey)
     ) {
       setSelections(createFullAiContextSelections());

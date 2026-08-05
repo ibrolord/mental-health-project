@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
 import {
   normalizeEmail,
@@ -17,63 +17,115 @@ import {
   validateAccountEmail,
 } from '@/lib/auth-validation';
 import { Colors } from '@/lib/constants';
+import { SocialAuthButtons } from '@/components/social-auth-buttons';
+
+const MIN_PASSWORD_LENGTH = 8;
+type SignupStep = 'email' | 'confirmation' | 'password';
 
 export default function SignupScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ returnTo?: string }>();
   const {
     accountUpgradePending,
     pendingAccountUpgradeEmail,
     startAccountUpgrade,
     completeAccountUpgrade,
+    finishAccountUpgrade,
   } = useAuth();
   const [email, setEmail] = useState(pendingAccountUpgradeEmail ?? '');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [awaitingConfirmation, setAwaitingConfirmation] = useState(accountUpgradePending);
+  const submissionRef = useRef(false);
+  const [step, setStep] = useState<SignupStep>(
+    accountUpgradePending ? 'confirmation' : 'email'
+  );
 
-  const returnToApp = () => router.dismissTo('/(tabs)');
+  const returnToApp = () =>
+    router.dismissTo(params.returnTo === '/partner' ? '/partner' : '/(tabs)');
 
   const handleSignup = async () => {
+    if (submissionRef.current) return;
     const validationError = validateAccountEmail(email);
     if (validationError) {
       setError(validationError);
       return;
     }
 
+    submissionRef.current = true;
     setError('');
     setLoading(true);
     try {
       await startAccountUpgrade(normalizeEmail(email));
-      setAwaitingConfirmation(true);
+      setStep('confirmation');
     } catch (signupError) {
       setError(signupErrorMessage(signupError));
     } finally {
+      submissionRef.current = false;
       setLoading(false);
     }
   };
 
   const finishUpgrade = async () => {
+    if (submissionRef.current) return;
+    submissionRef.current = true;
     setError('');
     setLoading(true);
     try {
-      await completeAccountUpgrade();
-      returnToApp();
+      const status = await completeAccountUpgrade();
+      if (status === 'password-required') {
+        setStep('password');
+      } else {
+        returnToApp();
+      }
     } catch (upgradeError) {
       setError(upgradeError instanceof Error ? upgradeError.message : 'Account setup is not complete yet.');
     } finally {
+      submissionRef.current = false;
       setLoading(false);
     }
   };
 
-  if (awaitingConfirmation) {
+  const savePassword = async () => {
+    if (submissionRef.current) return;
+    setError('');
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Those passwords do not match.');
+      return;
+    }
+
+    submissionRef.current = true;
+    setLoading(true);
+    try {
+      await finishAccountUpgrade(password);
+      setPassword('');
+      setConfirmPassword('');
+      returnToApp();
+    } catch (passwordError) {
+      setError(
+        passwordError instanceof Error
+          ? passwordError.message
+          : 'Could not create your password.'
+      );
+    } finally {
+      submissionRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  if (step === 'confirmation') {
     return (
       <View style={s.confirmationContainer}>
         <Text style={s.confirmationIcon}>✉️</Text>
         <Text style={s.title}>Check your email</Text>
         <Text style={s.confirmationText}>
           Open the link sent to <Text style={s.email}>{normalizeEmail(email)}</Text>.
-          Your browser will ask you to create a password. When it says your account is ready,
-          return here.
+          When your email is confirmed, return here to create your password.
         </Text>
         {error ? (
           <View style={s.errorBox} accessibilityRole="alert">
@@ -85,15 +137,70 @@ export default function SignupScreen() {
           onPress={finishUpgrade}
           disabled={loading}
         >
-          <Text style={s.btnText}>{loading ? 'Checking...' : 'I Finished Setup in Browser'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.linkButton} onPress={() => router.replace('/auth/login')}>
-          <Text style={s.link}>Sign in instead</Text>
+          <Text style={s.btnText}>{loading ? 'Checking...' : 'I Confirmed My Email'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.linkButton} onPress={returnToApp}>
           <Text style={s.link}>Continue anonymously for now</Text>
         </TouchableOpacity>
       </View>
+    );
+  }
+
+  if (step === 'password') {
+    return (
+      <KeyboardAvoidingView
+        style={s.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          style={s.flex}
+          contentContainerStyle={s.container}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={s.title}>Create your password</Text>
+          <Text style={s.subtitle}>
+            Your email is confirmed. Finish setup without leaving the app.
+          </Text>
+          {error ? (
+            <View style={s.errorBox} accessibilityRole="alert">
+              <Text style={s.errorText}>{error}</Text>
+            </View>
+          ) : null}
+          <Text style={s.label}>Password</Text>
+          <TextInput
+            style={s.input}
+            value={password}
+            onChangeText={setPassword}
+            placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+            placeholderTextColor={Colors.textSecondary}
+            secureTextEntry
+            textContentType="newPassword"
+            autoComplete="new-password"
+          />
+          <Text style={s.label}>Confirm password</Text>
+          <TextInput
+            style={s.input}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            placeholder="Type it again"
+            placeholderTextColor={Colors.textSecondary}
+            secureTextEntry
+            textContentType="newPassword"
+            autoComplete="new-password"
+            onSubmitEditing={() => void savePassword()}
+          />
+          <TouchableOpacity
+            style={[s.btn, loading && s.disabled]}
+            onPress={() => void savePassword()}
+            disabled={loading}
+            accessibilityRole="button"
+          >
+            <Text style={s.btnText}>
+              {loading ? 'Finishing setup...' : 'Finish Account Setup'}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -135,8 +242,7 @@ export default function SignupScreen() {
         />
 
         <Text style={s.helper}>
-          We will email a secure confirmation link. You will create your password in the browser,
-          then return to the app.
+          We will email a secure confirmation link. Return here afterwards to create your password.
         </Text>
 
         <TouchableOpacity
@@ -148,7 +254,17 @@ export default function SignupScreen() {
           <Text style={s.btnText}>{loading ? 'Sending confirmation...' : 'Continue with Email'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={s.linkButton} onPress={() => router.replace('/auth/login')}>
+        <SocialAuthButtons intent="upgrade" onComplete={returnToApp} />
+
+        <TouchableOpacity
+          style={s.linkButton}
+          onPress={() =>
+            router.replace({
+              pathname: '/auth/login',
+              params: params.returnTo === '/partner' ? { returnTo: '/partner' } : {},
+            })
+          }
+        >
           <Text style={s.link}>Already have an account? Sign in</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.linkButton} onPress={returnToApp}>
