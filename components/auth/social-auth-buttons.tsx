@@ -1,13 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
+  getAnonymousProfileDataConflictUserId,
+  isAnonymousProfileDataConflict,
   useAuth,
   type SocialAuthIntent,
   type SocialAuthProvider,
 } from '@/lib/auth-context';
 import { getEnabledAuthProviders } from '@/lib/auth-providers';
+import { isIdentityAlreadyLinkedError } from '@/lib/auth/social';
 
 /** Google's mark, inlined so the button works without an external request. */
 function GoogleMark() {
@@ -55,9 +58,20 @@ const PROVIDERS: Array<{
 export function SocialAuthButtons({
   intent,
   nextPath,
+  disabled = false,
+  submissionRef: sharedSubmissionRef,
+  onAnonymousDataBlocked,
+  onIdentityAlreadyLinked,
 }: {
   intent: SocialAuthIntent;
   nextPath?: string;
+  disabled?: boolean;
+  submissionRef?: MutableRefObject<boolean>;
+  onAnonymousDataBlocked?: (
+    provider: SocialAuthProvider,
+    anonymousUserId: string
+  ) => void;
+  onIdentityAlreadyLinked?: (provider: SocialAuthProvider) => void;
 }) {
   const { continueWithProvider } = useAuth();
   const [available, setAvailable] = useState<Record<SocialAuthProvider, boolean> | null>(
@@ -65,7 +79,8 @@ export function SocialAuthButtons({
   );
   const [pending, setPending] = useState<SocialAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const submissionRef = useRef(false);
+  const localSubmissionRef = useRef(false);
+  const submissionRef = sharedSubmissionRef ?? localSubmissionRef;
 
   useEffect(() => {
     let active = true;
@@ -83,14 +98,31 @@ export function SocialAuthButtons({
   if (enabled.length === 0) return null;
 
   const handleClick = async (provider: SocialAuthProvider) => {
-    if (submissionRef.current) return;
+    if (disabled || submissionRef.current) return;
     submissionRef.current = true;
     setError(null);
     setPending(provider);
     try {
       await continueWithProvider(provider, intent, nextPath);
     } catch (err) {
-      setError((err as Error).message);
+      const anonymousUserId = getAnonymousProfileDataConflictUserId(err);
+      if (
+        intent === 'upgrade' &&
+        isIdentityAlreadyLinkedError(
+          err instanceof Error ? err.message : String(err)
+        ) &&
+        onIdentityAlreadyLinked
+      ) {
+        onIdentityAlreadyLinked(provider);
+      } else if (
+        anonymousUserId &&
+        isAnonymousProfileDataConflict(err) &&
+        onAnonymousDataBlocked
+      ) {
+        onAnonymousDataBlocked(provider, anonymousUserId);
+      } else {
+        setError((err as Error).message);
+      }
     } finally {
       submissionRef.current = false;
       setPending(null);
@@ -112,7 +144,7 @@ export function SocialAuthButtons({
           key={id}
           type="button"
           onClick={() => void handleClick(id)}
-          disabled={pending !== null}
+          disabled={disabled || pending !== null}
           className="flex w-full items-center justify-center gap-2.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {pending === id ? (

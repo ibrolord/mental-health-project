@@ -4,7 +4,7 @@ import { Suspense, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Loader2, MailCheck } from 'lucide-react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth, type SocialAuthProvider } from '@/lib/auth-context';
 import { SocialAuthButtons } from '@/components/auth/social-auth-buttons';
 import { authPathWithNext, getSafeAuthRedirect } from '@/lib/auth/redirect';
 import { signupErrorMessage } from '@/mobile/lib/auth-validation';
@@ -22,6 +22,8 @@ function SignupPageInner() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [linkedIdentityProvider, setLinkedIdentityProvider] =
+    useState<SocialAuthProvider | null>(null);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const submissionRef = useRef(false);
 
@@ -100,6 +102,26 @@ function SignupPageInner() {
               </p>
             )}
 
+            {linkedIdentityProvider && (
+              <div
+                role="alert"
+                className="rounded-xl border border-sky-300 bg-sky-50 px-4 py-4 text-sm text-sky-950"
+              >
+                <p className="font-medium">This account already exists.</p>
+                <p className="mt-1 leading-relaxed">
+                  Sign in with{' '}
+                  {linkedIdentityProvider === 'google' ? 'Google' : 'Apple'} instead.
+                  Nothing in this anonymous profile has been deleted.
+                </p>
+                <Link
+                  href={`${authPathWithNext('/auth/login', nextPath)}&reason=identity_already_linked&provider=${linkedIdentityProvider}`}
+                  className="mt-3 inline-flex rounded-full bg-primary px-4 py-2 font-medium text-primary-foreground"
+                >
+                  Go to sign in
+                </Link>
+              </div>
+            )}
+
             <div>
               <label htmlFor="email" className={LABEL_CLASS}>
                 Email
@@ -127,7 +149,11 @@ function SignupPageInner() {
           </form>
 
           <div className="mt-5">
-            <SocialAuthButtons intent="upgrade" nextPath={nextPath} />
+            <SocialAuthButtons
+              intent="upgrade"
+              nextPath={nextPath}
+              onIdentityAlreadyLinked={setLinkedIdentityProvider}
+            />
           </div>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">

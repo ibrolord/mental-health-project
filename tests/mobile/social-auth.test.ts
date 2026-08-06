@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import {
   appleProfileMetadata,
   isAppleAuthCancellation,
+  isIdentityAlreadyLinkedError,
   linkedProviderVerificationError,
   parseOAuthCallback,
 } from '../../mobile/lib/social-auth';
@@ -23,6 +24,14 @@ describe('mobile social auth provider settings', () => {
       google: false,
       apple: false,
     });
+  });
+});
+
+describe('mobile linked-identity recovery', () => {
+  it('recognizes browser and native Supabase conflicts', () => {
+    expect(isIdentityAlreadyLinkedError(new Error('Identity is already linked to another user'))).toBe(true);
+    expect(isIdentityAlreadyLinkedError({ code: 'identity_already_exists' })).toBe(true);
+    expect(isIdentityAlreadyLinkedError({ message: 'Access denied' })).toBe(false);
   });
 });
 
@@ -49,6 +58,18 @@ describe('mobile social auth callback', () => {
         'mhtoolkit://auth/callback#error_description=Access%20denied'
       )
     ).toThrow('Access denied');
+    expect(() =>
+      parseOAuthCallback(
+        'mhtoolkit://auth/callback#error_code=identity_already_exists'
+      )
+    ).toThrow(/identity provider could not complete sign-in/);
+    try {
+      parseOAuthCallback(
+        'mhtoolkit://auth/callback#error_code=identity_already_exists'
+      );
+    } catch (error) {
+      expect(isIdentityAlreadyLinkedError(error)).toBe(true);
+    }
   });
 
   it('rejects incomplete callbacks', () => {

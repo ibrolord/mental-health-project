@@ -172,11 +172,13 @@ export function AppButton({
 
 export function ChoiceChip({
   label,
+  accessibilityLabel,
   selected,
   onPress,
   icon,
 }: {
   label: string;
+  accessibilityLabel?: string;
   selected: boolean;
   onPress: () => void;
   icon?: FeatherName;
@@ -184,6 +186,7 @@ export function ChoiceChip({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected }}
       onPress={onPress}
       style={({ pressed }) => [
@@ -404,7 +407,8 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.48 },
   pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
   chip: {
-    minHeight: 36,
+    minHeight: 44,
+    minWidth: 44,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Colors.border,

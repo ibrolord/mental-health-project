@@ -119,6 +119,7 @@ export default function RootLayout() {
           <Stack.Screen name="library" options={stackScreenOptions('Library')} />
           <Stack.Screen name="ground" options={stackScreenOptions('Grounding')} />
           <Stack.Screen name="meditate" options={stackScreenOptions('Meditation')} />
+          <Stack.Screen name="yoga" options={stackScreenOptions('Yoga')} />
           <Stack.Screen name="mind-games" options={stackScreenOptions('Mind Games')} />
           <Stack.Screen name="planner" options={stackScreenOptions('Life Planner')} />
           <Stack.Screen name="plans" options={stackScreenOptions('My Plans')} />

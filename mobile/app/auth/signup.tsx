@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth, type SocialAuthProvider } from '@/lib/auth-context';
 import {
   normalizeEmail,
   signupErrorMessage,
@@ -37,6 +37,8 @@ export default function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [linkedIdentityProvider, setLinkedIdentityProvider] =
+    useState<SocialAuthProvider | null>(null);
   const submissionRef = useRef(false);
   const [step, setStep] = useState<SignupStep>(
     accountUpgradePending ? 'confirmation' : 'email'
@@ -132,6 +134,7 @@ export default function SignupScreen() {
             <Text style={s.errorText}>{error}</Text>
           </View>
         ) : null}
+
         <TouchableOpacity
           style={[s.btn, loading && s.disabled]}
           onPress={finishUpgrade}
@@ -226,6 +229,28 @@ export default function SignupScreen() {
           </View>
         ) : null}
 
+        {linkedIdentityProvider ? (
+          <View style={s.recoveryBox} accessibilityRole="alert">
+            <Text style={s.recoveryTitle}>This account already exists</Text>
+            <Text style={s.recoveryText}>
+              Sign in with {linkedIdentityProvider === 'google' ? 'Google' : 'Apple'}
+              {' '}instead. Nothing in this anonymous profile has been deleted.
+            </Text>
+            <TouchableOpacity
+              style={s.recoveryButton}
+              onPress={() =>
+                router.replace({
+                  pathname: '/auth/login',
+                  params: params.returnTo === '/partner' ? { returnTo: '/partner' } : {},
+                })
+              }
+              accessibilityRole="button"
+            >
+              <Text style={s.recoveryButtonText}>Go to Sign In</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <Text style={s.label}>Email</Text>
         <TextInput
           style={s.input}
@@ -254,7 +279,11 @@ export default function SignupScreen() {
           <Text style={s.btnText}>{loading ? 'Sending confirmation...' : 'Continue with Email'}</Text>
         </TouchableOpacity>
 
-        <SocialAuthButtons intent="upgrade" onComplete={returnToApp} />
+        <SocialAuthButtons
+          intent="upgrade"
+          onComplete={returnToApp}
+          onIdentityAlreadyLinked={setLinkedIdentityProvider}
+        />
 
         <TouchableOpacity
           style={s.linkButton}
@@ -316,6 +345,25 @@ const s = StyleSheet.create({
     marginBottom: 18,
   },
   errorText: { color: '#991b1b', fontSize: 14, lineHeight: 20 },
+  recoveryBox: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#93c5fd',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 18,
+  },
+  recoveryTitle: { color: '#0c4a6e', fontSize: 15, fontWeight: '700' },
+  recoveryText: { color: '#0c4a6e', fontSize: 14, lineHeight: 20, marginTop: 4 },
+  recoveryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.primary,
+    borderRadius: 999,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  recoveryButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
   btn: {
     backgroundColor: Colors.primary,
     borderRadius: 12,

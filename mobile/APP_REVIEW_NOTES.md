@@ -1,6 +1,6 @@
 # App Review Notes - Version 1.0.1
 
-Last updated: July 29, 2026
+Last updated: August 6, 2026
 
 ## Build Under Review
 
@@ -30,6 +30,9 @@ needed to establish a partnership.
    goals, habits, or private notes.
 6. Review Journal, Life Planner, Focus Mode, Meditation, Mind Games, and Ground
    Me. These tools work without an account.
+   Focus Mode includes optional bundled ambient audio. A selected focus sound
+   continues through the timer and while the device is locked, and stops when
+   the user chooses Quiet or leaves Focus Mode.
 7. Open AI Chat. Sending a message first displays the AI data-sharing consent
    flow. Personal context is off by default and can be enabled category by
    category from the collapsible "Context for this chat" panel.
@@ -71,9 +74,8 @@ model-generated answer.
 - Live voice audio is sent through the backend to OpenAI for transcription.
   Push-to-talk audio is sent to Google Gemini; compatible recordings may use
   OpenAI as a fallback. The transcript is then handled like a chat message.
-  Push-to-talk playback uses
-  the operating-system speech service; processing depends on the voice installed
-  and selected on the device.
+  AI response text is sent to Google Gemini for generated spoken playback, with
+  OpenAI and then the operating-system speech service used as fallbacks.
 - Optional chat context can include recent mood patterns, mood notes,
   assessment names and scores, goals and reflections, habit names and streaks,
   journal entries, private library notes, life-planner items, and focus

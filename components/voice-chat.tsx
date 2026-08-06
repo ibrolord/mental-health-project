@@ -22,6 +22,28 @@ const RECORDING_MIME_TYPES = [
   'audio/webm',
   'audio/mp4',
 ] as const;
+const MAX_SPOKEN_RESPONSE_CHARACTERS = 1_200;
+const MAX_GENERATED_SPEECH_REQUEST_MS = 30_000;
+const MAX_SPEECH_PLAYBACK_MS = 90_000;
+const MAX_TRANSCRIPTION_REQUEST_MS = 30_000;
+const MAX_CHAT_REQUEST_MS = 30_000;
+
+function getSpeakableResponse(text: string) {
+  if (text.length <= MAX_SPOKEN_RESPONSE_CHARACTERS) return text;
+
+  const suffix = ' More is shown on screen.';
+  const available = MAX_SPOKEN_RESPONSE_CHARACTERS - suffix.length;
+  const prefix = text.slice(0, available);
+  const sentenceEnd = Math.max(
+    prefix.lastIndexOf('. '),
+    prefix.lastIndexOf('! '),
+    prefix.lastIndexOf('? ')
+  );
+  const naturalCut = sentenceEnd >= Math.floor(available * 0.6)
+    ? prefix.slice(0, sentenceEnd + 1)
+    : prefix.trimEnd();
+  return `${naturalCut}${suffix}`;
+}
 
 function getRecordingMimeType() {
   if (typeof MediaRecorder === 'undefined') return undefined;
@@ -44,6 +66,38 @@ async function getResponseError(response: Response, fallback: string) {
     : fallback;
 }
 
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number
+) {
+  const controller = new AbortController();
+  const callerSignal = init.signal;
+  let timedOut = false;
+  const forwardAbort = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) {
+    forwardAbort();
+  } else {
+    callerSignal?.addEventListener('abort', forwardAbort, { once: true });
+  }
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (timedOut && !callerSignal?.aborted) {
+      throw new Error('The request timed out. Please try again.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+    callerSignal?.removeEventListener('abort', forwardAbort);
+  }
+}
+
 async function getLocalSpeechVoice(): Promise<SpeechSynthesisVoice | undefined> {
   const findVoice = () => {
     const localVoices = window.speechSynthesis
@@ -51,11 +105,15 @@ async function getLocalSpeechVoice(): Promise<SpeechSynthesisVoice | undefined> 
       .filter((voice) => voice.localService);
     const language = navigator.language.toLowerCase();
     const languageBase = language.split('-', 1)[0];
-    return localVoices.find((voice) => voice.lang.toLowerCase() === language)
-      || localVoices.find((voice) => (
-        voice.lang.toLowerCase().split('-', 1)[0] === languageBase
-      ))
-      || localVoices[0];
+    return [...localVoices].sort((left, right) => {
+      const score = (voice: SpeechSynthesisVoice) => {
+        const voiceLanguage = voice.lang.toLowerCase();
+        return (voiceLanguage === language ? 4 : 0)
+          + (voiceLanguage.split('-', 1)[0] === languageBase ? 2 : 0)
+          + (voice.default ? 3 : 0);
+      };
+      return score(right) - score(left);
+    })[0];
   };
   const available = findVoice();
   if (available) return available;
@@ -91,8 +149,51 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
   const animationFrameRef = useRef<number | undefined>(undefined);
   const streamRef = useRef<MediaStream | null>(null);
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const generatedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const generatedAudioUrlRef = useRef<string | null>(null);
+  const speechFetchAbortRef = useRef<AbortController | null>(null);
+  const speechCompletionRef = useRef<(() => void) | null>(null);
+  const speechPlaybackGenerationRef = useRef(0);
+  const turnAbortRef = useRef<AbortController | null>(null);
+  const turnGenerationRef = useRef(0);
   const recordingTimerRef = useRef<number | null>(null);
+  const captureStartInFlightRef = useRef(false);
+  const captureGenerationRef = useRef(0);
   const mountedRef = useRef(true);
+
+  const cancelSpeechPlayback = () => {
+    speechPlaybackGenerationRef.current += 1;
+    const utterance = speechRef.current;
+    const generatedAudio = generatedAudioRef.current;
+    const generatedAudioUrl = generatedAudioUrlRef.current;
+    const fetchAbort = speechFetchAbortRef.current;
+    const complete = speechCompletionRef.current;
+    speechRef.current = null;
+    generatedAudioRef.current = null;
+    generatedAudioUrlRef.current = null;
+    speechFetchAbortRef.current = null;
+    speechCompletionRef.current = null;
+    if (utterance) {
+      utterance.onend = null;
+      utterance.onerror = null;
+    }
+    complete?.();
+    fetchAbort?.abort();
+    if (generatedAudio) {
+      generatedAudio.onended = null;
+      generatedAudio.onerror = null;
+      generatedAudio.pause();
+      generatedAudio.removeAttribute('src');
+      generatedAudio.load();
+    }
+    if (generatedAudioUrl) URL.revokeObjectURL(generatedAudioUrl);
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (mountedRef.current) {
+      setIsSpeaking(false);
+    }
+  };
 
   const teardownCapture = async () => {
     if (recordingTimerRef.current !== null) {
@@ -111,7 +212,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
     if (context && context.state !== 'closed') {
       await context.close();
     }
-    setVolume(0);
+    if (mountedRef.current) setVolume(0);
   };
 
   const setupAudioVisualization = async (stream: MediaStream) => {
@@ -141,19 +242,35 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
   };
 
   const startListening = async () => {
+    if (captureStartInFlightRef.current || mediaRecorderRef.current) return;
+    captureStartInFlightRef.current = true;
+    const captureGeneration = captureGenerationRef.current + 1;
+    captureGenerationRef.current = captureGeneration;
+    const captureIsCurrent = () => (
+      mountedRef.current && captureGeneration === captureGenerationRef.current
+    );
     try {
+      cancelSpeechPlayback();
       if (!(await requestAiConsent())) return;
+      if (!captureIsCurrent()) return;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!captureIsCurrent()) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       
       await setupAudioVisualization(stream);
+      if (!captureIsCurrent()) {
+        await teardownCapture();
+        return;
+      }
       
       const recordingMimeType = getRecordingMimeType();
       const mediaRecorder = recordingMimeType
         ? new MediaRecorder(stream, { mimeType: recordingMimeType })
         : new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
@@ -173,6 +290,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       };
 
       mediaRecorder.start();
+      mediaRecorderRef.current = mediaRecorder;
       recordingTimerRef.current = window.setTimeout(() => {
         if (mediaRecorder.state === 'recording') {
           mediaRecorder.stop();
@@ -185,7 +303,11 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
     } catch (err) {
       console.error('Microphone error:', err);
       await teardownCapture();
-      setError('Could not access microphone. Please check permissions.');
+      if (captureIsCurrent()) {
+        setError('Could not access microphone. Please check permissions.');
+      }
+    } finally {
+      captureStartInFlightRef.current = false;
     }
   };
 
@@ -200,28 +322,44 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
   const processVoiceInput = async (audioBlob: Blob) => {
     const previousMessages = messages;
     let pendingUserMessage = false;
+    turnAbortRef.current?.abort();
+    const turnAbort = new AbortController();
+    turnAbortRef.current = turnAbort;
+    const turnGeneration = turnGenerationRef.current + 1;
+    turnGenerationRef.current = turnGeneration;
+    const turnIsCurrent = () => (
+      mountedRef.current
+      && !turnAbort.signal.aborted
+      && turnGeneration === turnGenerationRef.current
+    );
     try {
-      setIsProcessing(true);
+      if (turnIsCurrent()) setIsProcessing(true);
       
       // Step 1: Transcribe audio
       const uploadBlob = await convertRecordingToWav(audioBlob);
+      if (!turnIsCurrent()) return;
       if (uploadBlob.size > MAX_VOICE_AUDIO_BYTES) {
         throw new Error('That recording is too long. Please try a shorter message.');
       }
       const formData = new FormData();
       formData.append('audio', uploadBlob, getRecordingFileName(uploadBlob.type));
 
-      const transcribeResponse = await fetch('/api/voice', {
+      const transcribeHeaders = await getApiAuthHeaders();
+      if (!turnIsCurrent()) return;
+      const transcribeResponse = await fetchWithTimeout('/api/voice', {
         method: 'POST',
-        headers: await getApiAuthHeaders(),
+        headers: transcribeHeaders,
         body: formData,
-      });
+        signal: turnAbort.signal,
+      }, MAX_TRANSCRIPTION_REQUEST_MS);
+      if (!turnIsCurrent()) return;
 
       if (!transcribeResponse.ok) {
         throw new Error(await getResponseError(transcribeResponse, 'Transcription failed.'));
       }
 
       const { transcription } = await transcribeResponse.json();
+      if (!turnIsCurrent()) return;
       if (typeof transcription !== 'string' || !transcription.trim()) {
         throw new Error('I could not hear any speech. Please try again.');
       }
@@ -232,70 +370,195 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       setMessages(newMessages);
       pendingUserMessage = true;
       
-      const chatResponse = await fetch('/api/chat', {
+      const chatHeaders = await getApiAuthHeaders({ 'Content-Type': 'application/json' });
+      if (!turnIsCurrent()) return;
+      const chatResponse = await fetchWithTimeout('/api/chat', {
         method: 'POST',
-        headers: await getApiAuthHeaders({ 'Content-Type': 'application/json' }),
+        headers: chatHeaders,
         body: JSON.stringify({ 
           messages: newMessages,
           userContext 
         }),
-      });
+        signal: turnAbort.signal,
+      }, MAX_CHAT_REQUEST_MS);
+      if (!turnIsCurrent()) return;
 
       if (!chatResponse.ok) {
         throw new Error(await getResponseError(chatResponse, 'AI response failed.'));
       }
 
       const { response } = await chatResponse.json();
+      if (!turnIsCurrent()) return;
       if (typeof response !== 'string' || !response.trim()) {
         throw new Error('The AI service returned an empty response.');
       }
       setAiResponse(response);
       setMessages([...newMessages, { role: 'assistant', content: response }]);
       pendingUserMessage = false;
-      
+
       // Step 3: Speak the response
-      await speakResponse(response);
-      
       setIsProcessing(false);
+      await speakResponse(response);
     } catch (err) {
+      if (!turnIsCurrent()) return;
       console.error('Voice processing error:', err);
       if (pendingUserMessage) {
         setMessages(previousMessages);
       }
       setError(err instanceof Error ? err.message : 'Failed to process your voice. Please try again.');
-      setIsProcessing(false);
+    } finally {
+      if (turnAbortRef.current === turnAbort) {
+        turnAbortRef.current = null;
+      }
+      if (turnIsCurrent()) setIsProcessing(false);
     }
   };
 
   const speakResponse = async (text: string) => {
+    cancelSpeechPlayback();
+    const playbackGeneration = speechPlaybackGenerationRef.current + 1;
+    speechPlaybackGenerationRef.current = playbackGeneration;
     try {
       setIsSpeaking(true);
+      const spokenText = getSpeakableResponse(text);
+      const fetchAbort = new AbortController();
+      speechFetchAbortRef.current = fetchAbort;
+      const generatedSpeechRequestTimer = window.setTimeout(
+        () => fetchAbort.abort(),
+        MAX_GENERATED_SPEECH_REQUEST_MS
+      );
 
-      if (!('speechSynthesis' in window)) {
-        throw new Error('Spoken playback is not supported by this browser.');
-      }
+      try {
+        const response = await fetch('/api/voice', {
+          method: 'POST',
+          headers: await getApiAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ text: spokenText }),
+          signal: fetchAbort.signal,
+        });
+        if (!response.ok) {
+          throw new Error(await getResponseError(response, 'Natural voice is unavailable.'));
+        }
+        const audioBlob = await response.blob();
+        window.clearTimeout(generatedSpeechRequestTimer);
+        if (playbackGeneration !== speechPlaybackGenerationRef.current) return;
 
-      window.speechSynthesis.cancel();
-      const localVoice = await getLocalSpeechVoice();
-      if (!localVoice) {
-        throw new Error(
-          'Spoken playback is unavailable, but the response is shown above.'
-        );
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        generatedAudioRef.current = audio;
+        generatedAudioUrlRef.current = audioUrl;
+        speechFetchAbortRef.current = null;
+        await new Promise<void>((resolve, reject) => {
+          let settled = false;
+          const finish = (failure?: Error) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeout);
+            audio.onended = null;
+            audio.onerror = null;
+            if (speechCompletionRef.current === cancel) {
+              speechCompletionRef.current = null;
+            }
+            if (failure) reject(failure);
+            else resolve();
+          };
+          const cancel = () => finish();
+          const timeout = window.setTimeout(() => {
+            finish(new Error('Natural voice playback timed out.'));
+          }, MAX_SPEECH_PLAYBACK_MS);
+          speechCompletionRef.current = cancel;
+          audio.onended = () => finish();
+          audio.onerror = () => finish(new Error('Natural voice playback failed.'));
+          if (playbackGeneration !== speechPlaybackGenerationRef.current) {
+            finish();
+            return;
+          }
+          void audio.play().catch(() => {
+            finish(new Error('Natural voice playback failed.'));
+          });
+        });
+        if (generatedAudioRef.current === audio) {
+          generatedAudioRef.current = null;
+          audio.pause();
+          audio.removeAttribute('src');
+          audio.load();
+        }
+        if (generatedAudioUrlRef.current === audioUrl) {
+          generatedAudioUrlRef.current = null;
+          URL.revokeObjectURL(audioUrl);
+        }
+      } catch (generatedVoiceError) {
+        window.clearTimeout(generatedSpeechRequestTimer);
+        if (playbackGeneration !== speechPlaybackGenerationRef.current) return;
+        speechFetchAbortRef.current = null;
+        const failedAudio = generatedAudioRef.current;
+        const failedAudioUrl = generatedAudioUrlRef.current;
+        generatedAudioRef.current = null;
+        generatedAudioUrlRef.current = null;
+        if (failedAudio) {
+          failedAudio.onended = null;
+          failedAudio.onerror = null;
+          failedAudio.pause();
+          failedAudio.removeAttribute('src');
+          failedAudio.load();
+        }
+        if (failedAudioUrl) URL.revokeObjectURL(failedAudioUrl);
+        console.warn('Generated speech unavailable; using device voice.', generatedVoiceError);
+        if (!('speechSynthesis' in window)) {
+          throw new Error('Spoken playback is unavailable, but the response is shown above.');
+        }
+
+        window.speechSynthesis.cancel();
+        const localVoice = await getLocalSpeechVoice();
+        if (playbackGeneration !== speechPlaybackGenerationRef.current) return;
+        if (!localVoice) {
+          throw new Error('Spoken playback is unavailable, but the response is shown above.');
+        }
+        await new Promise<void>((resolve, reject) => {
+          const utterance = new SpeechSynthesisUtterance(spokenText);
+          let settled = false;
+          const finish = (failure?: Error) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeout);
+            utterance.onend = null;
+            utterance.onerror = null;
+            if (speechRef.current === utterance) speechRef.current = null;
+            if (speechCompletionRef.current === cancel) {
+              speechCompletionRef.current = null;
+            }
+            if (failure) reject(failure);
+            else resolve();
+          };
+          const cancel = () => finish();
+          const timeout = window.setTimeout(() => {
+            window.speechSynthesis.cancel();
+            finish(new Error('Spoken playback timed out.'));
+          }, MAX_SPEECH_PLAYBACK_MS);
+          speechRef.current = utterance;
+          speechCompletionRef.current = cancel;
+          utterance.voice = localVoice;
+          utterance.rate = 0.96;
+          utterance.onend = () => finish();
+          utterance.onerror = () => finish(new Error('Spoken playback failed.'));
+          if (playbackGeneration !== speechPlaybackGenerationRef.current) {
+            finish();
+            return;
+          }
+          window.speechSynthesis.speak(utterance);
+        });
       }
-      await new Promise<void>((resolve, reject) => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        speechRef.current = utterance;
-        utterance.voice = localVoice;
-        utterance.rate = 0.9;
-        utterance.onend = () => resolve();
-        utterance.onerror = () => reject(new Error('Spoken playback failed.'));
-        window.speechSynthesis.speak(utterance);
-      });
-      speechRef.current = null;
-      setIsSpeaking(false);
+      if (
+        mountedRef.current
+        && playbackGeneration === speechPlaybackGenerationRef.current
+      ) {
+        setIsSpeaking(false);
+      }
     } catch (err) {
       console.error('Speech error:', err);
-      if (mountedRef.current) {
+      if (
+        mountedRef.current
+        && playbackGeneration === speechPlaybackGenerationRef.current
+      ) {
         setError(
           err instanceof Error ? err.message : 'Spoken playback failed.'
         );
@@ -305,8 +568,14 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      speechPlaybackGenerationRef.current += 1;
+      captureGenerationRef.current += 1;
+      turnGenerationRef.current += 1;
+      turnAbortRef.current?.abort();
+      turnAbortRef.current = null;
       const recorder = mediaRecorderRef.current;
       if (recordingTimerRef.current !== null) {
         window.clearTimeout(recordingTimerRef.current);
@@ -324,11 +593,31 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
       if (audioContextRef.current?.state !== 'closed') {
         void audioContextRef.current?.close();
       }
-      if (speechRef.current && 'speechSynthesis' in window) {
-        speechRef.current.onend = null;
-        speechRef.current.onerror = null;
+      const utterance = speechRef.current;
+      const generatedAudio = generatedAudioRef.current;
+      const generatedAudioUrl = generatedAudioUrlRef.current;
+      speechFetchAbortRef.current?.abort();
+      speechFetchAbortRef.current = null;
+      const completeSpeech = speechCompletionRef.current;
+      speechRef.current = null;
+      generatedAudioRef.current = null;
+      generatedAudioUrlRef.current = null;
+      speechCompletionRef.current = null;
+      if (utterance) {
+        utterance.onend = null;
+        utterance.onerror = null;
+      }
+      completeSpeech?.();
+      if (generatedAudio) {
+        generatedAudio.onended = null;
+        generatedAudio.onerror = null;
+        generatedAudio.pause();
+        generatedAudio.removeAttribute('src');
+        generatedAudio.load();
+      }
+      if (generatedAudioUrl) URL.revokeObjectURL(generatedAudioUrl);
+      if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
-        speechRef.current = null;
       }
     };
   }, []);
@@ -343,7 +632,7 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
   const getSubText = () => {
     if (isListening) return 'Speak naturally, I\'m here to listen';
     if (isProcessing) return 'Transcribing and thinking...';
-    if (isSpeaking) return 'AI companion is responding';
+    if (isSpeaking) return 'Tap the microphone whenever you want to respond';
     return 'Click the microphone to start talking';
   };
 
@@ -384,8 +673,8 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
             <p className="text-xs text-orange-900">
               Voice Support sends your recording through MHtoolkit to Google Gemini for
               transcription, with OpenAI used as a fallback. The transcript is sent to an
-              AI provider for a response. Spoken playback uses a local browser voice when
-              one is available.
+              AI provider for a response. The response is sent to Gemini for natural
+              spoken playback, with OpenAI or your browser voice used as a fallback.
             </p>
           </div>
 
@@ -419,12 +708,13 @@ export function VoiceChat({ userContext, onClose }: VoiceChatProps) {
             {!isListening ? (
               <Button
                 onClick={startListening}
-                disabled={isSpeaking || isProcessing}
+                disabled={isProcessing}
                 size="lg"
                 className="gap-2"
+                aria-label={isSpeaking ? 'Interrupt AI and start talking' : 'Start talking'}
               >
                 <span className="text-xl">🎤</span>
-                Start Talking
+                {isSpeaking ? 'Interrupt & talk' : 'Start Talking'}
               </Button>
             ) : (
               <Button

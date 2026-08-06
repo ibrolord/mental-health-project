@@ -13,7 +13,7 @@ export default function PrivacyPolicyPage() {
           Privacy Policy
         </h1>
         <p className="text-sm text-muted-foreground mb-8">
-          Effective date: July 28, 2026
+          Effective date: August 6, 2026
         </p>
 
         <p className="text-foreground mb-6 leading-relaxed">
@@ -168,7 +168,7 @@ export default function PrivacyPolicyPage() {
             <li>
               <strong>Google Gemini:</strong> Processes standard chat messages,
               may generate personalized affirmations, and transcribes push-to-talk
-              recordings.
+              recordings. It also generates spoken audio from AI response text.
             </li>
             <li>
               <strong>Anthropic Claude:</strong> Handles complex or
@@ -176,8 +176,8 @@ export default function PrivacyPolicyPage() {
             </li>
             <li>
               <strong>OpenAI:</strong> Powers live voice transcription and is a
-              fallback for compatible push-to-talk recordings. Live voice may also
-              return OpenAI-generated audio.
+              fallback for compatible push-to-talk recordings and generated spoken
+              playback.
             </li>
           </ul>
           <p className="text-foreground mt-3 leading-relaxed">
@@ -250,21 +250,22 @@ export default function PrivacyPolicyPage() {
             </li>
             <li>
               <strong>Google (Gemini API)</strong> &mdash; AI chat,
-              affirmation generation, and push-to-talk transcription.
+              affirmation generation, push-to-talk transcription, and generated
+              spoken playback of AI response text.
             </li>
             <li>
               <strong>Anthropic (Claude API)</strong> &mdash; AI chat for complex
               interactions.
             </li>
             <li>
-              <strong>OpenAI</strong> &mdash; Live voice transcription and
-              fallback transcription for compatible push-to-talk recordings; live
-              voice may also return provider-generated audio.
+              <strong>OpenAI</strong> &mdash; Live voice transcription, fallback
+              transcription for compatible push-to-talk recordings, and fallback
+              generated spoken playback.
             </li>
             <li>
-              <strong>Operating-system speech services</strong> &mdash; Mobile
-              push-to-talk responses may be read aloud using voices configured on
-              the device. Processing depends on the selected device voice.
+              <strong>Operating-system speech services</strong> &mdash; Voice
+              responses may use a voice configured on the device if generated
+              playback is unavailable.
             </li>
             <li>
               <strong>Browser push services</strong> &mdash; If you explicitly

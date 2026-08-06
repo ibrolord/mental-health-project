@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/ai/voice-chat', () => ({
   generateVoiceResponse: mocks.generateVoiceResponse,
   transcribeAudio: mocks.transcribeAudio,
-  VOICE_NAMES: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -122,7 +121,7 @@ describe('voice API multipart validation', () => {
 
   it('returns CORS headers with generated voice audio', async () => {
     const response = await POST(new NextRequest('https://mhtoolkit.test/api/voice', {
-      body: JSON.stringify({ text: 'Take one slow breath.', voice: 'nova' }),
+      body: JSON.stringify({ text: 'Take one slow breath.' }),
       headers: { 'content-type': 'application/json' },
       method: 'POST',
     }));
@@ -130,30 +129,47 @@ describe('voice API multipart validation', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
     expect(response.headers.get('content-type')).toBe('audio/mpeg');
+    expect(mocks.generateVoiceResponse).toHaveBeenCalledWith('Take one slow breath.');
+  });
+
+  it('uses the preferred natural voice when the client omits a voice', async () => {
+    const response = await POST(new NextRequest('https://mhtoolkit.test/api/voice', {
+      body: JSON.stringify({ text: 'You can take this one step at a time.' }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    }));
+
+    expect(response.status).toBe(200);
     expect(mocks.generateVoiceResponse).toHaveBeenCalledWith(
-      'Take one slow breath.',
-      'nova'
+      'You can take this one step at a time.'
     );
   });
 
-  it('rejects unbounded speech text and unsupported voices before provider use', async () => {
+  it('preserves the generated provider audio content type', async () => {
+    mocks.generateVoiceResponse.mockResolvedValueOnce(
+      new Response(new Uint8Array([1, 2, 3]), {
+        headers: { 'content-type': 'audio/wav; rate=24000' },
+      })
+    );
+    const response = await POST(new NextRequest('https://mhtoolkit.test/api/voice', {
+      body: JSON.stringify({ text: 'Take one slow breath.' }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('audio/wav');
+  });
+
+  it('rejects unbounded speech text before provider use', async () => {
     const oversized = await POST(
       new NextRequest('https://mhtoolkit.test/api/voice', {
-        body: JSON.stringify({ text: 'a'.repeat(1_201), voice: 'nova' }),
+        body: JSON.stringify({ text: 'a'.repeat(1_201) }),
         headers: { 'content-type': 'application/json' },
         method: 'POST',
       })
     );
-    const invalidVoice = await POST(
-      new NextRequest('https://mhtoolkit.test/api/voice', {
-        body: JSON.stringify({ text: 'Hello', voice: 'not-a-real-voice' }),
-        headers: { 'content-type': 'application/json' },
-        method: 'POST',
-      })
-    );
-
     expect(oversized.status).toBe(413);
-    expect(invalidVoice.status).toBe(400);
     expect(mocks.generateVoiceResponse).not.toHaveBeenCalled();
   });
 

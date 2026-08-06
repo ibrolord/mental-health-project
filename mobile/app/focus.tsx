@@ -40,6 +40,9 @@ const EMPTY_CLOCK: FocusClock = {
   complete: false,
 };
 
+const SOUND_SYNC_ERROR =
+  'The sound changed, but the session setting could not be synced.';
+
 function safeNumber(value: string, fallback: number, min: number, max: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed)
@@ -53,7 +56,6 @@ export default function FocusScreen() {
   const [focusMinutes, setFocusMinutes] = useState('25');
   const [breakMinutes, setBreakMinutes] = useState('5');
   const [cycles, setCycles] = useState('1');
-  const [soundMode, setSoundMode] = useState<SoundscapeId>('off');
   const [clock, setClock] = useState<FocusClock>(EMPTY_CLOCK);
   const [config, setConfig] = useState<ActiveConfig | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -62,9 +64,55 @@ export default function FocusScreen() {
   const [completedThisWeek, setCompletedThisWeek] = useState(0);
   const finalizeRef = useRef<string | null>(null);
   const ownerRef = useRef(context.user_id);
+  const sessionIdRef = useRef<string | null>(null);
+  const soundModeRef = useRef<SoundscapeId>('off');
+  const soundSyncRef = useRef<Promise<void>>(Promise.resolve());
+  const soundSyncGenerationRef = useRef(0);
   const lastTickAtRef = useRef<number | null>(null);
   const previousClockRef = useRef<FocusClock>(EMPTY_CLOCK);
   ownerRef.current = context.user_id;
+
+  const queueSoundSync = (
+    activeId: string,
+    ownerId: string,
+    nextSound: SoundscapeId
+  ) => {
+    const generation = soundSyncGenerationRef.current + 1;
+    soundSyncGenerationRef.current = generation;
+    soundSyncRef.current = soundSyncRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        if (
+          ownerRef.current !== ownerId ||
+          sessionIdRef.current !== activeId
+        ) {
+          return;
+        }
+        const { error: updateError } = await supabase
+          .from('focus_sessions')
+          .update({
+            sound_mode: nextSound === 'off' ? 'none' : nextSound,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', activeId)
+          .eq('user_id', ownerId);
+        if (
+          updateError &&
+          generation === soundSyncGenerationRef.current &&
+          ownerRef.current === ownerId &&
+          sessionIdRef.current === activeId
+        ) {
+          setError(SOUND_SYNC_ERROR);
+        } else if (
+          !updateError &&
+          generation === soundSyncGenerationRef.current &&
+          ownerRef.current === ownerId &&
+          sessionIdRef.current === activeId
+        ) {
+          setError((current) => (current === SOUND_SYNC_ERROR ? '' : current));
+        }
+      });
+  };
 
   useEffect(() => {
     const ownerId = context.user_id;
@@ -194,7 +242,8 @@ export default function FocusScreen() {
           break_minutes: nextConfig.breakMinutes,
           planned_cycles: nextConfig.plannedCycles,
           completed_cycles: 0,
-          sound_mode: soundMode === 'off' ? 'none' : soundMode,
+          sound_mode:
+            soundModeRef.current === 'off' ? 'none' : soundModeRef.current,
           status: 'running',
           started_at: new Date().toISOString(),
         })
@@ -208,6 +257,8 @@ export default function FocusScreen() {
 
       setConfig(nextConfig);
       setSessionId(data.id as string);
+      sessionIdRef.current = data.id as string;
+      queueSoundSync(data.id as string, ownerId, soundModeRef.current);
       finalizeRef.current = null;
       lastTickAtRef.current = Date.now();
       setClock({ ...createFocusClock(nextConfig.focusMinutes, nextConfig.plannedCycles), running: true });
@@ -241,6 +292,8 @@ export default function FocusScreen() {
     setClock(EMPTY_CLOCK);
     setConfig(null);
     setSessionId(null);
+    sessionIdRef.current = null;
+    soundSyncGenerationRef.current += 1;
     finalizeRef.current = null;
     lastTickAtRef.current = null;
     if (!ownerId || !activeId) return;
@@ -256,6 +309,14 @@ export default function FocusScreen() {
     if (updateError && ownerRef.current === ownerId) {
       setError('The stopped session could not be synced.');
     }
+  };
+
+  const changeSound = (nextSound: SoundscapeId) => {
+    soundModeRef.current = nextSound;
+    const ownerId = context.user_id;
+    const activeId = sessionIdRef.current;
+    if (!ownerId || !activeId) return;
+    queueSoundSync(activeId, ownerId, nextSound);
   };
 
   const active = Boolean(config && sessionId);
@@ -351,6 +412,8 @@ export default function FocusScreen() {
                   setClock(EMPTY_CLOCK);
                   setConfig(null);
                   setSessionId(null);
+                  sessionIdRef.current = null;
+                  soundSyncGenerationRef.current += 1;
                   lastTickAtRef.current = null;
                 }}
                 style={{ marginTop: 16 }}
@@ -426,13 +489,12 @@ export default function FocusScreen() {
         )}
       </AppCard>
 
-      {!active ? (
-        <OptionalSoundscape
-          title="Optional focus sound"
-          compact
-          onChange={setSoundMode}
-        />
-      ) : null}
+      <OptionalSoundscape
+        title="Focus sound"
+        compact
+        backgroundPlayback
+        onChange={changeSound}
+      />
 
       <AppCard quiet>
         <View style={styles.stats}>

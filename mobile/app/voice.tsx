@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
@@ -17,6 +17,7 @@ import {
 import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import { apiRequest } from '@/lib/api';
 import { Colors } from '@/lib/constants';
+import { fetchWithTimeout } from '@/lib/request';
 import { classifyRealtimeEvent, parseRealtimeEvent } from '@/lib/realtime-events';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
@@ -56,6 +57,13 @@ type NativeMessageEvent = { data: unknown };
 const CONNECT_TIMEOUT_MS = 15_000;
 const MAX_FALLBACK_RECORDING_MS = 90_000;
 const MAX_FALLBACK_AUDIO_BYTES = 4 * 1024 * 1024;
+const MAX_SPOKEN_RESPONSE_CHARACTERS = 1_200;
+const MAX_GENERATED_SPEECH_REQUEST_MS = 30_000;
+const MAX_SPEECH_PLAYBACK_MS = 90_000;
+const MAX_TRANSCRIPTION_REQUEST_MS = 30_000;
+const MAX_CHAT_REQUEST_MS = 30_000;
+const MAX_REALTIME_CONTROL_REQUEST_MS = 10_000;
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';
 const FALLBACK_RECORDING_OPTIONS: Audio.RecordingOptions = {
   isMeteringEnabled: true,
   android: {
@@ -88,6 +96,59 @@ function getFallbackUploadMetadata() {
   return Platform.OS === 'ios'
     ? { type: 'audio/wav', name: 'recording.wav' }
     : { type: 'audio/aac', name: 'recording.aac' };
+}
+
+function getGeneratedAudioExtension(contentType: string | null) {
+  return contentType?.toLowerCase().startsWith('audio/wav') ? '.wav' : '.mp3';
+}
+
+function getSpeakableResponse(text: string) {
+  if (text.length <= MAX_SPOKEN_RESPONSE_CHARACTERS) return text;
+
+  const suffix = ' More is shown on screen.';
+  const available = MAX_SPOKEN_RESPONSE_CHARACTERS - suffix.length;
+  const prefix = text.slice(0, available);
+  const sentenceEnd = Math.max(
+    prefix.lastIndexOf('. '),
+    prefix.lastIndexOf('! '),
+    prefix.lastIndexOf('? ')
+  );
+  const naturalCut = sentenceEnd >= Math.floor(available * 0.6)
+    ? prefix.slice(0, sentenceEnd + 1)
+    : prefix.trimEnd();
+  return `${naturalCut}${suffix}`;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const bytes = new Uint8Array(buffer);
+  let encoded = '';
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index];
+    const second = bytes[index + 1];
+    const third = bytes[index + 2];
+    encoded += alphabet[first >> 2];
+    encoded += alphabet[((first & 3) << 4) | ((second ?? 0) >> 4)];
+    encoded += second === undefined
+      ? '='
+      : alphabet[((second & 15) << 2) | ((third ?? 0) >> 6)];
+    encoded += third === undefined ? '=' : alphabet[third & 63];
+  }
+  return encoded;
+}
+
+async function getBestDeviceSpeechVoice() {
+  const voices = await Speech.getAvailableVoicesAsync();
+  const englishVoices = voices.filter((voice) => (
+    voice.language.toLowerCase().split('-', 1)[0] === 'en'
+  ));
+  return englishVoices.find((voice) => (
+    voice.language.toLowerCase() === 'en-us'
+    && voice.quality === Speech.VoiceQuality.Enhanced
+  ))
+    || englishVoices.find((voice) => voice.quality === Speech.VoiceQuality.Enhanced)
+    || englishVoices.find((voice) => voice.language.toLowerCase() === 'en-us')
+    || englishVoices[0];
 }
 
 function asEventTarget<TEvent>(target: unknown): NativeEventTarget<TEvent> {
@@ -131,6 +192,16 @@ export default function VoiceSupportScreen() {
   const safetyQueueRef = useRef<Promise<void>>(Promise.resolve());
   const connectInFlightRef = useRef(false);
   const fallbackStartInFlightRef = useRef(false);
+  const fallbackTurnInFlightRef = useRef<Promise<void> | null>(null);
+  const fallbackTurnAbortRef = useRef<AbortController | null>(null);
+  const realtimeTurnAbortRef = useRef<AbortController | null>(null);
+  const speechPlaybackGenerationRef = useRef(0);
+  const speechCompletionRef = useRef<(() => void) | null>(null);
+  const generatedSpeechRef = useRef<Audio.Sound | null>(null);
+  const generatedSpeechPathRef = useRef<string | null>(null);
+  const generatedSpeechReleaseRef = useRef<Promise<boolean> | null>(null);
+  const speechFetchAbortRef = useRef<AbortController | null>(null);
+  const speechInterruptInFlightRef = useRef(false);
   const mutedRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -149,8 +220,74 @@ export default function VoiceSupportScreen() {
     elapsedTimerRef.current = null;
   }
 
+  const releaseGeneratedSpeech = useCallback(async (requireStop = false) => {
+    if (generatedSpeechReleaseRef.current) {
+      const playbackTerminated = await generatedSpeechReleaseRef.current;
+      if (requireStop && !playbackTerminated) {
+        throw new Error('Could not stop generated speech');
+      }
+      return;
+    }
+    const sound = generatedSpeechRef.current;
+    const path = generatedSpeechPathRef.current;
+    if (!sound && !path) return;
+
+    const release = (async () => {
+      let stopSucceeded = !sound;
+      let unloadSucceeded = !sound;
+      if (sound) {
+        sound.setOnPlaybackStatusUpdate(null);
+        await sound.stopAsync()
+          .then(() => { stopSucceeded = true; })
+          .catch(() => {});
+        await sound.unloadAsync()
+          .then(() => { unloadSucceeded = true; })
+          .catch(() => {});
+        if (unloadSucceeded && generatedSpeechRef.current === sound) {
+          generatedSpeechRef.current = null;
+        }
+      }
+      let pathDeleted = !path;
+      if (path) {
+        await FileSystem.deleteAsync(path, { idempotent: true })
+          .then(() => { pathDeleted = true; })
+          .catch(() => {});
+        if (pathDeleted && generatedSpeechPathRef.current === path) {
+          generatedSpeechPathRef.current = null;
+        }
+      }
+      return stopSucceeded || unloadSucceeded;
+    })();
+    const trackedRelease = release.finally(() => {
+      if (generatedSpeechReleaseRef.current === trackedRelease) {
+        generatedSpeechReleaseRef.current = null;
+      }
+    });
+    generatedSpeechReleaseRef.current = trackedRelease;
+    const playbackTerminated = await trackedRelease;
+    if (requireStop && !playbackTerminated) {
+      throw new Error('Could not stop generated speech');
+    }
+  }, []);
+
+  async function stopActiveSpeech() {
+    speechFetchAbortRef.current?.abort();
+    speechFetchAbortRef.current = null;
+    let stopError: unknown;
+    try {
+      await releaseGeneratedSpeech(true);
+    } catch (error) {
+      stopError = error;
+    }
+    await Speech.stop().catch((error) => {
+      stopError ??= error;
+    });
+    if (stopError) throw stopError;
+  }
+
   function disposeRealtimeSession(updateState = true) {
     sessionGenerationRef.current += 1;
+    speechPlaybackGenerationRef.current += 1;
     clearSessionTimers();
     channelRef.current?.close();
     peerRef.current?.close();
@@ -160,6 +297,15 @@ export default function VoiceSupportScreen() {
     streamRef.current = null;
     sessionDeadlineRef.current = null;
     safetyQueueRef.current = Promise.resolve();
+    realtimeTurnAbortRef.current?.abort();
+    realtimeTurnAbortRef.current = null;
+    const completeSpeech = speechCompletionRef.current;
+    speechCompletionRef.current = null;
+    completeSpeech?.();
+    speechFetchAbortRef.current?.abort();
+    speechFetchAbortRef.current = null;
+    void releaseGeneratedSpeech().catch(() => {});
+    void Speech.stop().catch(() => {});
     void Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
     if (updateState) {
       setStatus('idle');
@@ -173,6 +319,7 @@ export default function VoiceSupportScreen() {
     return () => {
       void cancelPendingRealtimeSessionRef.current();
       sessionGenerationRef.current += 1;
+      speechPlaybackGenerationRef.current += 1;
       if (sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
       if (fallbackRecordingTimerRef.current) {
@@ -194,9 +341,19 @@ export default function VoiceSupportScreen() {
             }
           });
       }
+      const completeSpeech = speechCompletionRef.current;
+      speechCompletionRef.current = null;
+      completeSpeech?.();
+      speechFetchAbortRef.current?.abort();
+      speechFetchAbortRef.current = null;
+      fallbackTurnAbortRef.current?.abort();
+      fallbackTurnAbortRef.current = null;
+      realtimeTurnAbortRef.current?.abort();
+      realtimeTurnAbortRef.current = null;
+      void releaseGeneratedSpeech().catch(() => {});
       void Speech.stop().catch(() => {});
     };
-  }, []);
+  }, [releaseGeneratedSpeech]);
 
   useEffect(() => {
     const active = status !== 'idle';
@@ -236,38 +393,42 @@ export default function VoiceSupportScreen() {
     return headers;
   }
 
-  async function cancelPendingRealtimeSession() {
-    const grantId = pendingRealtimeGrantRef.current;
-    const apiUrl = pendingRealtimeApiUrlRef.current;
-    pendingRealtimeGrantRef.current = null;
-    pendingRealtimeApiUrlRef.current = null;
-    if (!grantId || !apiUrl) return;
+  async function releaseRealtimeGrant(apiUrl: string, grantId: string) {
     try {
-      await fetch(`${apiUrl}/api/realtime/session`, {
+      await fetchWithTimeout(`${apiUrl}/api/realtime/session`, {
         method: 'DELETE',
         headers: {
           ...(await getAuthHeaders()),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ grantId }),
-      });
+      }, MAX_REALTIME_CONTROL_REQUEST_MS);
     } catch {
       // The server expiry task remains the hard stop if cleanup cannot connect.
     }
+  }
+
+  async function cancelPendingRealtimeSession() {
+    const grantId = pendingRealtimeGrantRef.current;
+    const apiUrl = pendingRealtimeApiUrlRef.current;
+    pendingRealtimeGrantRef.current = null;
+    pendingRealtimeApiUrlRef.current = null;
+    if (!grantId || !apiUrl) return;
+    await releaseRealtimeGrant(apiUrl, grantId);
   }
   cancelPendingRealtimeSessionRef.current = cancelPendingRealtimeSession;
 
   async function confirmRealtimeSession(apiUrl: string, grantId: string) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const response = await fetch(`${apiUrl}/api/realtime/session`, {
+        const response = await fetchWithTimeout(`${apiUrl}/api/realtime/session`, {
           method: 'PATCH',
           headers: {
             ...(await getAuthHeaders()),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ grantId }),
-        });
+        }, MAX_REALTIME_CONTROL_REQUEST_MS);
         if (response.ok) return;
         if (response.status === 400 || response.status === 401 || response.status === 409) {
           break;
@@ -292,33 +453,178 @@ export default function VoiceSupportScreen() {
   }
 
   async function speakText(text: string, returnToListening: boolean) {
+    let unownedGeneratedSpeechPath: string | null = null;
+    let generatedSpeechRequestTimer: ReturnType<typeof setTimeout> | null = null;
+    const cleanupUnownedGeneratedSpeechPath = async () => {
+      const path = unownedGeneratedSpeechPath;
+      if (!path) return;
+      unownedGeneratedSpeechPath = null;
+      try {
+        await FileSystem.deleteAsync(path, { idempotent: true });
+      } catch {
+        if (!generatedSpeechPathRef.current) {
+          generatedSpeechPathRef.current = path;
+        }
+      }
+    };
+    const playbackGeneration = speechPlaybackGenerationRef.current + 1;
+    speechPlaybackGenerationRef.current = playbackGeneration;
     try {
       setStatus('speaking');
       setMicrophoneEnabled(false);
-      await Speech.stop();
-      await new Promise<void>((resolve, reject) => {
-        let settled = false;
-        const finish = (error?: Error) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timeout);
-          if (error) reject(error);
-          else resolve();
-        };
-        const timeout = setTimeout(() => {
-          void Speech.stop();
-          finish(new Error('Speech playback timed out'));
-        }, 60_000);
-        Speech.speak(text, {
-          language: 'en-US',
-          rate: 0.9,
-          onDone: () => finish(),
-          onStopped: () => finish(),
-          onError: () => finish(new Error('Speech playback failed')),
+      await stopActiveSpeech();
+      if (playbackGeneration !== speechPlaybackGenerationRef.current) return;
+      const spokenText = getSpeakableResponse(text);
+      const fetchAbort = new AbortController();
+      speechFetchAbortRef.current = fetchAbort;
+      generatedSpeechRequestTimer = setTimeout(
+        () => fetchAbort.abort(),
+        MAX_GENERATED_SPEECH_REQUEST_MS
+      );
+
+      try {
+        const response = await fetch(`${API_URL}/api/voice`, {
+          method: 'POST',
+          headers: {
+            ...(await getAuthHeaders()),
+            Accept: 'audio/*',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ text: spokenText }),
+          signal: fetchAbort.signal,
         });
-      });
+        if (!response.ok) throw new Error('Natural voice is unavailable');
+        const audioExtension = getGeneratedAudioExtension(
+          response.headers.get('content-type')
+        );
+        const audioBytes = await response.arrayBuffer();
+        clearTimeout(generatedSpeechRequestTimer);
+        generatedSpeechRequestTimer = null;
+        if (playbackGeneration !== speechPlaybackGenerationRef.current) return;
+        if (!FileSystem.cacheDirectory) throw new Error('Audio cache is unavailable');
+        if (generatedSpeechRef.current || generatedSpeechPathRef.current) {
+          throw new Error('Previous generated audio is still being released');
+        }
+
+        const path = `${FileSystem.cacheDirectory}voice-response-${Date.now()}-${playbackGeneration}${audioExtension}`;
+        unownedGeneratedSpeechPath = path;
+        await FileSystem.writeAsStringAsync(path, arrayBufferToBase64(audioBytes), {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        if (playbackGeneration !== speechPlaybackGenerationRef.current) {
+          return;
+        }
+
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          playThroughEarpieceAndroid: false,
+        });
+        const { sound } = await Audio.Sound.createAsync({ uri: path });
+        generatedSpeechRef.current = sound;
+        generatedSpeechPathRef.current = path;
+        unownedGeneratedSpeechPath = null;
+        if (playbackGeneration !== speechPlaybackGenerationRef.current) {
+          await releaseGeneratedSpeech();
+          return;
+        }
+        speechFetchAbortRef.current = null;
+        await new Promise<void>((resolve, reject) => {
+          let settled = false;
+          const finish = (failure?: Error) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            sound.setOnPlaybackStatusUpdate(null);
+            if (speechCompletionRef.current === cancel) {
+              speechCompletionRef.current = null;
+            }
+            if (failure) reject(failure);
+            else resolve();
+          };
+          const cancel = () => finish();
+          const timeout = setTimeout(() => {
+            void releaseGeneratedSpeech();
+            finish(new Error('Speech playback timed out'));
+          }, MAX_SPEECH_PLAYBACK_MS);
+          speechCompletionRef.current = cancel;
+          sound.setOnPlaybackStatusUpdate((playbackStatus) => {
+            if (!playbackStatus.isLoaded) {
+              if (playbackStatus.error) {
+                finish(new Error('Natural voice playback failed'));
+              }
+              return;
+            }
+            if (playbackStatus.didJustFinish) finish();
+          });
+          void sound.playAsync().catch(() => {
+            finish(new Error('Natural voice playback failed'));
+          });
+        });
+        await releaseGeneratedSpeech(true);
+      } catch (generatedVoiceError) {
+        if (generatedSpeechRequestTimer) {
+          clearTimeout(generatedSpeechRequestTimer);
+          generatedSpeechRequestTimer = null;
+        }
+        if (
+          playbackGeneration !== speechPlaybackGenerationRef.current
+          || speechInterruptInFlightRef.current
+        ) return;
+        speechFetchAbortRef.current = null;
+        await releaseGeneratedSpeech(true);
+        await cleanupUnownedGeneratedSpeechPath();
+        console.warn('Generated speech unavailable; using device voice.', generatedVoiceError);
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          playThroughEarpieceAndroid: false,
+        });
+        await Speech.stop();
+        if (playbackGeneration !== speechPlaybackGenerationRef.current) return;
+        const deviceVoice = await getBestDeviceSpeechVoice().catch(() => undefined);
+        if (playbackGeneration !== speechPlaybackGenerationRef.current) return;
+        await new Promise<void>((resolve, reject) => {
+          let settled = false;
+          const finish = (failure?: Error) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (speechCompletionRef.current === cancel) {
+              speechCompletionRef.current = null;
+            }
+            if (failure) reject(failure);
+            else resolve();
+          };
+          const cancel = () => finish();
+          const timeout = setTimeout(() => {
+            void Speech.stop();
+            finish(new Error('Speech playback timed out'));
+          }, MAX_SPEECH_PLAYBACK_MS);
+          speechCompletionRef.current = cancel;
+          Speech.speak(spokenText, {
+            language: 'en-US',
+            rate: 0.96,
+            voice: deviceVoice?.identifier,
+            onDone: () => finish(),
+            onStopped: () => finish(),
+            onError: () => finish(new Error('Speech playback failed')),
+          });
+        });
+      }
     } finally {
+      if (generatedSpeechRequestTimer) clearTimeout(generatedSpeechRequestTimer);
+      await cleanupUnownedGeneratedSpeechPath();
+      if (
+        playbackGeneration !== speechPlaybackGenerationRef.current
+        || speechInterruptInFlightRef.current
+      ) return;
       if (returnToListening && peerRef.current) {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          playThroughEarpieceAndroid: false,
+        }).catch(() => {});
         setMicrophoneEnabled(!mutedRef.current);
         setStatus('listening');
       } else {
@@ -328,14 +634,23 @@ export default function VoiceSupportScreen() {
   }
 
   async function approveRealtimeTurn(transcriptText: string, generation: number) {
+    if (generation !== sessionGenerationRef.current || !peerRef.current) return;
+    realtimeTurnAbortRef.current?.abort();
+    const turnAbort = new AbortController();
+    realtimeTurnAbortRef.current = turnAbort;
+    const turnIsCurrent = () => (
+      !turnAbort.signal.aborted
+      && generation === sessionGenerationRef.current
+      && peerRef.current !== null
+    );
     try {
       setError('');
       const safety = await apiRequest<SafetyResponse>(
         '/api/realtime/safety',
         { transcript: transcriptText },
-        { timeoutMs: 12_000 }
+        { signal: turnAbort.signal, timeoutMs: 12_000 }
       );
-      if (generation !== sessionGenerationRef.current || !peerRef.current) return;
+      if (!turnIsCurrent()) return;
 
       if (safety.action === 'crisis') {
         const response = safety.response?.trim();
@@ -351,9 +666,9 @@ export default function VoiceSupportScreen() {
       const chat = await apiRequest<{ response?: unknown }>(
         '/api/chat',
         { messages: chatMessages },
-        { timeoutMs: 20_000 }
+        { signal: turnAbort.signal, timeoutMs: 20_000 }
       );
-      if (generation !== sessionGenerationRef.current || !peerRef.current) return;
+      if (!turnIsCurrent()) return;
       if (typeof chat.response !== 'string' || !chat.response.trim()) {
         throw new Error('AI response was empty');
       }
@@ -362,10 +677,14 @@ export default function VoiceSupportScreen() {
       setAiResponse(response);
       await speakText(response, true);
     } catch {
-      if (generation !== sessionGenerationRef.current) return;
+      if (!turnIsCurrent()) return;
       setError('I could not safely process that turn. Please try again.');
       setMicrophoneEnabled(!mutedRef.current);
       setStatus('listening');
+    } finally {
+      if (realtimeTurnAbortRef.current === turnAbort) {
+        realtimeTurnAbortRef.current = null;
+      }
     }
   }
 
@@ -459,35 +778,41 @@ export default function VoiceSupportScreen() {
   async function connectRealtime() {
     if (connectInFlightRef.current || peerRef.current) return;
     connectInFlightRef.current = true;
+    const generation = sessionGenerationRef.current + 1;
+    sessionGenerationRef.current = generation;
+    const connectIsCurrent = () => generation === sessionGenerationRef.current;
     try {
       setError('');
-      if (!(await ensureAiDataSharingConsent(consentSubjectId))) return;
+      const hasConsent = await ensureAiDataSharingConsent(consentSubjectId);
+      if (!connectIsCurrent() || !hasConsent) return;
 
       const { granted } = await Audio.requestPermissionsAsync();
+      if (!connectIsCurrent()) return;
       if (!granted) {
         setError('Microphone access is needed for live voice.');
         return;
       }
 
-      const generation = sessionGenerationRef.current + 1;
-      sessionGenerationRef.current = generation;
       setStatus('connecting');
       try {
-        const API_URL =
-          process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: true,
           playsInSilentModeIOS: true,
           playThroughEarpieceAndroid: false,
         });
+        if (!connectIsCurrent()) {
+          await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+          return;
+        }
 
         const rtc = await import('react-native-webrtc');
+        if (!connectIsCurrent()) return;
         const stream = await rtc.mediaDevices.getUserMedia({
           audio: true,
           video: false,
         });
         streamRef.current = stream;
-        if (generation !== sessionGenerationRef.current) {
+        if (!connectIsCurrent()) {
           stream.getTracks().forEach((track) => track.stop());
           streamRef.current = null;
           return;
@@ -592,12 +917,20 @@ export default function VoiceSupportScreen() {
           sdp: answerSdp,
         });
         await waitForDataChannelOpen(channel);
-        if (generation !== sessionGenerationRef.current) {
+        if (!connectIsCurrent()) {
           await cancelPendingRealtimeSession();
           return;
         }
 
         await confirmRealtimeSession(API_URL, grantId);
+        if (!connectIsCurrent()) {
+          if (pendingRealtimeGrantRef.current === grantId) {
+            pendingRealtimeGrantRef.current = null;
+            pendingRealtimeApiUrlRef.current = null;
+          }
+          await releaseRealtimeGrant(API_URL, grantId);
+          return;
+        }
         pendingRealtimeGrantRef.current = null;
         pendingRealtimeApiUrlRef.current = null;
         const remainingMilliseconds = Math.max(
@@ -646,10 +979,16 @@ export default function VoiceSupportScreen() {
   async function startFallbackRecording() {
     if (fallbackStartInFlightRef.current || recordingRef.current) return;
     fallbackStartInFlightRef.current = true;
+    const startupGeneration = sessionGenerationRef.current;
+    const startupIsCurrent = () => (
+      startupGeneration === sessionGenerationRef.current
+    );
     try {
       setError('');
-      if (!(await ensureAiDataSharingConsent(consentSubjectId))) return;
+      const hasConsent = await ensureAiDataSharingConsent(consentSubjectId);
+      if (!startupIsCurrent() || !hasConsent) return;
       const { granted } = await Audio.requestPermissionsAsync();
+      if (!startupIsCurrent()) return;
       if (!granted) {
         setError('Microphone access is needed for voice support.');
         return;
@@ -658,9 +997,22 @@ export default function VoiceSupportScreen() {
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
+      if (!startupIsCurrent()) {
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+        return;
+      }
       const { recording } = await Audio.Recording.createAsync(
         FALLBACK_RECORDING_OPTIONS
       );
+      if (!startupIsCurrent()) {
+        const staleUri = recording.getURI();
+        await recording.stopAndUnloadAsync().catch(() => {});
+        if (staleUri) {
+          void FileSystem.deleteAsync(staleUri, { idempotent: true }).catch(() => {});
+        }
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+        return;
+      }
       recordingRef.current = recording;
       fallbackRecordingTimerRef.current = setTimeout(() => {
         if (recordingRef.current === recording) {
@@ -669,8 +1021,11 @@ export default function VoiceSupportScreen() {
       }, MAX_FALLBACK_RECORDING_MS);
       setStatus('listening');
     } catch {
-      setError('Could not start recording. Check microphone access.');
-      setStatus('idle');
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+      if (startupIsCurrent()) {
+        setError('Could not start recording. Check microphone access.');
+        setStatus('idle');
+      }
     } finally {
       fallbackStartInFlightRef.current = false;
     }
@@ -679,6 +1034,8 @@ export default function VoiceSupportScreen() {
   async function stopFallbackRecording() {
     const recording = recordingRef.current;
     if (!recording) return;
+    const stopGeneration = sessionGenerationRef.current;
+    const stopIsCurrent = () => stopGeneration === sessionGenerationRef.current;
     if (fallbackRecordingTimerRef.current) {
       clearTimeout(fallbackRecordingTimerRef.current);
       fallbackRecordingTimerRef.current = null;
@@ -694,25 +1051,48 @@ export default function VoiceSupportScreen() {
         await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
       }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
-      setError('That recording could not be processed. Please try again.');
-      setStatus('idle');
+      if (stopIsCurrent()) {
+        setError('That recording could not be processed. Please try again.');
+        setStatus('idle');
+      }
       return;
     }
     if (recordingRef.current === recording) recordingRef.current = null;
+    if (!stopIsCurrent()) {
+      if (uri) {
+        await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+      }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+      return;
+    }
     if (!uri) {
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
       setError('That recording could not be processed. Please try again.');
       setStatus('idle');
       return;
     }
-    await processFallbackVoice(uri);
+    const fallbackTurn = processFallbackVoice(uri, stopGeneration);
+    fallbackTurnInFlightRef.current = fallbackTurn;
+    try {
+      await fallbackTurn;
+    } finally {
+      if (fallbackTurnInFlightRef.current === fallbackTurn) {
+        fallbackTurnInFlightRef.current = null;
+      }
+    }
   }
 
-  async function processFallbackVoice(audioUri: string) {
-    const API_URL =
-      process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';
+  async function processFallbackVoice(audioUri: string, turnGeneration: number) {
+    fallbackTurnAbortRef.current?.abort();
+    const turnAbort = new AbortController();
+    fallbackTurnAbortRef.current = turnAbort;
+    const turnIsCurrent = () => (
+      !turnAbort.signal.aborted
+      && turnGeneration === sessionGenerationRef.current
+    );
     try {
       const fileInfo = await FileSystem.getInfoAsync(audioUri);
+      if (!turnIsCurrent()) return;
       if (!fileInfo.exists) throw new Error('Audio file not found');
       if (
         typeof fileInfo.size === 'number'
@@ -728,16 +1108,19 @@ export default function VoiceSupportScreen() {
         type: upload.type,
         name: upload.name,
       } as never);
-      const transcribe = await fetch(`${API_URL}/api/voice`, {
+      const transcribe = await fetchWithTimeout(`${API_URL}/api/voice`, {
         method: 'POST',
         headers: {
           ...(await getAuthHeaders()),
           Accept: 'application/json',
         },
         body: formData,
-      });
+        signal: turnAbort.signal,
+      }, MAX_TRANSCRIPTION_REQUEST_MS);
+      if (!turnIsCurrent()) return;
       if (!transcribe.ok) throw new Error('Transcription failed');
       const data = (await transcribe.json()) as { transcription?: unknown };
+      if (!turnIsCurrent()) return;
       if (typeof data.transcription !== 'string' || !data.transcription.trim()) {
         throw new Error('Transcription was empty');
       }
@@ -749,9 +1132,21 @@ export default function VoiceSupportScreen() {
       ].slice(-12);
       messagesRef.current = nextMessages;
       setMessages(nextMessages);
-      const chat = await apiRequest<{ response?: unknown }>('/api/chat', {
-        messages: nextMessages,
-      });
+      const chatHeaders = await getAuthHeaders();
+      if (!turnIsCurrent()) return;
+      const chatResponse = await fetchWithTimeout(`${API_URL}/api/chat`, {
+        method: 'POST',
+        headers: {
+          ...chatHeaders,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages: nextMessages }),
+        signal: turnAbort.signal,
+      }, MAX_CHAT_REQUEST_MS);
+      if (!turnIsCurrent()) return;
+      if (!chatResponse.ok) throw new Error('AI response failed');
+      const chat = (await chatResponse.json()) as { response?: unknown };
+      if (!turnIsCurrent()) return;
       if (typeof chat.response !== 'string' || !chat.response.trim()) {
         throw new Error('AI response was empty');
       }
@@ -760,12 +1155,68 @@ export default function VoiceSupportScreen() {
       addMessage({ role: 'assistant', content: responseText });
       await speakText(responseText, false);
     } catch (reason) {
+      if (!turnIsCurrent()) return;
       console.error('Push-to-talk processing error:', reason);
       setError('Voice support could not answer. Please try again.');
       setStatus('idle');
     } finally {
-      await FileSystem.deleteAsync(audioUri, { idempotent: true }).catch(() => {});
+      if (fallbackTurnAbortRef.current === turnAbort) {
+        fallbackTurnAbortRef.current = null;
+      }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+      void FileSystem.deleteAsync(audioUri, { idempotent: true }).catch(() => {});
+    }
+  }
+
+  async function interruptSpeechAndListen() {
+    if (status !== 'speaking' || speechInterruptInFlightRef.current) return;
+    speechInterruptInFlightRef.current = true;
+    const interruptionGeneration = sessionGenerationRef.current;
+    const wasRealtime = peerRef.current !== null;
+    try {
+      setError('');
+      const completeSpeech = speechCompletionRef.current;
+      speechPlaybackGenerationRef.current += 1;
+      speechCompletionRef.current = null;
+      completeSpeech?.();
+      try {
+        await stopActiveSpeech();
+      } catch {
+        if (interruptionGeneration === sessionGenerationRef.current) {
+          setError('Could not stop playback. Please try again.');
+        }
+        return;
+      }
+      if (
+        interruptionGeneration !== sessionGenerationRef.current
+      ) return;
+      await releaseGeneratedSpeech(true);
+      await Speech.stop();
+
+      if (wasRealtime) {
+        if (!peerRef.current) return;
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          playThroughEarpieceAndroid: false,
+        });
+        if (interruptionGeneration !== sessionGenerationRef.current) return;
+        mutedRef.current = false;
+        setMuted(false);
+        setMicrophoneEnabled(true);
+        setStatus('listening');
+        return;
+      }
+
+      const activeFallbackTurn = fallbackTurnInFlightRef.current;
+      if (activeFallbackTurn) {
+        await activeFallbackTurn.catch(() => {});
+      }
+      if (interruptionGeneration !== sessionGenerationRef.current) return;
+      setStatus('idle');
+      await startFallbackRecording();
+    } finally {
+      speechInterruptInFlightRef.current = false;
     }
   }
 
@@ -835,7 +1286,8 @@ export default function VoiceSupportScreen() {
             <Feather name="lock" size={15} color="#675b47" />
             <Text style={styles.disclosureText}>
               Live audio uses OpenAI. Push-to-talk uses Gemini; compatible recordings
-              can fall back to OpenAI. Replies use your phone&apos;s speech service.
+              can fall back to OpenAI. Replies use Gemini&apos;s natural voice, with
+              OpenAI or your phone&apos;s voice as a fallback.
             </Text>
           </View>
           <TouchableOpacity
@@ -885,12 +1337,24 @@ export default function VoiceSupportScreen() {
       <View style={styles.controls}>
         {realtimeActive ? (
           <>
-            <TouchableOpacity style={styles.secondaryButton} onPress={toggleMute}>
-              <Feather name={muted ? 'mic' : 'mic-off'} size={19} color={Colors.primary} />
-              <Text style={styles.secondaryButtonText}>
-                {muted ? 'Resume mic' : 'Pause mic'}
-              </Text>
-            </TouchableOpacity>
+            {status === 'speaking' ? (
+              <TouchableOpacity
+                accessibilityLabel="Interrupt AI and start talking"
+                accessibilityRole="button"
+                style={styles.primaryButton}
+                onPress={() => void interruptSpeechAndListen()}
+              >
+                <Feather name="mic" size={19} color="#fff" />
+                <Text style={styles.primaryButtonText}>Interrupt &amp; talk</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.secondaryButton} onPress={toggleMute}>
+                <Feather name={muted ? 'mic' : 'mic-off'} size={19} color={Colors.primary} />
+                <Text style={styles.secondaryButtonText}>
+                  {muted ? 'Resume mic' : 'Pause mic'}
+                </Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.endButton}
               onPress={() => void endRealtimeSession()}
@@ -901,7 +1365,17 @@ export default function VoiceSupportScreen() {
           </>
         ) : mode === 'fallback' ? (
           <>
-            {status === 'listening' ? (
+            {status === 'speaking' ? (
+              <TouchableOpacity
+                accessibilityLabel="Interrupt AI and start talking"
+                accessibilityRole="button"
+                style={styles.primaryButton}
+                onPress={() => void interruptSpeechAndListen()}
+              >
+                <Feather name="mic" size={19} color="#fff" />
+                <Text style={styles.primaryButtonText}>Interrupt &amp; talk</Text>
+              </TouchableOpacity>
+            ) : status === 'listening' ? (
               <TouchableOpacity
                 style={styles.primaryButton}
                 onPress={() => void stopFallbackRecording()}

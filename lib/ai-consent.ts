@@ -1,6 +1,6 @@
 'use client';
 
-const AI_CONSENT_PREFIX = 'mhtoolkit.ai_data_sharing_consent.v2';
+const AI_CONSENT_PREFIX = 'mhtoolkit.ai_data_sharing_consent.v3';
 
 function consentKey(subjectId: string): string | null {
   const normalized = subjectId.trim();
@@ -12,7 +12,7 @@ function consentKey(subjectId: string): string | null {
 export const AI_DATA_SHARING_TITLE = 'AI Data Sharing Consent';
 
 export const AI_DATA_SHARING_DISCLOSURE =
-  'Your message and any MHtoolkit context you turn on may be sent securely to AI providers including Google Gemini, Anthropic Claude, and OpenAI. Voice features also send recordings for transcription, live voice may return provider-generated audio, and mobile push-to-talk may use your operating system\'s speech service. We do not sell this data or use it for advertising.';
+  'Your message and any MHtoolkit context you turn on may be sent securely to AI providers including Google Gemini, Anthropic Claude, and OpenAI. Voice features also send recordings for transcription, send response text to Google Gemini or OpenAI for generated audio, and may use your operating system\'s speech service as a fallback. We do not sell this data or use it for advertising.';
 
 export function hasAiDataSharingConsent(subjectId: string): boolean {
   if (typeof window === 'undefined') return false;

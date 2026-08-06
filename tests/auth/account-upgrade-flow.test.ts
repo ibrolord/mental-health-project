@@ -15,6 +15,10 @@ const webCallback = read('app/auth/callback/page.tsx');
 const partnerAccept = read('app/partner/accept/page.tsx');
 const mobilePartner = read('mobile/app/partner.tsx');
 const mobileLogin = read('mobile/app/auth/login.tsx');
+const webLogin = read('app/auth/login/page.tsx');
+const webSocialAuth = read('components/auth/social-auth-buttons.tsx');
+const mobileSocialAuth = read('mobile/components/social-auth-buttons.tsx');
+const anonymousProfileSwitch = read('mobile/lib/anonymous-profile-switch.ts');
 
 describe('anonymous account upgrade journey', () => {
   it('links email to the existing web identity instead of creating another user', () => {
@@ -55,5 +59,51 @@ describe('anonymous account upgrade journey', () => {
     expect(mobileSignup).toContain('if (submissionRef.current) return');
     expect(partnerAccept).toContain('acceptanceRef.current?.token !== token');
     expect(partnerAccept).toContain('acceptance.promise');
+  });
+
+  it('turns anonymous-data conflicts into an explicit keep-or-delete choice', () => {
+    expect(anonymousProfileSwitch).toContain("'anonymous_profile_data_conflict'");
+    for (const authContext of [webAuth, mobileAuth]) {
+      expect(authContext).toContain(
+        'discardAnonymousProfile: (expectedAnonymousUserId: string) => Promise<void>'
+      );
+      expect(authContext).toContain("'/api/data/delete'");
+      expect(authContext).toContain('{ expectedAnonymousUserId }');
+    }
+
+    expect(webAuth).toContain(
+      'removeCurrentDevicePushSubscription(expectedAnonymousUserId)'
+    );
+    expect(mobileAuth).toContain('areRemindersEnabled()');
+    expect(mobileAuth).toContain('setRemindersEnabled(false)');
+    expect(webLogin).toContain('Keep data and create an account');
+    expect(webLogin).toContain('Delete data and sign in');
+    expect(mobileLogin).toContain('Keep Data and Create Account');
+    expect(mobileLogin).toContain('Delete Data and Sign In');
+  });
+
+  it('surfaces social sign-in conflicts to the login resolution flow', () => {
+    for (const socialAuth of [webSocialAuth, mobileSocialAuth]) {
+      expect(socialAuth).toContain('onAnonymousDataBlocked');
+      expect(socialAuth).toContain('isAnonymousProfileDataConflict');
+    }
+    expect(webLogin).toContain(
+      'setBlockedAttempt({ kind: \'provider\', provider, anonymousUserId })'
+    );
+    expect(mobileLogin).toContain(
+      'setBlockedAttempt({ kind: \'provider\', provider, anonymousUserId })'
+    );
+  });
+
+  it('recovers when an upgrade provider already belongs to an account', () => {
+    expect(webAuth).toContain('&provider=');
+    expect(webAuth).toContain('&auth_intent=upgrade');
+    expect(webCallback).toContain('isIdentityAlreadyLinkedError');
+    expect(webCallback).toContain("reason: 'identity_already_linked'");
+    expect(webCallback).toContain('Sign in to existing account');
+    expect(webLogin).toContain("searchParams.get('reason') === 'identity_already_linked'");
+    expect(webSignup).toContain('onIdentityAlreadyLinked={setLinkedIdentityProvider}');
+    expect(mobileSignup).toContain('onIdentityAlreadyLinked={setLinkedIdentityProvider}');
+    expect(mobileSignup).toContain('Nothing in this anonymous profile has been deleted.');
   });
 });

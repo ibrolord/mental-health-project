@@ -17,6 +17,21 @@ export async function POST(request: NextRequest) {
 
     if (!auth.userId && !auth.sessionId) return unauthorizedResponse();
 
+    const body = await request.json().catch(() => ({}));
+    const expectedAnonymousUserId =
+      typeof body?.expectedAnonymousUserId === 'string'
+        ? body.expectedAnonymousUserId
+        : null;
+    if (
+      expectedAnonymousUserId &&
+      (auth.userId !== expectedAnonymousUserId || auth.isAnonymous !== true)
+    ) {
+      return NextResponse.json(
+        { error: 'The anonymous profile changed before deletion. No data was deleted.' },
+        { status: 409, headers: corsHeaders() }
+      );
+    }
+
     if (auth.userId) {
       try {
         await recordServerPrivacyEvent({

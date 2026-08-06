@@ -13,8 +13,8 @@ export const MOBILE_ROOT = path.resolve(SCRIPT_DIR, '..');
 export const REPO_ROOT = path.resolve(MOBILE_ROOT, '..');
 export const CHECKLIST_PATH = path.join(MOBILE_ROOT, 'qa', 'ios-release-checklist.json');
 export const RUNS_ROOT = path.join(MOBILE_ROOT, 'qa', 'runs');
-export const EXPECTED_INVENTORY = Object.freeze({ routes: 25, routeChecks: 466, workflows: 86, total: 552 });
-export const EXPECTED_CHECKLIST_SHA256 = '682d8727316072fdb39a4a3a431297b226be3c00588b53b9fb0a3f0d3acb2414';
+export const EXPECTED_INVENTORY = Object.freeze({ routes: 26, routeChecks: 489, workflows: 94, total: 583 });
+export const EXPECTED_CHECKLIST_SHA256 = '7e5846882d09d24e20695f0d1679ec74a5c71d3a947785512cb76b170cc253fa';
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, 'utf8'));

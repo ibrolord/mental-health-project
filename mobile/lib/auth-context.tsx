@@ -42,37 +42,34 @@ import {
 } from './session-cleanup';
 import { offlineSafetyPlanCache } from './offline-safety-plan-cache';
 import { clearFullContextPreference } from './full-context-preference';
+import { clearGoToActions } from './go-to-actions-storage';
 import { clearContextSelections } from './chat-context-preference';
-import { setRemindersEnabled } from './notifications';
+import { areRemindersEnabled, setRemindersEnabled } from './notifications';
 import { Colors } from './constants';
+import {
+  ANONYMOUS_PROFILE_DATA_CONFLICT,
+  anonymousProfileDataConflict,
+  discardAnonymousProfileSafely,
+  getAnonymousProfileDataConflictUserId,
+  isAnonymousProfileDataConflict,
+} from './anonymous-profile-switch';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export type AccountUpgradeStatus = 'complete' | 'password-required';
 export type SocialAuthProvider = 'google' | 'apple';
 export type SocialAuthIntent = 'sign-in' | 'upgrade';
+export {
+  ANONYMOUS_PROFILE_DATA_CONFLICT,
+  getAnonymousProfileDataConflictUserId,
+  isAnonymousProfileDataConflict,
+};
 
 const LEGACY_SESSION_KEY = 'anonymous_session_id';
 const AUTH_SESSION_TIMEOUT_MS = 12_000;
 const AUTH_INIT_ERROR_MESSAGE =
   'Your private profile could not be started. Check your connection and try again.';
 const MOBILE_AUTH_REDIRECT = 'mhtoolkit://auth/callback';
-const USER_DATA_TABLES = [
-  'moods',
-  'assessments',
-  'goals',
-  'habits',
-  'journal_entries',
-  'chat_history',
-  'user_affirmation_history',
-  'user_book_favorites',
-  'user_library_items',
-  'life_plan_items',
-  'focus_sessions',
-  'wellbeing_reminders',
-  'push_subscriptions',
-] as const;
-
 async function assertAnonymousAccountIsEmpty(): Promise<void> {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw sessionError;
@@ -81,16 +78,16 @@ async function assertAnonymousAccountIsEmpty(): Promise<void> {
   }
   if (!session) return;
 
-  const results = await Promise.all(
-    USER_DATA_TABLES.map((table) => supabase.from(table).select('id').limit(1))
-  );
-  if (results.some(({ error }) => error)) {
-    throw new Error('Unable to verify that your anonymous data is safe. Sign in was blocked; please try again.');
-  }
-  if (results.some(({ data }) => (data?.length ?? 0) > 0)) {
-    throw new Error(
-      'Sign in is blocked because this anonymous profile has saved data. Export or delete that data in Settings before switching accounts.'
-    );
+  const [result, remindersEnabled] = await Promise.all([
+    apiRequest<{ hasOwnedData?: boolean }>(
+      '/api/data/switch-status',
+      {},
+      { accessToken: session.access_token }
+    ),
+    areRemindersEnabled(),
+  ]);
+  if (result.hasOwnedData !== false || remindersEnabled) {
+    throw anonymousProfileDataConflict(session.user.id);
   }
 }
 
@@ -144,6 +141,7 @@ interface AuthContextType {
     provider: SocialAuthProvider,
     intent: SocialAuthIntent
   ) => Promise<boolean>;
+  discardAnonymousProfile: (expectedAnonymousUserId: string) => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
@@ -161,6 +159,7 @@ const AuthContext = createContext<AuthContextType>({
   completeAccountUpgrade: async () => 'complete',
   finishAccountUpgrade: async () => {},
   continueWithProvider: async () => false,
+  discardAnonymousProfile: async () => {},
   signOut: async () => {},
   deleteAccount: async () => {},
 });
@@ -479,6 +478,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           clearStoredAcquisitionAttribution(),
           resetAiDataSharingConsent(ownerKey),
           clearFullContextPreference(ownerKey),
+          clearGoToActions(ownerKey),
           clearContextSelections(ownerKey),
           setRemindersEnabled(false),
           offlineSafetyPlanCache.clear(user.id),
@@ -488,6 +488,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+  };
+
+  const discardAnonymousProfile = async (expectedAnonymousUserId: string) => {
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const anonymousUser = current.session?.user ?? null;
+    const accessToken = current.session?.access_token;
+    const ownerKey = `user_id:${expectedAnonymousUserId}`;
+
+    await discardAnonymousProfileSafely({
+      expectedAnonymousUserId,
+      currentUser: anonymousUser,
+      prepareLocalCleanup: () =>
+        runDeletedAccountLocalCleanup(
+          [
+            clearStoredAcquisitionAttribution(),
+            resetAiDataSharingConsent(ownerKey),
+            clearFullContextPreference(ownerKey),
+            clearGoToActions(ownerKey),
+            clearContextSelections(ownerKey),
+            setRemindersEnabled(false),
+            offlineSafetyPlanCache.clear(expectedAnonymousUserId),
+          ],
+          (error) => console.error('Anonymous-profile local cleanup failed:', error)
+        ),
+      deleteRemoteData: () =>
+        apiRequest(
+          '/api/data/delete',
+          { expectedAnonymousUserId },
+          { accessToken }
+        ),
+      localCleanupError:
+        'This device could not clear local reminders or settings. No data was deleted; restart MHtoolkit and try again.',
+    });
   };
 
   const deleteAccount = async () => {
@@ -509,6 +543,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           clearStoredAcquisitionAttribution(),
           resetAiDataSharingConsent(deletedOwnerKey),
           clearFullContextPreference(deletedOwnerKey),
+          clearGoToActions(deletedOwnerKey),
           clearContextSelections(deletedOwnerKey),
           setRemindersEnabled(false),
           offlineSafetyPlanCache.clear(deletedOwnerId),
@@ -592,6 +627,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         completeAccountUpgrade,
         finishAccountUpgrade,
         continueWithProvider,
+        discardAnonymousProfile,
         signOut,
         deleteAccount,
       }}

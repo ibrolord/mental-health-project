@@ -3,11 +3,14 @@ type AuthCompletionUser = {
   is_anonymous?: boolean;
 };
 
+export type SupportedSocialAuthProvider = 'google' | 'apple';
+
 const OAUTH_CALLBACK_KEYS = [
   'code',
   'access_token',
   'refresh_token',
   'error',
+  'error_code',
   'error_description',
 ] as const;
 
@@ -17,6 +20,28 @@ export function hasOAuthCallbackParameters(search: string, hash: string): boolea
 
   return OAUTH_CALLBACK_KEYS.some(
     (key) => queryParams.has(key) || hashParams.has(key)
+  );
+}
+
+export function parseSocialAuthProvider(
+  value: string | null | undefined
+): SupportedSocialAuthProvider | null {
+  return value === 'google' || value === 'apple' ? value : null;
+}
+
+export function isIdentityAlreadyLinkedError(
+  ...values: Array<string | null | undefined>
+): boolean {
+  const normalized = values
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ');
+
+  return (
+    normalized.includes('identity is already linked') ||
+    normalized.includes('identity already linked') ||
+    normalized.includes('identity already exists')
   );
 }
 

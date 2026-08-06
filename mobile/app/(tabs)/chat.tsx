@@ -554,7 +554,7 @@ export default function ChatScreen() {
           style={styles.topAction}
         >
           <Feather name="compass" size={17} color={Colors.primary} />
-          <Text style={styles.topActionText}>Ground me</Text>
+          <Text style={styles.topActionText}>Ground</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -562,7 +562,7 @@ export default function ChatScreen() {
           style={styles.topAction}
         >
           <Feather name="life-buoy" size={17} color={Colors.primary} />
-          <Text style={styles.topActionText}>Support</Text>
+          <Text style={styles.topActionText}>Find help</Text>
         </Pressable>
       </View>
 
@@ -652,7 +652,7 @@ export default function ChatScreen() {
         style={styles.disclosure}
       >
         <Text style={styles.disclosureText}>
-          AI can make mistakes. You choose what context it receives.
+          AI guidance can be wrong. You control the context.
         </Text>
         <Feather
           name={disclosureOpen ? 'x' : 'info'}
@@ -803,33 +803,40 @@ const UNIFIED_LIBRARY_BY_ID = Object.fromEntries(
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   topBar: {
-    minHeight: 48,
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  topAction: {
+    minWidth: 0,
+    minHeight: 44,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: Colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    paddingHorizontal: 10,
-  },
-  topAction: {
-    minHeight: 38,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 999,
-    paddingHorizontal: 11,
+    borderRadius: 14,
+    paddingHorizontal: 8,
     backgroundColor: Colors.primaryLight,
   },
-  topActionText: { color: Colors.primary, fontSize: 11, fontWeight: '700' },
+  topActionText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
   contextPanel: {
     backgroundColor: Colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 14,
+    marginHorizontal: 12,
+    marginTop: 10,
+    overflow: 'hidden',
   },
   contextHeader: {
-    minHeight: 60,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -869,25 +876,29 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   disclosure: {
-    minHeight: 37,
+    minHeight: 38,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 14,
-    backgroundColor: Colors.accentLight,
+    paddingHorizontal: 13,
+    marginHorizontal: 12,
+    marginTop: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,254,248,0.62)',
   },
-  disclosureText: { flex: 1, color: Colors.textSecondary, fontSize: 10 },
+  disclosureText: { flex: 1, color: Colors.textSecondary, fontSize: 11 },
   disclosureDetail: {
     color: Colors.textSecondary,
-    fontSize: 10,
-    lineHeight: 15,
-    backgroundColor: Colors.accentLight,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
+    fontSize: 11,
+    lineHeight: 16,
+    backgroundColor: 'rgba(255,254,248,0.62)',
+    marginHorizontal: 12,
+    paddingHorizontal: 13,
+    paddingBottom: 11,
   },
   messages: { flex: 1 },
-  messagesContent: { flexGrow: 1, padding: 15, paddingBottom: 8 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 35 },
+  messagesContent: { flexGrow: 1, padding: 15, paddingTop: 10, paddingBottom: 8 },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 24 },
   aiMark: {
     width: 52,
     height: 52,
@@ -915,18 +926,20 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 20,
+    marginTop: 18,
   },
   prompt: {
-    minHeight: 40,
-    borderRadius: 999,
+    width: '48%',
+    minHeight: 48,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.card,
-    paddingHorizontal: 13,
+    paddingHorizontal: 10,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  promptText: { color: Colors.text, fontSize: 12 },
+  promptText: { color: Colors.text, fontSize: 12, lineHeight: 17, textAlign: 'center' },
   messageRow: { marginBottom: 11, alignItems: 'flex-start' },
   userRow: { alignItems: 'flex-end' },
   bubble: { maxWidth: '84%', borderRadius: 16, padding: 13 },

@@ -20,6 +20,7 @@ import {
   type AffirmationDisplayRecord,
 } from '@/lib/affirmations';
 import { loadAffirmationCatalog } from '@/lib/affirmations-client';
+import { GoToActions } from '@/components/go-to-actions';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -345,35 +346,31 @@ export default function DashboardPage() {
           </DismissibleNotice>
         )}
 
-        <section className="app-panel p-5">
-          <h2 className="font-display text-2xl font-medium text-foreground">
-            Quick actions
-          </h2>
-          <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
-            {(lowEnergyMode
-              ? [
-                  { label: 'Ground me', href: '/ground' },
-                  { label: 'One small step', href: '/habits' },
-                  { label: 'Write a note', href: '/journal' },
-                ]
-              : [
-                  { label: 'Track mood', href: '/tracker' },
-                  { label: 'Lock In', href: '/focus' },
-                  { label: 'Habits', href: '/habits' },
-                  { label: 'Journal', href: '/journal' },
-                ]
-            ).map((link) => (
-              <Button
-                key={link.href}
-                variant="outline"
-                className="justify-start"
-                onClick={() => router.push(link.href)}
-              >
-                {link.label}
-              </Button>
-            ))}
-          </div>
-        </section>
+        {lowEnergyMode ? (
+          <section className="app-panel p-5">
+            <h2 className="font-display text-2xl font-medium text-foreground">
+              Choose one
+            </h2>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {[
+                { label: 'Ground me', href: '/ground' },
+                { label: 'One small step', href: '/habits' },
+                { label: 'Write a note', href: '/journal' },
+              ].map((link) => (
+                <Button
+                  key={link.href}
+                  variant="outline"
+                  className="justify-start"
+                  onClick={() => router.push(link.href)}
+                >
+                  {link.label}
+                </Button>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <GoToActions key={moodOwnerKey ?? 'pending'} ownerKey={moodOwnerKey} />
+        )}
       </div>
     </main>
   );

@@ -53,7 +53,7 @@ describe('push subscription ownership', () => {
     expect(authContext).toContain('removeCurrentDevicePushSubscription(user.id)');
     expect(authContext).toContain('subscription.unsubscribe()');
     expect(authContext).toContain(
-      'Sign out was blocked because device reminders could not be disconnected.'
+      'Device reminders could not be disconnected.'
     );
   });
 });

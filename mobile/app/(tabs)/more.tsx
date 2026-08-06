@@ -5,12 +5,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import type { ComponentProps } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { useRouter } from 'expo-router';
 import {
   AppScreen,
   PageHeader,
-  SectionHeader,
   appUiStyles,
 } from '@/components/AppUI';
 import { Colors } from '@/lib/constants';
@@ -24,6 +23,7 @@ type Route =
   | '/focus'
   | '/ground'
   | '/meditate'
+  | '/yoga'
   | '/mind-games'
   | '/journal'
   | '/affirmations'
@@ -37,6 +37,8 @@ type Route =
 
 const GROUPS: {
   title: string;
+  description: string;
+  icon: FeatherName;
   items: {
     label: string;
     description: string;
@@ -46,6 +48,8 @@ const GROUPS: {
 }[] = [
   {
     title: 'Plan and progress',
+    description: 'Goals, routines, and focused action',
+    icon: 'trending-up',
     items: [
       {
         label: 'Goals',
@@ -75,6 +79,8 @@ const GROUPS: {
   },
   {
     title: 'Calm and reflect',
+    description: 'Grounding, movement, and private reflection',
+    icon: 'sun',
     items: [
       {
         label: 'Ground me now',
@@ -87,6 +93,12 @@ const GROUPS: {
         description: 'Breathing and guided practices',
         icon: 'wind',
         route: '/meditate',
+      },
+      {
+        label: 'Yoga',
+        description: 'Gentle chair and floor movement',
+        icon: 'activity',
+        route: '/yoga',
       },
       {
         label: 'Mind games',
@@ -110,6 +122,8 @@ const GROUPS: {
   },
   {
     title: 'Learn and connect',
+    description: 'Guidance, people, and trusted support',
+    icon: 'compass',
     items: [
       {
         label: 'Library',
@@ -159,39 +173,78 @@ const GROUPS: {
 
 export default function MoreScreen() {
   const router = useRouter();
+  const [openGroup, setOpenGroup] = useState<string | null>('Calm and reflect');
+
   return (
     <AppScreen>
       <PageHeader
         eyebrow="MHtoolkit"
-        title="Everything in one place."
-        description="Choose a tool based on what you need right now."
+        title="Find the right tool."
+        description="Open a section, choose one next step, and leave the rest for later."
         icon="grid"
       />
       {GROUPS.map((group) => (
-        <View key={group.title}>
-          <SectionHeader title={group.title} />
-          <View style={styles.group}>
-            {group.items.map((item) => (
-              <Pressable
-                key={item.route}
-                accessibilityRole="button"
-                onPress={() => router.push(item.route)}
-                style={({ pressed }) => [
-                  styles.row,
-                  pressed && { opacity: 0.76 },
-                ]}
-              >
-                <View style={styles.icon}>
-                  <Feather name={item.icon} size={19} color={Colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.title}>{item.label}</Text>
-                  <Text style={appUiStyles.muted}>{item.description}</Text>
-                </View>
-                <Feather name="chevron-right" size={19} color={Colors.sage} />
-              </Pressable>
-            ))}
-          </View>
+        <View key={group.title} style={styles.group}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: openGroup === group.title }}
+            accessibilityLabel={`${group.title}, ${group.items.length} tools`}
+            accessibilityHint={
+              openGroup === group.title
+                ? 'Collapses this group'
+                : 'Expands this group'
+            }
+            onPress={() => {
+              setOpenGroup((current) =>
+                current === group.title ? null : group.title
+              );
+            }}
+            style={({ pressed }) => [
+              styles.groupHeader,
+              pressed && styles.pressed,
+            ]}
+          >
+            <View style={styles.groupIcon}>
+              <Feather name={group.icon} size={19} color={Colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.groupTitle}>{group.title}</Text>
+              <Text style={styles.groupDescription}>{group.description}</Text>
+            </View>
+            <View style={styles.groupCount}>
+              <Text style={styles.groupCountText}>{group.items.length}</Text>
+            </View>
+            <Feather
+              name={openGroup === group.title ? 'chevron-up' : 'chevron-down'}
+              size={19}
+              color={Colors.sage}
+            />
+          </Pressable>
+          {openGroup === group.title ? (
+            <View style={styles.groupItems}>
+              {group.items.map((item, index) => (
+                <Pressable
+                  key={item.route}
+                  accessibilityRole="button"
+                  onPress={() => router.push(item.route)}
+                  style={({ pressed }) => [
+                    styles.row,
+                    index === group.items.length - 1 && styles.lastRow,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={styles.icon}>
+                    <Feather name={item.icon} size={19} color={Colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>{item.label}</Text>
+                    <Text style={appUiStyles.muted}>{item.description}</Text>
+                  </View>
+                  <Feather name="chevron-right" size={19} color={Colors.sage} />
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
       ))}
     </AppScreen>
@@ -205,18 +258,69 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     borderRadius: 16,
     backgroundColor: Colors.card,
-    marginBottom: 10,
+    marginBottom: 12,
+    shadowColor: '#163a32',
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 1,
+  },
+  groupHeader: {
+    minHeight: 82,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  groupIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupTitle: {
+    color: Colors.text,
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '700',
+  },
+  groupDescription: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  groupCount: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupCountText: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  groupItems: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
   },
   row: {
-    minHeight: 75,
+    minHeight: 68,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
     paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingVertical: 9,
   },
+  lastRow: { borderBottomWidth: 0 },
   icon: {
     width: 42,
     height: 42,
@@ -232,4 +336,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 2,
   },
+  pressed: { opacity: 0.72 },
 });

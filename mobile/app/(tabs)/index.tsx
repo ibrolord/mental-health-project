@@ -15,10 +15,9 @@ import {
 } from '@/lib/check-in';
 import { chooseRandomAffirmation } from '@/lib/affirmations';
 import { loadAffirmationCatalog } from '@/lib/affirmations-client';
-import type { ComponentProps } from 'react';
+import { GoToActions } from '@/components/GoToActions';
+import { getMoodLabel, MoodGlyph, MoodPicker } from '@/components/MoodPicker';
 
-const moodEmojis: MoodEmoji[] = ['\u{1F604}', '\u{1F642}', '\u{1F610}', '\u{1F61E}', '\u{1F622}'];
-const moodLabels = ['Great', 'Good', 'Okay', 'Low', 'Very Low'];
 const CHALLENGE_SHARE_URL =
   'https://mhtoolkit.vercel.app/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share';
 
@@ -38,6 +37,7 @@ export default function DashboardScreen() {
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
+  const ownerKey = queryValue ? `${queryColumn}:${queryValue}` : null;
   const canSaveMood = Boolean(queryValue && user?.id);
   useEffect(() => {
     if (!queryValue) return;
@@ -108,18 +108,6 @@ export default function DashboardScreen() {
     }
   };
 
-  const quickActions: {
-    label: string;
-    icon: ComponentProps<typeof Feather>['name'];
-    route: '/ground' | '/focus' | '/habits' | '/journal' | '/plans' | '/library' | '/partner';
-  }[] = [
-    { label: 'Ground me', icon: 'compass', route: '/ground' },
-    { label: 'Focus', icon: 'clock', route: '/focus' },
-    { label: 'Habits', icon: 'repeat', route: '/habits' },
-    { label: 'My plans', icon: 'clipboard', route: '/plans' },
-    { label: 'Library', icon: 'book-open', route: '/library' },
-    { label: 'Accountability', icon: 'users', route: '/partner' },
-  ];
   const lowEnergyActions = [
     { label: 'Ground me', icon: 'compass' as const, route: '/ground' as const },
     { label: 'One small step', icon: 'repeat' as const, route: '/habits' as const },
@@ -145,9 +133,10 @@ export default function DashboardScreen() {
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <View style={s.headerRow}>
         <View style={{ flex: 1 }}>
-          <Text style={s.title}>{lowEnergyMode ? 'Keep it simple' : 'Welcome back'}</Text>
+          <Text style={s.eyebrow}>{lowEnergyMode ? 'ONE STEP' : 'TODAY'}</Text>
+          <Text style={s.title}>{lowEnergyMode ? 'Keep it simple' : 'How are you today?'}</Text>
           <Text style={s.subtitle}>
-            {lowEnergyMode ? 'Choose one thing. You can stop there.' : 'Your mental health snapshot'}
+            {lowEnergyMode ? 'Choose one thing. You can stop there.' : 'Start with a quick, private check-in.'}
           </Text>
         </View>
         <TouchableOpacity
@@ -163,26 +152,23 @@ export default function DashboardScreen() {
       </View>
 
       {/* Mood Check-in */}
-      <View style={s.card}>
-        <Text style={s.cardTitle}>How are you feeling?</Text>
-        <Text style={s.cardSubtitle}>Track your mood for today</Text>
-        <View style={s.moodRow}>
-          {moodEmojis.map((emoji, i) => (
-            <TouchableOpacity
-              key={emoji}
-              onPress={() => saveMood(emoji)}
-              disabled={savingMood || !canSaveMood}
-              style={[s.moodBtn, todayMood === emoji && s.moodBtnActive]}
-              accessibilityState={{
-                disabled: savingMood || !canSaveMood,
-                selected: todayMood === emoji,
-              }}
-            >
-              <Text style={s.moodEmoji}>{emoji}</Text>
-              <Text style={s.moodLabel}>{moodLabels[i]}</Text>
-            </TouchableOpacity>
-          ))}
+      <View style={[s.card, s.checkInCard]}>
+        <View style={s.cardHeadingRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.cardTitle}>Name the feeling</Text>
+            <Text style={s.cardSubtitle}>No score. Just a moment to notice.</Text>
+          </View>
+          {todayMood ? (
+            <View style={s.todayMood}>
+              <MoodGlyph mood={todayMood} size={25} />
+            </View>
+          ) : null}
         </View>
+        <MoodPicker
+          value={todayMood}
+          onChange={(mood) => void saveMood(mood)}
+          disabled={savingMood || !canSaveMood}
+        />
         {moodStatus ? (
           <Text
             accessibilityRole={moodStatus.type === 'error' ? 'alert' : 'text'}
@@ -197,16 +183,36 @@ export default function DashboardScreen() {
       </View>
 
       {/* Week Overview */}
-      {!lowEnergyMode ? <View style={s.card}>
-        <Text style={s.cardTitle}>This Week</Text>
-        <Text style={s.cardSubtitle}>Your mood over the last 7 days</Text>
+      {!lowEnergyMode ? <View style={[s.card, s.weekCard]}>
+        <View style={s.cardHeadingRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.cardTitle}>Your week</Text>
+            <Text style={s.cardSubtitle}>Seven days at a glance</Text>
+          </View>
+          <Feather name="calendar" size={18} color={Colors.sage} />
+        </View>
         <View style={s.weekRow}>
           {Array.from({ length: 7 }).map((_, i) => {
             const date = subDays(new Date(), 6 - i);
             const dayMood = getLatestCheckInForDate(weekMoods, date);
             return (
-              <View key={i} style={s.weekDay}>
-                <Text style={s.weekEmoji}>{dayMood?.emoji || '·'}</Text>
+              <View
+                key={i}
+                accessible
+                accessibilityLabel={`${format(date, 'EEEE')}, ${
+                  dayMood
+                    ? `${getMoodLabel(dayMood.emoji as MoodEmoji)} mood`
+                    : 'no check-in'
+                }`}
+                style={s.weekDay}
+              >
+                <View style={[s.weekMarker, dayMood && s.weekMarkerActive]}>
+                  {dayMood ? (
+                    <MoodGlyph mood={dayMood.emoji as MoodEmoji} size={20} />
+                  ) : (
+                    <Text style={s.weekEmoji}>–</Text>
+                  )}
+                </View>
                 <Text style={s.weekLabel}>{format(date, 'EEE')}</Text>
               </View>
             );
@@ -257,47 +263,56 @@ export default function DashboardScreen() {
         </View>
       ) : null}
 
-      {/* Quick Actions */}
-      <View style={s.card}>
-        <Text style={s.cardTitle}>Quick Actions</Text>
-        <View style={s.actionsGrid}>
-          {(lowEnergyMode ? lowEnergyActions : quickActions).map((action) => (
-            <TouchableOpacity
-              key={action.route}
-              style={s.actionBtn}
-              onPress={() => router.push(action.route)}
-            >
-              <Feather name={action.icon} size={18} color={Colors.primary} />
-              <Text style={s.actionLabel}>{action.label}</Text>
-            </TouchableOpacity>
-          ))}
+      {lowEnergyMode ? (
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Choose one</Text>
+          <View style={s.actionsGrid}>
+            {lowEnergyActions.map((action) => (
+              <TouchableOpacity
+                key={action.route}
+                style={s.actionBtn}
+                onPress={() => router.push(action.route)}
+              >
+                <Feather name={action.icon} size={18} color={Colors.primary} />
+                <Text style={s.actionLabel}>{action.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
-      </View>
+      ) : (
+        <GoToActions
+          key={ownerKey ?? 'pending'}
+          ownerKey={ownerKey}
+          onNavigate={(route) => router.push(route)}
+        />
+      )}
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 16, paddingBottom: 40 },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 20 },
-  title: { fontSize: 28, fontWeight: '700', color: Colors.text, marginBottom: 4 },
-  subtitle: { fontSize: 16, color: Colors.textSecondary },
-  energyToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: Colors.border, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 9, backgroundColor: Colors.card },
+  content: { padding: 18, paddingBottom: 42 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 22 },
+  eyebrow: { color: Colors.accent, fontSize: 11, lineHeight: 14, fontWeight: '800', letterSpacing: 1.7, marginBottom: 6 },
+  title: { fontSize: 30, lineHeight: 35, fontWeight: '700', letterSpacing: -0.6, color: Colors.text, marginBottom: 5 },
+  subtitle: { fontSize: 15, lineHeight: 21, color: Colors.textSecondary },
+  energyToggle: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: Colors.border, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: Colors.card },
   energyToggleText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
-  card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 4 },
-  cardSubtitle: { fontSize: 14, color: Colors.textSecondary, marginBottom: 16 },
-  moodRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  moodBtn: { alignItems: 'center', padding: 10, borderRadius: 12 },
-  moodBtnActive: { backgroundColor: Colors.primaryLight, borderWidth: 2, borderColor: Colors.primary },
-  moodEmoji: { fontSize: 28 },
-  moodLabel: { fontSize: 11, color: Colors.textSecondary, marginTop: 4 },
+  card: { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: 18, padding: 17, marginBottom: 13, shadowColor: '#163a32', shadowOpacity: 0.055, shadowRadius: 14, shadowOffset: { width: 0, height: 7 }, elevation: 2 },
+  checkInCard: { paddingBottom: 15 },
+  cardHeadingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 14 },
+  cardTitle: { fontSize: 19, lineHeight: 24, fontWeight: '700', color: Colors.text },
+  cardSubtitle: { fontSize: 13, lineHeight: 18, color: Colors.textSecondary, marginTop: 3 },
+  todayMood: { minWidth: 31, minHeight: 31, alignItems: 'center', justifyContent: 'center' },
   moodStatus: { color: Colors.primary, fontSize: 13, marginTop: 12 },
   moodStatusError: { color: '#b42318' },
-  weekRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 60 },
-  weekDay: { alignItems: 'center' },
-  weekEmoji: { fontSize: 22 },
+  weekCard: { paddingBottom: 15 },
+  weekRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  weekDay: { flex: 1, alignItems: 'center' },
+  weekMarker: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' },
+  weekMarkerActive: { backgroundColor: Colors.primaryLight },
+  weekEmoji: { color: Colors.textSecondary, fontSize: 17, lineHeight: 22 },
   weekLabel: { fontSize: 11, color: Colors.textSecondary, marginTop: 4 },
   challengeCard: { backgroundColor: '#edf4ea', borderWidth: 1, borderColor: '#bfd0c4', borderRadius: 16, padding: 20, marginBottom: 16 },
   challengeEyebrow: { color: '#a84c34', fontSize: 11, fontWeight: '700', letterSpacing: 1.4 },

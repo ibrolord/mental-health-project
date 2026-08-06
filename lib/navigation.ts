@@ -12,6 +12,7 @@ import {
   LifeBuoy,
   MessageCircle,
   PenLine,
+  PersonStanding,
   Settings,
   SmilePlus,
   Sparkles,
@@ -107,6 +108,12 @@ export const MORE_GROUPS: NavGroup[] = [
         label: 'Meditate',
         icon: Wind,
         blurb: 'Guided calm and focus',
+      },
+      {
+        href: '/yoga',
+        label: 'Yoga',
+        icon: PersonStanding,
+        blurb: 'Gentle guided movement',
       },
       { href: '/library', label: 'Library', icon: BookOpen, blurb: 'Books and videos' },
       {

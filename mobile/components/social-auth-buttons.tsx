@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -10,26 +10,41 @@ import {
 import * as AppleAuthentication from 'expo-apple-authentication';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import {
+  getAnonymousProfileDataConflictUserId,
+  isAnonymousProfileDataConflict,
   useAuth,
   type SocialAuthIntent,
   type SocialAuthProvider,
 } from '@/lib/auth-context';
 import { getEnabledAuthProviders } from '@/lib/auth-providers';
+import { isIdentityAlreadyLinkedError } from '@/lib/social-auth';
 import { Colors } from '@/lib/constants';
 
 export function SocialAuthButtons({
   intent,
   onComplete,
+  disabled = false,
+  submissionRef: sharedSubmissionRef,
+  onAnonymousDataBlocked,
+  onIdentityAlreadyLinked,
 }: {
   intent: SocialAuthIntent;
   onComplete: () => void;
+  disabled?: boolean;
+  submissionRef?: MutableRefObject<boolean>;
+  onAnonymousDataBlocked?: (
+    provider: SocialAuthProvider,
+    anonymousUserId: string
+  ) => void;
+  onIdentityAlreadyLinked?: (provider: SocialAuthProvider) => void;
 }) {
   const { continueWithProvider } = useAuth();
   const [available, setAvailable] = useState({ google: false, apple: false });
   const [ready, setReady] = useState(false);
   const [pending, setPending] = useState<SocialAuthProvider | null>(null);
   const [error, setError] = useState('');
-  const submissionRef = useRef(false);
+  const localSubmissionRef = useRef(false);
+  const submissionRef = sharedSubmissionRef ?? localSubmissionRef;
 
   useEffect(() => {
     let active = true;
@@ -59,7 +74,7 @@ export function SocialAuthButtons({
   if (!ready || (!available.google && !available.apple)) return null;
 
   const run = async (provider: SocialAuthProvider) => {
-    if (submissionRef.current) return;
+    if (disabled || submissionRef.current) return;
     submissionRef.current = true;
     setPending(provider);
     setError('');
@@ -67,11 +82,26 @@ export function SocialAuthButtons({
       const completed = await continueWithProvider(provider, intent);
       if (completed) onComplete();
     } catch (authError) {
-      setError(
-        authError instanceof Error
-          ? authError.message
-          : `${provider === 'google' ? 'Google' : 'Apple'} sign-in failed.`
-      );
+      const anonymousUserId = getAnonymousProfileDataConflictUserId(authError);
+      if (
+        intent === 'upgrade' &&
+        isIdentityAlreadyLinkedError(authError) &&
+        onIdentityAlreadyLinked
+      ) {
+        onIdentityAlreadyLinked(provider);
+      } else if (
+        anonymousUserId &&
+        isAnonymousProfileDataConflict(authError) &&
+        onAnonymousDataBlocked
+      ) {
+        onAnonymousDataBlocked(provider, anonymousUserId);
+      } else {
+        setError(
+          authError instanceof Error
+            ? authError.message
+            : `${provider === 'google' ? 'Google' : 'Apple'} sign-in failed.`
+        );
+      }
     } finally {
       submissionRef.current = false;
       setPending(null);
@@ -88,9 +118,9 @@ export function SocialAuthButtons({
 
       {available.google ? (
         <TouchableOpacity
-          style={[s.providerButton, pending && s.disabled]}
+          style={[s.providerButton, (disabled || pending) && s.disabled]}
           onPress={() => void run('google')}
-          disabled={pending !== null}
+          disabled={disabled || pending !== null}
           accessibilityRole="button"
           accessibilityLabel={`${intent === 'sign-in' ? 'Sign in' : 'Continue'} with Google`}
         >
@@ -107,8 +137,8 @@ export function SocialAuthButtons({
 
       {available.apple && Platform.OS === 'ios' ? (
         <View
-          pointerEvents={pending ? 'none' : 'auto'}
-          style={pending && s.disabled}
+          pointerEvents={disabled || pending ? 'none' : 'auto'}
+          style={(disabled || pending) && s.disabled}
         >
           <AppleAuthentication.AppleAuthenticationButton
             buttonType={
@@ -126,9 +156,9 @@ export function SocialAuthButtons({
 
       {available.apple && Platform.OS === 'android' ? (
         <TouchableOpacity
-          style={[s.appleOAuthButton, pending && s.disabled]}
+          style={[s.appleOAuthButton, (disabled || pending) && s.disabled]}
           onPress={() => void run('apple')}
-          disabled={pending !== null}
+          disabled={disabled || pending !== null}
           accessibilityRole="button"
           accessibilityLabel={`${intent === 'sign-in' ? 'Sign in' : 'Continue'} with Apple`}
         >

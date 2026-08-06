@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-08-05.2",
+  "checklistVersion": "2026-08-06.3",
   "platform": "ios",
-  "expectedInventory": { "routes": 25, "routeChecks": 466, "workflows": 86, "total": 552 },
+  "expectedInventory": { "routes": 26, "routeChecks": 489, "workflows": 94, "total": 583 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -33,6 +33,7 @@
       "data.safety-plan": { "identityRequirements": ["saved-anonymous"] },
       "data.staying-well": { "identityRequirements": ["saved-anonymous"] },
       "data.sleep-diary": { "identityRequirements": ["saved-anonymous"] },
+      "data.go-to-owner-isolation": { "identityRequirements": ["saved-anonymous", "email-owner"] },
       "safety.offline-plan": { "identityRequirements": ["saved-anonymous", "email-owner"] },
       "ai.context": { "identityRequirements": ["email-owner"] },
       "ai.chat-live": { "identityRequirements": ["email-owner"] },
@@ -106,7 +107,7 @@
       "source": "app/(tabs)/index.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "share-challenge", "low-energy-mode", "grounding", "focus", "habits", "plans", "library", "accountability"]
+      "controls": ["mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "share-challenge", "low-energy-mode", "grounding", "focus", "habits", "go-to-customize", "go-to-select-limit", "go-to-cue", "go-to-reorder", "go-to-save-relaunch", "go-to-storage-failure"]
     },
     {
       "id": "mood-tracker",
@@ -138,7 +139,7 @@
       "source": "app/(tabs)/more.tsx",
       "kind": "tab",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["goals", "habits", "plans", "focus", "journal", "affirmations", "grounding", "meditation", "mind-games", "library", "accountability", "resources", "research", "support", "settings"]
+      "controls": ["goals", "habits", "plans", "focus", "journal", "affirmations", "grounding", "meditation", "yoga", "mind-games", "library", "accountability", "resources", "research", "support", "settings"]
     },
     {
       "id": "login",
@@ -227,6 +228,14 @@
       "kind": "stack",
       "identityRequirements": ["fresh-anonymous"],
       "controls": ["all-filter", "issue-filters", "open-practice", "start", "pause", "resume", "reset", "sound", "choose-another"]
+    },
+    {
+      "id": "yoga",
+      "path": "/yoga",
+      "source": "app/yoga.tsx",
+      "kind": "stack",
+      "identityRequirements": ["fresh-anonymous"],
+      "controls": ["sequence-select", "chair-practice", "floor-practice", "pose-images", "start", "pause", "resume", "reset", "step-navigation", "choose-another", "sound", "safety-copy"]
     },
     {
       "id": "mind-games",
@@ -341,6 +350,7 @@
     { "id": "data.safety-plan", "area": "safety", "kind": "manual", "title": "All six Safety Plan parts save, update, delete, and remain owner-only without inferred content" },
     { "id": "data.staying-well", "area": "data", "kind": "manual", "title": "Staying Well items create, validate, update, delete, and persist without clinical claims" },
     { "id": "data.sleep-diary", "area": "data", "kind": "manual", "title": "Sleep diary saves the complete factual timeline, validates ordering, upserts one entry per wake date, and deletes cleanly" },
+    { "id": "data.go-to-owner-isolation", "area": "privacy", "kind": "manual", "title": "Two distinct owners keep separate go-to actions and cue text through switches and relaunches without cross-owner display" },
     { "id": "safety.offline-plan", "area": "safety", "kind": "manual", "title": "Encrypted per-owner Safety Plan cache is read-only offline, survives relaunch, and clears on owner change or deletion" },
     { "id": "data.focus-clock", "area": "data", "kind": "manual", "title": "Focus clock remains accurate through backgrounding, pause, resume, stop, and completion" },
     { "id": "data.assessments", "area": "data", "kind": "manual", "title": "GAD-7, PHQ-9, and CBI wording, scoring, progress, results, impact, and persistence are correct" },
@@ -387,6 +397,13 @@
     { "id": "regression.goal-duplicates", "area": "regression", "kind": "manual", "title": "Rapid goal adds and retry paths do not create duplicates" },
     { "id": "regression.account-creation", "area": "regression", "kind": "manual", "title": "Account creation, confirmation, password setup, and return to app complete visibly" },
     { "id": "regression.accountability", "area": "regression", "kind": "manual", "title": "Invite, accept, scopes, counts, celebration, reward, and revoke work across two accounts" },
-    { "id": "regression.ai-chat", "area": "regression", "kind": "manual", "title": "AI chat sends and receives on the exact production artifact" }
+    { "id": "regression.ai-chat", "area": "regression", "kind": "manual", "title": "AI chat sends and receives on the exact production artifact" },
+    { "id": "wellbeing.yoga-directional-art", "area": "wellbeing", "kind": "manual", "title": "Every yoga instruction matches its visible pose, side, neutral alignment, and direction-specific description" },
+    { "id": "wellbeing.yoga-timer-lifecycle", "area": "wellbeing", "kind": "manual", "title": "Yoga timing remains accurate through delayed ticks and pauses visibly when the app backgrounds" },
+    { "id": "wellbeing.yoga-voiceover", "area": "accessibility", "kind": "manual", "title": "VoiceOver announces yoga step changes and completion once without announcing each elapsed second" },
+    { "id": "wellbeing.yoga-targets", "area": "accessibility", "kind": "manual", "title": "Every yoga control has a descriptive label and a non-overlapping target of at least 44 by 44 points" },
+    { "id": "wellbeing.yoga-audio-cleanup", "area": "wellbeing", "kind": "manual", "title": "Yoga rain and ocean sounds start, switch, stop, fail safely, and release on navigation without overlap" },
+    { "id": "wellbeing.yoga-restart", "area": "wellbeing", "kind": "manual", "title": "Yoga completion, restart, manual step navigation, reset, and sequence switching restore the correct state" },
+    { "id": "wellbeing.yoga-progress", "area": "accessibility", "kind": "manual", "title": "Yoga progress reports whole-practice progress consistently and reaches completion exactly once" }
   ]
 }

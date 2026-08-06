@@ -12,7 +12,12 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
  * - Supabase session cookie (web app)
  * - X-Session-Id header for anonymous users (validated against DB)
  */
-export async function verifyAuth(request: NextRequest): Promise<{ valid: boolean; userId?: string; sessionId?: string }> {
+export async function verifyAuth(request: NextRequest): Promise<{
+  valid: boolean;
+  userId?: string;
+  sessionId?: string;
+  isAnonymous?: boolean;
+}> {
   const authHeader = request.headers.get('authorization');
   const sessionIdHeader = request.headers.get('x-session-id');
 
@@ -23,7 +28,11 @@ export async function verifyAuth(request: NextRequest): Promise<{ valid: boolean
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (!error && user) {
-      return { valid: true, userId: user.id };
+      return {
+        valid: true,
+        userId: user.id,
+        isAnonymous: user.is_anonymous === true,
+      };
     }
   }
 

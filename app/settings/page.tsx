@@ -11,6 +11,7 @@ import { apiRequest } from '@/lib/api/client';
 import { hasAiDataSharingConsent, resetAiDataSharingConsent } from '@/lib/ai-consent';
 import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
 import { clearFullContextPreference } from '@/lib/ai/full-context-preference';
+import { clearGoToActions } from '@/lib/go-to-actions-storage';
 import { PushNotificationSettings } from '@/components/push-notification-settings';
 import { PrivacyActivity } from '@/components/privacy-activity';
 import { VisitBriefBuilder } from '@/components/visit-brief-builder';
@@ -28,6 +29,7 @@ export default function SettingsPage() {
       () => clearStoredAcquisitionAttribution(),
       () => resetAiDataSharingConsent(ownerKey),
       () => clearFullContextPreference(ownerKey),
+      () => clearGoToActions(ownerKey),
     ].map((operation) => {
       try {
         return operation();

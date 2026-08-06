@@ -26,6 +26,12 @@ describe('mobile authentication resilience', () => {
     expect(loginScreen).toContain("name={showPassword ? 'eye-off' : 'eye'}");
   });
 
+  it('does not report provider cancellation after recovery sign-in completes', () => {
+    expect(loginScreen).toMatch(
+      /if \(completed\) \{\s*returnToApp\(\);\s*\} else \{\s*setError\('Sign-in was canceled\. You can try again\.'\);/
+    );
+  });
+
   it.each([
     [undefined, undefined],
     ['', ''],

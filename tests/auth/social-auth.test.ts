@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   hasOAuthCallbackParameters,
+  isIdentityAlreadyLinkedError,
+  parseSocialAuthProvider,
   socialAuthCompletionError,
 } from '../../lib/auth/social';
 
@@ -14,9 +16,25 @@ describe('social auth callback parameters', () => {
 
   it('detects provider errors and ignores app-only callback parameters', () => {
     expect(hasOAuthCallbackParameters('?error=access_denied', '')).toBe(true);
+    expect(hasOAuthCallbackParameters('?error_code=identity_already_exists', '')).toBe(true);
     expect(
       hasOAuthCallbackParameters('?next=%2Fdashboard&upgrade_user_id=user-1', '')
     ).toBe(false);
+  });
+});
+
+describe('social auth recovery', () => {
+  it('recognizes linked-identity messages and error codes', () => {
+    expect(isIdentityAlreadyLinkedError('Identity is already linked to another user')).toBe(true);
+    expect(isIdentityAlreadyLinkedError(null, 'identity_already_exists')).toBe(true);
+    expect(isIdentityAlreadyLinkedError('Access denied')).toBe(false);
+  });
+
+  it('allows only supported provider query values', () => {
+    expect(parseSocialAuthProvider('google')).toBe('google');
+    expect(parseSocialAuthProvider('apple')).toBe('apple');
+    expect(parseSocialAuthProvider('github')).toBeNull();
+    expect(parseSocialAuthProvider(null)).toBeNull();
   });
 });
 

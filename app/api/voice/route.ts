@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   generateVoiceResponse,
   transcribeAudio,
-  VOICE_NAMES,
-  type VoiceName,
 } from '@/lib/ai/voice-chat';
 import {
   createAudioFile,
@@ -18,7 +16,6 @@ export async function OPTIONS() {
 
 const MAX_TTS_CHARACTERS = 1_200;
 const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
-const voiceNames = new Set<string>(VOICE_NAMES);
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return NextResponse.json(body, { status, headers: corsHeaders() });
@@ -37,9 +34,8 @@ export async function POST(request: NextRequest) {
       if (Number.isFinite(declaredLength) && declaredLength > 16 * 1024) {
         return jsonResponse({ error: 'Text is too long' }, 413);
       }
-      const body = (await request.json()) as { text?: unknown; voice?: unknown };
+      const body = (await request.json()) as { text?: unknown };
       const text = typeof body.text === 'string' ? body.text.trim() : '';
-      const voice = body.voice === undefined ? 'nova' : body.voice;
 
       if (!text) {
         return jsonResponse({ error: 'Text is required' }, 400);
@@ -47,17 +43,17 @@ export async function POST(request: NextRequest) {
       if (text.length > MAX_TTS_CHARACTERS) {
         return jsonResponse({ error: 'Text is too long' }, 413);
       }
-      if (typeof voice !== 'string' || !voiceNames.has(voice)) {
-        return jsonResponse({ error: 'Invalid voice' }, 400);
-      }
 
-      const audioResponse = await generateVoiceResponse(text, voice as VoiceName);
+      const audioResponse = await generateVoiceResponse(text);
       const buffer = Buffer.from(await audioResponse.arrayBuffer());
+      const audioContentType =
+        audioResponse.headers.get('content-type')?.split(';', 1)[0]
+        || 'audio/mpeg';
 
       return new NextResponse(buffer, {
         headers: {
           ...corsHeaders(),
-          'Content-Type': 'audio/mpeg',
+          'Content-Type': audioContentType,
           'Content-Length': buffer.length.toString(),
         },
       });

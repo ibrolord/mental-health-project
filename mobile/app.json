@@ -20,7 +20,10 @@
       "bundleIdentifier": "com.mhtoolkit.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "MHtoolkit uses the microphone only during a live voice session so the AI can hear and respond to you.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "audio"
+        ]
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [

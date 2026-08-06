@@ -64,9 +64,28 @@ describe('audio-only Realtime native config', () => {
     );
   });
 
-  it('keeps push-to-talk independent from paid server speech and Gemini-compatible', () => {
+  it('uses generated speech with an authenticated device-voice fallback', () => {
     expect(voiceScreen).toContain("import * as Speech from 'expo-speech'");
-    expect(voiceScreen).toContain('Speech.speak(text');
+    expect(voiceScreen).toContain('Speech.speak(spokenText');
+    expect(voiceScreen).toContain('Speech.VoiceQuality.Enhanced');
+    expect(voiceScreen).toContain('voice: deviceVoice?.identifier');
+    expect(voiceScreen).toContain('body: JSON.stringify({ text: spokenText })');
+    expect(voiceScreen).toContain("Accept: 'audio/*'");
+    expect(voiceScreen).toContain('...(await getAuthHeaders())');
+    expect(voiceScreen).toContain('Audio.Sound.createAsync({ uri: path })');
+    expect(voiceScreen).toContain('speechFetchAbortRef.current?.abort()');
+    expect(voiceScreen).toContain('fallbackTurnAbortRef.current?.abort()');
+    expect(voiceScreen).toContain('realtimeTurnAbortRef.current?.abort()');
+    expect(voiceScreen).toContain('unownedGeneratedSpeechPath');
+    expect(voiceScreen).toContain('generatedSpeechReleaseRef.current = trackedRelease');
+    expect(voiceScreen).toContain('MAX_GENERATED_SPEECH_REQUEST_MS');
+    expect(voiceScreen).toContain('MAX_TRANSCRIPTION_REQUEST_MS');
+    expect(voiceScreen).toContain('MAX_CHAT_REQUEST_MS');
+    expect(voiceScreen).toContain('MAX_REALTIME_CONTROL_REQUEST_MS');
+    expect(voiceScreen).toContain('const connectIsCurrent');
+    expect(voiceScreen).toMatch(
+      /await confirmRealtimeSession\(API_URL, grantId\);[\s\S]*if \(!connectIsCurrent\(\)\)/
+    );
     expect(voiceScreen).toContain("extension: '.wav'");
     expect(voiceScreen).toContain('Audio.IOSOutputFormat.LINEARPCM');
     expect(voiceScreen).toContain("extension: '.aac'");
@@ -75,6 +94,5 @@ describe('audio-only Realtime native config', () => {
     expect(voiceScreen).toMatch(
       /catch \{[\s\S]*recording\.stopAndUnloadAsync\(\)\.catch[\s\S]*Audio\.setAudioModeAsync/
     );
-    expect(voiceScreen).not.toContain("body: JSON.stringify({ text, voice: 'nova' })");
   });
 });

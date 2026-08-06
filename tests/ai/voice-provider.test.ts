@@ -10,6 +10,7 @@ vi.mock('@google/genai', () => ({
   GoogleGenAI: vi.fn(() => ({
     models: { generateContent: mocks.generateContent },
   })),
+  Modality: { AUDIO: 'AUDIO' },
 }));
 
 vi.mock('openai', () => ({
@@ -21,7 +22,10 @@ vi.mock('openai', () => ({
   })),
 }));
 
-import { transcribeAudio } from '../../lib/ai/voice-chat';
+import {
+  generateVoiceResponse,
+  transcribeAudio,
+} from '../../lib/ai/voice-chat';
 
 const originalGoogleKey = process.env.GOOGLE_API_KEY;
 const originalOpenAiKey = process.env.OPENAI_API_KEY;
@@ -35,8 +39,10 @@ describe('voice transcription providers', () => {
     delete process.env.GEMINI_MODEL;
     delete process.env.GEMINI_TRANSCRIPTION_MODEL;
     mocks.generateContent.mockReset();
+    mocks.speechCreate.mockReset();
     mocks.transcriptionCreate.mockReset();
     mocks.generateContent.mockResolvedValue({ text: '  Hello from the recording.  ' });
+    mocks.speechCreate.mockResolvedValue(new Response(new Uint8Array([1, 2, 3])));
     mocks.transcriptionCreate.mockResolvedValue({ text: 'OpenAI transcript' });
   });
 
@@ -71,9 +77,59 @@ describe('voice transcription providers', () => {
           { inlineData: { data: 'AQID', mimeType: 'audio/wav' } },
         ],
       }],
-      config: { temperature: 0 },
+      config: {
+        abortSignal: expect.any(AbortSignal),
+        temperature: 0,
+      },
     });
     expect(mocks.transcriptionCreate).not.toHaveBeenCalled();
+  });
+
+  it('generates quality-optimized speech with the preferred natural voice', async () => {
+    mocks.generateContent.mockResolvedValueOnce({
+      data: Buffer.from([1, 2, 3, 4]).toString('base64'),
+    });
+    const response = await generateVoiceResponse('Take one slow breath.');
+
+    expect(mocks.generateContent).toHaveBeenCalledWith({
+      model: 'gemini-3.1-flash-tts-preview',
+      contents: [{
+        role: 'user',
+        parts: [{ text: expect.stringContaining('Take one slow breath.') }],
+      }],
+      config: {
+        abortSignal: expect.any(AbortSignal),
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          languageCode: 'en-US',
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Sulafat' },
+          },
+        },
+      },
+    });
+    expect(mocks.speechCreate).not.toHaveBeenCalled();
+    expect(response.headers.get('content-type')).toBe('audio/wav');
+    const wav = Buffer.from(await response.arrayBuffer());
+    expect(wav.subarray(0, 4).toString('ascii')).toBe('RIFF');
+    expect(wav.subarray(8, 12).toString('ascii')).toBe('WAVE');
+  });
+
+  it('falls back to quality-optimized OpenAI speech when Gemini TTS fails', async () => {
+    mocks.generateContent.mockRejectedValueOnce(new Error('Gemini TTS unavailable'));
+
+    await generateVoiceResponse('Take one slow breath.');
+
+    expect(mocks.speechCreate).toHaveBeenCalledWith(
+      {
+        model: 'tts-1-hd',
+        voice: 'marin',
+        input: 'Take one slow breath.',
+        response_format: 'mp3',
+        speed: 0.96,
+      },
+      { maxRetries: 0, timeout: 12_000 }
+    );
   });
 
   it('uses Gemini for Android AAC without requiring OpenAI', async () => {
@@ -114,7 +170,8 @@ describe('voice transcription providers', () => {
       transcribeAudio(new File(['audio'], 'voice.wav', { type: 'audio/wav' }))
     ).resolves.toBe('OpenAI transcript');
     expect(mocks.transcriptionCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'gpt-4o-mini-transcribe' })
+      expect.objectContaining({ model: 'gpt-4o-mini-transcribe' }),
+      { maxRetries: 0, timeout: 12_000 }
     );
   });
 

@@ -57,6 +57,13 @@ const SECTIONS = [
     evidenceIds: ['slow-breathing', 'nature-sound'],
   },
   {
+    id: 'movement',
+    title: 'Yoga and gentle movement',
+    summary:
+      'Beginner chair and supported floor movement, with narrow claims and clear stop guidance.',
+    evidenceIds: ['yoga-safety', 'yoga-depression', 'physical-activity'],
+  },
+  {
     id: 'reminders',
     title: 'Reminders',
     summary:

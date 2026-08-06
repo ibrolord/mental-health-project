@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
+import { Alert, View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
@@ -9,9 +9,18 @@ import type { MoodEmoji } from '@/lib/types';
 import { saveCheckInWithAttribution } from '@/lib/acquisition';
 import { getLocalCheckInFields } from '@/lib/check-in';
 import { collectMoodTags, filterMoodEntriesByTag } from '@/lib/mood-filter';
-
-const moodEmojis: MoodEmoji[] = ['\u{1F604}', '\u{1F642}', '\u{1F610}', '\u{1F61E}', '\u{1F622}'];
-const moodLabels = ['Great', 'Good', 'Okay', 'Low', 'Very Low'];
+import { getMoodLabel, MoodGlyph, MoodPicker } from '@/components/MoodPicker';
+import {
+  AppButton,
+  AppCard,
+  AppInput,
+  AppScreen,
+  ChoiceChip,
+  EmptyState,
+  PageHeader,
+  SectionHeader,
+  appUiStyles,
+} from '@/components/AppUI';
 
 interface MoodEntry {
   id: string;
@@ -78,7 +87,9 @@ export default function TrackerScreen() {
     setSaving(true);
     setSaveStatus(null);
     try {
-      const tags = newTags.split(',').map((t) => t.trim()).filter((t) => t);
+      const tags = [
+        ...new Set(newTags.split(',').map((tag) => tag.trim()).filter(Boolean)),
+      ];
       await saveCheckInWithAttribution({
         emoji: newMood,
         note: newNote || null,
@@ -110,21 +121,22 @@ export default function TrackerScreen() {
   const filteredMoods = filterMoodEntriesByTag(moods, filterTag);
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <View style={s.header}>
-        <View>
-          <Text style={s.title}>Mood Tracker</Text>
-          <Text style={s.subtitle}>Your emotional journey over time</Text>
-        </View>
-        <TouchableOpacity
-          style={[s.addBtn, !user?.id && s.addBtnDisabled]}
-          onPress={() => setShowAdd(!showAdd)}
-          disabled={!user?.id}
-          accessibilityState={{ disabled: !user?.id }}
-        >
-          <Text style={s.addBtnText}>{showAdd ? 'Cancel' : '+ Add'}</Text>
-        </TouchableOpacity>
-      </View>
+    <AppScreen>
+      <PageHeader
+        eyebrow="NOTICE THE PATTERN"
+        title="Mood"
+        description="Check in, add context if it helps, and look back without judgment."
+        action={
+          <AppButton
+            label={showAdd ? 'Close' : 'Check in'}
+            icon={showAdd ? 'x' : 'plus'}
+            variant={showAdd ? 'secondary' : 'primary'}
+            onPress={() => setShowAdd((current) => !current)}
+            disabled={!user?.id}
+            style={s.headerButton}
+          />
+        }
+      />
 
       {saveStatus ? (
         <Text
@@ -139,144 +151,132 @@ export default function TrackerScreen() {
       ) : null}
 
       {showAdd && (
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Add Mood Entry</Text>
-          <Text style={[s.label, { marginTop: 12 }]}>How are you feeling?</Text>
-          <View style={s.moodRow}>
-            {moodEmojis.map((emoji, i) => (
-              <TouchableOpacity
-                key={emoji}
-                onPress={() => setNewMood(emoji)}
-                style={[s.moodBtn, newMood === emoji && s.moodBtnActive]}
-              >
-                <Text style={s.moodEmoji}>{emoji}</Text>
-                <Text style={s.moodLabel}>{moodLabels[i]}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={s.label}>Note (optional)</Text>
-          <TextInput
-            style={s.textArea}
+        <AppCard style={s.checkInCard}>
+          <SectionHeader
+            title="How are you feeling?"
+            description="Choose the closest fit. You can change it later."
+          />
+          <MoodPicker value={newMood} onChange={setNewMood} disabled={saving} />
+          <AppInput
+            label="What is affecting it? (optional)"
             placeholder="What's affecting your mood?"
             value={newNote}
             onChangeText={setNewNote}
             multiline
-            placeholderTextColor={Colors.textSecondary}
           />
-          <Text style={s.label}>Tags (comma-separated)</Text>
-          <TextInput
-            style={s.input}
+          <AppInput
+            label="Tags (optional)"
+            helper="Separate tags with commas."
             placeholder="e.g., sleep, work, exercise"
             value={newTags}
             onChangeText={setNewTags}
-            placeholderTextColor={Colors.textSecondary}
           />
-          <TouchableOpacity
-            style={[
-              s.saveBtn,
-              (!newMood || saving || !user?.id) && s.saveBtnDisabled,
-            ]}
+          <AppButton
+            label="Save check-in"
+            icon="check"
             onPress={handleAdd}
             disabled={!newMood || saving || !user?.id}
-          >
-            <Text style={s.saveBtnText}>{saving ? 'Saving...' : 'Save Mood'}</Text>
-          </TouchableOpacity>
-        </View>
+            loading={saving}
+          />
+        </AppCard>
       )}
 
       {/* Tag Filter */}
       {allTags.length > 0 && (
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Filter by Tag</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
-            <TouchableOpacity
-              style={[s.tagBtn, !filterTag && s.tagBtnActive]}
-              onPress={() => setFilterTag(null)}
-            >
-              <Text style={[s.tagText, !filterTag && s.tagTextActive]}>All</Text>
-            </TouchableOpacity>
+        <AppCard quiet>
+          <SectionHeader title="Filter" />
+          <View style={appUiStyles.wrap}>
+            <ChoiceChip label="All" selected={!filterTag} onPress={() => setFilterTag(null)} />
             {allTags.map((tag) => (
-              <TouchableOpacity
+              <ChoiceChip
                 key={tag}
-                style={[s.tagBtn, filterTag === tag && s.tagBtnActive]}
+                label={tag}
+                selected={filterTag === tag}
                 onPress={() => setFilterTag(tag)}
-              >
-                <Text style={[s.tagText, filterTag === tag && s.tagTextActive]}>{tag}</Text>
-              </TouchableOpacity>
+              />
             ))}
-          </ScrollView>
-        </View>
+          </View>
+        </AppCard>
       )}
 
       {/* Mood History */}
-      <View style={s.card}>
-        <Text style={s.cardTitle}>Mood History</Text>
-        {loading ? (
-          <ActivityIndicator style={{ marginTop: 20 }} color={Colors.primary} />
-        ) : filteredMoods.length === 0 ? (
-          <Text style={s.empty}>No mood entries for this period</Text>
-        ) : (
-          filteredMoods.map((mood) => (
+      <SectionHeader
+        title="Recent check-ins"
+        description={filterTag ? `Showing entries tagged ${filterTag}` : 'This month'}
+      />
+      {loading ? (
+        <AppCard style={s.loadingCard}>
+          <ActivityIndicator color={Colors.primary} />
+          <Text style={appUiStyles.muted}>Loading your check-ins...</Text>
+        </AppCard>
+      ) : filteredMoods.length === 0 ? (
+        <EmptyState
+          icon="bar-chart-2"
+          title={filterTag ? 'No matching check-ins' : 'Your first check-in starts here'}
+          description={
+            filterTag
+              ? 'Try another tag or show all entries.'
+              : 'A quick check-in gives you something useful to notice over time.'
+          }
+          action={
+            <AppButton
+              label={filterTag ? 'Show all' : 'Check in now'}
+              icon={filterTag ? 'x' : 'plus'}
+              variant={filterTag ? 'secondary' : 'primary'}
+              onPress={() => {
+                if (filterTag) setFilterTag(null);
+                else setShowAdd(true);
+              }}
+              disabled={!filterTag && !user?.id}
+            />
+          }
+        />
+      ) : (
+        <AppCard>
+          {filteredMoods.map((mood) => (
             <View key={mood.id} style={s.moodEntry}>
-              <Text style={s.entryEmoji}>{mood.emoji}</Text>
+              <View
+                accessible
+                accessibilityLabel={`${getMoodLabel(mood.emoji)} mood`}
+                style={s.entryEmojiWrap}
+              >
+                <MoodGlyph mood={mood.emoji} size={27} />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.entryDate}>
-                  {format(new Date(mood.created_at), 'MMMM dd, yyyy - h:mm a')}
+                  {format(new Date(mood.created_at), 'MMM d, h:mm a')}
                 </Text>
-                {mood.note && <Text style={s.entryNote}>{mood.note}</Text>}
-                {mood.tags.length > 0 && (
+                {mood.note ? <Text style={s.entryNote}>{mood.note}</Text> : null}
+                {mood.tags.length > 0 ? (
                   <View style={s.entryTags}>
-                    {mood.tags.map((tag, i) => (
-                      <View key={i} style={s.entryTag}>
+                    {mood.tags.map((tag, index) => (
+                      <View key={`${mood.id}:${tag}:${index}`} style={s.entryTag}>
                         <Text style={s.entryTagText}>{tag}</Text>
                       </View>
                     ))}
                   </View>
-                )}
+                ) : null}
               </View>
             </View>
-          ))
-        )}
-      </View>
+          ))}
+        </AppCard>
+      )}
       <SleepDiary />
-    </ScrollView>
+    </AppScreen>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 16, paddingBottom: 40 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  title: { fontSize: 28, fontWeight: '700', color: Colors.text },
-  subtitle: { fontSize: 14, color: Colors.textSecondary, marginTop: 4 },
-  addBtn: { backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16 },
-  addBtnDisabled: { opacity: 0.5 },
-  addBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  headerButton: { minHeight: 42, paddingHorizontal: 14 },
   saveStatus: { color: Colors.primary, fontSize: 13, marginBottom: 12 },
   saveStatusError: { color: '#b42318' },
-  card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text },
-  label: { fontSize: 14, fontWeight: '500', color: Colors.text, marginBottom: 8, marginTop: 16 },
-  moodRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  moodBtn: { alignItems: 'center', padding: 8, borderRadius: 12 },
-  moodBtnActive: { backgroundColor: '#dbeafe', borderWidth: 2, borderColor: Colors.primary },
-  moodEmoji: { fontSize: 28 },
-  moodLabel: { fontSize: 11, color: Colors.textSecondary, marginTop: 4 },
-  input: { backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 12, fontSize: 15, color: Colors.text },
-  textArea: { backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 12, fontSize: 15, color: Colors.text, minHeight: 80, textAlignVertical: 'top' },
-  saveBtn: { backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 20 },
-  saveBtnDisabled: { opacity: 0.5 },
-  saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  tagBtn: { borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14, marginRight: 8 },
-  tagBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  tagText: { fontSize: 13, color: Colors.text },
-  tagTextActive: { color: '#fff' },
-  empty: { textAlign: 'center', color: Colors.textSecondary, paddingVertical: 24 },
-  moodEntry: { flexDirection: 'row', gap: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  entryEmoji: { fontSize: 36 },
+  checkInCard: { paddingTop: 5 },
+  loadingCard: { minHeight: 108, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  moodEntry: { flexDirection: 'row', gap: 12, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  entryEmojiWrap: { width: 46, height: 46, borderRadius: 16, backgroundColor: Colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
   entryDate: { fontSize: 12, color: Colors.textSecondary, marginBottom: 4 },
-  entryNote: { fontSize: 14, color: Colors.text, marginBottom: 6 },
+  entryNote: { fontSize: 14, lineHeight: 20, color: Colors.text, marginBottom: 7 },
   entryTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  entryTag: { backgroundColor: Colors.background, borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
+  entryTag: { backgroundColor: Colors.background, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 8 },
   entryTagText: { fontSize: 11, color: Colors.textSecondary },
 });

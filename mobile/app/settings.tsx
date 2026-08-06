@@ -21,6 +21,7 @@ import { VisitBriefBuilder } from '@/components/VisitBriefBuilder';
 import { offlineSafetyPlanCache } from '@/lib/offline-safety-plan-cache';
 import { clearFullContextPreference } from '@/lib/full-context-preference';
 import { clearContextSelections } from '@/lib/chat-context-preference';
+import { clearGoToActions } from '@/lib/go-to-actions-storage';
 
 const HOUR_OPTIONS = [
   { label: '7 AM', value: 7 },
@@ -114,6 +115,7 @@ export default function SettingsScreen() {
                 resetAiDataSharingConsent(consentSubjectId),
                 clearFullContextPreference(consentSubjectId),
                 clearContextSelections(consentSubjectId),
+                clearGoToActions(consentSubjectId),
                 setRemindersEnabled(false),
                 user ? offlineSafetyPlanCache.clear(user.id) : Promise.resolve(),
               ]);

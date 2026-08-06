@@ -77,4 +77,43 @@ describe('transactional data deletion route', () => {
     expect(mocks.recordServerPrivacyEvent).not.toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
+
+  it('rejects deletion when the captured anonymous owner no longer matches', async () => {
+    mocks.verifyAuth.mockResolvedValueOnce({
+      valid: true,
+      userId: 'different-user',
+      isAnonymous: true,
+    });
+
+    const response = await POST(
+      new NextRequest('https://mhtoolkit.test/api/data/delete', {
+        method: 'POST',
+        body: JSON.stringify({ expectedAnonymousUserId: 'anonymous-1' }),
+      })
+    );
+
+    expect(response.status).toBe(409);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('deletes only the anonymous owner authenticated by the captured token', async () => {
+    mocks.verifyAuth.mockResolvedValueOnce({
+      valid: true,
+      userId: 'anonymous-1',
+      isAnonymous: true,
+    });
+
+    const response = await POST(
+      new NextRequest('https://mhtoolkit.test/api/data/delete', {
+        method: 'POST',
+        body: JSON.stringify({ expectedAnonymousUserId: 'anonymous-1' }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith('delete_owned_data', {
+      p_session_id: null,
+      p_user_id: 'anonymous-1',
+    });
+  });
 });

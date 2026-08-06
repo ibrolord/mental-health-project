@@ -1,7 +1,6 @@
 'use client';
 
-import { supabase } from '@/lib/supabase/client';
-import { getSessionId } from '@/lib/session';
+import { getApiAuthHeaders } from '@/lib/api/auth-headers';
 
 /**
  * Make an authenticated API request from the web client.
@@ -10,21 +9,15 @@ import { getSessionId } from '@/lib/session';
 export async function apiRequest(
   path: string,
   body: any,
-  options: { signal?: AbortSignal } = {}
+  options: { signal?: AbortSignal; accessToken?: string } = {}
 ): Promise<any> {
-  const headers: Record<string, string> = {
+  const headers = await getApiAuthHeaders({
     'Content-Type': 'application/json',
-    'X-Client-Platform': 'web',
-  };
+  });
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
-  } else {
-    const sessionId = getSessionId();
-    if (sessionId) {
-      headers['X-Session-Id'] = sessionId;
-    }
+  if (options.accessToken) {
+    headers.Authorization = `Bearer ${options.accessToken}`;
+    delete headers['X-Session-Id'];
   }
 
   const res = await fetch(path, {
@@ -40,3 +33,5 @@ export async function apiRequest(
   }
   return result;
 }
+
+export { getApiAuthHeaders } from '@/lib/api/auth-headers';

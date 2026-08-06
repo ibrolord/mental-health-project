@@ -54,6 +54,13 @@ const SECTIONS: Array<{
     evidenceIds: ['slow-breathing', 'nature-sound'],
   },
   {
+    id: 'movement',
+    title: 'Yoga and gentle movement',
+    summary:
+      'MHtoolkit uses only beginner chair and supported floor movements. Research suggests possible wellbeing benefits, but programs vary and evidence for mental-health outcomes is inconsistent. These sequences are optional movement guidance, not treatment or individualized exercise advice.',
+    evidenceIds: ['yoga-safety', 'yoga-depression', 'physical-activity'],
+  },
+  {
     id: 'reminders',
     title: 'Reminders',
     summary:

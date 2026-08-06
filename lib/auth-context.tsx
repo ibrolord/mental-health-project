@@ -12,25 +12,24 @@ import {
   ACCOUNT_UPGRADE_STARTED_FLAG,
 } from '@/mobile/lib/auth-validation';
 import { resetAiDataSharingConsent } from './ai-consent';
+import { clearStoredAcquisitionAttribution } from './acquisition';
+import { clearFullContextPreference } from './ai/full-context-preference';
+import { clearGoToActions } from './go-to-actions-storage';
+import {
+  ANONYMOUS_PROFILE_DATA_CONFLICT,
+  anonymousProfileDataConflict,
+  discardAnonymousProfileSafely,
+  getAnonymousProfileDataConflictUserId,
+  isAnonymousProfileDataConflict,
+} from '@/mobile/lib/anonymous-profile-switch';
 
 export type SocialAuthProvider = 'google' | 'apple';
 export type SocialAuthIntent = 'sign-in' | 'upgrade';
-
-const USER_DATA_TABLES = [
-  'moods',
-  'assessments',
-  'goals',
-  'habits',
-  'journal_entries',
-  'chat_history',
-  'user_affirmation_history',
-  'user_book_favorites',
-  'user_library_items',
-  'life_plan_items',
-  'focus_sessions',
-  'wellbeing_reminders',
-  'push_subscriptions',
-] as const;
+export {
+  ANONYMOUS_PROFILE_DATA_CONFLICT,
+  getAnonymousProfileDataConflictUserId,
+  isAnonymousProfileDataConflict,
+};
 
 async function assertAnonymousAccountIsEmpty(): Promise<void> {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -40,16 +39,13 @@ async function assertAnonymousAccountIsEmpty(): Promise<void> {
   }
   if (!session) return;
 
-  const results = await Promise.all(
-    USER_DATA_TABLES.map((table) => supabase.from(table).select('id').limit(1))
+  const result = await apiRequest(
+    '/api/data/switch-status',
+    {},
+    { accessToken: session.access_token }
   );
-  if (results.some(({ error }) => error)) {
-    throw new Error('Unable to verify that your anonymous data is safe. Sign in was blocked; please try again.');
-  }
-  if (results.some(({ data }) => (data?.length ?? 0) > 0)) {
-    throw new Error(
-      'Sign in is blocked because this anonymous profile has saved data or an active device reminder. Export or delete the data, and turn off device reminders in Settings before switching accounts.'
-    );
+  if (result?.hasOwnedData !== false) {
+    throw anonymousProfileDataConflict(session.user.id);
   }
 }
 
@@ -73,14 +69,14 @@ async function removeCurrentDevicePushSubscription(userId: string): Promise<void
     .eq('endpoint', subscription.endpoint);
   if (error) {
     throw new Error(
-      'Sign out was blocked because device reminders could not be disconnected.'
+      'Device reminders could not be disconnected.'
     );
   }
 
   const unsubscribed = await subscription.unsubscribe();
   if (!unsubscribed) {
     throw new Error(
-      'Sign out was blocked because device reminders could not be disconnected.'
+      'Device reminders could not be disconnected.'
     );
   }
 }
@@ -110,6 +106,7 @@ interface AuthContextType {
     intent: SocialAuthIntent,
     next?: string
   ) => Promise<void>;
+  discardAnonymousProfile: (expectedAnonymousUserId: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -122,6 +119,7 @@ const AuthContext = createContext<AuthContextType>({
   signIn: async () => {},
   signUp: async () => {},
   continueWithProvider: async () => {},
+  discardAnonymousProfile: async () => {},
   signOut: async () => {},
 });
 
@@ -233,7 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const safeNext = getSafeAuthRedirect(next);
     const callbackUrl =
       typeof window !== 'undefined'
-        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`
+        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext)}&provider=${encodeURIComponent(provider)}`
         : undefined;
 
     if (intent === 'upgrade') {
@@ -241,7 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('This browser is already signed in to an account.');
       }
       const redirectTo = callbackUrl
-        ? `${callbackUrl}&upgrade_user_id=${encodeURIComponent(current.session.user.id)}`
+        ? `${callbackUrl}&auth_intent=upgrade&upgrade_user_id=${encodeURIComponent(current.session.user.id)}`
         : undefined;
       const { error } = await supabase.auth.linkIdentity({
         provider,
@@ -259,10 +257,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
+  const discardAnonymousProfile = async (expectedAnonymousUserId: string) => {
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const anonymousUser = current.session?.user ?? null;
+    const accessToken = current.session?.access_token;
+    const ownerKey = `user_id:${expectedAnonymousUserId}`;
+
+    await discardAnonymousProfileSafely({
+      expectedAnonymousUserId,
+      currentUser: anonymousUser,
+      prepareLocalCleanup: async () =>
+        [
+          clearStoredAcquisitionAttribution(),
+          resetAiDataSharingConsent(ownerKey),
+          clearFullContextPreference(ownerKey),
+          clearGoToActions(ownerKey),
+        ].every(Boolean),
+      deleteRemoteData: () =>
+        apiRequest(
+          '/api/data/delete',
+          { expectedAnonymousUserId },
+          { accessToken }
+        ),
+      finalizeAfterDelete: () =>
+        removeCurrentDevicePushSubscription(expectedAnonymousUserId),
+      onFinalizeError: (error) =>
+        console.error('Anonymous-profile reminder cleanup failed:', error),
+      localCleanupError:
+        'This browser could not clear its local settings. No data was deleted; clear this site\'s browser data and try again.',
+    });
+  };
+
   const signOut = async () => {
     if (user) {
       await removeCurrentDevicePushSubscription(user.id);
-      resetAiDataSharingConsent(`user_id:${user.id}`);
+      const ownerKey = `user_id:${user.id}`;
+      resetAiDataSharingConsent(ownerKey);
+      clearGoToActions(ownerKey);
     }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
@@ -279,6 +311,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signUp,
         continueWithProvider,
+        discardAnonymousProfile,
         signOut,
       }}
     >

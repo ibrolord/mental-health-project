@@ -24,31 +24,62 @@ export function advanceGuidedTimer(
   stepSeconds: number,
   totalSteps: number
 ): GuidedTimerState {
+  return advanceGuidedTimerBy(
+    state,
+    Array.from({ length: Math.max(0, totalSteps) }, () => stepSeconds),
+    1
+  );
+}
+
+export function advanceGuidedTimerBy(
+  state: GuidedTimerState,
+  stepDurations: readonly number[],
+  seconds: number
+): GuidedTimerState {
   if (
     !state.running ||
     state.complete ||
-    stepSeconds <= 0 ||
-    totalSteps <= 0
+    stepDurations.length <= 0 ||
+    !Number.isFinite(seconds) ||
+    seconds <= 0
   ) {
     return state;
   }
 
-  if (state.elapsed + 1 < stepSeconds) {
-    return { ...state, elapsed: state.elapsed + 1 };
+  let next = { ...state };
+  let remaining = Math.floor(seconds);
+
+  while (remaining > 0 && !next.complete) {
+    const stepSeconds = stepDurations[next.stepIndex] ?? 0;
+
+    if (!Number.isFinite(stepSeconds) || stepSeconds <= 0) {
+      if (next.stepIndex >= stepDurations.length - 1) {
+        next = { ...next, elapsed: 0, running: false, complete: true };
+      } else {
+        next = { ...next, stepIndex: next.stepIndex + 1, elapsed: 0 };
+      }
+      continue;
+    }
+
+    const available = Math.max(0, stepSeconds - next.elapsed);
+    if (remaining < available) {
+      next = { ...next, elapsed: next.elapsed + remaining };
+      remaining = 0;
+      continue;
+    }
+
+    remaining -= available;
+    if (next.stepIndex >= stepDurations.length - 1) {
+      next = {
+        ...next,
+        elapsed: stepSeconds,
+        running: false,
+        complete: true,
+      };
+    } else {
+      next = { ...next, stepIndex: next.stepIndex + 1, elapsed: 0 };
+    }
   }
 
-  if (state.stepIndex >= totalSteps - 1) {
-    return {
-      ...state,
-      elapsed: stepSeconds,
-      running: false,
-      complete: true,
-    };
-  }
-
-  return {
-    ...state,
-    stepIndex: state.stepIndex + 1,
-    elapsed: 0,
-  };
+  return next;
 }

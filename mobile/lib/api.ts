@@ -6,6 +6,8 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app
 
 interface ApiRequestOptions {
   timeoutMs?: number;
+  accessToken?: string;
+  signal?: AbortSignal;
 }
 
 /**
@@ -22,16 +24,20 @@ export async function apiRequest<T = any>(
     'X-Client-Platform': Platform.OS === 'android' ? 'android' : 'ios',
   };
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) {
+  const { data: { session } } = options.accessToken
+    ? { data: { session: null } }
+    : await supabase.auth.getSession();
+  const accessToken = options.accessToken ?? session?.access_token;
+  if (!accessToken) {
     throw new Error('No authenticated Supabase session');
   }
-  headers['Authorization'] = `Bearer ${session.access_token}`;
+  headers['Authorization'] = `Bearer ${accessToken}`;
 
   const res = await fetchWithTimeout(`${API_URL}${path}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
+    signal: options.signal,
   }, options.timeoutMs);
 
   if (!res.ok) {

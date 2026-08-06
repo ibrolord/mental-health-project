@@ -20,6 +20,10 @@ afterEach(() => {
 describe('AI data sharing consent', () => {
   it('persists and resets consent without using a blocking browser prompt', () => {
     const values = new Map<string, string>();
+    values.set(
+      'mhtoolkit.ai_data_sharing_consent.v2:user_id%3Aowner-a',
+      'granted'
+    );
     const confirm = vi.fn();
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
@@ -36,11 +40,24 @@ describe('AI data sharing consent', () => {
     expect(hasAiDataSharingConsent('user_id:owner-a')).toBe(false);
     expect(grantAiDataSharingConsent('user_id:owner-a')).toBe(true);
     expect(hasAiDataSharingConsent('user_id:owner-a')).toBe(true);
+    expect(values.get('mhtoolkit.ai_data_sharing_consent.v3:user_id%3Aowner-a'))
+      .toBe('granted');
     expect(hasAiDataSharingConsent('user_id:owner-b')).toBe(false);
     expect(confirm).not.toHaveBeenCalled();
 
     resetAiDataSharingConsent('user_id:owner-a');
     expect(hasAiDataSharingConsent('user_id:owner-a')).toBe(false);
+  });
+
+  it('uses the same regenerated-speech consent version and disclosure on mobile', () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), 'mobile/lib/ai-consent.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain('mhtoolkit.ai_data_sharing_consent.v3');
+    expect(source).toContain('response text to Google Gemini or OpenAI for generated speech');
+    expect(source).toContain('device speech service may be used');
   });
 
   it('renders one accessible, dismissible consent dialog at the app root', () => {

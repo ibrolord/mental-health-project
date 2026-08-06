@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   IDLE_GUIDED_TIMER,
   advanceGuidedTimer,
+  advanceGuidedTimerBy,
   resetGuidedTimer,
 } from '../../lib/guided-timer';
 
@@ -69,6 +70,36 @@ describe('guided timer transitions', () => {
       elapsed: 0,
       running: true,
       complete: false,
+    });
+  });
+
+  it('reconciles delayed ticks across steps using elapsed time', () => {
+    expect(
+      advanceGuidedTimerBy(
+        { stepIndex: 0, elapsed: 8, running: true, complete: false },
+        [10, 20, 30],
+        7
+      )
+    ).toEqual({
+      stepIndex: 1,
+      elapsed: 5,
+      running: true,
+      complete: false,
+    });
+  });
+
+  it('completes safely when a delayed tick crosses the practice end', () => {
+    expect(
+      advanceGuidedTimerBy(
+        { stepIndex: 1, elapsed: 18, running: true, complete: false },
+        [10, 20],
+        10
+      )
+    ).toEqual({
+      stepIndex: 1,
+      elapsed: 20,
+      running: false,
+      complete: true,
     });
   });
 });

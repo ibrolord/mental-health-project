@@ -91,6 +91,33 @@ export const EVIDENCE_SOURCES: EvidenceSource[] = [
     url: 'https://pubmed.ncbi.nlm.nih.gov/37294612/',
     citation: 'Bell et al., JMIR mHealth and uHealth (2023)',
   },
+  {
+    id: 'yoga-safety',
+    title: 'Begin with gentle forms and qualified guidance',
+    summary:
+      'Yoga is generally safe when practiced appropriately, but sprains and strains can occur. Beginners should avoid extreme poses and use qualified guidance when health needs require modification.',
+    strength: 'moderate',
+    url: 'https://www.nccih.nih.gov/health/yoga-effectiveness-and-safety',
+    citation: 'National Center for Complementary and Integrative Health (2023)',
+  },
+  {
+    id: 'yoga-depression',
+    title: 'Mental-health findings are promising but inconsistent',
+    summary:
+      'A review of randomized trials found short-term improvements compared with passive controls, while results against active controls and overall evidence quality were inconsistent. Guided movement here is optional support, not treatment.',
+    strength: 'emerging',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/40226719/',
+    citation: 'Moosburner et al., Depression and Anxiety (2024)',
+  },
+  {
+    id: 'physical-activity',
+    title: 'Some activity is better than none',
+    summary:
+      'WHO guidance supports regular physical activity and reducing sedentary time, with adaptations for ability, health conditions, pregnancy, and age. A short sequence is only one small movement option.',
+    strength: 'strong',
+    url: 'https://www.who.int/publications/i/item/9789240014886',
+    citation: 'World Health Organization physical activity guidelines (2020)',
+  },
 ];
 
 const evidenceById = new Map(EVIDENCE_SOURCES.map((source) => [source.id, source]));
