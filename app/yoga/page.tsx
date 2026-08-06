@@ -110,18 +110,25 @@ export default function YogaPage() {
         </header>
 
         <section className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="app-panel overflow-hidden">
-            <div className="grid md:grid-cols-[0.92fr_1.08fr]">
-              <div className="relative min-h-80 overflow-hidden bg-[#eadfcd] md:min-h-[34rem]">
+          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+              <div className="app-panel relative aspect-square overflow-hidden bg-[#eadfcd] xl:aspect-[4/5]">
+                <Image
+                  src={currentPose.imagePath}
+                  alt=""
+                  aria-hidden="true"
+                  fill
+                  sizes="(min-width: 1280px) 24rem, (min-width: 1024px) 48rem, 100vw"
+                  className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-xl"
+                />
                 <Image
                   key={currentPose.id}
                   src={currentPose.imagePath}
                   alt={currentStep.imageAlt ?? currentPose.imageAlt}
                   fill
                   priority
-                  sizes="(min-width: 1024px) 32rem, (min-width: 768px) 42vw, 100vw"
+                  sizes="(min-width: 1280px) 24rem, (min-width: 1024px) 48rem, 100vw"
                   className={cn(
-                    'absolute inset-0 h-full w-full object-cover',
+                    'absolute inset-0 h-full w-full object-contain',
                     currentStep.mirrorImage && '-scale-x-100'
                   )}
                 />
@@ -132,7 +139,7 @@ export default function YogaPage() {
                 </div>
               </div>
 
-              <div className="flex min-h-[34rem] flex-col p-6 md:p-8">
+              <div className="app-panel flex flex-col p-6 md:p-8">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-accent">
@@ -155,12 +162,15 @@ export default function YogaPage() {
                   <span className="font-semibold text-foreground">You need:</span>{' '}
                   {selected.equipment}
                 </p>
-                <div className="mt-3 flex items-start gap-2 rounded-xl border border-border bg-background px-4 py-3">
-                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    Wellbeing support, not treatment. Stop for pain, dizziness, numbness, or breathing difficulty. {selected.safetyNote}
+                <details className="mt-3 rounded-xl border border-border bg-background">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-4 py-3 text-xs font-semibold text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
+                    Safety and modifications
+                  </summary>
+                  <p className="px-4 pb-4 pl-10 text-xs leading-relaxed text-muted-foreground">
+                    Wellbeing support, not treatment. Stop for pain, dizziness, numbness, or breathing difficulty. Move gently. {selected.safetyNote}
                   </p>
-                </div>
+                </details>
 
                 <div className="mt-6 flex-1">
                   <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
@@ -288,8 +298,6 @@ export default function YogaPage() {
                   ))}
                 </div>
               </div>
-            </div>
-
           </div>
 
           <aside className="space-y-4">

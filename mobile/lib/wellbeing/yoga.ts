@@ -89,7 +89,7 @@ export const YOGA_POSES: Record<YogaPoseId, YogaPose> = {
   'supported-child': {
     id: 'supported-child',
     name: "Supported Child's Pose",
-    imageAlt: "A kneeling person resting on a chair in Supported Child's Pose.",
+    imageAlt: "A kneeling person resting their torso on a bolster in Supported Child's Pose.",
   },
   'floor-rest': {
     id: 'floor-rest',
@@ -228,14 +228,14 @@ export const YOGA_PRACTICES: YogaPractice[] = [
     title: 'Restorative yoga',
     summary: "Supported Child's Pose and Savasana with a bolster.",
     setting: 'restorative',
-    equipment: 'A mat, sturdy chair, folded towel, and firm bolster or cushion',
-    safetyNote: 'Change position if you feel pressure, numbness, tingling, or difficulty getting up.',
+    equipment: 'A mat, folded towel, and firm bolster or cushion',
+    safetyNote: 'Choose Constructive Rest instead if kneeling is uncomfortable.',
     evidenceIds: ['yoga-safety', 'yoga-depression'],
     steps: [
       {
         label: "Supported Child's Pose",
         instruction:
-          'Kneel in front of the chair and rest your forearms and forehead on the seat. Keep your hips where your knees feel comfortable.',
+          'Kneel with your knees comfortably apart and place the bolster lengthwise between them. Fold forward, rest your torso and one cheek on the bolster, and let your arms relax.',
         seconds: 120,
         poseId: 'supported-child',
       },

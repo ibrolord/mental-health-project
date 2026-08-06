@@ -117,7 +117,7 @@ export default function YogaScreen() {
                       styles.poseImage,
                       step.mirrorImage && styles.mirroredPose,
                     ]}
-                    resizeMode="cover"
+                    resizeMode="contain"
                   />
                   <View style={styles.poseLabel}>
                     <Text style={styles.poseLabelText}>{pose.name}</Text>
