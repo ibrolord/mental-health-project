@@ -28,6 +28,12 @@ function minutesLabel(seconds: number): string {
   return `${Math.max(1, Math.ceil(seconds / 60))} min`;
 }
 
+function settingLabel(setting: (typeof YOGA_PRACTICES)[number]['setting']): string {
+  if (setting === 'chair') return 'Chair yoga';
+  if (setting === 'restorative') return 'Restorative yoga';
+  return 'Floor yoga';
+}
+
 export default function YogaPage() {
   const [selectedId, setSelectedId] = useState(YOGA_PRACTICES[0].id);
   const [timer, setTimer] = useState(IDLE_GUIDED_TIMER);
@@ -93,13 +99,13 @@ export default function YogaPage() {
         <header className="max-w-3xl">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             <Activity className="h-3.5 w-3.5" aria-hidden="true" />
-            Guided movement
+            Beginner yoga
           </div>
           <h1 className="font-display text-4xl font-medium leading-[1.05] tracking-[-0.02em] text-foreground md:text-5xl">
-            Move gently, one step at a time.
+            Choose a practice that fits today.
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground">
-            Beginner chair and floor sequences with a clear picture for every movement.
+            Named yoga poses, clear setup, and easy exits. Start seated, on the floor, or with restorative support.
           </p>
         </header>
 
@@ -130,7 +136,7 @@ export default function YogaPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-accent">
-                      {selected.setting === 'chair' ? 'Chair practice' : 'Floor practice'}
+                      {settingLabel(selected.setting)}
                     </p>
                     <h2 className="mt-2 font-display text-3xl font-medium text-foreground">
                       {selected.title}
@@ -152,7 +158,7 @@ export default function YogaPage() {
                 <div className="mt-3 flex items-start gap-2 rounded-xl border border-border bg-background px-4 py-3">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    Optional wellbeing support, not treatment or individualized advice. Stop for pain, dizziness, numbness, or breathing difficulty. {selected.safetyNote}
+                    Wellbeing support, not treatment. Stop for pain, dizziness, numbness, or breathing difficulty. {selected.safetyNote}
                   </p>
                 </div>
 
@@ -305,7 +311,7 @@ export default function YogaPage() {
                     )}
                   >
                     <span className="text-xs font-semibold uppercase tracking-[0.1em] opacity-70">
-                      {practice.setting} | {minutesLabel(yogaPracticeDurationSeconds(practice))}
+                      {settingLabel(practice.setting)} | {minutesLabel(yogaPracticeDurationSeconds(practice))}
                     </span>
                     <span className="mt-1.5 block font-semibold">{practice.title}</span>
                     <span className="mt-1 block text-xs leading-relaxed opacity-75">
@@ -326,7 +332,7 @@ export default function YogaPage() {
           </summary>
           <div className="mt-3 max-w-3xl space-y-2 text-sm leading-relaxed text-muted-foreground">
             <p>
-              These are gentle self-guided movements, not medical treatment or a substitute for an instructor.
+              These are beginner self-guided yoga practices, not medical treatment or a substitute for an instructor.
             </p>
             <p>
               If you are pregnant, recovering from surgery or injury, have a health condition, or are unsure whether movement is safe for you, ask a qualified health professional first.

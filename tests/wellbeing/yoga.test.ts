@@ -30,6 +30,7 @@ describe('guided yoga catalog', () => {
     expect(new Set(YOGA_PRACTICES.map(({ id }) => id)).size).toBe(YOGA_PRACTICES.length);
     expect(YOGA_PRACTICES.some(({ setting }) => setting === 'chair')).toBe(true);
     expect(YOGA_PRACTICES.some(({ setting }) => setting === 'floor')).toBe(true);
+    expect(YOGA_PRACTICES.some(({ setting }) => setting === 'restorative')).toBe(true);
 
     for (const practice of YOGA_PRACTICES) {
       expect(practice.steps.length).toBeGreaterThanOrEqual(3);
@@ -50,19 +51,54 @@ describe('guided yoga catalog', () => {
     );
   });
 
-  it('uses direction-specific side-reach visuals and descriptions', () => {
-    const chairSteps = YOGA_PRACTICES.find(({ id }) => id === 'chair-reset')!.steps;
-    const left = chairSteps.find(({ label }) => label === 'Reach left')!;
-    const right = chairSteps.find(({ label }) => label === 'Reach right')!;
+  it('presents named yoga poses rather than generic stretching labels', () => {
+    const poseNames = new Set(Object.values(YOGA_POSES).map(({ name }) => name));
+    for (const expectedName of [
+      'Seated Mountain',
+      'Seated Cat',
+      'Seated Cow',
+      'Seated Side Bend',
+      'Seated Twist',
+      'Tabletop Pose',
+      'Cat Pose',
+      'Cow Pose',
+      "Child's Pose",
+      "Supported Child's Pose",
+      'Constructive Rest',
+      'Supported Savasana',
+    ]) {
+      expect(poseNames.has(expectedName), expectedName).toBe(true);
+    }
+
+    expect(YOGA_PRACTICES.map(({ id }) => id)).toEqual([
+      'chair-yoga',
+      'gentle-floor-yoga',
+      'restorative-yoga',
+    ]);
+    expect(JSON.stringify(YOGA_PRACTICES)).not.toContain('legs-on-chair');
+  });
+
+  it('uses direction-specific side-bend and twist visuals and descriptions', () => {
+    const chairSteps = YOGA_PRACTICES.find(({ id }) => id === 'chair-yoga')!.steps;
+    const left = chairSteps.find(({ label }) => label === 'Side Bend left')!;
+    const right = chairSteps.find(({ label }) => label === 'Side Bend right')!;
+    const twistLeft = chairSteps.find(({ label }) => label === 'Twist left')!;
+    const twistRight = chairSteps.find(({ label }) => label === 'Twist right')!;
 
     expect(left.poseId).toBe(right.poseId);
     expect(left.mirrorImage).not.toBe(true);
     expect(right.mirrorImage).toBe(true);
     expect(left.imageAlt).toContain('left');
     expect(right.imageAlt).toContain('right');
+    expect(twistLeft.poseId).toBe(twistRight.poseId);
+    expect(twistLeft.mirrorImage).not.toBe(true);
+    expect(twistRight.mirrorImage).toBe(true);
+    expect(twistLeft.imageAlt).toContain('left');
+    expect(twistRight.imageAlt).toContain('right');
   });
 
   it('ships optimized original pose art in both clients', () => {
+    const activePoseDigests = new Set<string>();
     for (const pose of Object.values(YOGA_POSES)) {
       const fileName = pose.imagePath.split('/').at(-1);
       expect(fileName).toBeTruthy();
@@ -74,7 +110,9 @@ describe('guided yoga catalog', () => {
         digests.push(createHash('sha256').update(readFileSync(file)).digest('hex'));
       }
       expect(digests[0]).toBe(digests[1]);
+      activePoseDigests.add(digests[0]);
     }
+    expect(activePoseDigests.size).toBe(Object.keys(YOGA_POSES).length);
   });
 
   it('connects every catalog citation to the reviewed evidence registry', () => {
@@ -93,7 +131,10 @@ describe('guided yoga integration boundaries', () => {
     expect(page).toContain('src={currentPose.imagePath}');
     expect(page).toContain("role=\"status\"");
     expect(page).toContain("document.addEventListener('visibilitychange'");
-    expect(page).toContain('Optional wellbeing support, not treatment or individualized advice.');
+    expect(page).toContain('Beginner yoga');
+    expect(page).toContain('Named yoga poses, clear setup, and easy exits.');
+    expect(page).toContain('Wellbeing support, not treatment.');
+    expect(page).toContain('Stop for pain, dizziness, numbness, or breathing difficulty.');
     expect(page).toContain('<OptionalSoundscape');
     expect(page).toContain('href="/research#movement"');
   });
@@ -101,7 +142,13 @@ describe('guided yoga integration boundaries', () => {
   it('uses static bundled images and accessible guided visuals on Expo', () => {
     const page = source('mobile/app/yoga.tsx');
     expect(page).toContain("require('@/assets/yoga/seated-arrival.jpg')");
+    expect(page).toContain("require('@/assets/yoga/seated-cat.jpg')");
+    expect(page).toContain("require('@/assets/yoga/seated-cow.jpg')");
+    expect(page).toContain("require('@/assets/yoga/seated-twist.jpg')");
     expect(page).toContain("require('@/assets/yoga/tabletop-neutral.jpg')");
+    expect(page).toContain("require('@/assets/yoga/tabletop-cow.jpg')");
+    expect(page).toContain("require('@/assets/yoga/child-pose.jpg')");
+    expect(page).toContain("require('@/assets/yoga/supported-savasana.jpg')");
     expect(page).toContain('accessibilityLabel={step.imageAlt ?? pose.imageAlt}');
     expect(page).toContain('renderStepVisual');
     expect(page).toContain('Stop for pain, dizziness, numbness, or breathing difficulty.');

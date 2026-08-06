@@ -1,13 +1,18 @@
-export type YogaSetting = 'chair' | 'floor';
+export type YogaSetting = 'chair' | 'floor' | 'restorative';
 
 export type YogaPoseId =
   | 'seated-arrival'
+  | 'seated-cat'
+  | 'seated-cow'
   | 'seated-side-reach'
+  | 'seated-twist'
   | 'tabletop-neutral'
   | 'tabletop-round'
+  | 'tabletop-cow'
+  | 'child-pose'
   | 'supported-child'
   | 'floor-rest'
-  | 'legs-on-chair';
+  | 'supported-savasana';
 
 export type YogaPose = {
   id: YogaPoseId;
@@ -39,157 +44,232 @@ export type YogaPractice = {
 export const YOGA_POSES: Record<YogaPoseId, YogaPose> = {
   'seated-arrival': {
     id: 'seated-arrival',
-    name: 'Seated arrival',
+    name: 'Seated Mountain',
     imagePath: '/images/yoga/seated-arrival.jpg',
-    imageAlt: 'A person sitting upright on a sturdy chair with both feet on the floor.',
+    imageAlt: 'A person in Seated Mountain Pose, sitting tall with both feet on the floor.',
+  },
+  'seated-cat': {
+    id: 'seated-cat',
+    name: 'Seated Cat',
+    imagePath: '/images/yoga/seated-cat.jpg',
+    imageAlt: 'A seated person gently rounding their spine in Seated Cat Pose.',
+  },
+  'seated-cow': {
+    id: 'seated-cow',
+    name: 'Seated Cow',
+    imagePath: '/images/yoga/seated-cow.jpg',
+    imageAlt: 'A seated person gently lifting their chest in Seated Cow Pose.',
   },
   'seated-side-reach': {
     id: 'seated-side-reach',
-    name: 'Seated side reach',
+    name: 'Seated Side Bend',
     imagePath: '/images/yoga/seated-side-reach.jpg',
-    imageAlt: 'A seated person making a gentle side reach with one arm overhead.',
+    imageAlt: 'A seated person making a gentle yoga side bend with one arm overhead.',
+  },
+  'seated-twist': {
+    id: 'seated-twist',
+    name: 'Seated Twist',
+    imagePath: '/images/yoga/seated-twist.jpg',
+    imageAlt: 'A person sitting tall in a gentle seated yoga twist.',
   },
   'tabletop-round': {
     id: 'tabletop-round',
-    name: 'Tabletop wave',
+    name: 'Cat Pose',
     imagePath: '/images/yoga/tabletop-round.jpg',
-    imageAlt: 'A person on hands and knees gently rounding their upper back.',
+    imageAlt: 'A person on hands and knees rounding their spine in Cat Pose.',
   },
   'tabletop-neutral': {
     id: 'tabletop-neutral',
-    name: 'Neutral tabletop',
+    name: 'Tabletop Pose',
     imagePath: '/images/yoga/tabletop-neutral.jpg',
-    imageAlt: 'A person on hands and knees with a long, neutral spine.',
+    imageAlt: 'A person in Tabletop Pose with hands under shoulders and knees under hips.',
+  },
+  'tabletop-cow': {
+    id: 'tabletop-cow',
+    name: 'Cow Pose',
+    imagePath: '/images/yoga/tabletop-cow.jpg',
+    imageAlt: 'A person on hands and knees gently lifting their chest in Cow Pose.',
+  },
+  'child-pose': {
+    id: 'child-pose',
+    name: "Child's Pose",
+    imagePath: '/images/yoga/child-pose.jpg',
+    imageAlt: "A person resting forward with their forehead supported in Child's Pose.",
   },
   'supported-child': {
     id: 'supported-child',
-    name: 'Supported rest',
+    name: "Supported Child's Pose",
     imagePath: '/images/yoga/supported-child.jpg',
-    imageAlt: 'A kneeling person resting their forearms and head on the seat of a chair.',
+    imageAlt: "A kneeling person resting on a chair in Supported Child's Pose.",
   },
   'floor-rest': {
     id: 'floor-rest',
-    name: 'Floor rest',
+    name: 'Constructive Rest',
     imagePath: '/images/yoga/floor-rest.jpg',
-    imageAlt: 'A person lying on their back with knees bent and feet on the floor.',
+    imageAlt: 'A person in Constructive Rest with knees bent and feet on the floor.',
   },
-  'legs-on-chair': {
-    id: 'legs-on-chair',
-    name: 'Supported leg rest',
-    imagePath: '/images/yoga/legs-on-chair.jpg',
-    imageAlt: 'A person lying on their back with lower legs resting on a chair.',
+  'supported-savasana': {
+    id: 'supported-savasana',
+    name: 'Supported Savasana',
+    imagePath: '/images/yoga/supported-savasana.jpg',
+    imageAlt: 'A person resting on their back with a yoga bolster supporting both knees.',
   },
 };
 
 export const YOGA_PRACTICES: YogaPractice[] = [
   {
-    id: 'chair-reset',
-    title: 'Chair reset',
-    summary: 'A short seated sequence for easing out of a tense or still moment.',
+    id: 'chair-yoga',
+    title: 'Chair yoga',
+    summary: 'Seated Mountain, Cat-Cow, side bends, and twists.',
     setting: 'chair',
     equipment: 'A sturdy chair without wheels',
-    safetyNote: 'Keep both sitting bones supported and stay within an easy range.',
+    safetyNote: 'Keep both feet planted and make every bend or twist small enough to feel steady.',
     evidenceIds: ['yoga-safety', 'physical-activity'],
     steps: [
       {
-        label: 'Arrive',
+        label: 'Seated Mountain',
         instruction:
-          'Sit toward the middle of a sturdy chair. Let both feet meet the floor and rest your hands on your thighs.',
-        seconds: 45,
+          'Sit near the middle of the chair. Place both feet under your knees, rest your hands on your thighs, and lengthen your spine.',
+        seconds: 30,
         poseId: 'seated-arrival',
       },
       {
-        label: 'Reach left',
+        label: 'Seated Cow',
         instruction:
-          'Keep your weight even. Lift your right arm and lean a little to the left without twisting or forcing the reach.',
-        seconds: 45,
+          'Keep your hands on your thighs. Tip your pelvis slightly forward and lift your chest without throwing your head back. Return to neutral and repeat slowly.',
+        seconds: 40,
+        poseId: 'seated-cow',
+      },
+      {
+        label: 'Seated Cat',
+        instruction:
+          'Tuck your pelvis slightly and round your spine toward the chair back. Keep your head in line with your spine. Return to neutral and repeat slowly.',
+        seconds: 40,
+        poseId: 'seated-cat',
+      },
+      {
+        label: 'Side Bend left',
+        instruction:
+          'Keep both feet down. Lift your right arm and lean a little to the left without twisting or forcing the reach.',
+        seconds: 30,
         poseId: 'seated-side-reach',
         imageAlt: 'A seated person lifting the right arm and leaning gently to the left.',
       },
       {
-        label: 'Reach right',
+        label: 'Side Bend right',
         instruction:
           'Return upright, then lift your left arm and lean a little to the right. Keep the movement comfortable.',
-        seconds: 45,
+        seconds: 30,
         poseId: 'seated-side-reach',
         imageAlt: 'A seated person lifting the left arm and leaning gently to the right.',
         mirrorImage: true,
       },
       {
-        label: 'Settle',
+        label: 'Twist left',
         instruction:
-          'Return both hands to your thighs. Notice the chair and floor supporting you before you stand or continue.',
-        seconds: 45,
+          'Keep your knees facing forward. Sit tall and turn your ribs gently to the left, placing your hands lightly on your thigh and chair.',
+        seconds: 30,
+        poseId: 'seated-twist',
+        imageAlt: 'A person sitting tall in a gentle seated yoga twist to the left.',
+      },
+      {
+        label: 'Twist right',
+        instruction:
+          'Return to center. Keep your knees forward, sit tall, and turn your ribs gently to the right.',
+        seconds: 30,
+        poseId: 'seated-twist',
+        imageAlt: 'A person sitting tall in a gentle seated yoga twist to the right.',
+        mirrorImage: true,
+      },
+      {
+        label: 'Seated Mountain',
+        instruction:
+          'Face forward with both hands on your thighs. Feel the chair and floor supporting you before you finish.',
+        seconds: 30,
         poseId: 'seated-arrival',
       },
     ],
   },
   {
-    id: 'floor-unwind',
-    title: 'Gentle floor unwind',
-    summary: 'Slow spinal movement followed by supported rest.',
+    id: 'gentle-floor-yoga',
+    title: 'Gentle floor yoga',
+    summary: "Tabletop, Cat-Cow, Child's Pose, and rest.",
     setting: 'floor',
     equipment: 'A mat or soft floor and a sturdy chair',
-    safetyNote: 'Choose the chair reset if getting to or from the floor is not comfortable.',
+    safetyNote: 'Choose Chair yoga if floor transitions or weight on your hands and knees are not comfortable.',
     evidenceIds: ['yoga-safety', 'physical-activity'],
     steps: [
       {
-        label: 'Find tabletop',
+        label: 'Tabletop Pose',
         instruction:
           'Come to hands and knees only if that transition is comfortable. Keep wrists under shoulders and knees under hips.',
         seconds: 30,
         poseId: 'tabletop-neutral',
       },
       {
-        label: 'Round and release',
+        label: 'Cat Pose',
         instruction:
-          'Gently round your back, then return to a neutral spine. Move slowly through a range that feels easy.',
-        seconds: 90,
+          'Press evenly through your hands and gently round your spine. Keep your head in line with the curve, then return to Tabletop.',
+        seconds: 45,
         poseId: 'tabletop-round',
       },
       {
-        label: 'Use support',
+        label: 'Cow Pose',
         instruction:
-          'Bring your hips toward your heels and rest your forearms on the chair. Skip this position if knees or hips object.',
-        seconds: 90,
-        poseId: 'supported-child',
+          'From Tabletop, let your belly lower slightly as your chest moves forward. Keep the back of your neck long, then return to Tabletop.',
+        seconds: 45,
+        poseId: 'tabletop-cow',
       },
       {
-        label: 'Rest on your back',
+        label: "Child's Pose",
         instruction:
-          'Roll onto your back with knees bent and feet down. Let your breathing stay ordinary and unforced.',
+          'Bring your hips toward your heels and rest your forehead on a folded towel. Keep your knees comfortably apart and come out early if they object.',
+        seconds: 90,
+        poseId: 'child-pose',
+      },
+      {
+        label: 'Constructive Rest',
+        instruction:
+          'Roll onto your back with knees bent and feet down. Let your arms rest by your sides and keep your breathing ordinary.',
         seconds: 90,
         poseId: 'floor-rest',
       },
     ],
   },
   {
-    id: 'supported-rest',
-    title: 'Supported rest',
-    summary: 'A quiet floor sequence for shifting out of doing mode.',
-    setting: 'floor',
-    equipment: 'A mat or soft floor and a sturdy chair',
-    safetyNote: 'Come out early if your back, hips, or legs become uncomfortable or numb.',
+    id: 'restorative-yoga',
+    title: 'Restorative yoga',
+    summary: "Supported Child's Pose and Savasana with a bolster.",
+    setting: 'restorative',
+    equipment: 'A mat, sturdy chair, folded towel, and firm bolster or cushion',
+    safetyNote: 'Change position if you feel pressure, numbness, tingling, or difficulty getting up.',
     evidenceIds: ['yoga-safety', 'yoga-depression'],
     steps: [
       {
-        label: 'Set up',
+        label: "Supported Child's Pose",
         instruction:
-          'Lie on your back with knees bent and feet down. Keep your head supported in a neutral position.',
+          'Kneel in front of the chair and rest your forearms and forehead on the seat. Keep your hips where your knees feel comfortable.',
+        seconds: 120,
+        poseId: 'supported-child',
+      },
+      {
+        label: 'Constructive Rest',
+        instruction:
+          'Move onto your back with knees bent and feet down. Pause here before placing support under your knees.',
         seconds: 60,
         poseId: 'floor-rest',
       },
       {
-        label: 'Rest your legs',
+        label: 'Supported Savasana',
         instruction:
-          'Place your lower legs on the chair. Adjust until your back and hips feel easy, or return your feet to the floor.',
+          'Place a firm bolster under both knees. Let your legs and arms rest, keep your head neutral, and breathe normally.',
         seconds: 240,
-        poseId: 'legs-on-chair',
+        poseId: 'supported-savasana',
       },
       {
-        label: 'Return slowly',
+        label: 'Return to rest',
         instruction:
-          'Bring one foot down at a time. Pause with knees bent, then roll to one side before sitting up when ready.',
+          'Remove the bolster and place both feet down. Pause with knees bent, then roll to one side before sitting up when ready.',
         seconds: 60,
         poseId: 'floor-rest',
       },

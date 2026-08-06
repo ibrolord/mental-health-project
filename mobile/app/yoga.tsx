@@ -29,16 +29,27 @@ import {
 
 const POSE_IMAGES: Record<YogaPoseId, ImageSourcePropType> = {
   'seated-arrival': require('@/assets/yoga/seated-arrival.jpg'),
+  'seated-cat': require('@/assets/yoga/seated-cat.jpg'),
+  'seated-cow': require('@/assets/yoga/seated-cow.jpg'),
   'seated-side-reach': require('@/assets/yoga/seated-side-reach.jpg'),
+  'seated-twist': require('@/assets/yoga/seated-twist.jpg'),
   'tabletop-neutral': require('@/assets/yoga/tabletop-neutral.jpg'),
   'tabletop-round': require('@/assets/yoga/tabletop-round.jpg'),
+  'tabletop-cow': require('@/assets/yoga/tabletop-cow.jpg'),
+  'child-pose': require('@/assets/yoga/child-pose.jpg'),
   'supported-child': require('@/assets/yoga/supported-child.jpg'),
   'floor-rest': require('@/assets/yoga/floor-rest.jpg'),
-  'legs-on-chair': require('@/assets/yoga/legs-on-chair.jpg'),
+  'supported-savasana': require('@/assets/yoga/supported-savasana.jpg'),
 };
 
 function minutesLabel(seconds: number): string {
   return `${Math.max(1, Math.ceil(seconds / 60))} min`;
+}
+
+function settingLabel(setting: YogaPractice['setting']): string {
+  if (setting === 'chair') return 'Chair yoga';
+  if (setting === 'restorative') return 'Restorative yoga';
+  return 'Floor yoga';
 }
 
 export default function YogaScreen() {
@@ -47,9 +58,9 @@ export default function YogaScreen() {
   return (
     <AppScreen>
       <PageHeader
-        eyebrow="Guided movement"
-        title="Move gently, one step at a time."
-        description="Beginner chair and floor sequences with a clear picture for every movement."
+        eyebrow="Beginner yoga"
+        title="Choose a practice that fits today."
+        description="Named yoga poses, clear setup, and easy exits. Start seated, on the floor, or with restorative support."
         icon="activity"
       />
 
@@ -65,7 +76,7 @@ export default function YogaScreen() {
           <AppCard quiet>
             <View style={styles.practiceMeta}>
               <Text style={appUiStyles.label}>
-                {selected.setting === 'chair' ? 'Chair practice' : 'Floor practice'}
+                {settingLabel(selected.setting)}
               </Text>
               <Text style={styles.duration}>
                 {minutesLabel(yogaPracticeDurationSeconds(selected))}
@@ -87,7 +98,7 @@ export default function YogaScreen() {
               <Text style={styles.safetyTitle}>Move within an easy range</Text>
             </View>
             <Text style={appUiStyles.muted}>
-              Optional wellbeing support, not treatment or individualized advice. Stop for pain, dizziness, numbness, or breathing difficulty. {selected.safetyNote}
+              Wellbeing support, not treatment. Stop for pain, dizziness, numbness, or breathing difficulty. {selected.safetyNote}
             </Text>
           </AppCard>
 
@@ -135,7 +146,7 @@ export default function YogaScreen() {
                 <Pressable
                   key={practice.id}
                   accessibilityRole="button"
-                  accessibilityLabel={`${practice.title}, ${minutesLabel(yogaPracticeDurationSeconds(practice))}, ${practice.setting} practice`}
+                  accessibilityLabel={`${practice.title}, ${minutesLabel(yogaPracticeDurationSeconds(practice))}, ${settingLabel(practice.setting)}`}
                   onPress={() => setSelected(practice)}
                   style={({ pressed }) => [styles.practiceCard, pressed && styles.pressed]}
                 >
@@ -147,7 +158,7 @@ export default function YogaScreen() {
                   />
                   <View style={styles.practiceCopy}>
                     <Text style={styles.practiceLabel}>
-                      {practice.setting} | {minutesLabel(yogaPracticeDurationSeconds(practice))}
+                      {settingLabel(practice.setting)} | {minutesLabel(yogaPracticeDurationSeconds(practice))}
                     </Text>
                     <Text style={styles.practiceTitle}>{practice.title}</Text>
                     <Text style={styles.practiceSummary}>{practice.summary}</Text>
@@ -164,7 +175,7 @@ export default function YogaScreen() {
               <Text style={styles.safetyTitle}>Before you begin</Text>
             </View>
             <Text style={appUiStyles.muted}>
-              These are gentle self-guided movements, not medical treatment. Ask a qualified health professional first if injury, pregnancy, surgery, or a health condition may affect safe movement.
+              These are beginner self-guided yoga practices, not medical treatment. Ask a qualified health professional first if injury, pregnancy, surgery, or a health condition may affect safe movement.
             </Text>
           </AppCard>
         </>
