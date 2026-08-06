@@ -1,6 +1,8 @@
 import {
   CURATED_LIBRARY,
   type CuratedBook,
+  type LibraryActionType,
+  type LibraryIntegration,
   type LibraryTopic,
 } from './editorial';
 import { CURATED_STORIES, type CuratedStory } from './stories';
@@ -30,6 +32,14 @@ export type LibraryItem =
   | VideoLibraryItem
   | StoryLibraryItem;
 
+export type LibraryTemplateFilter = 'all' | LibraryActionType;
+
+export interface BookPracticeTemplate {
+  id: string;
+  book: BookLibraryItem;
+  integration: LibraryIntegration;
+}
+
 export interface LibraryFilterInput {
   query: string;
   topic: LibraryTopic;
@@ -56,6 +66,23 @@ export const BOOK_LIBRARY_ITEMS: BookLibraryItem[] = CURATED_LIBRARY.map((book) 
   creator: book.author,
   durationLabel: `${book.read_time_minutes} min guide`,
 }));
+
+function hasTemplateContent(integration: LibraryIntegration): boolean {
+  if (integration.actionType === 'journal') return Boolean(integration.prompt?.trim());
+  if (integration.actionType === 'goal') return Boolean(integration.goalContent?.trim());
+  return Boolean(integration.habitName?.trim());
+}
+
+export const BOOK_PRACTICE_TEMPLATES: BookPracticeTemplate[] = BOOK_LIBRARY_ITEMS.flatMap(
+  (book) =>
+    book.integrations
+      .filter(hasTemplateContent)
+      .map((integration, index) => ({
+        id: `${book.id}:${integration.actionType}:${index}`,
+        book,
+        integration,
+      }))
+);
 
 export const VIDEO_LIBRARY_ITEMS: VideoLibraryItem[] = CURATED_VIDEOS.map((video) => ({
   ...video,
@@ -132,5 +159,40 @@ export function filterLibraryItems(
     }
 
     return searchable.some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
+  });
+}
+
+export function filterBookPracticeTemplates(
+  templates: readonly BookPracticeTemplate[],
+  {
+    query,
+    topic,
+    action,
+  }: {
+    query: string;
+    topic: LibraryTopic;
+    action: LibraryTemplateFilter;
+  }
+): BookPracticeTemplate[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+
+  return templates.filter(({ book, integration }) => {
+    if (topic !== 'All' && book.topic !== topic) return false;
+    if (action !== 'all' && integration.actionType !== action) return false;
+    if (!normalizedQuery) return true;
+
+    return [
+      book.title,
+      book.author,
+      book.topic,
+      ...book.displayTags,
+      integration.title,
+      integration.description,
+      integration.actionType,
+      integration.prompt,
+      integration.goalContent,
+      integration.habitName,
+      integration.habitDescription,
+    ].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery));
   });
 }

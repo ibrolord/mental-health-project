@@ -22,13 +22,16 @@ import {
 } from '@/components/AppUI';
 import { Colors } from '@/lib/constants';
 import {
+  BOOK_PRACTICE_TEMPLATES,
   UNIFIED_LIBRARY,
+  filterBookPracticeTemplates,
   filterLibraryItems,
   isBookItem,
   isStoryItem,
   isVideoItem,
   type LibraryItem,
   type LibraryMediaFilter,
+  type LibraryTemplateFilter,
 } from '@/lib/library/content';
 import {
   LIBRARY_TOPICS,
@@ -57,6 +60,15 @@ const MEDIA_FILTERS: {
   { id: 'saved', label: 'Saved' },
   { id: 'next', label: 'Up next' },
 ];
+
+const TEMPLATE_FILTERS: { id: LibraryTemplateFilter; label: string }[] = [
+  { id: 'all', label: 'All templates' },
+  { id: 'journal', label: 'Journal' },
+  { id: 'goal', label: 'Goal' },
+  { id: 'habit', label: 'Habit' },
+];
+
+type LibraryView = 'resources' | 'templates';
 
 function mediaLabel(item: LibraryItem): string {
   if (isVideoItem(item)) return 'Talk';
@@ -136,6 +148,9 @@ export default function LibraryScreen() {
   const [search, setSearch] = useState('');
   const [topic, setTopic] = useState<LibraryTopic>('All');
   const [media, setMedia] = useState<LibraryMediaFilter>('all');
+  const [libraryView, setLibraryView] = useState<LibraryView>('resources');
+  const [templateFilter, setTemplateFilter] = useState<LibraryTemplateFilter>('all');
+  const [showTopics, setShowTopics] = useState(false);
   const [selected, setSelected] = useState<LibraryItem | null>(null);
   const [itemStates, setItemStates] = useState<
     Record<string, LibraryItemState>
@@ -208,6 +223,15 @@ export default function LibraryScreen() {
         nextIds,
       }),
     [media, nextIds, savedIds, search, topic]
+  );
+  const filteredTemplates = useMemo(
+    () =>
+      filterBookPracticeTemplates(BOOK_PRACTICE_TEMPLATES, {
+        query: search,
+        topic,
+        action: templateFilter,
+      }),
+    [search, templateFilter, topic]
   );
 
   const stateFor = (item: LibraryItem): LibraryItemStateDraft =>
@@ -444,7 +468,10 @@ export default function LibraryScreen() {
           />
         </AppCard>
 
-        <DetailSection title="Use it in MHtoolkit">
+        <DetailSection title="Practice templates">
+          <Text style={[appUiStyles.muted, { marginBottom: 12 }]}>
+            Prefilled drafts based on paraphrased ideas from this guide. Review before saving.
+          </Text>
           {selected.integrations.map((integration) => (
             <Pressable
               key={integration.title}
@@ -456,7 +483,7 @@ export default function LibraryScreen() {
             >
               <View style={{ flex: 1 }}>
                 <Text style={appUiStyles.label}>
-                  {integration.actionType}
+                  {integration.actionType} template
                 </Text>
                 <Text style={styles.blockTitle}>{integration.title}</Text>
                 <Text style={appUiStyles.muted}>
@@ -510,44 +537,104 @@ export default function LibraryScreen() {
         icon="book-open"
       />
       <AppCard>
+        <View style={styles.viewSwitch}>
+          <ChoiceChip
+            label="Resources"
+            selected={libraryView === 'resources'}
+            onPress={() => setLibraryView('resources')}
+          />
+          <ChoiceChip
+            label="Practice templates"
+            selected={libraryView === 'templates'}
+            onPress={() => setLibraryView('templates')}
+          />
+        </View>
         <AppInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Search all resources"
+          placeholder={
+            libraryView === 'resources'
+              ? 'Search all resources'
+              : 'Search templates or books'
+          }
           accessibilityLabel="Search the library"
         />
         <View style={styles.chips}>
-          {MEDIA_FILTERS.map((filter) => (
+          {(libraryView === 'resources' ? MEDIA_FILTERS : TEMPLATE_FILTERS).map((filter) => (
             <ChoiceChip
               key={filter.id}
               label={filter.label}
-              selected={media === filter.id}
-              onPress={() => setMedia(filter.id)}
+              selected={
+                libraryView === 'resources'
+                  ? media === filter.id
+                  : templateFilter === filter.id
+              }
+              onPress={() => {
+                if (libraryView === 'resources') {
+                  setMedia(filter.id as LibraryMediaFilter);
+                } else {
+                  setTemplateFilter(filter.id as LibraryTemplateFilter);
+                }
+              }}
             />
           ))}
         </View>
-        <View style={[styles.chips, { marginTop: 9 }]}>
-          {LIBRARY_TOPICS.map((filterTopic) => (
-            <ChoiceChip
-              key={filterTopic}
-              label={filterTopic}
-              selected={topic === filterTopic}
-              onPress={() => setTopic(filterTopic)}
-            />
-          ))}
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: showTopics }}
+          accessibilityLabel={`Filter by need. Current selection: ${topic}`}
+          onPress={() => setShowTopics((current) => !current)}
+          style={styles.topicDisclosure}
+        >
+          <View style={styles.topicDisclosureLabel}>
+            <Feather name="sliders" size={15} color={Colors.primary} />
+            <Text style={styles.topicDisclosureText}>Need: {topic}</Text>
+          </View>
+          <Feather
+            name={showTopics ? 'chevron-up' : 'chevron-down'}
+            size={17}
+            color={Colors.primary}
+          />
+        </Pressable>
+        {showTopics ? (
+          <View style={[styles.chips, { marginTop: 9 }]}>
+            {LIBRARY_TOPICS.map((filterTopic) => (
+              <ChoiceChip
+                key={filterTopic}
+                label={filterTopic}
+                selected={topic === filterTopic}
+                onPress={() => {
+                  setTopic(filterTopic);
+                  setShowTopics(false);
+                }}
+              />
+            ))}
+          </View>
+        ) : null}
       </AppCard>
       <SectionHeader
-        title={`${filtered.length} resources`}
-        description={`${UNIFIED_LIBRARY.length} reviewed items across books, talks, and original profiles.`}
+        title={
+          libraryView === 'resources'
+            ? `${filtered.length} resources`
+            : `${filteredTemplates.length} practice templates`
+        }
+        description={
+          libraryView === 'resources'
+            ? `${UNIFIED_LIBRARY.length} reviewed items across books, talks, and original profiles.`
+            : `${BOOK_PRACTICE_TEMPLATES.length} source-attributed drafts across journal, goals, and habits.`
+        }
       />
       {error ? <Text style={appUiStyles.error}>{error}</Text> : null}
       {loadingState ? (
         <Text style={appUiStyles.muted}>Loading your library...</Text>
-      ) : filtered.length === 0 ? (
+      ) : (libraryView === 'resources' ? filtered.length : filteredTemplates.length) === 0 ? (
         <EmptyState
           icon="search"
-          title="No matching resources"
+          title={
+            libraryView === 'resources'
+              ? 'No matching resources'
+              : 'No matching templates'
+          }
           description="Clear a filter or try a different phrase."
           action={
             <AppButton
@@ -556,10 +643,53 @@ export default function LibraryScreen() {
                 setSearch('');
                 setTopic('All');
                 setMedia('all');
+                setTemplateFilter('all');
               }}
             />
           }
         />
+      ) : libraryView === 'templates' ? (
+        filteredTemplates.map((template) => {
+          const icon =
+            template.integration.actionType === 'journal'
+              ? 'edit-3'
+              : template.integration.actionType === 'goal'
+                ? 'target'
+                : 'repeat';
+          return (
+            <Pressable
+              key={template.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Use ${template.integration.title} from ${template.book.title}`}
+              onPress={() =>
+                router.push(integrationRoute(template.book, template.integration))
+              }
+              style={({ pressed }) => [
+                styles.templateCard,
+                pressed && { opacity: 0.76 },
+              ]}
+            >
+              <View style={styles.templateTop}>
+                <View style={styles.mediaBadge}>
+                  <Feather name={icon} size={13} color={Colors.primary} />
+                  <Text style={styles.mediaBadgeText}>
+                    {template.integration.actionType.toUpperCase()} TEMPLATE
+                  </Text>
+                </View>
+                <Text style={styles.duration}>{template.book.topic}</Text>
+              </View>
+              <Text style={styles.resourceTitle}>{template.integration.title}</Text>
+              <Text style={styles.summary}>{template.integration.description}</Text>
+              <Text style={styles.templateSource}>
+                From {template.book.title} by {template.book.author}
+              </Text>
+              <View style={styles.templateAction}>
+                <Text style={styles.templateActionText}>Use template</Text>
+                <Feather name="arrow-right" size={17} color={Colors.primary} />
+              </View>
+            </Pressable>
+          );
+        })
       ) : (
         filtered.map((item) => {
           const itemState = stateFor(item);
@@ -624,7 +754,20 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
+  viewSwitch: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 12 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  topicDisclosure: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    marginTop: 12,
+    paddingTop: 12,
+  },
+  topicDisclosureLabel: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topicDisclosureText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -702,6 +845,36 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 9,
   },
+  templateCard: {
+    backgroundColor: '#f4faf6',
+    borderWidth: 1,
+    borderColor: '#cfe2d5',
+    borderRadius: 17,
+    padding: 17,
+    marginBottom: 11,
+  },
+  templateTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  templateSource: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 13,
+  },
+  templateAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    paddingTop: 13,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  templateActionText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
   promptRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   promptNumber: {
     width: 26,

@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BOOK_PRACTICE_TEMPLATES,
   BOOK_LIBRARY_ITEMS,
+  filterBookPracticeTemplates,
   filterLibraryItems,
   STORY_LIBRARY_ITEMS,
   UNIFIED_LIBRARY,
   VIDEO_LIBRARY_ITEMS,
 } from '../../lib/library/content';
+import {
+  BOOK_PRACTICE_TEMPLATES as MOBILE_BOOK_PRACTICE_TEMPLATES,
+} from '../../mobile/lib/library/content';
 
 describe('unified library catalog', () => {
   it('combines every reviewed book, video, and story without id collisions', () => {
@@ -78,5 +83,58 @@ describe('unified library catalog', () => {
         nextIds,
       }).map(({ id }) => id)
     ).toEqual(['video-anxiety-stress-friend']);
+  });
+
+  it('turns every complete book integration into a source-attributed practice template', () => {
+    expect(BOOK_PRACTICE_TEMPLATES).toHaveLength(174);
+    expect(new Set(BOOK_PRACTICE_TEMPLATES.map(({ id }) => id)).size).toBe(174);
+
+    for (const { book, integration } of BOOK_PRACTICE_TEMPLATES) {
+      expect(book.mediaType).toBe('book');
+      expect(book.title).toBeTruthy();
+      expect(book.author).toBeTruthy();
+
+      if (integration.actionType === 'journal') expect(integration.prompt?.trim()).toBeTruthy();
+      if (integration.actionType === 'goal') expect(integration.goalContent?.trim()).toBeTruthy();
+      if (integration.actionType === 'habit') expect(integration.habitName?.trim()).toBeTruthy();
+
+      const prefill =
+        integration.prompt ??
+        integration.goalContent ??
+        integration.habitDescription ??
+        integration.habitName ??
+        '';
+      const params = new URLSearchParams({
+        source: 'library',
+        item: book.id,
+        itemTitle: book.title,
+        mediaType: 'book',
+        book: book.id,
+        bookTitle: book.title,
+        prefill,
+      });
+      expect(params.toString().length).toBeLessThan(1800);
+    }
+
+    expect(MOBILE_BOOK_PRACTICE_TEMPLATES).toEqual(BOOK_PRACTICE_TEMPLATES);
+  });
+
+  it('filters practice templates by action, topic, source book, and template content', () => {
+    const defusion = filterBookPracticeTemplates(BOOK_PRACTICE_TEMPLATES, {
+      query: 'Practice defusion on paper',
+      topic: 'All',
+      action: 'journal',
+    });
+    expect(defusion).toHaveLength(1);
+    expect(defusion[0].book.title).toBe('The Happiness Trap');
+
+    const recoveryHabits = filterBookPracticeTemplates(BOOK_PRACTICE_TEMPLATES, {
+      query: '',
+      topic: 'Burnout & recovery',
+      action: 'habit',
+    });
+    expect(recoveryHabits.length).toBeGreaterThan(0);
+    expect(recoveryHabits.every(({ integration }) => integration.actionType === 'habit')).toBe(true);
+    expect(recoveryHabits.every(({ book }) => book.topic === 'Burnout & recovery')).toBe(true);
   });
 });

@@ -27,7 +27,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import {
+  BOOK_PRACTICE_TEMPLATES,
   filterLibraryItems,
+  filterBookPracticeTemplates,
   BOOK_LIBRARY_ITEMS,
   isBookItem,
   isStoryItem,
@@ -37,6 +39,7 @@ import {
   VIDEO_LIBRARY_ITEMS,
   type LibraryItem,
   type LibraryMediaFilter,
+  type LibraryTemplateFilter,
 } from '@/lib/library/content';
 import {
   LIBRARY_TOPICS,
@@ -114,6 +117,15 @@ const mediaFilters: { value: LibraryMediaFilter; label: string }[] = [
   { value: 'next', label: 'Up next' },
 ];
 
+const templateFilters: { value: LibraryTemplateFilter; label: string }[] = [
+  { value: 'all', label: 'All templates' },
+  { value: 'journal', label: 'Journal' },
+  { value: 'goal', label: 'Goal' },
+  { value: 'habit', label: 'Habit' },
+];
+
+type LibraryView = 'resources' | 'templates';
+
 type Feedback = {
   tone: 'success' | 'error';
   message: string;
@@ -135,6 +147,8 @@ export default function LibraryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTopic, setSelectedTopic] = useState<LibraryTopic>('All');
   const [mediaFilter, setMediaFilter] = useState<LibraryMediaFilter>('all');
+  const [libraryView, setLibraryView] = useState<LibraryView>('resources');
+  const [templateFilter, setTemplateFilter] = useState<LibraryTemplateFilter>('all');
   const [selectedItem, setSelectedItem] = useState<LibraryItem | null>(null);
   const [itemStates, setItemStates] = useState<Record<string, LibraryItemState>>({});
   const [stateLoading, setStateLoading] = useState(true);
@@ -246,6 +260,15 @@ export default function LibraryPage() {
         nextIds,
       }),
     [mediaFilter, nextIds, savedIds, searchQuery, selectedTopic]
+  );
+  const filteredTemplates = useMemo(
+    () =>
+      filterBookPracticeTemplates(BOOK_PRACTICE_TEMPLATES, {
+        query: searchQuery,
+        topic: selectedTopic,
+        action: templateFilter,
+      }),
+    [searchQuery, selectedTopic, templateFilter]
   );
 
   const persistItemState = async (
@@ -409,6 +432,7 @@ export default function LibraryPage() {
     setSearchQuery('');
     setSelectedTopic('All');
     setMediaFilter('all');
+    setTemplateFilter('all');
   };
 
   if (selectedItem) {
@@ -763,14 +787,14 @@ export default function LibraryPage() {
 
               <section>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-800">
-                  Put the ideas to work
+                  Practice templates
                 </p>
                 <h2 className="mt-1 font-[family-name:var(--font-display)] text-3xl text-slate-950">
-                  Bring one idea into MHtoolkit
+                  Start with a ready-to-use practice
                 </h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                  Each action opens a prefilled draft for you to review. Nothing is saved until you
-                  choose to save it.
+                  These original MHtoolkit templates are based on paraphrased ideas from this guide.
+                  Review the draft before saving it.
                 </p>
                 <div className="mt-5 grid gap-4 md:grid-cols-3">
                   {selectedItem.integrations.map((integration) => {
@@ -785,7 +809,10 @@ export default function LibraryPage() {
                         className={`flex flex-col rounded-2xl border p-5 ${style.card}`}
                       >
                         <Icon className={`h-5 w-5 ${style.label}`} aria-hidden="true" />
-                        <h3 className="mt-4 font-semibold text-slate-950">{integration.title}</h3>
+                        <p className={`mt-3 text-xs font-bold uppercase tracking-[0.12em] ${style.label}`}>
+                          {integration.actionType} template
+                        </p>
+                        <h3 className="mt-2 font-semibold text-slate-950">{integration.title}</h3>
                         <p className="mt-2 text-sm leading-6 text-slate-700">
                           {integration.description}
                         </p>
@@ -902,7 +929,7 @@ export default function LibraryPage() {
                 [BOOK_LIBRARY_ITEMS.length.toString(), 'books'],
                 [VIDEO_LIBRARY_ITEMS.length.toString(), 'videos'],
                 [STORY_LIBRARY_ITEMS.length.toString(), 'stories'],
-                ['7', 'needs'],
+                [BOOK_PRACTICE_TEMPLATES.length.toString(), 'templates'],
               ].map(([value, label]) => (
                 <div
                   key={label}
@@ -936,25 +963,53 @@ export default function LibraryPage() {
           <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-800">
-                One practical library
+                {libraryView === 'resources' ? 'One practical library' : 'Turn insight into action'}
               </p>
               <h2
                 id="library-heading"
                 className="mt-1 font-[family-name:var(--font-display)] text-3xl text-slate-950"
               >
-                Browse by need, not format.
+                {libraryView === 'resources'
+                  ? 'Browse by need, not format.'
+                  : 'Start with a ready-to-use practice.'}
               </h2>
             </div>
             <p className="text-sm text-slate-600">
               {stateLoading
                 ? 'Syncing your saved library...'
-                : `${filteredItems.length} of ${UNIFIED_LIBRARY.length} resources`}
+                : libraryView === 'resources'
+                  ? `${filteredItems.length} of ${UNIFIED_LIBRARY.length} resources`
+                  : `${filteredTemplates.length} of ${BOOK_PRACTICE_TEMPLATES.length} templates`}
             </p>
           </div>
 
           <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" aria-label="Library view">
+              {([
+                ['resources', 'Resources', BookOpen],
+                ['templates', 'Practice templates', Repeat2],
+              ] as const).map(([value, label, Icon]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setLibraryView(value)}
+                  aria-pressed={libraryView === value}
+                  className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors ${
+                    libraryView === value
+                      ? 'bg-white text-emerald-950 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-950'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <label htmlFor="library-search" className="sr-only">
-              Search books, videos, and stories
+              {libraryView === 'resources'
+                ? 'Search books, videos, and stories'
+                : 'Search practice templates'}
             </label>
             <div className="relative">
               <Search
@@ -963,7 +1018,11 @@ export default function LibraryPage() {
               />
               <Input
                 id="library-search"
-                placeholder="Search title, creator, topic, premise, or takeaway"
+                placeholder={
+                  libraryView === 'resources'
+                    ? 'Search title, creator, topic, premise, or takeaway'
+                    : 'Search templates, books, authors, or topics'
+                }
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 className="h-11 pl-10"
@@ -972,16 +1031,30 @@ export default function LibraryPage() {
 
             <div
               className="mt-4 flex gap-2 overflow-x-auto pb-1"
-              aria-label="Library media filters"
+              aria-label={
+                libraryView === 'resources'
+                  ? 'Library media filters'
+                  : 'Practice template filters'
+              }
             >
-              {mediaFilters.map(({ value, label }) => (
+              {(libraryView === 'resources' ? mediaFilters : templateFilters).map(({ value, label }) => (
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setMediaFilter(value)}
-                  aria-pressed={mediaFilter === value}
+                  onClick={() => {
+                    if (libraryView === 'resources') {
+                      setMediaFilter(value as LibraryMediaFilter);
+                    } else {
+                      setTemplateFilter(value as LibraryTemplateFilter);
+                    }
+                  }}
+                  aria-pressed={
+                    libraryView === 'resources'
+                      ? mediaFilter === value
+                      : templateFilter === value
+                  }
                   className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
-                    mediaFilter === value
+                    (libraryView === 'resources' ? mediaFilter : templateFilter) === value
                       ? 'bg-emerald-950 text-white'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
@@ -1013,11 +1086,13 @@ export default function LibraryPage() {
             </div>
           </div>
 
-          {filteredItems.length === 0 && (
+          {(libraryView === 'resources' ? filteredItems.length : filteredTemplates.length) === 0 && (
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-10 text-center">
-              <p className="font-semibold text-slate-950">No resources match this view.</p>
+              <p className="font-semibold text-slate-950">
+                No {libraryView === 'resources' ? 'resources' : 'templates'} match this view.
+              </p>
               <p className="mt-1 text-sm text-slate-600">
-                Saved and Up next stay empty until you choose something.
+                Try another phrase or clear the filters.
               </p>
               <button
                 type="button"
@@ -1029,7 +1104,56 @@ export default function LibraryPage() {
             </div>
           )}
 
-          {filteredItems.length > 0 && (
+          {libraryView === 'templates' && filteredTemplates.length > 0 && (
+            <div className="mt-6 grid gap-5 md:grid-cols-2">
+              {filteredTemplates.map((template) => {
+                const style = integrationStyle[template.integration.actionType];
+                const Icon = style.icon;
+                return (
+                  <article
+                    key={template.id}
+                    className={`flex min-h-64 flex-col rounded-2xl border p-6 ${style.card}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className={`inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] ${style.label}`}>
+                        <Icon className="h-4 w-4" aria-hidden="true" />
+                        {template.integration.actionType} template
+                      </span>
+                      <span className="text-xs text-slate-500">{template.book.topic}</span>
+                    </div>
+                    <h3 className="mt-5 font-[family-name:var(--font-display)] text-2xl leading-tight text-slate-950">
+                      {template.integration.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-6 text-slate-700">
+                      {template.integration.description}
+                    </p>
+                    <p className="mt-4 text-xs leading-5 text-slate-600">
+                      From <span className="font-semibold text-slate-800">{template.book.title}</span>{' '}
+                      by {template.book.author}
+                    </p>
+                    <div className="mt-auto flex flex-wrap items-center gap-4 pt-6">
+                      <Link
+                        href={integrationHref(template.book, template.integration)}
+                        className={`inline-flex items-center gap-2 text-sm font-semibold ${style.label}`}
+                      >
+                        Use template
+                        <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => openItem(template.book)}
+                        className="text-sm font-semibold text-slate-600 underline decoration-slate-300 underline-offset-4"
+                      >
+                        Open guide
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+
+          {libraryView === 'resources' && filteredItems.length > 0 && (
             <div className="mt-6 grid gap-5 md:grid-cols-2">
               {filteredItems.map((item) => {
                 const itemState =
