@@ -40,6 +40,11 @@ export interface BookPracticeTemplate {
   integration: LibraryIntegration;
 }
 
+export type LibraryPracticeDestination = {
+  pathname: '/journal' | '/goals' | '/habits';
+  params: Record<string, string>;
+};
+
 export interface LibraryFilterInput {
   query: string;
   topic: LibraryTopic;
@@ -60,6 +65,33 @@ export function isStoryItem(item: LibraryItem): item is StoryLibraryItem {
   return item.mediaType === 'story';
 }
 
+export function practiceDestinationFor(
+  integration: LibraryIntegration
+): LibraryPracticeDestination | null {
+  if (integration.actionType === 'journal' && integration.prompt?.trim()) {
+    return { pathname: '/journal', params: { prompt: integration.prompt } };
+  }
+  if (integration.actionType === 'goal' && integration.goalContent?.trim()) {
+    return { pathname: '/goals', params: { content: integration.goalContent } };
+  }
+  if (integration.actionType === 'habit' && integration.habitName?.trim()) {
+    return {
+      pathname: '/habits',
+      params: {
+        name: integration.habitName,
+        description: integration.habitDescription ?? '',
+      },
+    };
+  }
+  if (integration.actionType === 'routine' && integration.routineId?.trim()) {
+    return {
+      pathname: '/habits',
+      params: { view: 'routines', template: integration.routineId },
+    };
+  }
+  return null;
+}
+
 export const BOOK_LIBRARY_ITEMS: BookLibraryItem[] = CURATED_LIBRARY.map((book) => ({
   ...book,
   mediaType: 'book',
@@ -70,19 +102,61 @@ export const BOOK_LIBRARY_ITEMS: BookLibraryItem[] = CURATED_LIBRARY.map((book) 
 function hasTemplateContent(integration: LibraryIntegration): boolean {
   if (integration.actionType === 'journal') return Boolean(integration.prompt?.trim());
   if (integration.actionType === 'goal') return Boolean(integration.goalContent?.trim());
-  return Boolean(integration.habitName?.trim());
+  if (integration.actionType === 'habit') return Boolean(integration.habitName?.trim());
+  return Boolean(integration.routineId?.trim());
 }
 
+const CURATED_INTEGRATION_TITLES: Record<string, readonly string[]> = {
+  'atomic-habits': ['Design your habit loop', 'Track the smallest version'],
+  'the-happiness-trap': ['Practice defusion on paper', 'Choose a values action'],
+  'feeling-good': ['Write a balanced thought record', 'Run a small experiment'],
+  'when-the-body-says-no': ['Map a boundary', 'Practice a capacity check'],
+  'burnout-stress-cycle': ['Separate stress from stressor'],
+  'gifts-of-imperfection': ['Rewrite the perfectionist rule', 'Use a compassionate debrief'],
+  'the-body-keeps-the-score': ['Create a present-safety note'],
+  mindset: ['Turn a setback into data', 'Run one learning experiment', 'Record one useful lesson'],
+};
+
+const BOOK_ROUTINE_INTEGRATIONS: Record<string, readonly LibraryIntegration[]> = {
+  'atomic-habits': [
+    {
+      title: 'Build a cue-to-reward routine',
+      description: 'Review a short sequence for setting the cue, starting small, and learning from the repetition.',
+      actionType: 'routine',
+      actionLabel: 'Review the routine',
+      routineId: 'atomic-habit-loop',
+    },
+  ],
+  'burnout-stress-cycle': [
+    {
+      title: 'Build a recovery reset',
+      description: 'Review a short sequence that separates practical action from a safe recovery step.',
+      actionType: 'routine',
+      actionLabel: 'Review the routine',
+      routineId: 'burnout-recovery-reset',
+    },
+  ],
+};
+
 export const BOOK_PRACTICE_TEMPLATES: BookPracticeTemplate[] = BOOK_LIBRARY_ITEMS.flatMap(
-  (book) =>
-    book.integrations
-      .filter(hasTemplateContent)
-      .map((integration, index) => ({
-        id: `${book.id}:${integration.actionType}:${index}`,
-        book,
-        integration,
-      }))
+  (book) => {
+    const selectedTitles = new Set(CURATED_INTEGRATION_TITLES[book.id] ?? []);
+    const integrations = [
+      ...book.integrations.filter(({ title }) => selectedTitles.has(title)),
+      ...(BOOK_ROUTINE_INTEGRATIONS[book.id] ?? []),
+    ].filter(hasTemplateContent);
+
+    return integrations.map((integration, index) => ({
+      id: `${book.id}:${integration.actionType}:${index}`,
+      book,
+      integration,
+    }));
+  }
 );
+
+export function bookPracticeTemplatesFor(bookId: string): BookPracticeTemplate[] {
+  return BOOK_PRACTICE_TEMPLATES.filter(({ book }) => book.id === bookId);
+}
 
 export const VIDEO_LIBRARY_ITEMS: VideoLibraryItem[] = CURATED_VIDEOS.map((video) => ({
   ...video,
@@ -193,6 +267,7 @@ export function filterBookPracticeTemplates(
       integration.goalContent,
       integration.habitName,
       integration.habitDescription,
+      integration.routineId,
     ].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery));
   });
 }

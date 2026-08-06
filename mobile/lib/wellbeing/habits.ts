@@ -250,6 +250,83 @@ export const ROUTINE_TEMPLATES: RoutineTemplate[] = [
       }),
     ],
   },
+  {
+    id: 'atomic-habit-loop',
+    title: 'Cue-to-reward habit loop',
+    eyebrow: 'From Atomic Habits',
+    description:
+      'A three-step setup for making one chosen behavior easier to notice, begin, and adjust.',
+    slot: 'anytime',
+    evidenceIds: ['habit-repetition', 'implementation-intentions'],
+    items: [
+      baseHabit({
+        name: 'Prepare one visible cue',
+        description: 'Put the reminder or needed object where the behavior will happen.',
+        category: 'custom',
+        icon: 'target',
+        cue: 'Before the time or place I chose for this habit',
+        tinyStep: 'Place one cue in view',
+        routineSlot: 'anytime',
+      }),
+      baseHabit({
+        name: 'Complete the two-minute version',
+        description: 'Begin with the smallest safe version that still counts.',
+        category: 'custom',
+        icon: 'play',
+        cue: 'When I notice the prepared cue',
+        tinyStep: 'Do the first two minutes',
+        routineSlot: 'anytime',
+      }),
+      baseHabit({
+        name: 'Review one point of friction',
+        description: 'Use the repetition or miss to make the next attempt easier.',
+        category: 'custom',
+        icon: 'notebook',
+        cue: 'After the attempt',
+        tinyStep: 'Write one adjustment for next time',
+        routineSlot: 'anytime',
+      }),
+    ],
+  },
+  {
+    id: 'burnout-recovery-reset',
+    title: 'Stress and recovery reset',
+    eyebrow: 'From Burnout',
+    description:
+      'A short sequence for naming the practical demand, choosing a safe recovery action, and checking its effect.',
+    slot: 'anytime',
+    evidenceIds: ['habit-repetition', 'implementation-intentions', 'microbreaks'],
+    items: [
+      baseHabit({
+        name: 'Name the stressor and one next action',
+        description: 'Separate the external demand from the response it created.',
+        category: 'wellbeing',
+        icon: 'target',
+        cue: 'When a stressful period ends',
+        tinyStep: 'Write the stressor and one practical next step',
+        routineSlot: 'anytime',
+      }),
+      baseHabit({
+        name: 'Choose one safe recovery action',
+        description: 'Use movement, rest, connection, or another accessible action that helps you settle.',
+        category: 'wellbeing',
+        icon: 'wind',
+        cue: 'After I name the stressor',
+        tinyStep: 'Try one recovery action for two minutes',
+        routineSlot: 'anytime',
+        evidenceIds: ['microbreaks', 'habit-repetition'],
+      }),
+      baseHabit({
+        name: 'Check the effect without grading it',
+        description: 'Notice whether anything shifted and choose what to adjust next time.',
+        category: 'wellbeing',
+        icon: 'notebook',
+        cue: 'After the recovery action',
+        tinyStep: 'Name one effect or one adjustment',
+        routineSlot: 'anytime',
+      }),
+    ],
+  },
 ];
 
 export function createHabitDedupeKey(name: string, slot: RoutineSlot): string {

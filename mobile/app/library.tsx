@@ -23,12 +23,14 @@ import {
 import { Colors } from '@/lib/constants';
 import {
   BOOK_PRACTICE_TEMPLATES,
+  bookPracticeTemplatesFor,
   UNIFIED_LIBRARY,
   filterBookPracticeTemplates,
   filterLibraryItems,
   isBookItem,
   isStoryItem,
   isVideoItem,
+  practiceDestinationFor,
   type LibraryItem,
   type LibraryMediaFilter,
   type LibraryTemplateFilter,
@@ -66,6 +68,7 @@ const TEMPLATE_FILTERS: { id: LibraryTemplateFilter; label: string }[] = [
   { id: 'journal', label: 'Journal' },
   { id: 'goal', label: 'Goal' },
   { id: 'habit', label: 'Habit' },
+  { id: 'routine', label: 'Routine' },
 ];
 
 type LibraryView = 'resources' | 'templates';
@@ -88,25 +91,11 @@ function integrationRoute(
     bookTitle: item.title,
     mediaType: item.mediaType,
   };
-  if (integration.actionType === 'journal') {
-    return {
-      pathname: '/journal' as const,
-      params: { ...baseParams, prompt: integration.prompt ?? '' },
-    };
-  }
-  if (integration.actionType === 'goal') {
-    return {
-      pathname: '/goals' as const,
-      params: { ...baseParams, content: integration.goalContent ?? '' },
-    };
-  }
+  const destination = practiceDestinationFor(integration);
+  if (!destination) return { pathname: '/library' as const };
   return {
-    pathname: '/habits' as const,
-    params: {
-      ...baseParams,
-      name: integration.habitName ?? '',
-      description: integration.habitDescription ?? '',
-    },
+    pathname: destination.pathname,
+    params: { ...baseParams, ...destination.params },
   };
 }
 
@@ -312,6 +301,9 @@ export default function LibraryScreen() {
     const selectedState = stateFor(selected);
     const selectedIsBook = isBookItem(selected);
     const selectedIsStory = isStoryItem(selected);
+    const selectedIntegrations = selectedIsBook
+      ? bookPracticeTemplatesFor(selected.id).map(({ integration }) => integration)
+      : selected.integrations;
     return (
       <AppScreen>
         <AppButton
@@ -468,11 +460,11 @@ export default function LibraryScreen() {
           />
         </AppCard>
 
-        <DetailSection title="Practice templates">
+        {selectedIntegrations.length > 0 ? <DetailSection title="Practice templates">
           <Text style={[appUiStyles.muted, { marginBottom: 12 }]}>
             Prefilled drafts based on paraphrased ideas from this guide. Review before saving.
           </Text>
-          {selected.integrations.map((integration) => (
+          {selectedIntegrations.map((integration) => (
             <Pressable
               key={integration.title}
               accessibilityRole="button"
@@ -493,7 +485,7 @@ export default function LibraryScreen() {
               <Feather name="arrow-right" size={18} color={Colors.primary} />
             </Pressable>
           ))}
-        </DetailSection>
+        </DetailSection> : null}
 
         <DetailSection title="Questions to carry forward">
           {selected.reflectionPrompts.map((prompt, index) => (
@@ -621,7 +613,7 @@ export default function LibraryScreen() {
         description={
           libraryView === 'resources'
             ? `${UNIFIED_LIBRARY.length} reviewed items across books, talks, and original profiles.`
-            : `${BOOK_PRACTICE_TEMPLATES.length} source-attributed drafts across journal, goals, and habits.`
+            : `${BOOK_PRACTICE_TEMPLATES.length} curated tools across journals, goals, habits, and routines.`
         }
       />
       {error ? <Text style={appUiStyles.error}>{error}</Text> : null}
@@ -655,7 +647,9 @@ export default function LibraryScreen() {
               ? 'edit-3'
               : template.integration.actionType === 'goal'
                 ? 'target'
-                : 'repeat';
+                : template.integration.actionType === 'routine'
+                  ? 'layers'
+                  : 'repeat';
           return (
             <Pressable
               key={template.id}

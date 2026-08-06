@@ -28,7 +28,7 @@ export const LIBRARY_TOPICS = [
 
 export type LibraryTopic = (typeof LIBRARY_TOPICS)[number];
 export type BookSourceType = 'author' | 'publisher' | 'research' | 'clinical-context';
-export type LibraryActionType = 'journal' | 'goal' | 'habit';
+export type LibraryActionType = 'journal' | 'goal' | 'habit' | 'routine';
 
 export interface BookSource {
   label: string;
@@ -58,6 +58,7 @@ export interface LibraryIntegration {
   goalContent?: string;
   habitName?: string;
   habitDescription?: string;
+  routineId?: string;
 }
 
 export interface CuratedBook extends BookRecord {

@@ -4,6 +4,7 @@ import {
   BOOK_LIBRARY_ITEMS,
   filterBookPracticeTemplates,
   filterLibraryItems,
+  practiceDestinationFor,
   STORY_LIBRARY_ITEMS,
   UNIFIED_LIBRARY,
   VIDEO_LIBRARY_ITEMS,
@@ -11,6 +12,8 @@ import {
 import {
   BOOK_PRACTICE_TEMPLATES as MOBILE_BOOK_PRACTICE_TEMPLATES,
 } from '../../mobile/lib/library/content';
+import { ROUTINE_TEMPLATES } from '../../lib/wellbeing/habits';
+import { ROUTINE_TEMPLATES as MOBILE_ROUTINE_TEMPLATES } from '../../mobile/lib/wellbeing/habits';
 
 describe('unified library catalog', () => {
   it('combines every reviewed book, video, and story without id collisions', () => {
@@ -85,9 +88,31 @@ describe('unified library catalog', () => {
     ).toEqual(['video-anxiety-stress-friend']);
   });
 
-  it('turns every complete book integration into a source-attributed practice template', () => {
-    expect(BOOK_PRACTICE_TEMPLATES).toHaveLength(174);
-    expect(new Set(BOOK_PRACTICE_TEMPLATES.map(({ id }) => id)).size).toBe(174);
+  it('publishes only curated, source-attributed tools with varied destinations', () => {
+    expect(BOOK_PRACTICE_TEMPLATES).toHaveLength(17);
+    expect(new Set(BOOK_PRACTICE_TEMPLATES.map(({ id }) => id)).size).toBe(17);
+    expect(new Set(BOOK_PRACTICE_TEMPLATES.map(({ book }) => book.id))).toHaveLength(8);
+
+    const actionsByBook = new Set(
+      [...new Set(BOOK_PRACTICE_TEMPLATES.map(({ book }) => book.id))].map((bookId) =>
+        BOOK_PRACTICE_TEMPLATES.filter(({ book }) => book.id === bookId)
+          .map(({ integration }) => integration.actionType)
+          .sort()
+          .join(',')
+      )
+    );
+    expect(actionsByBook.size).toBeGreaterThan(3);
+
+    const genericTitles = [
+      'Connect the guide to your experience',
+      'Choose one next step',
+      'Practice before expanding',
+    ];
+    expect(
+      BOOK_PRACTICE_TEMPLATES.some(({ integration }) =>
+        genericTitles.includes(integration.title)
+      )
+    ).toBe(false);
 
     for (const { book, integration } of BOOK_PRACTICE_TEMPLATES) {
       expect(book.mediaType).toBe('book');
@@ -97,6 +122,10 @@ describe('unified library catalog', () => {
       if (integration.actionType === 'journal') expect(integration.prompt?.trim()).toBeTruthy();
       if (integration.actionType === 'goal') expect(integration.goalContent?.trim()).toBeTruthy();
       if (integration.actionType === 'habit') expect(integration.habitName?.trim()).toBeTruthy();
+      if (integration.actionType === 'routine') {
+        expect(integration.routineId?.trim()).toBeTruthy();
+        expect(ROUTINE_TEMPLATES.some(({ id }) => id === integration.routineId)).toBe(true);
+      }
 
       const prefill =
         integration.prompt ??
@@ -117,6 +146,7 @@ describe('unified library catalog', () => {
     }
 
     expect(MOBILE_BOOK_PRACTICE_TEMPLATES).toEqual(BOOK_PRACTICE_TEMPLATES);
+    expect(MOBILE_ROUTINE_TEMPLATES).toEqual(ROUTINE_TEMPLATES);
   });
 
   it('filters practice templates by action, topic, source book, and template content', () => {
@@ -128,13 +158,32 @@ describe('unified library catalog', () => {
     expect(defusion).toHaveLength(1);
     expect(defusion[0].book.title).toBe('The Happiness Trap');
 
-    const recoveryHabits = filterBookPracticeTemplates(BOOK_PRACTICE_TEMPLATES, {
+    const recoveryRoutines = filterBookPracticeTemplates(BOOK_PRACTICE_TEMPLATES, {
       query: '',
       topic: 'Burnout & recovery',
-      action: 'habit',
+      action: 'routine',
     });
-    expect(recoveryHabits.length).toBeGreaterThan(0);
-    expect(recoveryHabits.every(({ integration }) => integration.actionType === 'habit')).toBe(true);
-    expect(recoveryHabits.every(({ book }) => book.topic === 'Burnout & recovery')).toBe(true);
+    expect(recoveryRoutines).toHaveLength(1);
+    expect(recoveryRoutines[0].integration.routineId).toBe('burnout-recovery-reset');
+  });
+
+  it('routes each tool type to its matching product flow', () => {
+    const destinationByAction = Object.fromEntries(
+      BOOK_PRACTICE_TEMPLATES.map(({ integration }) => [
+        integration.actionType,
+        practiceDestinationFor(integration),
+      ])
+    );
+
+    expect(destinationByAction.journal?.pathname).toBe('/journal');
+    expect(destinationByAction.goal?.pathname).toBe('/goals');
+    expect(destinationByAction.habit?.pathname).toBe('/habits');
+    expect(destinationByAction.routine).toEqual({
+      pathname: '/habits',
+      params: {
+        view: 'routines',
+        template: expect.stringMatching(/^(atomic-habit-loop|burnout-recovery-reset)$/),
+      },
+    });
   });
 });

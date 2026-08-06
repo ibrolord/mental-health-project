@@ -12,6 +12,10 @@ const habitsPage = readFileSync(
   resolve(process.cwd(), 'app/habits/page.tsx'),
   'utf8'
 );
+const mobileHabitsPage = readFileSync(
+  resolve(process.cwd(), 'mobile/app/habits.tsx'),
+  'utf8'
+);
 
 describe('habit identity and progress', () => {
   it('normalizes case, spacing, punctuation, and accents for semantic identity', () => {
@@ -66,5 +70,24 @@ describe('habit identity and progress', () => {
     expect(addHabitSource).toContain('setHabits((current)');
     expect(addHabitSource).toContain('setLogs((current)');
     expect(addHabitSource).not.toContain('await loadHabits()');
+  });
+
+  it('clears library routine attribution before opening a blank habit editor', () => {
+    const webBlankEditor = habitsPage.slice(
+      habitsPage.indexOf('const openBlankHabitEditor = () =>'),
+      habitsPage.indexOf('const loadHabits = async')
+    );
+    expect(webBlankEditor).toContain('setDraft(EMPTY_DRAFT)');
+    expect(webBlankEditor).toContain("setLibrarySourceTitle('')");
+    expect(webBlankEditor).toContain("setSelectedRoutineId('')");
+
+    const mobileBlankEditor = mobileHabitsPage.slice(
+      mobileHabitsPage.indexOf('const openBlankHabitEditor = () =>'),
+      mobileHabitsPage.indexOf('return (', mobileHabitsPage.indexOf('const openBlankHabitEditor = () =>'))
+    );
+    expect(mobileBlankEditor).toContain("setSourceTitle('')");
+    expect(mobileBlankEditor).toContain("setSelectedRoutineId('')");
+    expect(mobileBlankEditor).toContain('setTemplatesOpen(false)');
+    expect(mobileHabitsPage).toContain('onPress={openBlankHabitEditor}');
   });
 });

@@ -128,6 +128,9 @@ export default function HabitsScreen() {
     name?: string | string[];
     description?: string | string[];
     bookTitle?: string | string[];
+    itemTitle?: string | string[];
+    view?: string | string[];
+    template?: string | string[];
   }>();
   const { context, authLoading } = useDataContext();
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -141,6 +144,7 @@ export default function HabitsScreen() {
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [sourceTitle, setSourceTitle] = useState('');
+  const [selectedRoutineId, setSelectedRoutineId] = useState('');
   const ownerRef = useRef(context.user_id);
   const createRef = useRef(false);
   const appliedLibraryRef = useRef('');
@@ -215,6 +219,25 @@ export default function HabitsScreen() {
       appliedLibraryRef.current = '';
       return;
     }
+    const routineId = firstParam(params.template).trim();
+    if (
+      firstParam(params.view) === 'routines' &&
+      ROUTINE_TEMPLATES.some(({ id }) => id === routineId)
+    ) {
+      const bookTitle = (
+        firstParam(params.itemTitle) || firstParam(params.bookTitle)
+      )
+        .trim()
+        .slice(0, 200);
+      const identity = `routine\u0000${routineId}\u0000${bookTitle}`;
+      if (appliedLibraryRef.current === identity) return;
+      appliedLibraryRef.current = identity;
+      setSourceTitle(bookTitle || 'the library');
+      setSelectedRoutineId(routineId);
+      setTemplatesOpen(true);
+      setEditorOpen(false);
+      return;
+    }
     const name = firstParam(params.name).trim().slice(0, 160);
     if (!name) return;
     const description = firstParam(params.description).trim().slice(0, 500);
@@ -232,7 +255,15 @@ export default function HabitsScreen() {
     }));
     setSourceTitle(bookTitle);
     setEditorOpen(true);
-  }, [params.bookTitle, params.description, params.name, params.source]);
+  }, [
+    params.bookTitle,
+    params.description,
+    params.itemTitle,
+    params.name,
+    params.source,
+    params.template,
+    params.view,
+  ]);
 
   const rowForDraft = (item: HabitDraft, ownerId: string) => ({
     user_id: ownerId,
@@ -448,6 +479,14 @@ export default function HabitsScreen() {
     Math.max(0, ...habits.map((habit) => habit.best_streak))
   );
 
+  const openBlankHabitEditor = () => {
+    setDraft(blankDraft());
+    setSourceTitle('');
+    setSelectedRoutineId('');
+    setTemplatesOpen(false);
+    setEditorOpen(true);
+  };
+
   return (
     <AppScreen>
       <PageHeader
@@ -464,8 +503,10 @@ export default function HabitsScreen() {
               if (editorOpen) {
                 setDraft(blankDraft());
                 setSourceTitle('');
+                setEditorOpen(false);
+              } else {
+                openBlankHabitEditor();
               }
-              setEditorOpen((current) => !current);
             }}
           />
         }
@@ -506,8 +547,24 @@ export default function HabitsScreen() {
             title="Start from a routine"
             description="Install only what fits. Duplicate items are skipped."
           />
-          {ROUTINE_TEMPLATES.map((template) => (
-            <AppCard key={template.id}>
+          {sourceTitle && selectedRoutineId ? (
+            <AppCard style={styles.libraryRoutineNotice}>
+              <Text style={styles.libraryRoutineNoticeText}>
+                Suggested from {sourceTitle}. Review the sequence and install only what fits.
+              </Text>
+            </AppCard>
+          ) : null}
+          {[...ROUTINE_TEMPLATES]
+            .sort(
+              (left, right) =>
+                Number(right.id === selectedRoutineId) -
+                Number(left.id === selectedRoutineId)
+            )
+            .map((template) => (
+            <AppCard
+              key={template.id}
+              style={template.id === selectedRoutineId ? styles.selectedTemplate : undefined}
+            >
               <Text style={appUiStyles.label}>{template.eyebrow}</Text>
               <Text style={styles.templateTitle}>{template.title}</Text>
               <Text style={[appUiStyles.muted, { marginTop: 6 }]}>
@@ -704,7 +761,7 @@ export default function HabitsScreen() {
             <AppButton
               label="Create a habit"
               icon="plus"
-              onPress={() => setEditorOpen(true)}
+              onPress={openBlankHabitEditor}
             />
           }
         />
@@ -915,6 +972,19 @@ const styles = StyleSheet.create({
   },
   levelFill: { height: '100%', backgroundColor: Colors.accent },
   topActions: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  libraryRoutineNotice: {
+    backgroundColor: Colors.successLight,
+    borderColor: Colors.success,
+  },
+  libraryRoutineNoticeText: {
+    color: Colors.text,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  selectedTemplate: {
+    borderColor: Colors.primary,
+    borderWidth: 2,
+  },
   templateTitle: {
     color: Colors.text,
     fontSize: 20,

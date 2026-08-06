@@ -28,12 +28,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import {
   BOOK_PRACTICE_TEMPLATES,
+  bookPracticeTemplatesFor,
   filterLibraryItems,
   filterBookPracticeTemplates,
   BOOK_LIBRARY_ITEMS,
   isBookItem,
   isStoryItem,
   isVideoItem,
+  practiceDestinationFor,
   STORY_LIBRARY_ITEMS,
   UNIFIED_LIBRARY,
   VIDEO_LIBRARY_ITEMS,
@@ -71,23 +73,10 @@ function integrationHref(item: LibraryItem, integration: LibraryIntegration): st
     params.set('bookTitle', item.title);
   }
 
-  if (integration.actionType === 'journal' && integration.prompt) {
-    params.set('prompt', integration.prompt);
-    return `/journal?${params.toString()}`;
-  }
-  if (integration.actionType === 'goal' && integration.goalContent) {
-    params.set('content', integration.goalContent);
-    return `/goals?${params.toString()}`;
-  }
-  if (integration.actionType === 'habit' && integration.habitName) {
-    params.set('name', integration.habitName);
-    if (integration.habitDescription) {
-      params.set('description', integration.habitDescription);
-    }
-    return `/habits?${params.toString()}`;
-  }
-
-  return '/library';
+  const destination = practiceDestinationFor(integration);
+  if (!destination) return '/library';
+  for (const [key, value] of Object.entries(destination.params)) params.set(key, value);
+  return `${destination.pathname}?${params.toString()}`;
 }
 
 const integrationStyle = {
@@ -106,6 +95,11 @@ const integrationStyle = {
     card: 'border-amber-200 bg-amber-50',
     label: 'text-amber-900',
   },
+  routine: {
+    icon: ListStart,
+    card: 'border-emerald-200 bg-emerald-50',
+    label: 'text-emerald-900',
+  },
 } as const;
 
 const mediaFilters: { value: LibraryMediaFilter; label: string }[] = [
@@ -122,6 +116,7 @@ const templateFilters: { value: LibraryTemplateFilter; label: string }[] = [
   { value: 'journal', label: 'Journal' },
   { value: 'goal', label: 'Goal' },
   { value: 'habit', label: 'Habit' },
+  { value: 'routine', label: 'Routine' },
 ];
 
 type LibraryView = 'resources' | 'templates';
@@ -438,8 +433,12 @@ export default function LibraryPage() {
   if (selectedItem) {
     const selectedState =
       scopedItemStates[selectedItem.id] ?? emptyState(selectedItem.mediaType);
+    const selectedIsBook = isBookItem(selectedItem);
     const selectedIsVideo = isVideoItem(selectedItem);
     const selectedIsStory = isStoryItem(selectedItem);
+    const selectedIntegrations = selectedIsBook
+      ? bookPracticeTemplatesFor(selectedItem.id).map(({ integration }) => integration)
+      : selectedItem.integrations;
     const storyPersistenceUnavailable =
       selectedIsStory &&
       !canPersistLibraryMedia(selectedItem.mediaType, quoteStorySchemaReady);
@@ -785,6 +784,7 @@ export default function LibraryPage() {
                 </div>
               </section>
 
+              {selectedIntegrations.length > 0 && (
               <section>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-800">
                   Practice templates
@@ -797,7 +797,7 @@ export default function LibraryPage() {
                   Review the draft before saving it.
                 </p>
                 <div className="mt-5 grid gap-4 md:grid-cols-3">
-                  {selectedItem.integrations.map((integration) => {
+                  {selectedIntegrations.map((integration) => {
                     const style = integrationStyle[integration.actionType];
                     const Icon = style.icon;
                     const integrationUnavailable =
@@ -834,6 +834,7 @@ export default function LibraryPage() {
                   })}
                 </div>
               </section>
+              )}
 
               <section className="rounded-2xl border border-slate-200 p-6">
                 <h2 className="font-[family-name:var(--font-display)] text-2xl text-slate-950">
@@ -929,7 +930,7 @@ export default function LibraryPage() {
                 [BOOK_LIBRARY_ITEMS.length.toString(), 'books'],
                 [VIDEO_LIBRARY_ITEMS.length.toString(), 'videos'],
                 [STORY_LIBRARY_ITEMS.length.toString(), 'stories'],
-                [BOOK_PRACTICE_TEMPLATES.length.toString(), 'templates'],
+                [BOOK_PRACTICE_TEMPLATES.length.toString(), 'curated tools'],
               ].map(([value, label]) => (
                 <div
                   key={label}

@@ -131,6 +131,7 @@ export default function HabitsPage() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [draft, setDraft] = useState<HabitDraft>(EMPTY_DRAFT);
   const [librarySourceTitle, setLibrarySourceTitle] = useState('');
+  const [selectedRoutineId, setSelectedRoutineId] = useState('');
   const [busyHabitIds, setBusyHabitIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [installingTemplate, setInstallingTemplate] = useState('');
@@ -148,6 +149,13 @@ export default function HabitsPage() {
   const [error, setError] = useState('');
   const addInFlightRef = useRef(false);
   const appliedLibraryActionRef = useRef(false);
+
+  const openBlankHabitEditor = () => {
+    setDraft(EMPTY_DRAFT);
+    setLibrarySourceTitle('');
+    setSelectedRoutineId('');
+    setView('create');
+  };
 
   const loadHabits = async () => {
     if (!user) return;
@@ -208,6 +216,22 @@ export default function HabitsPage() {
     if (appliedLibraryActionRef.current || typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('source') !== 'library') return;
+    const routineId = params.get('template')?.trim() ?? '';
+    if (
+      params.get('view') === 'routines' &&
+      ROUTINE_TEMPLATES.some(({ id }) => id === routineId)
+    ) {
+      appliedLibraryActionRef.current = true;
+      setLibrarySourceTitle(
+        params.get('itemTitle')?.slice(0, 200) ??
+          params.get('bookTitle')?.slice(0, 200) ??
+          'the library'
+      );
+      setSelectedRoutineId(routineId);
+      setView('routines');
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
     const name = params.get('name')?.trim().slice(0, 160) ?? '';
     if (!name) return;
 
@@ -557,7 +581,7 @@ export default function HabitsPage() {
               Use a clear cue, a tiny version, and repetition.
             </p>
           </div>
-          <Button onClick={() => setView('create')} className="w-full sm:w-auto">
+          <Button onClick={openBlankHabitEditor} className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
             New habit
           </Button>
@@ -577,7 +601,7 @@ export default function HabitsPage() {
             <button
               key={id}
               type="button"
-              onClick={() => setView(id)}
+              onClick={() => (id === 'create' ? openBlankHabitEditor() : setView(id))}
               className={cn(
                 'rounded-xl px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 view === id
@@ -692,7 +716,7 @@ export default function HabitsPage() {
                   <Button variant="outline" onClick={() => setView('routines')}>
                     Browse templates
                   </Button>
-                  <Button onClick={() => setView('create')}>Create one</Button>
+                  <Button onClick={openBlankHabitEditor}>Create one</Button>
                 </div>
               </section>
             ) : (
@@ -1086,9 +1110,27 @@ export default function HabitsPage() {
 
         {view === 'routines' && (
           <section className="mt-6">
+            {librarySourceTitle && selectedRoutineId && (
+              <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+                Suggested from {librarySourceTitle}. Review the sequence and install only what fits.
+              </div>
+            )}
             <div className="grid gap-4 md:grid-cols-2">
-              {ROUTINE_TEMPLATES.map((template) => (
-                <article key={template.id} className="app-panel flex flex-col p-5">
+              {[...ROUTINE_TEMPLATES]
+                .sort(
+                  (left, right) =>
+                    Number(right.id === selectedRoutineId) -
+                    Number(left.id === selectedRoutineId)
+                )
+                .map((template) => (
+                <article
+                  id={`routine-${template.id}`}
+                  key={template.id}
+                  className={cn(
+                    'app-panel flex flex-col p-5',
+                    template.id === selectedRoutineId && 'ring-2 ring-emerald-700 ring-offset-2'
+                  )}
+                >
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-accent">
                     {template.eyebrow}
                   </p>
