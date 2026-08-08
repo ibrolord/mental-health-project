@@ -1,14 +1,18 @@
-/* eslint-disable @typescript-eslint/no-require-imports -- The platform branch must remain runtime-resolved so iOS never bundles Android notification modules. */
-import { Platform } from 'react-native';
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+/* eslint-disable @typescript-eslint/no-require-imports -- Defer JS notification setup until after the root view mounts. */
 import type { NotificationsBundle } from './notifications-types';
 
-type NotificationsRuntimeModule = {
-  loadNotificationsBundle: () => NotificationsBundle | null;
-};
+export function loadNotificationsBundle(): NotificationsBundle | null {
+  try {
+    const Notifications =
+      require('expo-notifications') as NotificationsBundle['Notifications'];
+    const notificationsHelper =
+      require('./notifications') as NotificationsBundle['notificationsHelper'];
 
-const runtimeModule: NotificationsRuntimeModule =
-  Platform.OS === 'android'
-    ? require('./notifications-runtime.android')
-    : require('./notifications-runtime.ios');
-
-export const loadNotificationsBundle = runtimeModule.loadNotificationsBundle;
+    return { Notifications, notificationsHelper };
+  } catch (error) {
+    console.warn('Failed to load notification modules:', error);
+    return null;
+  }
+}

@@ -1,3 +1,5 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
@@ -12,6 +14,7 @@ import {
   createSingleFlight,
   goalIdentityKey,
 } from '@/lib/goals/deduplication';
+import { refreshReminders } from '@/lib/notifications';
 
 interface Goal {
   id: string;
@@ -65,6 +68,12 @@ export default function GoalsScreen() {
   const appliedLibraryActionRef = useRef('');
   const goalIdsByKeyRef = useRef(new Map<string, string[]>());
   const runGoalInsertRef = useRef(createSingleFlight());
+
+  const refreshReminderContent = () => {
+    void refreshReminders().catch((error) => {
+      console.warn('Could not refresh local reminders after a goal change:', error);
+    });
+  };
 
   const loadGoals = useCallback(async () => {
     if (!query) {
@@ -170,6 +179,7 @@ export default function GoalsScreen() {
         );
         setActiveSection(null);
         setLibrarySourceTitle('');
+        refreshReminderContent();
         return true;
       } catch {
         setGoalError('Could not add that goal. Please try again.');
@@ -194,6 +204,7 @@ export default function GoalsScreen() {
       return;
     }
     setGoals((current) => current.map((g) => (g.id === id ? { ...g, status: newStatus as Goal['status'] } : g)));
+    refreshReminderContent();
   };
 
   const deleteGoal = async (id: string) => {
@@ -209,6 +220,7 @@ export default function GoalsScreen() {
     }
     goalIdsByKeyRef.current.delete(identityKey);
     setGoals((current) => current.filter((g) => g.id !== id));
+    refreshReminderContent();
   };
 
   const completed = goals.filter((g) => g.status === 'completed').length;

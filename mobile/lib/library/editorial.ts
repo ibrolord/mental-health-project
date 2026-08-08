@@ -1,3 +1,5 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 import { ADDITIONAL_BOOKS, type AdditionalBookDraft } from './additional-books';
 
 export interface BookRecord {
@@ -1089,7 +1091,7 @@ function expandAdditionalBook(book: AdditionalBookDraft): EditorialOverride {
     takeaways: book.practicalTakeaways.map(({ description }) => description),
     action_step: firstTakeaway.nextStep,
     reflectionPrompts: book.reflectionPrompts,
-    integrations: [
+    integrations: book.toolTemplates ?? [
       {
         title: 'Connect the guide to your experience',
         description: 'Use the reflection prompts to capture what fits, what does not, and why.',

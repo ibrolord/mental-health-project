@@ -1,3 +1,5 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 export type AdditionalBookTopic =
   | 'Anxiety & stress'
   | 'Mood & self-compassion'
@@ -26,6 +28,18 @@ export interface AdditionalBookSource {
   sourceType: 'author' | 'publisher' | 'research' | 'clinical-context';
 }
 
+export interface AdditionalToolTemplate {
+  title: string;
+  description: string;
+  actionType: 'journal' | 'goal' | 'habit' | 'routine';
+  actionLabel: string;
+  prompt?: string;
+  goalContent?: string;
+  habitName?: string;
+  habitDescription?: string;
+  routineId?: string;
+}
+
 export interface AdditionalBookDraft {
   id: string;
   title: string;
@@ -42,6 +56,7 @@ export interface AdditionalBookDraft {
   ];
   reflectionPrompts: string[];
   sources: AdditionalBookSource[];
+  toolTemplates?: AdditionalToolTemplate[];
   medicalCaveat?: string;
 }
 
@@ -4160,5 +4175,150 @@ export const ADDITIONAL_BOOKS: AdditionalBookDraft[] = [
         sourceType: 'author',
       },
     ],
+  }),
+  defineBook({
+    id: 'why-has-nobody-told-me-this-before',
+    title: 'Why Has Nobody Told Me This Before?',
+    author: 'Dr Julie Smith',
+    topic: 'Mood & self-compassion',
+    displayTags: ['Practical skills', 'Mood', 'Anxiety', 'Confidence'],
+    readTimeMinutes: 18,
+    summary:
+      'Dr Julie Smith organizes practical psychological skills around everyday challenges such as low mood, anxiety, self-doubt, grief, stress, motivation, and sleep. MHtoolkit turns those broad themes into short, optional exercises that help a person notice what is happening, choose a proportionate next step, and decide when human support is needed.',
+    centralPremise:
+      'A difficult mental state can narrow attention, reduce motivation, and make one explanation feel certain. A useful first response is to slow down the interpretation, identify the state and the need, then choose a small action that fits the person’s current capacity. These exercises support reflection and self-management; they do not diagnose or replace care.',
+    corePremises: [
+      {
+        title: 'Name the state before choosing the tool',
+        premise:
+          'Low mood, threat, rumination, self-criticism, grief, poor sleep, and overload can look similar from the inside but call for different first steps. A brief state check can prevent using a demanding strategy when the immediate need is safety, rest, connection, or a smaller task.',
+        whyItMatters:
+          'Matching the response to the state makes the exercise more realistic and reduces the chance of turning a coping tool into another performance test.',
+        practice:
+          'Record the strongest feeling, the body signal, the thought attached to it, the immediate need, and one action that is safe and possible in the next ten minutes.',
+      },
+      {
+        title: 'Action can come before motivation',
+        premise:
+          'When low mood or avoidance reduces activity, waiting to feel ready can keep the loop going. A very small, scheduled action can provide contact with mastery, care, pleasure, or connection without demanding a complete turnaround.',
+        whyItMatters:
+          'The target is not forced positivity. It is a manageable experiment that creates information about what helps and can be repeated or adjusted.',
+        practice:
+          'Choose a five-minute version of one useful or meaningful activity, schedule it, and review the result without treating completion as a verdict on your character.',
+      },
+      {
+        title: 'Thoughts deserve examination, not automatic obedience',
+        premise:
+          'Threat and self-criticism can make predictions, memories, and labels feel like complete descriptions of reality. Stepping back to separate facts, interpretations, alternatives, and next actions can widen the available response.',
+        whyItMatters:
+          'Distance helps a person act on evidence and values while still taking feelings seriously. It does not require arguing with every thought or pretending that real problems are imaginary.',
+        practice:
+          'Write the thought, the evidence you have, what remains uncertain, a kinder and still-honest alternative, and the next useful action or support request.',
+      },
+    ],
+    practicalTakeaways: [
+      {
+        title: 'Use a state-to-step check',
+        description:
+          'Start with what is happening now, then choose the smallest response that addresses the actual need rather than the entire future.',
+        nextStep:
+          'Complete: “Right now I notice ____. I may need ____. One safe next step in ten minutes is ____.”',
+      },
+      {
+        title: 'Schedule a tiny activation experiment',
+        description:
+          'A bounded action can test whether movement, mastery, pleasure, connection, or care changes the next part of the day.',
+        nextStep:
+          'Put one five-minute activity on today’s calendar, then note effort, mood before, mood after, and what you learned.',
+      },
+      {
+        title: 'Build a support threshold',
+        description:
+          'Self-help tools should sit inside a wider support plan. Worsening symptoms, safety concerns, or loss of basic functioning are signals to involve qualified help.',
+        nextStep:
+          'Write who you will contact, what you will say, and where to find urgent local support if your situation becomes unsafe.',
+      },
+    ],
+    reflectionPrompts: [
+      'Which state is most likely to make every problem feel urgent or permanent for me?',
+      'What five-minute activity could provide care, mastery, pleasure, or connection without requiring motivation first?',
+      'What signs tell me that a self-guided exercise is not enough and I should involve a trusted person or qualified professional?',
+    ],
+    toolTemplates: [
+      {
+        title: 'State snapshot',
+        description: 'Map the feeling, body signal, thought, need, and next safe step before choosing an exercise.',
+        actionType: 'journal',
+        actionLabel: 'Open a state note',
+        prompt:
+          'State snapshot:\n\nWhat is strongest right now?\nWhat do I notice in my body?\nWhat thought is attached?\nWhat might I need: safety, rest, connection, care, clarity, or action?\nWhat is one safe step for the next ten minutes?',
+      },
+      {
+        title: 'Five-minute activation experiment',
+        description: 'Schedule one small activity before waiting for motivation, then review what you learned.',
+        actionType: 'goal',
+        actionLabel: 'Add the experiment',
+        goalContent: 'Complete one five-minute activity that supports care, mastery, pleasure, or connection, then record what I learned',
+      },
+      {
+        title: 'Start before ready',
+        description: 'Practice the smallest visible beginning of a task and stop or continue by choice after five minutes.',
+        actionType: 'habit',
+        actionLabel: 'Prefill the habit',
+        habitName: 'Do the five-minute beginning',
+        habitDescription: 'Choose one useful or meaningful task, begin the smallest version for five minutes, and review without self-judgment.',
+      },
+      {
+        title: 'Thought distance check',
+        description: 'Separate the thought, evidence, uncertainty, honest alternative, and next action.',
+        actionType: 'journal',
+        actionLabel: 'Open a thought note',
+        prompt:
+          'Thought distance check:\n\nThe thought or prediction is:\nFacts I have:\nWhat is uncertain:\nA kinder, still-honest alternative:\nOne action or support request that fits the evidence:',
+      },
+      {
+        title: 'Motivation reset',
+        description: 'Use a short activation routine when waiting to feel motivated has become the barrier.',
+        actionType: 'routine',
+        actionLabel: 'Open the routine',
+        routineId: 'motivation-restart',
+      },
+      {
+        title: 'Sleep landing plan',
+        description: 'Use a consistent wind-down and protect tomorrow’s first step without treating sleep as a performance test.',
+        actionType: 'routine',
+        actionLabel: 'Open the routine',
+        routineId: 'evening-wind-down',
+      },
+      {
+        title: 'Confidence evidence log',
+        description: 'Record specific actions, effort, learning, and support instead of relying on a global self-worth label.',
+        actionType: 'habit',
+        actionLabel: 'Prefill the habit',
+        habitName: 'Record one piece of evidence',
+        habitDescription: 'Write one specific action, effort, boundary, learning moment, or support request that reflects the person I am practicing becoming.',
+      },
+      {
+        title: 'Support threshold plan',
+        description: 'Make the next help-seeking step concrete before distress makes planning harder.',
+        actionType: 'goal',
+        actionLabel: 'Add a support plan',
+        goalContent: 'Write who I will contact, what I will say, and where to find qualified or urgent local support if my symptoms worsen or safety changes',
+      },
+    ],
+    sources: [
+      {
+        label: 'Penguin Books: Why Has Nobody Told Me This Before?',
+        url: 'https://www.penguin.co.uk/books/454841/why-has-nobody-told-me-this-before-by-smith-dr-julie/9780241529744',
+        sourceType: 'publisher',
+      },
+      {
+        label: 'NHS: Every Mind Matters',
+        url: 'https://www.nhs.uk/every-mind-matters/',
+        sourceType: 'clinical-context',
+      },
+    ],
+    medicalCaveat:
+      'This is an original, paraphrased reading guide inspired by the book’s broad therapist-toolkit themes, not a reproduction of the book or a clinical protocol. It cannot diagnose or treat depression, anxiety, trauma, sleep disorders, or another condition. Stop an exercise if it increases distress and seek qualified support for persistent, severe, or worsening symptoms; if you may not be able to stay safe, use local emergency or crisis services now.',
   }),
 ];

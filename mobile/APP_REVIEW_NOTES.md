@@ -1,3 +1,5 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 # App Review Notes - Version 1.0.1
 
 Last updated: August 6, 2026
@@ -98,7 +100,11 @@ text, habit names, planner text, focus-task text, or library notes.
 
 ## iPad Compatibility
 
-The app is distributed as iPhone-only and requires fullscreen. It has also been
-tested in iPhone compatibility mode on an iPad Air 11-inch (M3) simulator. The
-iOS native build excludes the notification and device modules that caused the
-earlier iPad launch crash; notification reminders remain available on Android.
+The app is distributed as iPhone-only and requires fullscreen. It is also
+tested in iPhone compatibility mode on iPad. The earlier notification launch
+crash occurred on `expo-notifications` 0.32.16. This release uses 0.32.17, which
+contains Expo's iOS notification-serializer thread-safety fix, and does not
+include the unnecessary `expo-device` module. Local reminders are available on
+iPhone and Android. The exact TestFlight artifact must pass cold-launch stress
+and notification permission, delivery, tap-routing, and force-quit checks on a
+physical iPhone and in iPad compatibility mode before submission.

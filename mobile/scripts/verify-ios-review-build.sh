@@ -1,3 +1,5 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -434,13 +436,18 @@ if [ -n "$IPA_PATH" ]; then
       fail "IPA bundle does not embed Supabase URL"
     fi
 
-    if grep -aFq 'ExpoPushTokenManager' "$BUNDLE_PATH" ||
-      grep -aFq 'expo-notifications' "$BUNDLE_PATH" ||
-      grep -aFq 'expo-device' "$BUNDLE_PATH" ||
-      strings "$APP_DIR/$EXECUTABLE" | grep -Eq 'ExpoPushTokenManager|EXNotifications|ExpoNotifications|expo-notifications|expo-device|ExpoDevice|EXDeviceModule'; then
-      fail "IPA still contains excluded notifications/device native symbols"
+    if grep -aFq 'expo-notifications' "$BUNDLE_PATH" &&
+      strings "$APP_DIR/$EXECUTABLE" | grep -Eq 'EXNotifications|ExpoNotifications|ExpoNotificationsEmitter'; then
+      pass "IPA contains the fixed iOS notifications JS and native modules"
     else
-      pass "IPA omits excluded notifications/device native symbols"
+      fail "IPA is missing the required fixed iOS notifications module"
+    fi
+
+    if grep -aFq 'expo-device' "$BUNDLE_PATH" ||
+      strings "$APP_DIR/$EXECUTABLE" | grep -Eq 'expo-device|ExpoDevice|EXDeviceModule'; then
+      fail "IPA still contains the unnecessary expo-device module"
+    else
+      pass "IPA omits the unnecessary expo-device module"
     fi
 
     if grep -aFq 'Delete Account' "$BUNDLE_PATH" &&
