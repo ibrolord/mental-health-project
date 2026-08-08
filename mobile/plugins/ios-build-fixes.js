@@ -1,69 +1,31 @@
 /**
- * Expo config plugin:
- * 1. exclude expo-notifications and expo-device from iOS auto-linking so their
- *    native modules are never loaded on iPad (or iPhone)
- * 2. remove the unused iOS push entitlement left by Expo's auto plugin
- * 3. apply a local Xcode 26.4 workaround for React Native's fmt pod
+ * Local Xcode 26.4 workaround for React Native's fmt pod.
  *
- * Why: React Native old-arch auto-initialises native modules at bridge startup,
- * BEFORE any JS runs. expo-notifications' native init crashes on iPad Air /
- * iPadOS 26 with SIGABRT. JS-level lazy-loading (Build 17) cannot prevent this.
- * Excluding the native module from the iOS binary is the only reliable fix.
- *
- * Separately, Apple clang in Xcode 26.4 rejects fmt 11.0.2's consteval path
- * during local pod compilation. Disabling FMT_USE_CONSTEVAL for the fmt target
- * keeps local device/simulator builds working without affecting runtime logic.
- *
- * Notifications still work on Android. On iOS the JS try/catch in _layout.tsx
- * and lib/notifications.ts gracefully handles the missing native module.
+ * Apple clang rejects fmt 11.0.2's consteval path during local pod
+ * compilation. Disabling that path for the fmt target keeps local
+ * device/simulator builds working without changing app runtime behavior.
  */
-const {
-  withDangerousMod,
-  withEntitlementsPlist,
-} = require('@expo/config-plugins');
+const { withDangerousMod } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
-function excludeNotificationsIOS(config) {
-  const configWithoutPushEntitlement = withEntitlementsPlist(
-    config,
-    (modConfig) => {
-      delete modConfig.modResults['aps-environment'];
-      return modConfig;
-    }
-  );
-
-  return withDangerousMod(configWithoutPushEntitlement, [
+function withIosBuildFixes(config) {
+  return withDangerousMod(config, [
     'ios',
-    (config) => {
+    (modConfig) => {
       const podfilePath = path.join(
-        config.modRequest.platformProjectRoot,
+        modConfig.modRequest.platformProjectRoot,
         'Podfile'
       );
-      let podfile = fs.readFileSync(podfilePath, 'utf8');
-
-      // Replace the bare call once, while allowing prebuild to be rerun safely.
-      const excludedModulesCall =
-        "use_expo_modules!(exclude: ['expo-notifications', 'expo-device'])";
-      const alreadyExcluded = podfile.includes(excludedModulesCall);
-      const replaced = alreadyExcluded
-        ? podfile
-        : podfile.replace(/use_expo_modules!\s*$/m, excludedModulesCall);
-
-      if (!alreadyExcluded && replaced === podfile) {
-        throw new Error(
-          'exclude-notifications-ios: failed to patch use_expo_modules! in Podfile. ' +
-          'The Podfile template may have changed — update the regex in this plugin.'
-        );
-      }
+      const podfile = fs.readFileSync(podfilePath, 'utf8');
 
       const fmtWorkaround = [
         "    installer.pods_project.targets.each do |target|",
         "      next unless target.name == 'fmt'",
-        "",
+        '',
         "      target.build_configurations.each do |build_config|",
         "        definitions = build_config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']",
-        "        definitions = Array(definitions)",
+        '        definitions = Array(definitions)',
         "        unless definitions.include?('FMT_USE_CONSTEVAL=0')",
         "          definitions << 'FMT_USE_CONSTEVAL=0'",
         '        end',
@@ -96,7 +58,7 @@ function excludeNotificationsIOS(config) {
         '    end',
       ].join('\n');
 
-      let patched = replaced;
+      let patched = podfile;
       if (!patched.includes('FMT_USE_CONSTEVAL=0')) {
         patched = patched.replace(
           /(\s+react_native_post_install\([\s\S]*?\n\s+\))/m,
@@ -104,17 +66,17 @@ function excludeNotificationsIOS(config) {
         );
       }
 
-      if (patched === replaced && !patched.includes('FMT_USE_CONSTEVAL=0')) {
+      if (patched === podfile && !patched.includes('FMT_USE_CONSTEVAL=0')) {
         throw new Error(
-          'exclude-notifications-ios: failed to patch fmt workaround into Podfile. ' +
-          'The Podfile template may have changed — update the regex in this plugin.'
+          'ios-build-fixes: failed to patch the fmt workaround into Podfile. ' +
+          'The Podfile template may have changed.'
         );
       }
 
       fs.writeFileSync(podfilePath, patched);
-      return config;
+      return modConfig;
     },
   ]);
 }
 
-module.exports = excludeNotificationsIOS;
+module.exports = withIosBuildFixes;

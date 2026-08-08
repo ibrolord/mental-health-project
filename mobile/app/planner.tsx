@@ -19,6 +19,7 @@ import {
   appUiStyles,
 } from '@/components/AppUI';
 import { useDataContext } from '@/lib/hooks/use-data-context';
+import { refreshReminders } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/lib/constants';
 
@@ -80,6 +81,12 @@ export default function PlannerScreen() {
   const ownerRef = useRef(context.user_id);
   const saveRef = useRef(false);
   ownerRef.current = context.user_id;
+
+  const refreshReminderContent = () => {
+    void refreshReminders().catch((error) => {
+      console.warn('Could not refresh local reminders after a plan change:', error);
+    });
+  };
 
   useEffect(() => {
     if (authLoading) return;
@@ -162,6 +169,7 @@ export default function PlannerScreen() {
       resetEditor();
       setEditorOpen(false);
       setFilter('active');
+      refreshReminderContent();
     } finally {
       saveRef.current = false;
       if (ownerRef.current === ownerId) setSaving(false);
@@ -199,6 +207,7 @@ export default function PlannerScreen() {
         candidate.id === item.id ? (data as PlanItem) : candidate
       )
     );
+    refreshReminderContent();
   };
 
   const deleteItem = (item: PlanItem) => {
@@ -222,6 +231,7 @@ export default function PlannerScreen() {
             setItems((current) =>
               current.filter((candidate) => candidate.id !== item.id)
             );
+            refreshReminderContent();
           }
         },
       },

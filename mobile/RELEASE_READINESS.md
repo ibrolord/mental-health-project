@@ -1,6 +1,6 @@
 # Mobile Release Readiness
 
-Last updated: July 29, 2026
+Last updated: August 6, 2026
 
 This file separates verified source behavior, packaged artifacts, store
 uploads, and public release. A successful build is not a store submission.
@@ -44,7 +44,8 @@ to `auth.uid()`, and perform object-level authorization.
 - [x] Bundle is `com.mhtoolkit.app`, version 1.0.1, build 34.
 - [x] iPhone-only device family, fullscreen compatibility mode, encryption
   declaration, privacy manifest, production URLs, and support metadata verified.
-- [x] `expo-notifications` and `expo-device` native symbols are absent.
+- [x] Submitted build 34 omits both `expo-notifications` and `expo-device` under
+  the previous iOS launch-crash workaround.
 - [x] Clean simulator installs render on iPhone and iPad Air 11-inch (M3).
 - [x] Launch stress passes 20/20 on iPhone and 20/20 on iPad with no crash,
   fatal, exception, abort, keychain, or auth-init log pattern.
@@ -58,6 +59,20 @@ App Store Connect submission `1d9febf2-6e1d-4350-b798-ececd1c53025` is
 Waiting for Review. EAS upload `72330965-7667-4889-a32d-122e582e50cd`
 completed successfully. The refreshed icon and store screenshots are prepared
 for the next version and are not part of build 34.
+
+## Notification-enabled follow-up build
+
+- [x] Source uses Expo SDK 54's fixed `expo-notifications` 0.32.17 package.
+- [x] The unnecessary `expo-device` dependency and old iOS exclusion plugin are removed.
+- [x] Settings exposes permission-aware daily reminders, target-date alerts,
+  attributed affirmations, library picks, and a test notification.
+- [x] Clean iOS prebuild and signed Release simulator build contain
+  `expo-notifications` 0.32.17 and omit `expo-device`.
+- [x] Release simulator launch stress passes 20/20 on iPhone and 20/20 in iPad
+  compatibility mode with no matching crash or fatal log pattern.
+- [ ] Physical notification permission, delivery, tap-routing, denial,
+  later-enable, force-quit, target-date, affirmation, and library-pick checks pass.
+- [ ] A new exact artifact is uploaded only after the exhaustive QA run is complete.
 
 ## Android 1.0.1
 

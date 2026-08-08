@@ -95,11 +95,25 @@ describe('exhaustive mobile QA release gate', () => {
     expect(validateChecklist(checklist, MOBILE_ROOT)).toEqual([]);
     const ids = expandChecklist(checklist).map((item) => item.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(checklist.expectedInventory).toEqual({ routes: 26, routeChecks: 489, workflows: 94, total: 583 });
+    expect(checklist.expectedInventory).toEqual({ routes: 26, routeChecks: 491, workflows: 95, total: 586 });
     expect(checklist.routes).toHaveLength(26);
-    expect(checklist.workflows).toHaveLength(94);
-    expect(ids).toHaveLength(583);
+    expect(checklist.workflows).toHaveLength(95);
+    expect(ids).toHaveLength(586);
     expect(checklistDigest(checklist)).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('keeps the written protocol aligned with the enforced inventory and simulator preflight', () => {
+    const protocol = readFileSync(path.join(MOBILE_ROOT, 'QA_PROTOCOL.md'), 'utf8');
+    const { routes, routeChecks, workflows, total } = checklist.expectedInventory;
+
+    expect(protocol).toContain(
+      `${routes}-route, ${routeChecks} route/control, ${workflows} workflow, and ${total} total-row inventory`
+    );
+    expect(protocol).toContain(
+      'curl --fail --silent http://127.0.0.1:8081/status'
+    );
+    expect(protocol).toContain('packager-status:running');
+    expect(protocol).toContain('cached JavaScript');
   });
 
   it('accepts only a complete exact-artifact run', () => {

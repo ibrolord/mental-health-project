@@ -46,6 +46,20 @@ fallback, and stale-screen content. An unsigned or ad hoc simulator build is
 not valid evidence for SecureStore, Keychain restoration, or authentication;
 those rows require the signed TestFlight artifact on the declared devices.
 
+Supplemental dev-client tests that load bundled assets must prove Metro is
+available before the first observation:
+
+```bash
+curl --fail --silent http://127.0.0.1:8081/status
+```
+
+The response must be exactly `packager-status:running` and must be attached to
+the supplemental evidence. A dev client can display cached JavaScript while
+audio and image asset requests fail against an offline Metro server; that state
+is a blocked test environment, not valid pass or failure evidence for the
+release artifact. This requirement does not apply to an installed TestFlight
+build, whose assets must be packaged in the IPA.
+
 ## Required identities and devices
 
 Use disposable data and declare each identity in `metadata.identities` with a
@@ -131,7 +145,7 @@ npm run qa:ios:verify -- \
 ## Coverage model
 
 The manifest and its reviewed SHA-256 enforce all native route files. Its exact
-24-route, 404 route/control, 78 workflow, and 482 total-row inventory cannot
+26-route, 491 route/control, 95 workflow, and 586 total-row inventory cannot
 silently shrink. Each route requires render,
 control, state-boundary, restoration, and navigation evidence appropriate to
 its tab, stack, or modal type. Every named control is a separate required row.
@@ -152,8 +166,8 @@ Cross-route coverage includes:
 - Export, saved-data deletion, account deletion, RLS, log privacy,
   accessibility, layouts, keyboard, timezone, locale, and App Store metadata.
 - Every previously observed rejection or regression, including iPad launch,
-  iOS notification-module exclusion, support URL, back navigation, mood save,
-  goal duplication, account creation, accountability, and live AI chat.
+  iOS notification permission/delivery/tap launch, support URL, back navigation,
+  mood save, goal duplication, account creation, accountability, and live AI chat.
 
 ## Adding features
 

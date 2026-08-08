@@ -1,23 +1,38 @@
-/* eslint-disable @typescript-eslint/no-require-imports -- Runtime platform resolution prevents iOS from loading excluded notification modules. */
+/* eslint-disable @typescript-eslint/no-require-imports -- Keep native module access lazy until the first notification operation. */
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  createNotificationService,
+  type NotificationService,
+  type NotificationsModule,
+} from './notifications-core';
+import { loadSmartReminderPlan } from './notification-content';
 
-type NotificationsApiModule = {
-  requestPermissions: () => Promise<boolean>;
-  scheduleMoodReminders: () => Promise<void>;
-  setRemindersEnabled: (enabled: boolean) => Promise<void>;
-  areRemindersEnabled: () => Promise<boolean>;
-  setReminderTimes: (times: number[]) => Promise<void>;
-  getReminderTimes: () => Promise<number[]>;
-};
+let service: NotificationService | null = null;
 
-const notificationsModule: NotificationsApiModule =
-  Platform.OS === 'android'
-    ? require('./notifications.android')
-    : require('./notifications.ios');
+function getService(): NotificationService {
+  if (!service) {
+    const Notifications = require('expo-notifications') as NotificationsModule;
+    service = createNotificationService(
+      Notifications,
+      AsyncStorage,
+      Platform.OS === 'android' ? 'android' : 'ios',
+      loadSmartReminderPlan
+    );
+  }
+  return service;
+}
 
-export const requestPermissions = notificationsModule.requestPermissions;
-export const scheduleMoodReminders = notificationsModule.scheduleMoodReminders;
-export const setRemindersEnabled = notificationsModule.setRemindersEnabled;
-export const areRemindersEnabled = notificationsModule.areRemindersEnabled;
-export const setReminderTimes = notificationsModule.setReminderTimes;
-export const getReminderTimes = notificationsModule.getReminderTimes;
+export const requestPermissions = () => getService().requestPermissions();
+export const scheduleMoodReminders = () => getService().scheduleMoodReminders();
+export const setRemindersEnabled = (enabled: boolean) =>
+  getService().setRemindersEnabled(enabled);
+export const areRemindersEnabled = () => getService().areRemindersEnabled();
+export const setReminderTimes = (times: number[]) =>
+  getService().setReminderTimes(times);
+export const getReminderTimes = () => getService().getReminderTimes();
+export const sendTestNotification = () => getService().sendTestNotification();
+
+// Rebuild local reminders after a user changes a goal, plan, or library state.
+// It is a no-op until the user has enabled reminders on this device.
+export const refreshReminders = () => getService().scheduleMoodReminders();
