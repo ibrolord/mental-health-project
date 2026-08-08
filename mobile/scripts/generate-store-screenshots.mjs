@@ -25,7 +25,7 @@ const screens = [
   {
     output: '02_library.png',
     source: 'library.png',
-    title: ['107 resources.', 'One thoughtful library.'],
+    title: ['108 resources.', 'One thoughtful library.'],
     body: 'Books, talks, and real stories with notes, sources, and practical actions.',
   },
   {

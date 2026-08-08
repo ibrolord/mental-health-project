@@ -114,6 +114,16 @@ const CURATED_INTEGRATION_TITLES: Record<string, readonly string[]> = {
   'burnout-stress-cycle': ['Separate stress from stressor'],
   'gifts-of-imperfection': ['Rewrite the perfectionist rule', 'Use a compassionate debrief'],
   'the-body-keeps-the-score': ['Create a present-safety note'],
+  'why-has-nobody-told-me-this-before': [
+    'State snapshot',
+    'Five-minute activation experiment',
+    'Start before ready',
+    'Thought distance check',
+    'Motivation reset',
+    'Sleep landing plan',
+    'Confidence evidence log',
+    'Support threshold plan',
+  ],
   mindset: ['Turn a setback into data', 'Run one learning experiment', 'Record one useful lesson'],
 };
 
