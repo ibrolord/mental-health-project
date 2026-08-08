@@ -1,3 +1,5 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 #!/usr/bin/env node
 
 // Keep exported signatures synchronized with qa-release-gate.d.mts.
@@ -13,8 +15,8 @@ export const MOBILE_ROOT = path.resolve(SCRIPT_DIR, '..');
 export const REPO_ROOT = path.resolve(MOBILE_ROOT, '..');
 export const CHECKLIST_PATH = path.join(MOBILE_ROOT, 'qa', 'ios-release-checklist.json');
 export const RUNS_ROOT = path.join(MOBILE_ROOT, 'qa', 'runs');
-export const EXPECTED_INVENTORY = Object.freeze({ routes: 26, routeChecks: 489, workflows: 94, total: 583 });
-export const EXPECTED_CHECKLIST_SHA256 = '7e5846882d09d24e20695f0d1679ec74a5c71d3a947785512cb76b170cc253fa';
+export const EXPECTED_INVENTORY = Object.freeze({ routes: 26, routeChecks: 491, workflows: 95, total: 586 });
+export const EXPECTED_CHECKLIST_SHA256 = '745969dd008fc6350fe6d306cae852d8a3d8daa77ca6de8ca32675ee8a78e6ca';
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, 'utf8'));

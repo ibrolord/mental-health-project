@@ -1,12 +1,24 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 export type NotificationScreenData = {
-  screen?: string;
+  screen?: unknown;
 };
+
+export type NotificationScreen =
+  | '/(tabs)/tracker'
+  | '/goals'
+  | '/affirmations'
+  | '/library'
+  | '/planner';
 
 export type NotificationResponseLike = {
   notification: {
     request: {
       content: {
         data?: NotificationScreenData;
+      };
+      trigger?: {
+        payload?: NotificationScreenData;
       };
     };
   };
@@ -18,6 +30,7 @@ export type NotificationSubscription = {
 
 export type NotificationsModuleLike = {
   getLastNotificationResponseAsync: () => Promise<NotificationResponseLike | null>;
+  clearLastNotificationResponseAsync: () => Promise<void>;
   addNotificationResponseReceivedListener: (
     listener: (response: NotificationResponseLike) => void
   ) => NotificationSubscription;
@@ -31,3 +44,31 @@ export type NotificationsBundle = {
   Notifications: NotificationsModuleLike;
   notificationsHelper: NotificationsHelperLike;
 };
+
+const ALLOWED_NOTIFICATION_SCREENS = new Set<NotificationScreen>([
+  '/(tabs)/tracker',
+  '/goals',
+  '/affirmations',
+  '/library',
+  '/planner',
+]);
+
+export function notificationScreenFromResponse(
+  response: NotificationResponseLike | null
+): NotificationScreen | null {
+  const request = response?.notification.request;
+  const candidates = [
+    request?.content.data?.screen,
+    request?.trigger?.payload?.screen,
+  ];
+
+  for (const screen of candidates) {
+    if (
+      typeof screen === 'string' &&
+      ALLOWED_NOTIFICATION_SCREENS.has(screen as NotificationScreen)
+    ) {
+      return screen as NotificationScreen;
+    }
+  }
+  return null;
+}

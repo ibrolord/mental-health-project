@@ -1,3 +1,5 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 import { access, mkdir, readdir, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +27,7 @@ const screens = [
   {
     output: '02_library.png',
     source: 'library.png',
-    title: ['107 resources.', 'One thoughtful library.'],
+    title: ['108 resources.', 'One thoughtful library.'],
     body: 'Books, talks, and real stories with notes, sources, and practical actions.',
   },
   {

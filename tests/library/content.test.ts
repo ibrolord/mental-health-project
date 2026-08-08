@@ -1,3 +1,5 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 import { describe, expect, it } from 'vitest';
 import {
   BOOK_PRACTICE_TEMPLATES,
@@ -17,11 +19,11 @@ import { ROUTINE_TEMPLATES as MOBILE_ROUTINE_TEMPLATES } from '../../mobile/lib/
 
 describe('unified library catalog', () => {
   it('combines every reviewed book, video, and story without id collisions', () => {
-    expect(BOOK_LIBRARY_ITEMS).toHaveLength(58);
+    expect(BOOK_LIBRARY_ITEMS).toHaveLength(59);
     expect(VIDEO_LIBRARY_ITEMS).toHaveLength(35);
     expect(STORY_LIBRARY_ITEMS).toHaveLength(14);
-    expect(UNIFIED_LIBRARY).toHaveLength(107);
-    expect(new Set(UNIFIED_LIBRARY.map(({ id }) => id)).size).toBe(107);
+    expect(UNIFIED_LIBRARY).toHaveLength(108);
+    expect(new Set(UNIFIED_LIBRARY.map(({ id }) => id)).size).toBe(108);
   });
 
   it('filters by media, need, and useful content rather than title alone', () => {
@@ -89,9 +91,9 @@ describe('unified library catalog', () => {
   });
 
   it('publishes only curated, source-attributed tools with varied destinations', () => {
-    expect(BOOK_PRACTICE_TEMPLATES).toHaveLength(17);
-    expect(new Set(BOOK_PRACTICE_TEMPLATES.map(({ id }) => id)).size).toBe(17);
-    expect(new Set(BOOK_PRACTICE_TEMPLATES.map(({ book }) => book.id))).toHaveLength(8);
+    expect(BOOK_PRACTICE_TEMPLATES).toHaveLength(25);
+    expect(new Set(BOOK_PRACTICE_TEMPLATES.map(({ id }) => id)).size).toBe(25);
+    expect(new Set(BOOK_PRACTICE_TEMPLATES.map(({ book }) => book.id))).toHaveLength(9);
 
     const actionsByBook = new Set(
       [...new Set(BOOK_PRACTICE_TEMPLATES.map(({ book }) => book.id))].map((bookId) =>
@@ -182,7 +184,9 @@ describe('unified library catalog', () => {
       pathname: '/habits',
       params: {
         view: 'routines',
-        template: expect.stringMatching(/^(atomic-habit-loop|burnout-recovery-reset)$/),
+        template: expect.stringMatching(
+          /^(atomic-habit-loop|burnout-recovery-reset|motivation-restart|evening-wind-down)$/
+        ),
       },
     });
   });

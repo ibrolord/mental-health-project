@@ -1,0 +1,377 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+import type {
+  NotificationPermissionsStatus,
+  NotificationRequestInput,
+} from 'expo-notifications';
+import type { NotificationScreen } from './notifications-types';
+
+export type NotificationsModule = typeof import('expo-notifications');
+
+export type NotificationStorage = {
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
+};
+
+export type NotificationPlatform = 'android' | 'ios';
+
+export const NOTIFICATIONS_KEY = 'mood_reminders_enabled';
+export const REMINDER_TIMES_KEY = 'reminder_times';
+export const MOOD_REMINDER_IDS_KEY = 'mood_reminder_notification_ids';
+export const DEFAULT_REMINDER_TIMES = [9, 14, 20] as const;
+export const MOOD_TRACKER_NOTIFICATION_ROUTE = '/(tabs)/tracker';
+
+export type ReminderContent = {
+  title: string;
+  body: string;
+  screen: NotificationScreen;
+};
+
+export type DueDateReminder = ReminderContent & {
+  date: Date;
+};
+
+export type ReminderSchedulePlan = {
+  daily: ReminderContent[];
+  dueDates: DueDateReminder[];
+};
+
+export type ReminderContentProvider = (
+  reminderTimes: readonly number[]
+) => Promise<ReminderSchedulePlan>;
+
+export const DEFAULT_REMINDER_CONTENT: ReminderContent = {
+  title: 'MHtoolkit reminder',
+  body: 'Take a moment for the step you planned.',
+  screen: MOOD_TRACKER_NOTIFICATION_ROUTE,
+};
+
+const TEST_REMINDER_CONTENT = {
+  title: 'MHtoolkit reminder',
+  body: 'Your test reminder is working. Daily reminders can include plans, affirmations, and library picks.',
+};
+
+export function normalizeReminderTimes(
+  value: unknown,
+  fallback: readonly number[] = DEFAULT_REMINDER_TIMES
+): number[] {
+  if (!Array.isArray(value)) return [...fallback];
+
+  const times = Array.from(
+    new Set(value.filter((hour): hour is number => Number.isInteger(hour) && hour >= 0 && hour <= 23))
+  ).sort((a, b) => a - b);
+
+  return times.length > 0 ? times : [...fallback];
+}
+
+export function parseStoredReminderTimes(value: string | null): number[] {
+  if (!value) return [...DEFAULT_REMINDER_TIMES];
+  try {
+    return normalizeReminderTimes(JSON.parse(value));
+  } catch {
+    return [...DEFAULT_REMINDER_TIMES];
+  }
+}
+
+export function parseStoredNotificationIds(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return Array.from(
+      new Set(parsed.filter((id): id is string => typeof id === 'string' && id.length > 0))
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function notificationPermissionAllowsDelivery(
+  permission: NotificationPermissionsStatus,
+  Notifications: Pick<NotificationsModule, 'IosAuthorizationStatus'>
+): boolean {
+  if (permission.granted) return true;
+
+  const iosStatus = permission.ios?.status;
+  return iosStatus === Notifications.IosAuthorizationStatus.AUTHORIZED ||
+    iosStatus === Notifications.IosAuthorizationStatus.PROVISIONAL ||
+    iosStatus === Notifications.IosAuthorizationStatus.EPHEMERAL;
+}
+
+export function reminderContentForTimes(
+  times: readonly number[],
+  contents: readonly ReminderContent[]
+): ReminderContent[] {
+  const available = contents.length > 0 ? contents : [DEFAULT_REMINDER_CONTENT];
+  return times.map((_, index) => available[index % available.length]);
+}
+
+function validDueDateReminders(
+  reminders: readonly DueDateReminder[],
+  now: number = Date.now()
+): DueDateReminder[] {
+  return reminders.filter(({ date }) =>
+    date instanceof Date &&
+    Number.isFinite(date.getTime()) &&
+    date.getTime() > now
+  );
+}
+
+export function createNotificationService(
+  Notifications: NotificationsModule,
+  storage: NotificationStorage,
+  platform: NotificationPlatform,
+  contentProvider: ReminderContentProvider = async () => ({
+    daily: [DEFAULT_REMINDER_CONTENT],
+    dueDates: [],
+  })
+) {
+  let handlerConfigured = false;
+  let reminderSyncInFlight: Promise<string[]> | null = null;
+  let reminderMutationTail: Promise<void> = Promise.resolve();
+
+  function enqueueReminderMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const run = reminderMutationTail.then(operation, operation);
+    reminderMutationTail = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  }
+
+  function configureHandler(): void {
+    if (handlerConfigured) return;
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      }),
+    });
+    handlerConfigured = true;
+  }
+
+  async function ensureAndroidChannel(): Promise<void> {
+    if (platform !== 'android') return;
+    await Notifications.setNotificationChannelAsync('mood-reminders', {
+      name: 'Wellbeing reminders',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default',
+    });
+  }
+
+  async function hasPermission(): Promise<boolean> {
+    configureHandler();
+    const permission = await Notifications.getPermissionsAsync();
+    return notificationPermissionAllowsDelivery(permission, Notifications);
+  }
+
+  async function requestPermissions(): Promise<boolean> {
+    configureHandler();
+    await ensureAndroidChannel();
+
+    let permission = await Notifications.getPermissionsAsync();
+    if (!notificationPermissionAllowsDelivery(permission, Notifications)) {
+      permission = await Notifications.requestPermissionsAsync();
+    }
+
+    return notificationPermissionAllowsDelivery(permission, Notifications);
+  }
+
+  async function cancelMoodReminders(): Promise<void> {
+    configureHandler();
+    const ids = parseStoredNotificationIds(
+      await storage.getItem(MOOD_REMINDER_IDS_KEY)
+    );
+
+    if (ids.length === 0) {
+      await storage.removeItem(MOOD_REMINDER_IDS_KEY);
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      ids.map((id) => Notifications.cancelScheduledNotificationAsync(id))
+    );
+    const failedIds = ids.filter((_, index) => results[index].status === 'rejected');
+
+    if (failedIds.length > 0) {
+      await storage.setItem(MOOD_REMINDER_IDS_KEY, JSON.stringify(failedIds));
+      throw new Error('One or more local reminders could not be removed.');
+    }
+
+    await storage.removeItem(MOOD_REMINDER_IDS_KEY);
+  }
+
+  async function scheduleMoodRemindersInternal(): Promise<string[]> {
+    configureHandler();
+    if ((await storage.getItem(NOTIFICATIONS_KEY)) !== 'true') return [];
+    if (!(await hasPermission())) {
+      await cancelMoodReminders();
+      return [];
+    }
+
+    const times = parseStoredReminderTimes(
+      await storage.getItem(REMINDER_TIMES_KEY)
+    );
+    let reminderPlan: ReminderSchedulePlan;
+    try {
+      reminderPlan = await contentProvider(times);
+    } catch (error) {
+      console.warn('Could not load personalized reminder content:', error);
+      reminderPlan = { daily: [DEFAULT_REMINDER_CONTENT], dueDates: [] };
+    }
+
+    await cancelMoodReminders();
+
+    await ensureAndroidChannel();
+    const scheduledIds: string[] = [];
+    const dailyContent = reminderContentForTimes(times, reminderPlan.daily);
+    const dueDates = validDueDateReminders(reminderPlan.dueDates);
+
+    try {
+      for (const [index, hour] of times.entries()) {
+        const content = dailyContent[index];
+        const request: NotificationRequestInput = {
+          content: {
+            title: content.title,
+            body: content.body,
+            data: { screen: content.screen },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            ...(platform === 'android' ? { channelId: 'mood-reminders' } : {}),
+            hour,
+            minute: 0,
+          },
+        };
+        scheduledIds.push(await Notifications.scheduleNotificationAsync(request));
+      }
+
+      for (const dueDate of dueDates) {
+        const request: NotificationRequestInput = {
+          content: {
+            title: dueDate.title,
+            body: dueDate.body,
+            data: { screen: dueDate.screen },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            ...(platform === 'android' ? { channelId: 'mood-reminders' } : {}),
+            date: dueDate.date,
+          },
+        };
+        scheduledIds.push(await Notifications.scheduleNotificationAsync(request));
+      }
+    } catch (error) {
+      const cleanup = await Promise.allSettled(
+        scheduledIds.map((id) => Notifications.cancelScheduledNotificationAsync(id))
+      );
+      const unclearedIds = scheduledIds.filter(
+        (_, index) => cleanup[index].status === 'rejected'
+      );
+      if (unclearedIds.length > 0) {
+        await storage.setItem(MOOD_REMINDER_IDS_KEY, JSON.stringify(unclearedIds));
+      }
+      throw error;
+    }
+
+    await storage.setItem(MOOD_REMINDER_IDS_KEY, JSON.stringify(scheduledIds));
+    return scheduledIds;
+  }
+
+  async function scheduleMoodReminders(): Promise<string[]> {
+    if (reminderSyncInFlight) return reminderSyncInFlight;
+
+    const sync = enqueueReminderMutation(scheduleMoodRemindersInternal);
+    reminderSyncInFlight = sync;
+    try {
+      return await sync;
+    } finally {
+      if (reminderSyncInFlight === sync) reminderSyncInFlight = null;
+    }
+  }
+
+  async function setRemindersEnabled(enabled: boolean): Promise<boolean> {
+    if (!enabled) {
+      return enqueueReminderMutation(async () => {
+        await cancelMoodReminders();
+        await storage.setItem(NOTIFICATIONS_KEY, 'false');
+        return false;
+      });
+    }
+
+    if (!(await requestPermissions())) {
+      return enqueueReminderMutation(async () => {
+        await cancelMoodReminders();
+        await storage.setItem(NOTIFICATIONS_KEY, 'false');
+        return false;
+      });
+    }
+
+    return enqueueReminderMutation(async () => {
+      await storage.setItem(NOTIFICATIONS_KEY, 'true');
+      try {
+        await scheduleMoodRemindersInternal();
+        return true;
+      } catch (error) {
+        await storage.setItem(NOTIFICATIONS_KEY, 'false');
+        throw error;
+      }
+    });
+  }
+
+  async function areRemindersEnabled(): Promise<boolean> {
+    if ((await storage.getItem(NOTIFICATIONS_KEY)) !== 'true') return false;
+    return hasPermission();
+  }
+
+  async function setReminderTimes(times: number[]): Promise<number[]> {
+    const normalized = normalizeReminderTimes(times, []);
+    if (normalized.length === 0) {
+      throw new Error('Choose at least one reminder time.');
+    }
+
+    return enqueueReminderMutation(async () => {
+      await storage.setItem(REMINDER_TIMES_KEY, JSON.stringify(normalized));
+      if ((await storage.getItem(NOTIFICATIONS_KEY)) === 'true') {
+        await scheduleMoodRemindersInternal();
+      }
+      return normalized;
+    });
+  }
+
+  async function getReminderTimes(): Promise<number[]> {
+    return parseStoredReminderTimes(await storage.getItem(REMINDER_TIMES_KEY));
+  }
+
+  async function sendTestNotification(): Promise<boolean> {
+    if (!(await requestPermissions())) return false;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        ...TEST_REMINDER_CONTENT,
+        data: { screen: MOOD_TRACKER_NOTIFICATION_ROUTE },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        ...(platform === 'android' ? { channelId: 'mood-reminders' } : {}),
+        seconds: 2,
+      },
+    });
+    return true;
+  }
+
+  return {
+    requestPermissions,
+    scheduleMoodReminders,
+    setRemindersEnabled,
+    areRemindersEnabled,
+    setReminderTimes,
+    getReminderTimes,
+    sendTestNotification,
+  };
+}
+
+export type NotificationService = ReturnType<typeof createNotificationService>;

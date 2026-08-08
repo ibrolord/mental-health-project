@@ -1,7 +1,9 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 import { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { AppState } from 'react-native';
 import { AuthProvider } from '@/lib/auth-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { loadNotificationsBundle } from '@/lib/notifications-runtime';
@@ -9,24 +11,19 @@ import type {
   NotificationResponseLike,
   NotificationSubscription,
 } from '@/lib/notifications-types';
+import { notificationScreenFromResponse } from '@/lib/notifications-types';
 import { AcquisitionCapture } from '@/components/AcquisitionCapture';
 import { AppBackButton } from '@/components/AppBackButton';
 
-// NOTE: Shared iOS-loaded files must not reference expo-notifications or
-// expo-device at all. Those modules are resolved through platform-specific
-// files so the iOS JS bundle does not carry notification-module load paths.
-
 export default function RootLayout() {
+  const router = useRouter();
   const notificationResponseRef = useRef<NotificationSubscription | null>(null);
-  const routerRef = useRef<ReturnType<typeof useRouter>>(undefined);
 
   useEffect(() => {
-    if (Platform.OS === 'ios') {
-      return;
-    }
-
     let cancelled = false;
     let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+    let routeTimer: ReturnType<typeof setTimeout> | null = null;
+    let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
 
     // Defer past first paint. rAF → setTimeout(0) guarantees we're past the
     // initial render pass before we touch any native module. Unlike
@@ -44,6 +41,37 @@ export default function RootLayout() {
         }
         const { Notifications, notificationsHelper } = notificationBundle;
 
+        const openNotification = async (
+          response: NotificationResponseLike | null
+        ) => {
+          if (!response) return;
+
+          const screen = notificationScreenFromResponse(response);
+          if (screen) {
+            if (routeTimer) clearTimeout(routeTimer);
+            // iOS can deliver a response while the app is still transitioning
+            // from background to active. Navigate after that transition settles.
+            routeTimer = setTimeout(() => {
+              routeTimer = null;
+              if (!cancelled) router.navigate(screen as any);
+            }, 250);
+          }
+          try {
+            await Notifications.clearLastNotificationResponseAsync();
+          } catch (error) {
+            console.warn('Failed to clear notification response:', error);
+          }
+        };
+
+        const reconcileLastNotificationResponse = async () => {
+          try {
+            const last = await Notifications.getLastNotificationResponseAsync();
+            await openNotification(last);
+          } catch (e) {
+            console.warn('Failed to read last notification response:', e);
+          }
+        };
+
         // Reconcile only a choice the user already made. This never requests
         // permission; the opt-in prompt is triggered from Settings.
         (async () => {
@@ -57,27 +85,22 @@ export default function RootLayout() {
         // Handle cold-start taps: if the app was opened by tapping a
         // notification, the live listener registers too late to catch it.
         // Check the last response once here.
-        (async () => {
-          try {
-            const last = await Notifications.getLastNotificationResponseAsync();
-            const screen = last?.notification.request.content.data?.screen;
-            if (screen && routerRef.current) {
-              routerRef.current.push(screen as any);
-            }
-          } catch (e) {
-            console.warn('Failed to read last notification response:', e);
+        void reconcileLastNotificationResponse();
+
+        // iOS may resume the existing process without replaying the live
+        // listener callback. Re-check the native response when it becomes active.
+        appStateSubscription = AppState.addEventListener('change', (state) => {
+          if (state === 'active') {
+            void reconcileLastNotificationResponse();
           }
-        })();
+        });
 
         try {
           notificationResponseRef.current =
             Notifications.addNotificationResponseReceivedListener((
               response: NotificationResponseLike
             ) => {
-              const screen = response.notification.request.content.data?.screen;
-              if (screen && routerRef.current) {
-                routerRef.current.push(screen as any);
-              }
+              void openNotification(response);
             });
         } catch (e) {
           console.warn('Failed to attach notification response listener:', e);
@@ -89,16 +112,17 @@ export default function RootLayout() {
       cancelled = true;
       cancelAnimationFrame(raf);
       if (pendingTimer) clearTimeout(pendingTimer);
+      if (routeTimer) clearTimeout(routeTimer);
+      appStateSubscription?.remove();
       notificationResponseRef.current?.remove();
       notificationResponseRef.current = null;
     };
-  }, []);
+  }, [router]);
 
   return (
     <ErrorBoundary>
       <AuthProvider>
         <AcquisitionCapture />
-        <RouterCapture routerRef={routerRef} />
         <StatusBar style="dark" />
         <Stack
           screenOptions={{
@@ -147,13 +171,4 @@ function stackScreenOptions(
     presentation: modal ? ('modal' as const) : ('card' as const),
     title,
   };
-}
-
-// Helper to capture router ref inside the navigation context
-function RouterCapture({ routerRef }: { routerRef: React.MutableRefObject<ReturnType<typeof useRouter> | undefined> }) {
-  const router = useRouter();
-  useEffect(() => {
-    routerRef.current = router;
-  }, [router, routerRef]);
-  return null;
 }

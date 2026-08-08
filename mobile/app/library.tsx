@@ -1,3 +1,5 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import {
@@ -48,6 +50,7 @@ import {
   type LibraryItemState,
   type LibraryItemStateDraft,
 } from '@/lib/library/user-state';
+import { refreshReminders } from '@/lib/notifications';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { supabase } from '@/lib/supabase';
 
@@ -229,6 +232,12 @@ export default function LibraryScreen() {
       media_type: item.mediaType,
     };
 
+  const refreshReminderContent = () => {
+    void refreshReminders().catch((error) => {
+      console.warn('Could not refresh local reminders after a library change:', error);
+    });
+  };
+
   const persistState = async (
     item: LibraryItem,
     patch: Partial<LibraryItemStateDraft>
@@ -256,6 +265,7 @@ export default function LibraryScreen() {
             return copy;
           });
         }
+        refreshReminderContent();
         return;
       }
 
@@ -284,6 +294,7 @@ export default function LibraryScreen() {
           [item.id]: data as LibraryItemState,
         }));
       }
+      refreshReminderContent();
     } catch {
       setError('That library change was not saved.');
     } finally {

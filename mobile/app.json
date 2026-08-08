@@ -1,3 +1,5 @@
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
+pyenv: cannot rehash: /Users/ibrobaba/.pyenv/shims isn't writable
 {
   "expo": {
     "name": "MHtoolkit",
@@ -63,9 +65,16 @@
       ]
     },
     "plugins": [
-      "./plugins/exclude-notifications-ios",
+      "./plugins/ios-build-fixes",
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "sounds": [],
+          "enableBackgroundRemoteNotifications": false
+        }
+      ],
       [
         "expo-av",
         {
