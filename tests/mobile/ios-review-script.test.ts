@@ -15,6 +15,18 @@ describe('iOS review artifact checks', () => {
     expect(reviewScript).not.toContain('|EXDevice|');
   });
 
+  it('scans binary symbols without a pipefail-sensitive strings pipeline', () => {
+    expect(reviewScript).toContain(
+      "grep -aEq 'EXNotifications|ExpoNotifications|ExpoNotificationsEmitter'"
+    );
+    expect(reviewScript).toContain(
+      "grep -aEq 'expo-device|ExpoDevice|EXDeviceModule'"
+    );
+    expect(reviewScript).not.toContain(
+      'strings "$APP_DIR/$EXECUTABLE" | grep'
+    );
+  });
+
   it('blocks release when social providers or Apple entitlements are unverified', () => {
     expect(reviewScript).toContain('npm run verify:social-auth');
     expect(reviewScript).toContain('com.apple.developer.applesignin');

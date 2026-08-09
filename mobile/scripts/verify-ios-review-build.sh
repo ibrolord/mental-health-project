@@ -435,14 +435,14 @@ if [ -n "$IPA_PATH" ]; then
     fi
 
     if grep -aFq 'expo-notifications' "$BUNDLE_PATH" &&
-      strings "$APP_DIR/$EXECUTABLE" | grep -Eq 'EXNotifications|ExpoNotifications|ExpoNotificationsEmitter'; then
+      grep -aEq 'EXNotifications|ExpoNotifications|ExpoNotificationsEmitter' "$APP_DIR/$EXECUTABLE"; then
       pass "IPA contains the fixed iOS notifications JS and native modules"
     else
       fail "IPA is missing the required fixed iOS notifications module"
     fi
 
     if grep -aFq 'expo-device' "$BUNDLE_PATH" ||
-      strings "$APP_DIR/$EXECUTABLE" | grep -Eq 'expo-device|ExpoDevice|EXDeviceModule'; then
+      grep -aEq 'expo-device|ExpoDevice|EXDeviceModule' "$APP_DIR/$EXECUTABLE"; then
       fail "IPA still contains the unnecessary expo-device module"
     else
       pass "IPA omits the unnecessary expo-device module"
