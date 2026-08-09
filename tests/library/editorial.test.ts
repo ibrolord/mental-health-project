@@ -68,8 +68,8 @@ describe('library editorial review', () => {
       ...ADDITIONAL_BOOKS.map(({ title }) => title),
     ].sort((a, b) => a.localeCompare(b));
 
-    expect(ADDITIONAL_BOOKS).toHaveLength(50);
-    expect(CURATED_LIBRARY).toHaveLength(58);
+    expect(ADDITIONAL_BOOKS).toHaveLength(51);
+    expect(CURATED_LIBRARY).toHaveLength(59);
     expect(CURATED_LIBRARY.map(({ title }) => title)).toEqual(expectedTitles);
     expect(CURATED_LIBRARY.every(({ quote }) => quote === null)).toBe(true);
     expect(CURATED_LIBRARY.every(({ read_time_minutes }) => read_time_minutes >= 13)).toBe(true);
@@ -109,11 +109,9 @@ describe('library editorial review', () => {
       expect(reviewed).not.toBeNull();
       expect(reviewed?.quote).toBeNull();
       expect(reviewed?.sources).toEqual(draft.sources);
-      expect(reviewed?.integrations.map(({ actionType }) => actionType).sort()).toEqual([
-        'goal',
-        'habit',
-        'journal',
-      ]);
+      expect([...new Set(reviewed?.integrations.map(({ actionType }) => actionType))]).toEqual(
+        expect.arrayContaining(['goal', 'habit', 'journal'])
+      );
     }
   });
 
@@ -125,6 +123,24 @@ describe('library editorial review', () => {
     const somaticGuide = applyEditorialReview(book('Waking the Tiger'));
     expect(somaticGuide?.medicalCaveat).toContain('debated');
     expect(somaticGuide?.medicalCaveat).toContain('Do not use sensation practices to recover memories');
+  });
+
+  it('ships the Julie Smith guide with distinct, routed tool templates', () => {
+    const reviewed = applyEditorialReview(book('Why Has Nobody Told Me This Before?'));
+    expect(reviewed?.integrations).toHaveLength(8);
+    expect(new Set(reviewed?.integrations.map(({ actionType }) => actionType))).toEqual(
+      new Set(['goal', 'habit', 'journal', 'routine'])
+    );
+    expect(reviewed?.integrations.map(({ title }) => title)).toEqual([
+      'State snapshot',
+      'Five-minute activation experiment',
+      'Start before ready',
+      'Thought distance check',
+      'Motivation reset',
+      'Sleep landing plan',
+      'Confidence evidence log',
+      'Support threshold plan',
+    ]);
   });
 
   it('keeps mobile and web editorial content aligned', () => {

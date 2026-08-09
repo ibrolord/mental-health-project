@@ -1,11 +1,11 @@
-# App Review Notes - Version 1.0.1
+# App Review Notes - Version 1.0.2
 
-Last updated: August 6, 2026
+Last updated: August 9, 2026
 
 ## Build Under Review
 
-- Version: 1.0.1
-- iOS build: 34
+- Version: 1.0.2
+- iOS build: 42
 - Bundle ID: `com.mhtoolkit.app`
 - Support URL: https://mhtoolkit.vercel.app/support
 - Support email: bolajiag10@gmail.com
@@ -86,6 +86,10 @@ model-generated answer.
   new data after revocation.
 - MHtoolkit does not sell user data or share it for advertising.
 
+Live voice sessions are audio-only. The bundled WebRTC framework references
+camera APIs, so the signed app includes Apple's required camera purpose string.
+MHtoolkit does not request camera permission or capture or transmit camera data.
+
 The privacy policy at https://mhtoolkit.vercel.app/privacy identifies the AI
 providers, data categories, purposes, and consent controls.
 
@@ -98,7 +102,11 @@ text, habit names, planner text, focus-task text, or library notes.
 
 ## iPad Compatibility
 
-The app is distributed as iPhone-only and requires fullscreen. It has also been
-tested in iPhone compatibility mode on an iPad Air 11-inch (M3) simulator. The
-iOS native build excludes the notification and device modules that caused the
-earlier iPad launch crash; notification reminders remain available on Android.
+The app is distributed as iPhone-only and requires fullscreen. It is also
+tested in iPhone compatibility mode on iPad. The earlier notification launch
+crash occurred on `expo-notifications` 0.32.16. This release uses 0.32.17, which
+contains Expo's iOS notification-serializer thread-safety fix, and does not
+include the unnecessary `expo-device` module. Local reminders are available on
+iPhone and Android. The exact TestFlight artifact must pass cold-launch stress
+and notification permission, delivery, tap-routing, and force-quit checks on a
+physical iPhone and in iPad compatibility mode before submission.

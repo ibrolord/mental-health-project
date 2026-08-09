@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch, Platform, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
 import { useDataContext } from '@/lib/hooks/use-data-context';
@@ -12,6 +12,7 @@ import {
   setRemindersEnabled,
   getReminderTimes,
   setReminderTimes,
+  sendTestNotification,
 } from '@/lib/notifications';
 import { hasAiDataSharingConsent, resetAiDataSharingConsent, PRIVACY_POLICY_URL } from '@/lib/ai-consent';
 import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
@@ -22,6 +23,8 @@ import { offlineSafetyPlanCache } from '@/lib/offline-safety-plan-cache';
 import { clearFullContextPreference } from '@/lib/full-context-preference';
 import { clearContextSelections } from '@/lib/chat-context-preference';
 import { clearGoToActions } from '@/lib/go-to-actions-storage';
+import { clearReflectionDraft } from '@/lib/reflection-draft-storage';
+import { supabase } from '@/lib/supabase';
 
 const HOUR_OPTIONS = [
   { label: '7 AM', value: 7 },
@@ -49,23 +52,74 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(false);
   const [remindersOn, setRemindersOn] = useState(false);
   const [selectedTimes, setSelectedTimes] = useState<number[]>([9, 14, 20]);
+  const [reminderBusy, setReminderBusy] = useState(false);
+  const [reminderStatus, setReminderStatus] = useState('');
   const [aiConsentGranted, setAiConsentGranted] = useState(false);
   const [dataGeneration, setDataGeneration] = useState(0);
 
+  const captureOwnerSession = async (expectedOwnerId: string) => {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    if (!data.session || data.session.user.id !== expectedOwnerId) {
+      throw new Error('The profile changed. Try again from the current profile.');
+    }
+    return data.session.access_token;
+  };
+
   useEffect(() => {
     (async () => {
-      setRemindersOn(await areRemindersEnabled());
-      setSelectedTimes(await getReminderTimes());
+      try {
+        const [enabled, times] = await Promise.all([
+          areRemindersEnabled(),
+          getReminderTimes(),
+        ]);
+        setRemindersOn(enabled);
+        setSelectedTimes(times);
+      } catch (error) {
+        console.warn('Unable to load local reminder settings:', error);
+        setReminderStatus('Reminder settings could not be loaded.');
+      }
       setAiConsentGranted(await hasAiDataSharingConsent(consentSubjectId));
     })();
   }, [consentSubjectId]);
 
   const toggleReminders = async (val: boolean) => {
-    setRemindersOn(val);
-    await setRemindersEnabled(val);
+    if (reminderBusy) return;
+    setReminderBusy(true);
+    setReminderStatus('');
+    try {
+      const enabled = await setRemindersEnabled(val);
+      setRemindersOn(enabled);
+      if (val && !enabled) {
+        Alert.alert(
+          'Notifications are off',
+          'Allow notifications in device settings to receive reminders.',
+          [
+            { text: 'Not Now', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: openNotificationSettings,
+            },
+          ]
+        );
+      } else {
+        setReminderStatus(
+          enabled
+            ? 'Reminders are on: plans, affirmations, and library picks are scheduled for this device.'
+            : 'Daily reminders are off.'
+        );
+      }
+    } catch (error) {
+      console.warn('Unable to update local reminders:', error);
+      setRemindersOn(await areRemindersEnabled().catch(() => false));
+      Alert.alert('Reminder Error', 'Your reminder settings could not be updated. Please try again.');
+    } finally {
+      setReminderBusy(false);
+    }
   };
 
   const toggleTime = async (hour: number) => {
+    if (reminderBusy) return;
     let next: number[];
     if (selectedTimes.includes(hour)) {
       next = selectedTimes.filter((h) => h !== hour);
@@ -73,30 +127,85 @@ export default function SettingsScreen() {
       next = [...selectedTimes, hour].sort((a, b) => a - b);
     }
     if (next.length === 0) return; // Must keep at least one
-    setSelectedTimes(next);
-    await setReminderTimes(next);
+    setReminderBusy(true);
+    setReminderStatus('');
+    try {
+      const saved = await setReminderTimes(next);
+      setSelectedTimes(saved);
+      setReminderStatus('Reminder times updated.');
+    } catch (error) {
+      console.warn('Unable to update reminder times:', error);
+      Alert.alert('Reminder Error', 'The new reminder times could not be scheduled.');
+    } finally {
+      setReminderBusy(false);
+    }
+  };
+
+  const handleTestReminder = async () => {
+    if (reminderBusy) return;
+    setReminderBusy(true);
+    setReminderStatus('');
+    try {
+      const scheduled = await sendTestNotification();
+      if (!scheduled) {
+        Alert.alert(
+          'Notifications are off',
+          'Allow notifications in device settings, then try again.',
+          [
+            { text: 'Not Now', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: openNotificationSettings,
+            },
+          ]
+        );
+        return;
+      }
+      setReminderStatus('Test reminder scheduled. It should arrive in a few seconds.');
+    } catch (error) {
+      console.warn('Unable to send a test reminder:', error);
+      Alert.alert('Reminder Error', 'The test reminder could not be scheduled.');
+    } finally {
+      setReminderBusy(false);
+    }
   };
 
   const handleExport = async () => {
-    if (!query) return;
+    const expectedOwnerId = user?.id;
+    if (!query || !expectedOwnerId) return;
     setLoading(true);
+    let exportPath: string | null = null;
     try {
-      const exportData = await apiRequest('/api/data/export', {});
+      const accessToken = await captureOwnerSession(expectedOwnerId);
+      const exportData = await apiRequest(
+        '/api/data/export',
+        { expectedUserId: expectedOwnerId },
+        { accessToken }
+      );
       const data = JSON.stringify(exportData, null, 2);
-
-      const path = `${FileSystem.documentDirectory}mental-health-data.json`;
-      await FileSystem.writeAsStringAsync(path, data);
+      if (!FileSystem.cacheDirectory) {
+        throw new Error('A private export location is unavailable.');
+      }
+      exportPath = `${FileSystem.cacheDirectory}mhtoolkit-data-export-${Date.now()}.json`;
+      await FileSystem.writeAsStringAsync(exportPath, data);
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(path);
+        await Sharing.shareAsync(exportPath);
       }
     } catch {
       Alert.alert('Error', 'Failed to export data');
+    } finally {
+      if (exportPath) {
+        await FileSystem.deleteAsync(exportPath, { idempotent: true }).catch(
+          (error) => console.warn('Unable to remove temporary export:', error)
+        );
+      }
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleDeleteAll = async () => {
-    if (!query) return;
+    const expectedOwnerId = user?.id;
+    if (!query || !expectedOwnerId) return;
     Alert.alert(
       'Delete All Data?',
       'This will permanently delete all your check-ins, assessments, goals, habits, chat history, favorites, AI reports, and acquisition attribution. This cannot be undone.',
@@ -108,7 +217,12 @@ export default function SettingsScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              const result = await apiRequest('/api/data/delete', {});
+              const accessToken = await captureOwnerSession(expectedOwnerId);
+              const result = await apiRequest(
+                '/api/data/delete',
+                { expectedUserId: expectedOwnerId },
+                { accessToken }
+              );
               if (!result?.deleted) throw new Error(result?.error || 'Deletion failed');
               const cleanup = await Promise.allSettled([
                 clearStoredAcquisitionAttribution(),
@@ -117,7 +231,8 @@ export default function SettingsScreen() {
                 clearContextSelections(consentSubjectId),
                 clearGoToActions(consentSubjectId),
                 setRemindersEnabled(false),
-                user ? offlineSafetyPlanCache.clear(user.id) : Promise.resolve(),
+                offlineSafetyPlanCache.clear(expectedOwnerId),
+                clearReflectionDraft(expectedOwnerId),
               ]);
               setDataGeneration((current) => current + 1);
               const cleanupFailed = cleanup.some((item) => item.status === 'rejected');
@@ -193,6 +308,12 @@ export default function SettingsScreen() {
     });
   };
 
+  function openNotificationSettings() {
+    Linking.openSettings().catch(() => {
+      Alert.alert('Unable to Open Settings', 'Open your device settings and allow notifications for MHtoolkit.');
+    });
+  }
+
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       {/* Account */}
@@ -232,52 +353,59 @@ export default function SettingsScreen() {
         )}
       </View>
 
-      {/* Notifications remain Android-only while the incompatible iOS native
-          modules stay excluded from release builds. */}
-      {Platform.OS !== 'ios' ? (
-        <View style={s.card}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <Text style={s.cardTitle}>Local Reminders</Text>
-            <Switch
-              value={remindersOn}
-              onValueChange={toggleReminders}
-              trackColor={{ false: '#d1d5db', true: Colors.primary }}
-              thumbColor="#fff"
-            />
-          </View>
-          <Text style={s.bodyText}>Optional, private reminders for the steps you plan.</Text>
+      <View style={s.card}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <Text style={s.cardTitle}>Daily Reminders</Text>
+          <Switch
+            value={remindersOn}
+            onValueChange={toggleReminders}
+            disabled={reminderBusy}
+            trackColor={{ false: '#d1d5db', true: Colors.primary }}
+            thumbColor="#fff"
+          />
+        </View>
+        <Text style={s.bodyText}>
+          Plans and target dates are scheduled at your chosen times. With three times, reminders cycle through a plan, affirmation, and library pick.
+        </Text>
 
-          {remindersOn && (
-            <View style={{ marginTop: 14 }}>
-              <Text style={[s.bodyText, { fontWeight: '500', marginBottom: 8 }]}>Reminder times:</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {HOUR_OPTIONS.map((opt) => {
-                  const selected = selectedTimes.includes(opt.value);
-                  return (
-                    <TouchableOpacity
-                      key={opt.value}
-                      onPress={() => toggleTime(opt.value)}
-                      style={[
-                        s.timePill,
-                        selected && { backgroundColor: Colors.primary, borderColor: Colors.primary },
-                      ]}
-                    >
-                      <Text style={[s.timePillText, selected && { color: '#fff' }]}>{opt.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+        {remindersOn && (
+          <View style={{ marginTop: 14 }}>
+            <Text style={[s.bodyText, { fontWeight: '500', marginBottom: 8 }]}>Reminder times:</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {HOUR_OPTIONS.map((opt) => {
+                const selected = selectedTimes.includes(opt.value);
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    onPress={() => toggleTime(opt.value)}
+                    disabled={reminderBusy}
+                    style={[
+                      s.timePill,
+                      selected && { backgroundColor: Colors.primary, borderColor: Colors.primary },
+                      reminderBusy && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Text style={[s.timePillText, selected && { color: '#fff' }]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-          )}
-        </View>
-      ) : (
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Local Reminders</Text>
-          <Text style={s.bodyText}>
-            iPhone reminders are not available in this release. Your habits and plans still work without them.
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[s.btnOutline, reminderBusy && { opacity: 0.6 }]}
+          onPress={handleTestReminder}
+          disabled={reminderBusy}
+        >
+          <Text style={s.btnOutlineText}>Send Test Notification</Text>
+        </TouchableOpacity>
+        {reminderStatus ? (
+          <Text accessibilityLiveRegion="polite" style={[s.bodyText, { marginTop: 10 }]}>
+            {reminderStatus}
           </Text>
-        </View>
-      )}
+        ) : null}
+      </View>
 
       {/* Export */}
       <View style={s.card}>

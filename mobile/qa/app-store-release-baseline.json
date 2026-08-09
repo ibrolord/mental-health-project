@@ -1,0 +1,6 @@
+{
+  "lastApprovedVersion": "1.0.1",
+  "candidateVersion": "1.0.2",
+  "verifiedAt": "2026-08-09",
+  "evidence": "Apple processed version 1.0.2 build 41 and reported only ITMS-90683; the earlier 1.0.1 builds 39 and 40 were rejected as a closed approved train."
+}

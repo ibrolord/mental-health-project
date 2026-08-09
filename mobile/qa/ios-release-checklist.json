@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-08-06.3",
+  "checklistVersion": "2026-08-08.1",
   "platform": "ios",
-  "expectedInventory": { "routes": 26, "routeChecks": 489, "workflows": 94, "total": 583 },
+  "expectedInventory": { "routes": 28, "routeChecks": 534, "workflows": 95, "total": 629 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -12,6 +12,7 @@
       "launch.cold-stress-ipad": { "deviceRequirements": ["ipad"] },
       "layout.devices": { "deviceRequirements": ["physical-iphone", "ipad"] },
       "regression.ipad-launch": { "deviceRequirements": ["ipad"] },
+      "notification.local-delivery": { "deviceRequirements": ["physical-iphone", "ipad"] },
       "auth.anonymous-first-launch": { "identityRequirements": ["fresh-anonymous"] },
       "auth.email-upgrade": { "identityRequirements": ["saved-anonymous", "email-owner"] },
       "auth.email-invalid": { "identityRequirements": ["email-owner"] },
@@ -107,7 +108,7 @@
       "source": "app/(tabs)/index.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "share-challenge", "low-energy-mode", "grounding", "focus", "habits", "go-to-customize", "go-to-select-limit", "go-to-cue", "go-to-reorder", "go-to-save-relaunch", "go-to-storage-failure"]
+      "controls": ["mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "share-challenge", "low-energy-mode", "weekly-insight", "weekly-reflection", "resume-practice", "saved-space", "grounding", "focus", "habits", "go-to-customize", "go-to-select-limit", "go-to-cue", "go-to-reorder", "go-to-save-relaunch", "go-to-storage-failure"]
     },
     {
       "id": "mood-tracker",
@@ -115,7 +116,7 @@
       "source": "app/(tabs)/tracker.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["open-close-entry", "five-mood-options", "note", "tags", "save", "save-double-tap", "all-filter", "tag-filter", "refresh-after-save", "sleep-open-close", "sleep-wake-date", "sleep-five-times", "sleep-awakenings", "sleep-awake-minutes", "sleep-nap-minutes", "sleep-notes", "sleep-save", "sleep-delete"]
+      "controls": ["open-close-entry", "five-mood-options", "details-collapse", "emotion-options", "custom-emotion", "suggested-action", "note", "save", "save-double-tap", "history-collapse", "all-filter", "tag-filter", "refresh-after-save", "sleep-open-close", "sleep-wake-date", "sleep-five-times", "sleep-awakenings", "sleep-awake-minutes", "sleep-nap-minutes", "sleep-notes", "sleep-save", "sleep-delete"]
     },
     {
       "id": "ai-chat",
@@ -139,7 +140,7 @@
       "source": "app/(tabs)/more.tsx",
       "kind": "tab",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["goals", "habits", "plans", "focus", "journal", "affirmations", "grounding", "meditation", "yoga", "mind-games", "library", "accountability", "resources", "research", "support", "settings"]
+      "controls": ["goals", "habits", "plans", "focus", "guided-reflection", "journal", "affirmations", "grounding", "meditation", "yoga", "mind-games", "library", "saved", "accountability", "resources", "research", "support", "settings"]
     },
     {
       "id": "login",
@@ -214,6 +215,22 @@
       "controls": ["new-close", "title", "entry", "tags", "favorite", "context-toggle", "save", "double-submit", "search", "filters", "edit", "delete", "library-prefill"]
     },
     {
+      "id": "guided-reflection",
+      "path": "/reflect",
+      "source": "app/reflect.tsx",
+      "kind": "stack",
+      "identityRequirements": ["saved-anonymous"],
+      "controls": ["template-select", "more-templates", "restore-encrypted-draft", "response-input", "previous-step", "next-step", "save-to-journal", "open-journal", "start-another", "weekly-pattern-deep-link"]
+    },
+    {
+      "id": "saved",
+      "path": "/saved",
+      "source": "app/saved.tsx",
+      "kind": "stack",
+      "identityRequirements": ["saved-anonymous"],
+      "controls": ["browse-library-empty", "open-up-next", "open-saved-resource", "open-important-journal-marker"]
+    },
+    {
       "id": "library",
       "path": "/library",
       "source": "app/library.tsx",
@@ -227,7 +244,7 @@
       "source": "app/meditate.tsx",
       "kind": "stack",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["all-filter", "issue-filters", "open-practice", "start", "pause", "resume", "reset", "sound", "choose-another"]
+      "controls": ["all-filter", "issue-filters", "open-practice", "start", "pause", "resume", "resume-after-relaunch", "version-conflict", "reset", "sound", "choose-another"]
     },
     {
       "id": "yoga",
@@ -243,7 +260,7 @@
       "source": "app/mind-games.tsx",
       "kind": "stack",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["open-each-game", "color-switch", "paced-counting", "category-fluency", "memory-sequence", "sensory-scan", "start", "pause", "reset", "new-round", "exit-game"]
+      "controls": ["open-each-game", "color-switch", "paced-counting", "category-fluency", "memory-sequence", "sensory-scan", "number-flow", "number-difficulty", "number-answer", "start", "pause", "reset", "new-round", "exit-game"]
     },
     {
       "id": "accountability",
@@ -291,7 +308,7 @@
       "source": "app/settings.tsx",
       "kind": "stack",
       "identityRequirements": ["email-owner"],
-      "controls": ["create-account", "finish-account", "sign-in", "sign-out", "reminders", "reminder-times", "export", "revoke-ai-consent", "privacy", "visit-brief-collapse", "visit-brief-section-toggles", "visit-brief-safety-opt-in", "visit-brief-exact-preview", "visit-brief-share", "privacy-activity-collapse", "privacy-activity-refresh", "email-support", "support-page", "delete-saved-data", "delete-account"]
+      "controls": ["create-account", "finish-account", "sign-in", "sign-out", "reminders", "reminder-times", "test-reminder", "permission-denied-open-settings", "export", "revoke-ai-consent", "privacy", "visit-brief-collapse", "visit-brief-section-toggles", "visit-brief-safety-opt-in", "visit-brief-exact-preview", "visit-brief-share", "privacy-activity-collapse", "privacy-activity-refresh", "email-support", "support-page", "delete-saved-data", "delete-account"]
     },
     {
       "id": "support",
@@ -315,7 +332,7 @@
     { "id": "artifact.identity", "area": "artifact", "kind": "automated", "title": "Bundle ID, version, build number, signer, device family, and minimum OS match the release record" },
     { "id": "artifact.hash", "area": "artifact", "kind": "automated", "title": "Record SHA-256 for the exact IPA and installed app" },
     { "id": "artifact.production-env", "area": "artifact", "kind": "automated", "title": "Packaged bundle uses production Supabase and API endpoints with no development URL" },
-    { "id": "artifact.native-modules", "area": "artifact", "kind": "automated", "title": "Required modules are present and forbidden iOS notification/device modules are absent" },
+    { "id": "artifact.native-modules", "area": "artifact", "kind": "automated", "title": "Fixed iOS notifications module is present and unnecessary expo-device module is absent" },
     { "id": "artifact.privacy-manifest", "area": "artifact", "kind": "automated", "title": "Privacy manifest and permission purpose strings match actual behavior" },
     { "id": "artifact.tests", "area": "artifact", "kind": "automated", "title": "Root and mobile tests, TypeScript, and lint pass from the exact commit" },
     { "id": "artifact.prebuild", "area": "artifact", "kind": "automated", "title": "Clean Expo prebuild and release archive/build pass" },
@@ -326,6 +343,7 @@
     { "id": "launch.cold-stress-iphone", "area": "launch", "kind": "manual", "title": "Twenty cold launches on iPhone produce no crash or fatal log" },
     { "id": "launch.cold-stress-ipad", "area": "launch", "kind": "manual", "title": "Twenty cold launches on iPad compatibility mode produce no crash or fatal log" },
     { "id": "launch.background-foreground", "area": "launch", "kind": "manual", "title": "Repeated background, foreground, lock, unlock, and force-quit cycles preserve valid state" },
+    { "id": "notification.local-delivery", "area": "notification", "kind": "manual", "title": "Allow, deny, later-enable, schedule, deliver, tap-route, disable, and force-quit notification paths work without duplicate delivery or launch crash; verify due-date, affirmation, and library-pick content on iPhone and iPad compatibility mode" },
     { "id": "launch.offline", "area": "network", "kind": "manual", "title": "Offline launch renders recoverable UI without data loss or infinite loading" },
     { "id": "network.slow-reconnect", "area": "network", "kind": "manual", "title": "Slow network, timeout, disconnect, and reconnect recover without duplicate writes" },
     { "id": "network.server-errors", "area": "network", "kind": "manual", "title": "401, 403, 429, and 500 responses show actionable errors and permit safe retry" },
@@ -390,7 +408,7 @@
     { "id": "store.no-purchases", "area": "store", "kind": "manual", "title": "Confirm there is no undisclosed purchase, subscription, donation, or paywall flow" },
     { "id": "store.processing", "area": "store", "kind": "manual", "title": "Uploaded build finishes processing and the selected build number and icon are correct" },
     { "id": "regression.ipad-launch", "area": "regression", "kind": "manual", "title": "iPad compatibility launch does not reproduce the prior crash" },
-    { "id": "regression.ios-notifications", "area": "regression", "kind": "automated", "title": "Forbidden iOS notification/device native symbols remain absent" },
+    { "id": "regression.ios-notifications", "area": "regression", "kind": "automated", "title": "Fixed iOS notification native symbols are present and expo-device symbols remain absent" },
     { "id": "regression.support-url", "area": "regression", "kind": "automated", "title": "Support URL returns 200 and exposes current contact information" },
     { "id": "regression.back-navigation", "area": "regression", "kind": "manual", "title": "Every stack/modal Back works with history and from direct launch" },
     { "id": "regression.mood-save", "area": "regression", "kind": "manual", "title": "Mood entry visibly saves, appears in history, and remains after relaunch" },

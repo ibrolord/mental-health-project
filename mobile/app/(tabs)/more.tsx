@@ -26,6 +26,8 @@ type Route =
   | '/yoga'
   | '/mind-games'
   | '/journal'
+  | '/reflect'
+  | '/saved'
   | '/affirmations'
   | '/library'
   | '/partner'
@@ -102,9 +104,15 @@ const GROUPS: {
       },
       {
         label: 'Mind games',
-        description: 'Five offline attention exercises',
+        description: 'Six offline attention exercises',
         icon: 'grid',
         route: '/mind-games',
+      },
+      {
+        label: 'Guided reflection',
+        description: 'Structured private prompts',
+        icon: 'book-open',
+        route: '/reflect',
       },
       {
         label: 'Private journal',
@@ -130,6 +138,12 @@ const GROUPS: {
         description: 'Books, talks, and real stories',
         icon: 'book-open',
         route: '/library',
+      },
+      {
+        label: 'Saved',
+        description: 'Resources and important markers',
+        icon: 'bookmark',
+        route: '/saved',
       },
       {
         label: 'Accountability',

@@ -18,6 +18,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const body = await request.json().catch(() => ({}));
+    const expectedUserId =
+      typeof body?.expectedUserId === 'string' ? body.expectedUserId : null;
+    if (!expectedUserId || expectedUserId !== auth.userId) {
+      return NextResponse.json(
+        { error: 'The account changed before deletion. No account was deleted.' },
+        { status: 409, headers: corsHeaders() }
+      );
+    }
+
     const { error } = await supabaseAdmin.auth.admin.deleteUser(auth.userId);
     if (error) {
       console.error('Account deletion error:', error);

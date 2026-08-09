@@ -13,7 +13,7 @@ export default function PrivacyPolicyPage() {
           Privacy Policy
         </h1>
         <p className="text-sm text-muted-foreground mb-8">
-          Effective date: August 6, 2026
+          Effective date: August 8, 2026
         </p>
 
         <p className="text-foreground mb-6 leading-relaxed">
@@ -99,6 +99,17 @@ export default function PrivacyPolicyPage() {
               We do not store the referring URL, advertising identifiers, your
               mood value, notes, assessments, or AI content with these labels.
             </li>
+            <li>
+              <strong>Operational events:</strong> For authenticated web and iOS
+              sessions, we may store a fixed event name, the web or iOS source,
+              and a server timestamp when an app error boundary appears or an
+              allowlisted notification step succeeds or fails. These events do
+              not contain journal, chat, assessment, mood, note, tag, title, or
+              prompt values; route URLs; related record IDs; exception messages
+              or stacks; device IDs; email addresses; or arbitrary metadata. We
+              do not record Android operational events or crisis and grounding
+              tool usage events.
+            </li>
           </ul>
         </section>
 
@@ -142,6 +153,10 @@ export default function PrivacyPolicyPage() {
               campaign so we can focus on useful, permission-based distribution.
             </li>
             <li>Reviewing user-reported AI responses for safety and quality.</li>
+            <li>
+              Detecting app-boundary and notification reliability problems from
+              the fixed, content-free operational event taxonomy.
+            </li>
           </ul>
           <p className="text-foreground mt-3 leading-relaxed">
             We do <strong>not</strong> sell, rent, or share your personal data
@@ -228,6 +243,11 @@ export default function PrivacyPolicyPage() {
               dismissed notice preferences use the same owner-scoped Row Level
               Security model.
             </li>
+            <li>
+              Operational events are written directly to Supabase through an
+              authenticated, fixed-input database function. We do not send these
+              events to Sentry or another crash-reporting provider.
+            </li>
           </ul>
         </section>
 
@@ -305,6 +325,11 @@ export default function PrivacyPolicyPage() {
             <li>
               Campaign attribution is retained with your anonymous or signed-in
               account and is deleted when you delete your data or account.
+            </li>
+            <li>
+              Operational events are retained with your authenticated account,
+              included in your export, and removed when you delete your data or
+              account.
             </li>
             <li>
               A browser push subscription is retained until you turn it off,

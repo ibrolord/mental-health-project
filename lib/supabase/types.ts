@@ -13,6 +13,7 @@ export type JournalEntryKind =
   | 'story_note';
 export type LibraryMediaType = 'book' | 'video' | 'story';
 export type LibraryPriority = 'none' | 'next';
+export type PracticeType = 'meditation';
 export type PartnerInviteStatus = 'pending' | 'accepted' | 'revoked';
 export type PartnerLinkStatus = 'active' | 'revoked';
 export type PartnerCelebrationKind = 'cheer' | 'reward';
@@ -105,6 +106,18 @@ export type PrivacyEventType =
   | 'sharing_disabled'
   | 'export_requested'
   | 'deletion_requested';
+export type OperationalEventType =
+  | 'route_error'
+  | 'global_error'
+  | 'render_error'
+  | 'notification_permission_granted'
+  | 'notification_permission_denied'
+  | 'notification_registration_succeeded'
+  | 'notification_registration_failed'
+  | 'notification_scheduling_succeeded'
+  | 'notification_scheduling_failed'
+  | 'notification_response_received'
+  | 'notification_response_failed';
 
 export interface Database {
   public: {
@@ -608,6 +621,38 @@ export interface Database {
           priority?: LibraryPriority;
           custom_notes?: string;
           created_at?: string;
+          updated_at?: string;
+        };
+      };
+      practice_progress: {
+        Row: {
+          user_id: string;
+          practice_type: PracticeType;
+          practice_id: string;
+          route: '/meditate';
+          step_index: number;
+          step_elapsed_seconds: number;
+          version: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          practice_type: PracticeType;
+          practice_id: string;
+          route: '/meditate';
+          step_index: number;
+          step_elapsed_seconds: number;
+          version?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          practice_id?: string;
+          route?: '/meditate';
+          step_index?: number;
+          step_elapsed_seconds?: number;
+          version?: number;
           updated_at?: string;
         };
       };
@@ -1119,6 +1164,16 @@ export interface Database {
         };
         Update: never;
       };
+      operational_events: {
+        Row: {
+          user_id: string;
+          event_type: OperationalEventType;
+          source: 'web' | 'ios';
+          occurred_at: string;
+        };
+        Insert: never;
+        Update: never;
+      };
       user_data_migration: {
         Row: {
           id: string;
@@ -1138,6 +1193,68 @@ export interface Database {
           user_id?: string;
           migrated_at?: string;
         };
+      };
+    };
+    Functions: {
+      save_check_in_with_attribution: {
+        Args: {
+          p_expected_user_id: string;
+          p_emoji: MoodEmoji;
+          p_note: string | null;
+          p_tags: string[];
+          p_local_date: string;
+          p_utc_offset_minutes: number;
+          p_source: string;
+          p_medium: string;
+          p_campaign: string;
+          p_content: string;
+          p_platform: string;
+        };
+        Returns: string;
+      };
+      weekly_owner_summary: {
+        Args: {
+          p_week_start: string;
+          p_timezone: string;
+        };
+        Returns: {
+          week_start: string;
+          week_end: string;
+          timezone: string;
+          check_in_days: number;
+          completed_habit_days: number;
+          completed_focus_sessions: number;
+          journal_entries: number;
+        };
+      };
+      record_operational_event: {
+        Args: {
+          p_event_type: OperationalEventType;
+          p_source: 'web' | 'ios';
+        };
+        Returns: undefined;
+      };
+      save_practice_progress: {
+        Args: {
+          p_expected_user_id: string;
+          p_practice_type: PracticeType;
+          p_practice_id: string;
+          p_route: '/meditate';
+          p_step_index: number;
+          p_step_elapsed_seconds: number;
+          p_expected_version: number;
+        };
+        Returns: Database['public']['Tables']['practice_progress']['Row'];
+      };
+      clear_practice_progress: {
+        Args: {
+          p_expected_user_id: string;
+          p_practice_type: PracticeType;
+          p_practice_id: string;
+          p_route: '/meditate';
+          p_expected_version: number;
+        };
+        Returns: boolean;
       };
     };
   };

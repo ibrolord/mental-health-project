@@ -35,8 +35,8 @@ const dashboardSource = readFileSync(
   resolve(process.cwd(), 'app/dashboard/page.tsx'),
   'utf8'
 );
-const trackerSource = readFileSync(
-  resolve(process.cwd(), 'app/tracker/page.tsx'),
+const trackerCheckInSource = readFileSync(
+  resolve(process.cwd(), 'components/mood/inline-mood-check-in.tsx'),
   'utf8'
 );
 const mobileLayoutSource = readFileSync(
@@ -85,10 +85,9 @@ describe('session and mood readiness', () => {
     );
     expect(dashboardSource).toContain('Check-in saved.');
     expect(dashboardSource).toContain('Your check-in was not saved.');
-    expect(trackerSource).toContain(
-      'disabled={authLoading || !user?.id}'
-    );
-    expect(trackerSource).toContain('Mood entry saved.');
+    expect(trackerCheckInSource).toContain('disabled={controlsUnavailable}');
+    expect(trackerCheckInSource).toContain('Your private profile is not ready.');
+    expect(trackerCheckInSource).toContain('Not saved');
   });
 
   it('uses a user-facing iOS back title instead of the route group name', () => {

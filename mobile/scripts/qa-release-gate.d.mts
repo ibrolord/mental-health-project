@@ -34,6 +34,9 @@ export type QaRunResult = {
   command?: string;
   exitCode?: number | null;
   outputRef?: string;
+  outputSha256?: string;
+  executionMode?: string;
+  executionReceipt?: string;
 };
 
 export type QaRunMetadata = {
@@ -87,6 +90,14 @@ export type QaRunContext = {
   worktreeClean?: boolean;
   artifactFileSha256?: string;
   artifactFileError?: string;
+  automatedOutputFiles?: Record<string, {
+    canonicalPath?: string;
+    dev?: string;
+    ino?: string;
+    sha256?: string;
+    size?: number;
+    error?: string;
+  }>;
   expectedRunSha256?: string;
   nowMs?: number;
 };
@@ -104,6 +115,10 @@ export const EXPECTED_INVENTORY: Readonly<{
 export const EXPECTED_CHECKLIST_SHA256: string;
 
 export function checklistDigest(value: unknown): string;
+export function gateExecutionReceipt(
+  metadata: QaRunMetadata,
+  result: QaRunResult,
+): string;
 export function expandChecklist(checklist: QaChecklist): QaChecklistItem[];
 export function discoverRouteSources(mobileRoot?: string): string[];
 export function validateChecklist(checklist: QaChecklist, mobileRoot?: string): string[];

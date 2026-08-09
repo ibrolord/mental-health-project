@@ -11,6 +11,18 @@ export interface CollapsedGoals<T extends GoalIdentity> {
   idsByKey: Map<string, string[]>;
 }
 
+export type GoalCompletionStatus = 'pending' | 'completed';
+
+export function nextGoalCompletionStatus(
+  status: GoalCompletionStatus
+): GoalCompletionStatus {
+  return status === 'completed' ? 'pending' : 'completed';
+}
+
+export function goalCompletionFeedback(status: GoalCompletionStatus): string {
+  return status === 'completed' ? 'Goal completed.' : 'Goal moved back to pending.';
+}
+
 function normalizeContent(content: string): string {
   return content.trim().replace(/\s+/g, ' ').toLowerCase();
 }

@@ -5,6 +5,7 @@ import { Bell, BellOff, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
+import { recordOperationalEvent } from '@/lib/observability';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -75,9 +76,11 @@ export function PushNotificationSettings({ compact = false }: { compact?: boolea
     try {
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
+        void recordOperationalEvent('notification_permission_denied');
         setMessage('Notifications were not enabled. You can change this in browser settings.');
         return;
       }
+      void recordOperationalEvent('notification_permission_granted');
 
       const registration = await navigator.serviceWorker.ready;
       const subscription =
@@ -98,9 +101,11 @@ export function PushNotificationSettings({ compact = false }: { compact?: boolea
         p_user_agent: navigator.userAgent.slice(0, 500),
       });
       if (error) throw error;
+      void recordOperationalEvent('notification_registration_succeeded');
       setEnabled(true);
       setMessage('Background reminders are enabled on this device.');
     } catch (error) {
+      void recordOperationalEvent('notification_registration_failed');
       setMessage(
         error instanceof Error ? error.message : 'Notifications could not be enabled.'
       );

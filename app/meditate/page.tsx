@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { CirclePause, CirclePlay, RotateCcw, Wind } from 'lucide-react';
 import { OptionalSoundscape } from '@/components/optional-soundscape';
@@ -15,7 +15,20 @@ import {
   IDLE_GUIDED_TIMER,
   advanceGuidedTimer,
   resetGuidedTimer,
+  type GuidedTimerState,
 } from '@/lib/guided-timer';
+import { useDataContext } from '@/lib/hooks/use-data-context';
+import {
+  PracticeProgressConflictError,
+  clearPausedPracticeProgress,
+  parsePracticeProgressRow,
+  pausedProgressFromTimer,
+  pausedTimerFromProgress,
+  savePausedPracticeProgress,
+  type PracticeProgressRow,
+  type ProductStateRpc,
+} from '@/lib/product-state';
+import { supabase } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
 function durationLabel(seconds: number): string {
@@ -24,9 +37,26 @@ function durationLabel(seconds: number): string {
 }
 
 export default function MeditatePage() {
+  const { context, authLoading } = useDataContext();
   const [issue, setIssue] = useState<MeditationIssue | 'all'>('all');
   const [selectedId, setSelectedId] = useState(MEDITATION_PRACTICES[0].id);
   const [timerState, setTimerState] = useState(IDLE_GUIDED_TIMER);
+  const [storedProgress, setStoredProgress] =
+    useState<PracticeProgressRow | null>(null);
+  const [progressLoading, setProgressLoading] = useState(true);
+  const [progressBusy, setProgressBusy] = useState(false);
+  const [progressConflict, setProgressConflict] = useState(false);
+  const [progressMessage, setProgressMessage] = useState('');
+  const ownerRef = useRef(context.user_id);
+  const selectedIdRef = useRef(selectedId);
+  const timerRef = useRef<GuidedTimerState>(timerState);
+  const progressRef = useRef<PracticeProgressRow | null>(storedProgress);
+  const pendingPauseRef = useRef<Promise<void> | null>(null);
+  const lifecyclePauseRef = useRef<() => void>(() => {});
+  ownerRef.current = context.user_id;
+  selectedIdRef.current = selectedId;
+  timerRef.current = timerState;
+  progressRef.current = storedProgress;
   const {
     stepIndex,
     elapsed: stepElapsed,
@@ -46,29 +76,201 @@ export default function MeditatePage() {
   const elapsedSeconds = Math.min(totalSeconds, completedSeconds + stepElapsed);
   const progress = totalSeconds > 0 ? (elapsedSeconds / totalSeconds) * 100 : 0;
 
+  const rpc: ProductStateRpc = (name, args) => supabase.rpc(name, args);
+
+  useEffect(() => {
+    if (authLoading) return;
+    const ownerId = context.user_id;
+    setTimerState(IDLE_GUIDED_TIMER);
+    setStoredProgress(null);
+    progressRef.current = null;
+    setProgressBusy(false);
+    setProgressConflict(false);
+    setProgressMessage('');
+
+    if (!ownerId) {
+      setProgressLoading(false);
+      return;
+    }
+
+    let active = true;
+    setProgressLoading(true);
+    void supabase
+      .from('practice_progress')
+      .select(
+        'user_id, practice_type, practice_id, route, step_index, step_elapsed_seconds, version, created_at, updated_at'
+      )
+      .eq('user_id', ownerId)
+      .eq('practice_type', 'meditation')
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!active || ownerRef.current !== ownerId) return;
+        setProgressLoading(false);
+        if (error) {
+          setProgressMessage('Paused progress could not be loaded.');
+          return;
+        }
+        if (!data) return;
+
+        const parsed = parsePracticeProgressRow(data);
+        if (!parsed || parsed.user_id !== ownerId) {
+          setProgressMessage('Saved practice progress was invalid and was not resumed.');
+          return;
+        }
+        progressRef.current = parsed;
+        setStoredProgress(parsed);
+        setSelectedId(parsed.practice_id);
+        setTimerState(pausedTimerFromProgress(parsed));
+        setProgressMessage('Paused progress restored. Continue when you are ready.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authLoading, context.user_id]);
+
   useEffect(() => {
     if (!running || complete) return;
     const timer = window.setInterval(() => {
       setTimerState((current) =>
-        advanceGuidedTimer(
+        {
+          const next = advanceGuidedTimer(
           current,
           currentStep.seconds,
           selected.steps.length
-        )
+          );
+          timerRef.current = next;
+          return next;
+        }
       );
     }, 1_000);
     return () => window.clearInterval(timer);
   }, [complete, currentStep.seconds, running, selected.steps.length]);
 
-  const selectPractice = (id: string) => {
+  const clearStored = async (): Promise<boolean> => {
+    await pendingPauseRef.current;
+    const ownerId = context.user_id;
+    const current = progressRef.current;
+    if (!current) return true;
+    if (!ownerId || current.user_id !== ownerId) return false;
+
+    setProgressBusy(true);
+    setProgressMessage('');
+    try {
+      await clearPausedPracticeProgress(rpc, ownerId, current);
+      if (ownerRef.current !== ownerId) return false;
+      progressRef.current = null;
+      setStoredProgress(null);
+      return true;
+    } catch (error) {
+      if (ownerRef.current !== ownerId) return false;
+      if (error instanceof PracticeProgressConflictError) {
+        setProgressConflict(true);
+      }
+      setProgressMessage(
+        error instanceof PracticeProgressConflictError
+          ? 'Progress changed in another session. Reload before continuing.'
+          : 'Paused progress could not be cleared. Try again.'
+      );
+      return false;
+    } finally {
+      if (ownerRef.current === ownerId) setProgressBusy(false);
+    }
+  };
+
+  const persistPaused = async (
+    paused: GuidedTimerState,
+    practiceId: string
+  ) => {
+    const ownerId = context.user_id;
+    if (!ownerId) return;
+    const draft = pausedProgressFromTimer('meditation', practiceId, paused);
+    if (!draft) return;
+
+    const operation = (async () => {
+      const expectedVersion = progressRef.current?.version ?? 0;
+      setProgressBusy(true);
+      setProgressMessage('Saving paused progress...');
+      try {
+        const saved = await savePausedPracticeProgress(
+          rpc,
+          ownerId,
+          draft,
+          expectedVersion
+        );
+        if (ownerRef.current !== ownerId) return;
+        progressRef.current = saved;
+        setStoredProgress(saved);
+        setProgressMessage('Paused progress saved.');
+      } catch (error) {
+        if (ownerRef.current !== ownerId) return;
+        if (error instanceof PracticeProgressConflictError) {
+          setProgressConflict(true);
+        }
+        setProgressMessage(
+          error instanceof PracticeProgressConflictError
+            ? 'Progress changed in another session. Reload before saving again.'
+            : 'Paused progress could not be saved.'
+        );
+      } finally {
+        if (ownerRef.current === ownerId) setProgressBusy(false);
+      }
+    })();
+    pendingPauseRef.current = operation;
+    try {
+      await operation;
+    } finally {
+      if (pendingPauseRef.current === operation) pendingPauseRef.current = null;
+    }
+  };
+
+  const pausePractice = () => {
+    const current = timerRef.current;
+    if (!current.running || current.complete) return;
+    const paused = { ...current, running: false };
+    timerRef.current = paused;
+    setTimerState(paused);
+    void persistPaused(paused, selectedIdRef.current);
+  };
+  lifecyclePauseRef.current = pausePractice;
+
+  useEffect(() => {
+    const pauseWhenHidden = () => {
+      if (document.visibilityState === 'hidden') lifecyclePauseRef.current();
+    };
+    const pauseBeforePageHide = () => lifecyclePauseRef.current();
+    document.addEventListener('visibilitychange', pauseWhenHidden);
+    window.addEventListener('pagehide', pauseBeforePageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', pauseWhenHidden);
+      window.removeEventListener('pagehide', pauseBeforePageHide);
+    };
+  }, []);
+
+  const startPractice = async () => {
+    if (progressBusy || progressConflict) return;
+    if (!(await clearStored())) return;
+    setProgressMessage('');
+    setTimerState((current) => {
+      const next = current.complete
+        ? resetGuidedTimer(true)
+        : { ...current, running: true };
+      timerRef.current = next;
+      return next;
+    });
+  };
+
+  const selectPractice = async (id: string) => {
+    if (progressBusy || progressConflict || !(await clearStored())) return;
     setSelectedId(id);
+    selectedIdRef.current = id;
+    timerRef.current = IDLE_GUIDED_TIMER;
     setTimerState(IDLE_GUIDED_TIMER);
+    setProgressMessage('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const restart = () => {
-    setTimerState(resetGuidedTimer(true));
-  };
+  const restart = () => void startPractice();
 
   return (
     <main className="px-4 py-8 md:px-8 md:py-12">
@@ -130,6 +332,7 @@ export default function MeditatePage() {
                   <button
                     type="button"
                     onClick={restart}
+                    disabled={progressBusy || progressConflict}
                     className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <RotateCcw className="h-4 w-4" aria-hidden="true" />
@@ -149,12 +352,8 @@ export default function MeditatePage() {
                   </p>
                   <button
                     type="button"
-                    onClick={() =>
-                      setTimerState((current) => ({
-                        ...current,
-                        running: !current.running,
-                      }))
-                    }
+                    onClick={running ? pausePractice : () => void startPractice()}
+                    disabled={progressBusy || progressConflict || progressLoading}
                     className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {running ? (
@@ -168,6 +367,14 @@ export default function MeditatePage() {
                         ? 'Continue'
                         : 'Begin'}
                   </button>
+                  {progressMessage ? (
+                    <p
+                      aria-live="polite"
+                      className="mt-3 text-xs text-muted-foreground"
+                    >
+                      {progressMessage}
+                    </p>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -223,7 +430,8 @@ export default function MeditatePage() {
               <button
                 key={practice.id}
                 type="button"
-                onClick={() => selectPractice(practice.id)}
+                onClick={() => void selectPractice(practice.id)}
+                disabled={progressBusy || progressConflict}
                 className={cn(
                   'app-panel p-5 text-left transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   selected.id === practice.id && 'border-primary/45'

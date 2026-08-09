@@ -19,7 +19,9 @@ export async function POST(request: NextRequest) {
     }
 
     const results = await Promise.all(
-      OWNED_DATA_SOURCES.map(({ table, ownerColumns }) => {
+      OWNED_DATA_SOURCES.filter(({ blocksAccountSwitch }) =>
+        blocksAccountSwitch
+      ).map(({ table, ownerColumns }) => {
         let query = supabaseAdmin.from(table).select(ownerColumns[0]);
         if (ownerColumns.length === 1) {
           query = query.eq(ownerColumns[0], auth.userId!);

@@ -21,6 +21,7 @@ const supabase = createClient(url, anonKey, {
 });
 
 const { error } = await supabase.rpc('save_check_in_with_attribution', {
+  p_expected_user_id: '00000000-0000-0000-0000-000000000000',
   p_emoji: '😐',
   p_note: null,
   p_tags: [],

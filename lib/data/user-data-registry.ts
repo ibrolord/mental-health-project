@@ -19,6 +19,7 @@ export const USER_DATA_REGISTRY = {
   user_affirmation_history: { owner: 'user-or-session', export: true, delete: true, partner: 'none', ai: 'never' },
   user_book_favorites: { owner: 'user-or-session', export: true, delete: true, partner: 'none', ai: 'never' },
   user_library_items: { owner: 'user', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
+  practice_progress: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
   partner_invites: { owner: 'user', export: true, delete: true, partner: 'relationship-record', ai: 'never' },
   partner_links: { owner: 'relationship', export: true, delete: true, partner: 'relationship-record', ai: 'never' },
   partner_celebrations: { owner: 'relationship', export: true, delete: true, partner: 'relationship-record', ai: 'never' },
@@ -37,4 +38,5 @@ export const USER_DATA_REGISTRY = {
   sleep_diary_entries: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
   partner_support_preferences: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
   privacy_events: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  operational_events: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
 } as const satisfies Record<string, UserDataClassification>;

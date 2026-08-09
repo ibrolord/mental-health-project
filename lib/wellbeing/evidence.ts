@@ -65,6 +65,51 @@ export const EVIDENCE_SOURCES: EvidenceSource[] = [
     citation: 'Syed et al., Journal of Intelligence (2024)',
   },
   {
+    id: 'guided-self-help',
+    title: 'Use structured reflection for a current problem',
+    summary:
+      'NICE includes structured CBT, behavioural activation, and problem-solving materials within guided self-help. Those interventions normally include trained-practitioner support; a standalone reflection tool is not equivalent treatment.',
+    strength: 'moderate',
+    url: 'https://www.nice.org.uk/guidance/ng222/chapter/Recommendations',
+    citation: 'NICE depression in adults guideline NG222 (2022)',
+  },
+  {
+    id: 'who-stress-skills',
+    title: 'Notice, unhook, make room, choose values, and practice kindness',
+    summary:
+      'WHO provides brief, field-tested stress-management exercises for noticing and naming experiences, unhooking from difficult thoughts, making room for emotions, acting on values, and self-kindness.',
+    strength: 'moderate',
+    url: 'https://tdr.who.int/home/our-work/global-engagement/9789240003927',
+    citation: 'World Health Organization, Doing What Matters in Times of Stress (2020)',
+  },
+  {
+    id: 'journaling-reflection',
+    title: 'Journaling may offer a modest adjunctive benefit',
+    summary:
+      'A systematic review of 20 randomized trials found a small-to-moderate average benefit, but high heterogeneity and methodological limitations prevent firm conclusions across mental-health conditions.',
+    strength: 'emerging',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/35304431/',
+    citation: 'Sohal et al., Family Medicine and Community Health (2022)',
+  },
+  {
+    id: 'self-compassion-reflection',
+    title: 'Self-compassion interventions may modestly reduce distress',
+    summary:
+      'A meta-analysis of 56 randomized trials found small-to-medium immediate effects, with small follow-up effects for depressive symptoms and stress. Overall risk of bias was high, few trials used active controls or online delivery, and this exact reflection was not studied.',
+    strength: 'emerging',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/37362192/',
+    citation: 'Han and Kim, Mindfulness (2023)',
+  },
+  {
+    id: 'gratitude-reflection',
+    title: 'Gratitude practices have modest, low-certainty benefits',
+    summary:
+      'A review of 64 randomized trials found improvements in several wellbeing outcomes, while much of the evidence had low or very low certainty and high risk of bias. Appreciation should remain optional, not forced positivity.',
+    strength: 'emerging',
+    url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC10393216/',
+    citation: 'Diniz et al., Einstein (2023)',
+  },
+  {
     id: 'microbreaks',
     title: 'Short breaks support energy more reliably than output',
     summary:

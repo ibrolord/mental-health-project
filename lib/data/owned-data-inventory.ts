@@ -1,11 +1,16 @@
 export interface OwnedDataSource {
   table: string;
   ownerColumns: readonly string[];
+  blocksAccountSwitch: boolean;
 }
 
-const ownedByUser = (table: string): OwnedDataSource => ({
+const ownedByUser = (
+  table: string,
+  blocksAccountSwitch = true
+): OwnedDataSource => ({
   table,
   ownerColumns: ['user_id'],
+  blocksAccountSwitch,
 });
 
 /**
@@ -14,6 +19,7 @@ const ownedByUser = (table: string): OwnedDataSource => ({
  * silently strand a newer data domain under an anonymous identity.
  */
 export const OWNED_DATA_SOURCES: readonly OwnedDataSource[] = [
+  ownedByUser('operational_events', false),
   ownedByUser('privacy_events'),
   ownedByUser('partner_support_preferences'),
   ownedByUser('sleep_diary_entries'),
@@ -23,9 +29,21 @@ export const OWNED_DATA_SOURCES: readonly OwnedDataSource[] = [
   ownedByUser('staying_well_plans'),
   ownedByUser('activity_plan_steps'),
   ownedByUser('activity_plans'),
-  { table: 'partner_celebrations', ownerColumns: ['owner_id', 'partner_id'] },
-  { table: 'partner_links', ownerColumns: ['owner_id', 'partner_id'] },
-  { table: 'partner_invites', ownerColumns: ['owner_id'] },
+  {
+    table: 'partner_celebrations',
+    ownerColumns: ['owner_id', 'partner_id'],
+    blocksAccountSwitch: true,
+  },
+  {
+    table: 'partner_links',
+    ownerColumns: ['owner_id', 'partner_id'],
+    blocksAccountSwitch: true,
+  },
+  {
+    table: 'partner_invites',
+    ownerColumns: ['owner_id'],
+    blocksAccountSwitch: true,
+  },
   ownedByUser('reminder_deliveries'),
   ownedByUser('wellbeing_reminders'),
   ownedByUser('push_subscriptions'),
@@ -34,6 +52,7 @@ export const OWNED_DATA_SOURCES: readonly OwnedDataSource[] = [
   ownedByUser('life_plan_items'),
   ownedByUser('acquisition_attribution'),
   ownedByUser('ai_response_reports'),
+  ownedByUser('practice_progress'),
   ownedByUser('user_library_items'),
   ownedByUser('journal_entries'),
   ownedByUser('user_affirmation_history'),

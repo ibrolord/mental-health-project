@@ -5,13 +5,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IPA_PATH=""
 EXPECTED_BUILD=""
 RUN_ISOLATED_DOCTOR=1
+SOURCE_ONLY=0
 MIC_PERMISSION="MHtoolkit uses the microphone only during a live voice session so the AI can hear and respond to you."
+CAMERA_PERMISSION="MHtoolkit's live voice sessions are audio-only. The bundled WebRTC library references camera APIs, but MHtoolkit never requests, captures, or transmits camera data."
 AI_CONSENT_TITLE="AI Data Sharing Consent"
 AI_PROVIDER_COPY="Google Gemini, Anthropic Claude, or OpenAI"
+APP_STORE_BASELINE="$ROOT_DIR/qa/app-store-release-baseline.json"
 
 usage() {
   cat <<'USAGE'
-Usage: npm run review:ios -- --ipa /path/to/app.ipa [--build-number 22] [--skip-isolated-doctor]
+Usage: npm run review:ios -- --ipa /path/to/app.ipa --build-number 42 [--skip-isolated-doctor]
+       npm run review:ios -- --source-only [--skip-isolated-doctor]
 
 Runs the App Review pre-submit checks that caught prior MHtoolkit issues:
 - TypeScript compile
@@ -20,6 +24,9 @@ Runs the App Review pre-submit checks that caught prior MHtoolkit issues:
 - live Google/Apple provider and redirect readiness
 - live support/privacy URL and contact email checks
 - IPA Info.plist, entitlement, and bundle inspection
+
+The default release mode fails unless both the signed IPA and expected build
+number are supplied. --source-only is the explicit pre-build mode.
 USAGE
 }
 
@@ -35,6 +42,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --skip-isolated-doctor)
       RUN_ISOLATED_DOCTOR=0
+      shift
+      ;;
+    --source-only)
+      SOURCE_ONLY=1
       shift
       ;;
     -h|--help)
@@ -81,6 +92,53 @@ check_command unzip
 check_command grep
 check_command /usr/libexec/PlistBuddy
 
+require_file "$APP_STORE_BASELINE" "App Store release baseline"
+SOURCE_VERSION="$(node -p "require('$ROOT_DIR/app.json').expo.version")"
+PACKAGE_VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
+LAST_APPROVED_VERSION="$(node -p "require('$APP_STORE_BASELINE').lastApprovedVersion")"
+CANDIDATE_VERSION="$(node -p "require('$APP_STORE_BASELINE').candidateVersion")"
+RELEASE_EVIDENCE="$(node -p "require('$APP_STORE_BASELINE').evidence")"
+
+if [ "$SOURCE_ONLY" -eq 1 ]; then
+  if [ -n "$IPA_PATH" ] || [ -n "$EXPECTED_BUILD" ]; then
+    echo "--source-only cannot be combined with --ipa or --build-number" >&2
+    exit 2
+  fi
+else
+  if [ -z "$IPA_PATH" ] || [ -z "$EXPECTED_BUILD" ]; then
+    echo "Release verification requires both --ipa and --build-number; use --source-only before a build exists" >&2
+    exit 2
+  fi
+fi
+
+if [ "$SOURCE_VERSION" = "$PACKAGE_VERSION" ]; then
+  pass "Expo and mobile package versions match at $SOURCE_VERSION"
+else
+  fail "Expo version $SOURCE_VERSION does not match mobile package version $PACKAGE_VERSION"
+fi
+
+if [ "$SOURCE_VERSION" = "$CANDIDATE_VERSION" ] && [ -n "$RELEASE_EVIDENCE" ]; then
+  pass "Source version matches the App Store release evidence at $SOURCE_VERSION"
+else
+  fail "App Store release evidence must explicitly match source version $SOURCE_VERSION"
+fi
+
+if node -e '
+  const [candidate, approved] = process.argv.slice(1).map((version) => {
+    if (!/^\d+\.\d+\.\d+$/.test(version)) process.exit(2);
+    return version.split(".").map(Number);
+  });
+  for (let index = 0; index < 3; index += 1) {
+    if (candidate[index] > approved[index]) process.exit(0);
+    if (candidate[index] < approved[index]) process.exit(1);
+  }
+  process.exit(1);
+' "$SOURCE_VERSION" "$LAST_APPROVED_VERSION"; then
+  pass "Release version $SOURCE_VERSION is higher than approved version $LAST_APPROVED_VERSION"
+else
+  fail "Release version $SOURCE_VERSION must be higher than approved version $LAST_APPROVED_VERSION"
+fi
+
 if command -v eas >/dev/null 2>&1; then
   EAS_CMD=(eas)
 else
@@ -94,6 +152,22 @@ if npx tsc --noEmit; then
 else
   fail "TypeScript compile"
 fi
+
+GENERATED_CONFIG="$(mktemp -t mhtoolkit-expo-config)"
+if npx expo config --type introspect --json >"$GENERATED_CONFIG" &&
+  node -e '
+    const fs = require("node:fs");
+    const [configPath, expectedVersion, expectedCamera] = process.argv.slice(1);
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    const plist = config.ios?.infoPlist ?? {};
+    if (plist.CFBundleShortVersionString !== expectedVersion) process.exit(1);
+    if (plist.NSCameraUsageDescription !== expectedCamera) process.exit(1);
+  ' "$GENERATED_CONFIG" "$SOURCE_VERSION" "$CAMERA_PERMISSION"; then
+  pass "Generated iOS plist contains the release version and camera disclosure"
+else
+  fail "Generated iOS plist is missing the release version or camera disclosure"
+fi
+rm -f "$GENERATED_CONFIG"
 
 if [ "$RUN_ISOLATED_DOCTOR" -eq 1 ]; then
   TMP_PROJECT="$(mktemp -d /tmp/mhtoolkit-mobile-review.XXXXXX)"
@@ -192,6 +266,13 @@ if grep -Fq "$MIC_PERMISSION" "$ROOT_DIR/app.json"; then
   pass "Microphone permission purpose string is specific"
 else
   fail "Microphone permission purpose string is missing or too generic"
+fi
+
+if grep -Fq "$CAMERA_PERMISSION" "$ROOT_DIR/app.json" &&
+  grep -Fq 'NSCameraUsageDescription = cameraDisclosure' "$ROOT_DIR/plugins/audio-only-webrtc.js"; then
+  pass "WebRTC camera API disclosure is present and explicitly audio-only"
+else
+  fail "WebRTC camera API disclosure is missing or inconsistent"
 fi
 
 if (cd "$ROOT_DIR/.." && npm run verify:social-auth); then
@@ -374,11 +455,13 @@ if [ -n "$IPA_PATH" ]; then
     EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_DIR/Info.plist")"
 
     bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_DIR/Info.plist")"
+    marketing_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Info.plist")"
     build_number="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_DIR/Info.plist")"
     full_screen="$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' "$APP_DIR/Info.plist")"
     encryption="$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$APP_DIR/Info.plist")"
     device_family="$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily' "$APP_DIR/Info.plist")"
     mic_description="$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$APP_DIR/Info.plist")"
+    camera_description="$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$APP_DIR/Info.plist" 2>/dev/null || true)"
     ENTITLEMENTS_PATH="$IPA_TMP/entitlements.plist"
     if codesign -d --entitlements - "$APP_DIR" >"$ENTITLEMENTS_PATH" 2>/dev/null; then
       apple_sign_in_entitlement="$(grep -A3 -F 'com.apple.developer.applesignin' "$ENTITLEMENTS_PATH" || true)"
@@ -390,6 +473,12 @@ if [ -n "$IPA_PATH" ]; then
       pass "IPA bundle identifier is com.mhtoolkit.app"
     else
       fail "IPA bundle identifier is $bundle_id"
+    fi
+
+    if [ "$marketing_version" = "$SOURCE_VERSION" ]; then
+      pass "IPA marketing version matches source at $SOURCE_VERSION"
+    else
+      fail "IPA marketing version is $marketing_version, expected $SOURCE_VERSION"
     fi
 
     if [ -z "$EXPECTED_BUILD" ] || [ "$build_number" = "$EXPECTED_BUILD" ]; then
@@ -422,6 +511,12 @@ if [ -n "$IPA_PATH" ]; then
       fail "IPA microphone permission string is not the expected specific text"
     fi
 
+    if [ "$camera_description" = "$CAMERA_PERMISSION" ]; then
+      pass "IPA includes the required honest WebRTC camera API disclosure"
+    else
+      fail "IPA is missing the required WebRTC camera API disclosure"
+    fi
+
     if printf '%s\n' "$apple_sign_in_entitlement" | grep -q 'Default'; then
       pass "IPA contains the Sign in with Apple entitlement"
     else
@@ -434,13 +529,18 @@ if [ -n "$IPA_PATH" ]; then
       fail "IPA bundle does not embed Supabase URL"
     fi
 
-    if grep -aFq 'ExpoPushTokenManager' "$BUNDLE_PATH" ||
-      grep -aFq 'expo-notifications' "$BUNDLE_PATH" ||
-      grep -aFq 'expo-device' "$BUNDLE_PATH" ||
-      strings "$APP_DIR/$EXECUTABLE" | grep -Eq 'ExpoPushTokenManager|EXNotifications|ExpoNotifications|expo-notifications|expo-device|ExpoDevice|EXDeviceModule'; then
-      fail "IPA still contains excluded notifications/device native symbols"
+    if grep -aFq 'expo-notifications' "$BUNDLE_PATH" &&
+      grep -aEq 'EXNotifications|ExpoNotifications|ExpoNotificationsEmitter' "$APP_DIR/$EXECUTABLE"; then
+      pass "IPA contains the fixed iOS notifications JS and native modules"
     else
-      pass "IPA omits excluded notifications/device native symbols"
+      fail "IPA is missing the required fixed iOS notifications module"
+    fi
+
+    if grep -aFq 'expo-device' "$BUNDLE_PATH" ||
+      grep -aEq 'expo-device|ExpoDevice|EXDeviceModule' "$APP_DIR/$EXECUTABLE"; then
+      fail "IPA still contains the unnecessary expo-device module"
+    else
+      pass "IPA omits the unnecessary expo-device module"
     fi
 
     if grep -aFq 'Delete Account' "$BUNDLE_PATH" &&
@@ -500,7 +600,9 @@ if [ -n "$IPA_PATH" ]; then
     fi
   fi
 else
-  echo "WARN IPA inspection skipped; pass --ipa /path/to/app.ipa before App Review submission"
+  if [ "$SOURCE_ONLY" -eq 1 ]; then
+    echo "INFO signed IPA inspection deferred in explicit source-only mode"
+  fi
 fi
 
 if [ "$failures" -gt 0 ]; then

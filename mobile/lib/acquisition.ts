@@ -167,11 +167,13 @@ export interface AttributedCheckIn extends LocalCheckInFields {
 }
 
 export async function saveCheckInWithAttribution(
+  expectedUserId: string,
   checkIn: AttributedCheckIn
 ): Promise<void> {
   const attribution = await readAttribution();
   const platform = Platform.OS === 'ios' ? 'ios' : 'android';
   const { error } = await supabase.rpc('save_check_in_with_attribution', {
+    p_expected_user_id: expectedUserId,
     p_emoji: checkIn.emoji,
     p_note: checkIn.note ?? null,
     p_tags: checkIn.tags ?? [],

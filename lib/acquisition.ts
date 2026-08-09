@@ -64,10 +64,12 @@ export interface AttributedCheckIn extends LocalCheckInFields {
 }
 
 export async function saveCheckInWithAttribution(
+  expectedUserId: string,
   checkIn: AttributedCheckIn
-): Promise<void> {
+): Promise<string> {
   const attribution = readAttribution();
-  const { error } = await supabase.rpc('save_check_in_with_attribution', {
+  const { data, error } = await supabase.rpc('save_check_in_with_attribution', {
+    p_expected_user_id: expectedUserId,
     p_emoji: checkIn.emoji,
     p_note: checkIn.note ?? null,
     p_tags: checkIn.tags ?? [],
@@ -81,4 +83,8 @@ export async function saveCheckInWithAttribution(
   });
 
   if (error) throw error;
+  if (typeof data !== 'string' || data.length === 0) {
+    throw new Error('Check-in was saved without a record identifier');
+  }
+  return data;
 }

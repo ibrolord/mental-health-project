@@ -2,7 +2,7 @@
 
 // Keep exported signatures synchronized with qa-release-gate.d.mts.
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -13,8 +13,8 @@ export const MOBILE_ROOT = path.resolve(SCRIPT_DIR, '..');
 export const REPO_ROOT = path.resolve(MOBILE_ROOT, '..');
 export const CHECKLIST_PATH = path.join(MOBILE_ROOT, 'qa', 'ios-release-checklist.json');
 export const RUNS_ROOT = path.join(MOBILE_ROOT, 'qa', 'runs');
-export const EXPECTED_INVENTORY = Object.freeze({ routes: 26, routeChecks: 489, workflows: 94, total: 583 });
-export const EXPECTED_CHECKLIST_SHA256 = '7e5846882d09d24e20695f0d1679ec74a5c71d3a947785512cb76b170cc253fa';
+export const EXPECTED_INVENTORY = Object.freeze({ routes: 28, routeChecks: 534, workflows: 95, total: 629 });
+export const EXPECTED_CHECKLIST_SHA256 = '62888cebad1686707ffdf1f9c784c5b1b5c2600de4a1c107e36c07725a00f3a3';
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, 'utf8'));
@@ -34,6 +34,40 @@ export function checklistDigest(checklist) {
 
 function fileSha256(filePath) {
   return createHash('sha256').update(readFileSync(filePath)).digest('hex');
+}
+
+function inspectOutputFile(filePath) {
+  if (!path.isAbsolute(filePath ?? '')) throw new Error('outputRef is not absolute');
+  const output = lstatSync(filePath);
+  if (output.isSymbolicLink() || !output.isFile()) {
+    throw new Error('outputRef is not a regular non-symlink file');
+  }
+  if (output.size === 0) throw new Error('outputRef is empty');
+  const canonicalPath = realpathSync(filePath);
+  const identity = statSync(canonicalPath);
+  return {
+    canonicalPath,
+    dev: String(identity.dev),
+    ino: String(identity.ino),
+    sha256: fileSha256(canonicalPath),
+    size: identity.size,
+  };
+}
+
+export function gateExecutionReceipt(metadata, result) {
+  return createHash('sha256')
+    .update(JSON.stringify({
+      artifactId: metadata.artifactId,
+      artifactSha256: metadata.artifactSha256,
+      buildNumber: metadata.buildNumber,
+      command: result.command,
+      exitCode: result.exitCode,
+      id: result.id,
+      outputRef: result.outputRef,
+      outputSha256: result.outputSha256,
+      sourceCommit: metadata.sourceCommit,
+    }))
+    .digest('hex');
 }
 
 function listFiles(directory) {
@@ -225,6 +259,9 @@ export function createRun(checklist, metadata = {}) {
       command: item.kind === 'automated' ? '' : undefined,
       exitCode: item.kind === 'automated' ? null : undefined,
       outputRef: item.kind === 'automated' ? '' : undefined,
+      outputSha256: item.kind === 'automated' ? '' : undefined,
+      executionMode: item.kind === 'automated' ? '' : undefined,
+      executionReceipt: item.kind === 'automated' ? '' : undefined,
     })),
   };
 }
@@ -386,6 +423,9 @@ export function validateRunData(checklist, run, context = {}) {
   if (unknown.length) errors.push(`Unknown result IDs: ${unknown.slice(0, 8).join(', ')}`);
 
   const evidenceRefs = new Map();
+  const automatedOutputRefs = new Map();
+  const automatedOutputIdentities = new Map();
+  const automatedOutputHashes = new Map();
   for (const result of results) {
     const item = expectedById.get(result.id);
     if (!item) continue;
@@ -457,7 +497,55 @@ export function validateRunData(checklist, run, context = {}) {
       }
       if (result.exitCode !== 0) errors.push(`${result.id} requires exitCode 0.`);
       if (typeof result.outputRef !== 'string' || result.outputRef.trim().length < 3) {
-        errors.push(`${result.id} requires an output or receipt reference.`);
+        errors.push(`${result.id} requires an absolute automated-output file reference.`);
+      } else {
+        if (!path.isAbsolute(result.outputRef.trim())) {
+          errors.push(`${result.id} outputRef must be absolute.`);
+        }
+        const normalizedOutputRef = path.normalize(result.outputRef.trim()).toLowerCase();
+        const previousOwner = automatedOutputRefs.get(normalizedOutputRef);
+        if (previousOwner && previousOwner !== result.id) {
+          errors.push(`${result.id} reuses automated output already claimed by ${previousOwner}.`);
+        } else {
+          automatedOutputRefs.set(normalizedOutputRef, result.id);
+        }
+      }
+      if (typeof result.outputSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.outputSha256)) {
+        errors.push(`${result.id} requires the recorded SHA-256 of its automated output.`);
+      }
+      const verifiedOutput = context.automatedOutputFiles?.[result.id];
+      if (!verifiedOutput) {
+        errors.push(`${result.id} automated output was not verified from the filesystem.`);
+      } else if (verifiedOutput.error) {
+        errors.push(`${result.id} automated output verification failed: ${verifiedOutput.error}.`);
+      } else if (!Number.isInteger(verifiedOutput.size) || verifiedOutput.size < 1) {
+        errors.push(`${result.id} automated output must be a non-empty file.`);
+      } else if (verifiedOutput.sha256 !== result.outputSha256) {
+        errors.push(`${result.id} automated output SHA-256 does not match the referenced file.`);
+      } else {
+        const previousHashOwner = automatedOutputHashes.get(verifiedOutput.sha256);
+        if (previousHashOwner && previousHashOwner !== result.id) {
+          errors.push(
+            `${result.id} reuses automated output content already claimed by ${previousHashOwner}.`
+          );
+        } else {
+          automatedOutputHashes.set(verifiedOutput.sha256, result.id);
+        }
+        const identityKey = `${verifiedOutput.dev}:${verifiedOutput.ino}`;
+        const previousIdentityOwner = automatedOutputIdentities.get(identityKey);
+        if (previousIdentityOwner && previousIdentityOwner !== result.id) {
+          errors.push(
+            `${result.id} reuses automated output bytes already claimed by ${previousIdentityOwner}.`
+          );
+        } else {
+          automatedOutputIdentities.set(identityKey, result.id);
+        }
+      }
+      if (result.executionMode !== 'gate') {
+        errors.push(`${result.id} must be executed and captured by the QA gate.`);
+      }
+      if (result.executionReceipt !== gateExecutionReceipt(metadata, result)) {
+        errors.push(`${result.id} has an invalid QA gate execution receipt.`);
       }
       if (typeof result.command === 'string' && !new RegExp(item.commandPattern).test(result.command.trim())) {
         errors.push(`${result.id} command does not match its allowlisted command contract.`);
@@ -503,7 +591,7 @@ function usage() {
   npm run qa:ios:inventory
   npm run qa:ios:init -- --output qa/runs/build-35.json --version 1.0.2 --build 35 --tester <name> --artifact <EAS-UUID> --ipa </absolute/path/app.ipa> --sha256 <hash> --receipt <expo.dev-url> --install-source TestFlight
   npm run qa:ios:record -- --run qa/runs/build-35.json --id <check-id> --status pass --devices <id,id> --actors <id,id> --evidence-type <type> --evidence <unique-reference> --observed <outcome>
-  npm run qa:ios:record -- --run qa/runs/build-35.json --id <automated-id> --status pass --actors <id,id> --evidence-type <type> --evidence <unique-reference> --observed <outcome> --command <allowlisted-command> --exit-code 0 --output-ref <reference>
+  npm run qa:ios:run -- --run qa/runs/build-35.json --id <automated-id> --actors <id,id> --evidence-type <type> --evidence <unique-reference> --observed <outcome> --command <allowlisted-command> --output-ref </absolute/path/command-output.log>
   npm run qa:ios:status -- --run qa/runs/build-35.json
   npm run qa:ios:digest -- --run qa/runs/build-35.json
   npm run qa:ios:verify -- --run qa/runs/build-35.json --expected-run-sha256 <externally-pinned-hash>`);
@@ -532,7 +620,7 @@ export function resolveRunPath(value, flag = '--run', mustNotExist = false) {
 }
 
 function verificationContext(run, expectedRunSha256) {
-  const context = { ...currentGitContext(), expectedRunSha256 };
+  const context = { ...currentGitContext(), expectedRunSha256, automatedOutputFiles: {} };
   try {
     if (!path.isAbsolute(run.metadata?.artifactPath ?? '')) throw new Error('artifactPath is not absolute');
     const artifact = lstatSync(run.metadata.artifactPath);
@@ -540,6 +628,16 @@ function verificationContext(run, expectedRunSha256) {
     context.artifactFileSha256 = fileSha256(run.metadata.artifactPath);
   } catch (error) {
     context.artifactFileError = error instanceof Error ? error.message : String(error);
+  }
+  for (const result of run.results ?? []) {
+    if (typeof result?.command !== 'string') continue;
+    try {
+      context.automatedOutputFiles[result.id] = inspectOutputFile(result.outputRef);
+    } catch (error) {
+      context.automatedOutputFiles[result.id] = {
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
   return context;
 }
@@ -594,6 +692,9 @@ function main() {
     if (!item) throw new Error(`Unknown checklist id: ${flags.id}`);
     const result = run.results.find((candidate) => candidate.id === flags.id);
     if (!result) throw new Error(`Run is missing checklist id: ${flags.id}`);
+    if (item.kind === 'automated') {
+      throw new Error('Automated checks must use the QA gate run command.');
+    }
     result.status = flags.status ?? 'pass';
     result.testedAt = new Date().toISOString();
     result.artifactId = run.metadata.artifactId;
@@ -604,13 +705,68 @@ function main() {
       ref: flags.evidence ?? '',
       observed: flags.observed ?? '',
     }];
-    if (item.kind === 'automated') {
-      result.command = flags.command ?? '';
-      result.exitCode = Number(flags['exit-code']);
-      result.outputRef = flags['output-ref'] ?? '';
-    }
     writeJson(runPath, run);
     console.log(`Recorded ${result.status}: ${result.id}`);
+    return;
+  }
+
+  if (command === 'run') {
+    const runPath = resolveRunPath(flags.run);
+    const run = readJson(runPath);
+    if (run.metadata?.completedAt) throw new Error('Completed runs are immutable; create a new run instead.');
+    const item = expandChecklist(checklist).find((candidate) => candidate.id === flags.id);
+    if (!item || item.kind !== 'automated') {
+      throw new Error(`Unknown automated checklist id: ${flags.id}`);
+    }
+    const result = run.results.find((candidate) => candidate.id === flags.id);
+    if (!result) throw new Error(`Run is missing checklist id: ${flags.id}`);
+    const automationCommand = flags.command ?? '';
+    if (!new RegExp(item.commandPattern).test(automationCommand)) {
+      throw new Error(`${item.id} command does not match its allowlisted command contract.`);
+    }
+    const outputRef = flags['output-ref'] ?? '';
+    if (!path.isAbsolute(outputRef)) throw new Error('--output-ref must be absolute.');
+    try {
+      lstatSync(outputRef);
+      throw new Error('--output-ref must not already exist.');
+    } catch (error) {
+      if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
+    }
+
+    const execution = spawnSync('/bin/bash', ['-lc', automationCommand], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const exitCode = execution.status ?? 1;
+    const output = [
+      `$ ${automationCommand}`,
+      `exitCode=${exitCode}`,
+      execution.stdout ?? '',
+      execution.stderr ?? '',
+    ].join('\n');
+    writeFileSync(outputRef, `${output.trimEnd()}\n`, { flag: 'wx' });
+    const inspected = inspectOutputFile(outputRef);
+
+    result.status = exitCode === 0 ? 'pass' : 'fail';
+    result.testedAt = new Date().toISOString();
+    result.artifactId = run.metadata.artifactId;
+    result.deviceIds = [];
+    result.actorIds = (flags.actors ?? '').split(',').filter(Boolean);
+    result.evidence = [{
+      type: flags['evidence-type'] ?? 'log',
+      ref: flags.evidence ?? `qa-gate:${result.id}:${inspected.sha256}`,
+      observed: flags.observed ?? `QA gate executed ${result.id}; exit code ${exitCode}.`,
+    }];
+    result.command = automationCommand;
+    result.exitCode = exitCode;
+    result.outputRef = outputRef;
+    result.outputSha256 = inspected.sha256;
+    result.executionMode = 'gate';
+    result.executionReceipt = gateExecutionReceipt(run.metadata, result);
+    writeJson(runPath, run);
+    console.log(`${exitCode === 0 ? 'PASS' : 'FAIL'} executed and captured: ${result.id}`);
+    if (exitCode !== 0) process.exitCode = exitCode;
     return;
   }
 

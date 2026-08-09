@@ -28,6 +28,22 @@ export async function POST(request: NextRequest) {
     if (!auth.valid) return unauthorizedResponse();
     if (!auth.userId && !auth.sessionId) return unauthorizedResponse();
 
+    const body = await request.json().catch(() => ({}));
+    const expectedUserId =
+      typeof body?.expectedUserId === 'string' ? body.expectedUserId : null;
+    if (auth.userId && !expectedUserId) {
+      return NextResponse.json(
+        { error: 'The profile could not be verified. No data was exported.' },
+        { status: 409, headers: corsHeaders() }
+      );
+    }
+    if (expectedUserId && auth.userId !== expectedUserId) {
+      return NextResponse.json(
+        { error: 'The profile changed before export. No data was exported.' },
+        { status: 409, headers: corsHeaders() }
+      );
+    }
+
     const ownerColumn = auth.userId ? 'user_id' : 'session_id';
     const ownerValue = auth.userId ?? auth.sessionId!;
 
@@ -50,6 +66,7 @@ export async function POST(request: NextRequest) {
       affirmationHistoryResult,
       bookFavoritesResult,
       libraryItemsResult,
+      practiceProgressResult,
       partnerInvitesResult,
       partnerLinksResult,
       partnerCelebrationsResult,
@@ -68,6 +85,7 @@ export async function POST(request: NextRequest) {
       sleepDiaryEntriesResult,
       partnerSupportPreferencesResult,
       privacyEventsResult,
+      operationalEventsResult,
     ] = await Promise.all([
       supabaseAdmin.from('moods').select('*').eq(ownerColumn, ownerValue),
       supabaseAdmin.from('assessments').select('*').eq(ownerColumn, ownerValue),
@@ -91,6 +109,12 @@ export async function POST(request: NextRequest) {
       auth.userId
         ? supabaseAdmin
             .from('user_library_items')
+            .select('*')
+            .eq('user_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('practice_progress')
             .select('*')
             .eq('user_id', auth.userId)
         : Promise.resolve({ data: [], error: null }),
@@ -159,6 +183,7 @@ export async function POST(request: NextRequest) {
       auth.userId ? supabaseAdmin.from('sleep_diary_entries').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
       auth.userId ? supabaseAdmin.from('partner_support_preferences').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
       auth.userId ? supabaseAdmin.from('privacy_events').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
+      auth.userId ? supabaseAdmin.from('operational_events').select('*').eq('user_id', auth.userId) : Promise.resolve({ data: [], error: null }),
     ]);
 
     const habits = requireQuery('habits', habitsResult);
@@ -250,6 +275,10 @@ export async function POST(request: NextRequest) {
         ),
         book_favorites: requireQuery('book favorites', bookFavoritesResult),
         library_items: requireQuery('library items', libraryItemsResult),
+        practice_progress: requireQuery(
+          'practice progress',
+          practiceProgressResult
+        ),
         partner_invites: requireQuery('partner invites', partnerInvitesResult),
         partner_links: requireQuery('partner links', partnerLinksResult),
         partner_celebrations: requireQuery(
@@ -283,6 +312,10 @@ export async function POST(request: NextRequest) {
         sleep_diary_entries: requireQuery('sleep diary entries', sleepDiaryEntriesResult),
         partner_support_preferences: requireQuery('partner support preferences', partnerSupportPreferencesResult),
         privacy_events: requireQuery('privacy events', privacyEventsResult),
+        operational_events: requireQuery(
+          'operational events',
+          operationalEventsResult
+        ),
         acquisition_attribution: requireQuery(
           'acquisition attribution',
           attributionResult

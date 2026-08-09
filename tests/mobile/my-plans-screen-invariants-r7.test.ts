@@ -126,7 +126,7 @@ describe('My Plans mobile screen invariants', () => {
 
   it('clears the secure fallback outside the Plans screen on logout and deletion', () => {
     expect(authContext).toContain('offlineSafetyPlanCache.clear(user.id)');
-    expect(settings).toContain('offlineSafetyPlanCache.clear(user.id)');
+    expect(settings).toContain('offlineSafetyPlanCache.clear(expectedOwnerId)');
   });
 
   it('clears AI consent, context choices, and reminders after server deletion', () => {
@@ -142,13 +142,16 @@ describe('My Plans mobile screen invariants', () => {
     expect(authContext).toContain('clearContextSelections(deletedOwnerKey)');
   });
 
-  it('does not let ancillary local cleanup prevent sign-out', () => {
+  it('fails closed when sign-out privacy cleanup is incomplete', () => {
     const start = authContext.indexOf('const signOut = async () =>');
     const end = authContext.indexOf('const deleteAccount = async () =>', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const signOut = authContext.slice(start, end);
-    expect(signOut).toContain('runDeletedAccountLocalCleanup(');
+    expect(signOut).toContain(
+      'const localCleanupComplete = await runDeletedAccountLocalCleanup('
+    );
+    expect(signOut).toContain('if (!localCleanupComplete)');
     expect(signOut).toContain('await supabase.auth.signOut()');
     expect(signOut).not.toContain('await Promise.all([');
   });
@@ -165,7 +168,7 @@ describe('My Plans mobile screen invariants', () => {
 
   it('deletes the server account before best-effort local cleanup and session clearing', () => {
     const serverDelete = authContext.indexOf(
-      "apiRequest('/api/account/delete', {})"
+      "'/api/account/delete'"
     );
     const localCleanup = authContext.indexOf(
       'runDeletedAccountLocalCleanup(',
@@ -175,6 +178,8 @@ describe('My Plans mobile screen invariants', () => {
       'clearDeletedAccountSession('
     );
     expect(serverDelete).toBeGreaterThanOrEqual(0);
+    expect(authContext).toContain('{ expectedUserId: deletedOwnerId }');
+    expect(authContext).toContain('{ accessToken: current.session.access_token }');
     expect(localCleanup).toBeGreaterThan(serverDelete);
     expect(sessionCleanup).toBeGreaterThan(localCleanup);
   });

@@ -34,10 +34,13 @@ Every manual result must record:
 - A concrete observed outcome of at least 20 characters.
 - The resulting route, persisted state, external destination, or error state.
 
-Every automated result must also record the exact command, exit code `0`, and
-an output/log/receipt reference. A screenshot of a button before it is pressed
-is not evidence. A toast is not persistence evidence. A local build is not
-TestFlight evidence.
+Every automated result must use `qa:ios:run`. The gate executes the allowlisted
+command itself, captures its exit code and output, and binds a receipt to the
+commit and artifact. The verifier re-hashes the non-empty regular output file,
+rejects symlinks and hard-link aliases, and prevents one filesystem object from
+proving multiple checks. A
+screenshot of a button before it is pressed is not evidence. A toast is not
+persistence evidence. A local build is not TestFlight evidence.
 
 A successful deep link, running process, or screenshot capture does not prove
 that a route rendered correctly. Route-render evidence must be inspected by a
@@ -45,6 +48,20 @@ human or OCR/visual assertion and must reject startup error, blank, crash,
 fallback, and stale-screen content. An unsigned or ad hoc simulator build is
 not valid evidence for SecureStore, Keychain restoration, or authentication;
 those rows require the signed TestFlight artifact on the declared devices.
+
+Supplemental dev-client tests that load bundled assets must prove Metro is
+available before the first observation:
+
+```bash
+curl --fail --silent http://127.0.0.1:8081/status
+```
+
+The response must be exactly `packager-status:running` and must be attached to
+the supplemental evidence. A dev client can display cached JavaScript while
+audio and image asset requests fail against an offline Metro server; that state
+is a blocked test environment, not valid pass or failure evidence for the
+release artifact. This requirement does not apply to an installed TestFlight
+build, whose assets must be packaged in the IPA.
 
 ## Required identities and devices
 
@@ -111,6 +128,20 @@ npm run qa:ios:record -- \
   --observed "Back returned to Dashboard without resetting tab state"
 ```
 
+Automated example:
+
+```bash
+npm run qa:ios:run -- \
+  --run qa/runs/build-35.json \
+  --id external.links \
+  --actors identity-email-owner \
+  --evidence-type log \
+  --evidence "qa-gate:external.links:build-35" \
+  --observed "The gate verified every allowlisted production resource link." \
+  --command "npm run verify:resource-links" \
+  --output-ref /tmp/mhtoolkit-build-35-external-links.log
+```
+
 8. Set `metadata.completedAt` only after the last observation. Once set, the
    recorder refuses further changes.
 9. Run `qa:ios:digest` and pin its SHA-256 outside the mutable run file in the
@@ -131,7 +162,7 @@ npm run qa:ios:verify -- \
 ## Coverage model
 
 The manifest and its reviewed SHA-256 enforce all native route files. Its exact
-24-route, 404 route/control, 78 workflow, and 482 total-row inventory cannot
+28-route, 534 route/control, 95 workflow, and 629 total-row inventory cannot
 silently shrink. Each route requires render,
 control, state-boundary, restoration, and navigation evidence appropriate to
 its tab, stack, or modal type. Every named control is a separate required row.
@@ -152,8 +183,8 @@ Cross-route coverage includes:
 - Export, saved-data deletion, account deletion, RLS, log privacy,
   accessibility, layouts, keyboard, timezone, locale, and App Store metadata.
 - Every previously observed rejection or regression, including iPad launch,
-  iOS notification-module exclusion, support URL, back navigation, mood save,
-  goal duplication, account creation, accountability, and live AI chat.
+  iOS notification permission/delivery/tap launch, support URL, back navigation,
+  mood save, goal duplication, account creation, accountability, and live AI chat.
 
 ## Adding features
 

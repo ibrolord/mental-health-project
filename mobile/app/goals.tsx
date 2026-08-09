@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
@@ -10,8 +10,11 @@ import {
   appendUniqueGoal,
   collapseDuplicateGoals,
   createSingleFlight,
+  goalCompletionFeedback,
   goalIdentityKey,
+  nextGoalCompletionStatus,
 } from '@/lib/goals/deduplication';
+import { refreshReminders } from '@/lib/notifications';
 
 interface Goal {
   id: string;
@@ -20,6 +23,7 @@ interface Goal {
   framework: FrameworkType;
   priority: string | null;
   eisenhower_quadrant: string | null;
+  completed_at: string | null;
 }
 
 const FRAMEWORKS: { id: FrameworkType; label: string; icon: string }[] = [
@@ -48,6 +52,7 @@ function firstParam(value: string | string[] | undefined): string {
 }
 
 export default function GoalsScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{
     source?: string | string[];
     content?: string | string[];
@@ -62,11 +67,25 @@ export default function GoalsScreen() {
   const [input, setInput] = useState('');
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [librarySourceTitle, setLibrarySourceTitle] = useState('');
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+  const [goalStatusChange, setGoalStatusChange] = useState<{
+    id: string;
+    from: 'pending' | 'completed';
+    to: 'pending' | 'completed';
+    fromCompletedAt: string | null;
+  } | null>(null);
   const appliedLibraryActionRef = useRef('');
   const goalIdsByKeyRef = useRef(new Map<string, string[]>());
   const runGoalInsertRef = useRef(createSingleFlight());
 
+  const refreshReminderContent = () => {
+    void refreshReminders().catch((error) => {
+      console.warn('Could not refresh local reminders after a goal change:', error);
+    });
+  };
+
   const loadGoals = useCallback(async () => {
+    setGoalStatusChange(null);
     if (!query) {
       setGoals([]);
       goalIdsByKeyRef.current = new Map();
@@ -170,6 +189,7 @@ export default function GoalsScreen() {
         );
         setActiveSection(null);
         setLibrarySourceTitle('');
+        refreshReminderContent();
         return true;
       } catch {
         setGoalError('Could not add that goal. Please try again.');
@@ -182,18 +202,57 @@ export default function GoalsScreen() {
     return saved ?? false;
   };
 
-  const toggleGoal = async (id: string, status: string) => {
+  const updateGoalStatus = async (
+    goal: Goal,
+    newStatus: 'pending' | 'completed',
+    completedAt = newStatus === 'completed' ? new Date().toISOString() : null
+  ) => {
     if (!query) return;
+    setStatusUpdatingId(goal.id);
+    setGoalError(null);
+    const ids = goalIdsByKeyRef.current.get(goalIdentityKey(goal)) ?? [goal.id];
+    try {
+      const { error } = await supabase.from('goals').update({ status: newStatus, completed_at: completedAt } as any).in('id', ids).eq(query.column, query.value);
+      if (error) {
+        setGoalError('Could not update that goal. Please try again.');
+        return false;
+      }
+      setGoals((current) => current.map((item) => (item.id === goal.id ? { ...item, status: newStatus, completed_at: completedAt } : item)));
+      refreshReminderContent();
+      return true;
+    } finally {
+      setStatusUpdatingId((current) => (current === goal.id ? null : current));
+    }
+  };
+
+  const toggleGoal = async (id: string) => {
+    if (statusUpdatingId) return;
     const goal = goals.find((item) => item.id === id);
-    if (!goal) return;
-    const ids = goalIdsByKeyRef.current.get(goalIdentityKey(goal)) ?? [id];
-    const newStatus = status === 'completed' ? 'pending' : 'completed';
-    const { error } = await supabase.from('goals').update({ status: newStatus, completed_at: newStatus === 'completed' ? new Date().toISOString() : null } as any).in('id', ids).eq(query.column, query.value);
-    if (error) {
-      setGoalError('Could not update that goal. Please try again.');
+    if (!goal || goal.status === 'cancelled') return;
+    const from = goal.status;
+    const to = nextGoalCompletionStatus(from);
+    const completedAt = to === 'completed' ? new Date().toISOString() : null;
+    if (await updateGoalStatus(goal, to, completedAt)) {
+      setGoalStatusChange({
+        id,
+        from,
+        to,
+        fromCompletedAt: goal.completed_at,
+      });
+    }
+  };
+
+  const undoGoalStatus = async () => {
+    const change = goalStatusChange;
+    if (!change || statusUpdatingId) return;
+    const goal = goals.find((item) => item.id === change.id);
+    if (!goal || goal.status !== change.to) {
+      setGoalStatusChange(null);
       return;
     }
-    setGoals((current) => current.map((g) => (g.id === id ? { ...g, status: newStatus as Goal['status'] } : g)));
+    if (await updateGoalStatus(goal, change.from, change.fromCompletedAt)) {
+      setGoalStatusChange(null);
+    }
   };
 
   const deleteGoal = async (id: string) => {
@@ -209,6 +268,7 @@ export default function GoalsScreen() {
     }
     goalIdsByKeyRef.current.delete(identityKey);
     setGoals((current) => current.filter((g) => g.id !== id));
+    refreshReminderContent();
   };
 
   const completed = goals.filter((g) => g.status === 'completed').length;
@@ -220,13 +280,36 @@ export default function GoalsScreen() {
     <View key={g.id} style={[s.goalRow, g.status === 'completed' && { opacity: 0.5 }]}>
       {num !== undefined && <Text style={s.goalNum}>{num}</Text>}
       <TouchableOpacity
+        accessibilityRole="checkbox"
+        accessibilityLabel={`${g.status === 'completed' ? 'Mark pending' : 'Mark complete'}: ${g.content}`}
+        accessibilityState={{ checked: g.status === 'completed', disabled: Boolean(statusUpdatingId) || g.status === 'cancelled' }}
         style={[s.checkbox, g.status === 'completed' && s.checkboxDone]}
-        onPress={() => toggleGoal(g.id, g.status)}
+        onPress={() => void toggleGoal(g.id)}
+        disabled={Boolean(statusUpdatingId) || g.status === 'cancelled'}
       >
         {g.status === 'completed' && <Text style={s.checkmark}>✓</Text>}
       </TouchableOpacity>
       <Text style={[s.goalText, g.status === 'completed' && s.goalTextDone]}>{g.content}</Text>
-      <TouchableOpacity onPress={() => deleteGoal(g.id)}>
+      {g.status === 'pending' ? (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={`Focus on ${g.content}`}
+          style={s.focusBtn}
+          onPress={() =>
+            router.push({
+              pathname: '/focus',
+              params: { source: 'goals', goalId: g.id },
+            })
+          }
+        >
+          <Text style={s.focusBtnText}>Focus</Text>
+        </TouchableOpacity>
+      ) : null}
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={`Delete ${g.content}`}
+        onPress={() => deleteGoal(g.id)}
+      >
         <Text style={s.deleteBtn}>×</Text>
       </TouchableOpacity>
     </View>
@@ -295,6 +378,19 @@ export default function GoalsScreen() {
       <View style={s.card}>
         <Text style={s.cardTitle}>{"📅 Today's Goals"} ({format(new Date(), 'MMM dd')})</Text>
         {goalError ? <Text style={s.errorText}>{goalError}</Text> : null}
+        {goalStatusChange ? (
+          <View accessibilityLiveRegion="polite" style={s.undoBanner}>
+            <Text style={s.undoText}>{goalCompletionFeedback(goalStatusChange.to)}</Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Undo goal status change"
+              onPress={() => void undoGoalStatus()}
+              disabled={Boolean(statusUpdatingId)}
+            >
+              <Text style={s.undoAction}>Undo</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {framework === 'simple' && (
           <>
@@ -423,7 +519,12 @@ const s = StyleSheet.create({
   checkmark: { color: '#fff', fontSize: 14, fontWeight: '700' },
   goalText: { flex: 1, fontSize: 15, color: Colors.text },
   goalTextDone: { textDecorationLine: 'line-through', color: Colors.textSecondary },
+  focusBtn: { minHeight: 36, justifyContent: 'center', borderRadius: 9, backgroundColor: Colors.primaryLight, paddingHorizontal: 10 },
+  focusBtnText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
   deleteBtn: { fontSize: 22, color: Colors.danger, paddingHorizontal: 8 },
   empty: { textAlign: 'center', color: Colors.textSecondary, paddingVertical: 16 },
   errorText: { color: Colors.danger, fontSize: 13, marginBottom: 10 },
+  undoBanner: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 11, backgroundColor: Colors.successLight, paddingHorizontal: 12, marginBottom: 12 },
+  undoText: { flex: 1, color: Colors.text, fontSize: 13, fontWeight: '600' },
+  undoAction: { color: Colors.primary, fontSize: 13, fontWeight: '800' },
 });

@@ -107,16 +107,18 @@ screener shows its recall period, scoring limitation, and published source
 before and after use. A positive response to PHQ-9 item 9 must surface
 safety guidance before the result.
 
-### 7. iOS does not get expo-notifications
+### 7. Treat the iOS notification crash as a release regression
 
-`mobile/plugins/exclude-notifications-ios.js` excludes `expo-notifications`
-and `expo-device` from iOS autolinking. Their native initialization crashes
-on iPad at bridge startup, before any JavaScript runs, which caused two
-rejections. JS-level lazy loading does not fix it.
+Build 17 used `expo-notifications` 0.32.16 and crashed during iPad cold launch.
+Expo 0.32.17 includes the upstream thread-safety fix for the iOS notification
+serializer, so notifications are enabled again on both platforms. Do not
+downgrade that package or re-add `expo-device`; local reminders do not need it.
 
-Only `.android.ts` files may import those modules. The iOS variants are
-inert stubs. If you need to check what the iOS bundle actually contains, use
-the sourcemap:
+Any notification change must pass the clean prebuild, exact-IPA module gate,
+20 cold launches on iPhone, 20 compatibility-mode cold launches on iPad, and
+the physical-device permission, delivery, tap-routing, and force-quit checks in
+`mobile/qa/ios-release-checklist.json`. If you need to inspect what the iOS
+bundle contains, use the sourcemap:
 
 ```bash
 npx expo export --platform ios --dump-sourcemap

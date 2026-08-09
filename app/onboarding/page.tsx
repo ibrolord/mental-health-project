@@ -47,7 +47,7 @@ export default function OnboardingPage() {
       setLoading(true);
       setSaveError('');
       
-      await saveCheckInWithAttribution({
+      await saveCheckInWithAttribution(user.id, {
         emoji: mood,
         note: note || null,
         ...getLocalCheckInFields(),
