@@ -77,8 +77,16 @@ for the next version and are not part of build 34.
   Info.plist and checked in the signed IPA after Apple rejected build 41.
 - [ ] Physical notification permission, delivery, tap-routing, denial,
   later-enable, force-quit, target-date, affirmation, and library-pick checks pass.
-- [ ] Build 42 passes the complete signed-IPA review gate.
+- [x] Build 42 passes the complete signed-IPA review gate.
 - [ ] Build 42 is uploaded and accepted by App Store Connect processing.
+
+Build 42 artifact:
+
+- EAS build ID: `23508566-be5a-46c4-af43-a7b0d8dd3971`
+- Source commit: `74b02b3124270a6a483a42f574165b90be8a199f`
+- IPA: `https://expo.dev/artifacts/eas/UC1bt3oo_knCSVE8gnRpfiqsEPx_Y-cZrezREdKrhlY.ipa`
+- SHA-256: `8b93ac5143f8861724499cfc333f963d9edafb57c233113c8ea6b4b5c4b37304`
+- Signed artifact gate: passed for version 1.0.2, build 42.
 
 ## Android 1.0.1
 
