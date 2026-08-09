@@ -87,6 +87,10 @@ Build 42 artifact:
 - IPA: `https://expo.dev/artifacts/eas/UC1bt3oo_knCSVE8gnRpfiqsEPx_Y-cZrezREdKrhlY.ipa`
 - SHA-256: `8b93ac5143f8861724499cfc333f963d9edafb57c233113c8ea6b4b5c4b37304`
 - Signed artifact gate: passed for version 1.0.2, build 42.
+- EAS submission ID: `b2fbab8d-d5be-456d-8c49-8a8bfefa4685`
+- Transporter result: upload accepted by App Store Connect.
+- Apple processing observation: no build-42 issue email was present after the
+  stated 5-10 minute window; direct TestFlight status remains to be verified.
 
 ## Android 1.0.1
 
