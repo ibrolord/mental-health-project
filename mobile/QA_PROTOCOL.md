@@ -112,6 +112,16 @@ npm run qa:ios:init -- \
    the signed TestFlight build; simulator evidence is supplemental only.
    Add all seven disposable roles to `metadata.identities`; duplicate device or
    identity IDs are rejected.
+   Before recording results, run the physical readiness diagnostic:
+
+```bash
+npm run qa:ios:physical-preflight -- --run qa/runs/<build>.json
+```
+
+   It verifies the exact IPA hash, required identity declarations, available
+   physical iPhone/iPad devices, Developer Mode access, installed TestFlight
+   bundle metadata, and the presence of the scoped Supabase management token.
+   Follow `QA_HARDWARE_RUNBOOK.md` to resolve every reported blocker.
 6. Execute every route, control, state boundary, workflow, privacy matrix, and
    regression row from `qa/ios-release-checklist.json`.
 7. Record each result immediately. Example:

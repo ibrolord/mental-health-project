@@ -112,7 +112,8 @@ if (supabaseUrl && anonKey) {
 if (publicOnly) {
   console.log('SKIP management-only redirect, client ID, and identity-linking checks');
 } else {
-  const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+  const accessToken =
+    process.env.SUPABASE_ACCESS_TOKEN ?? fileEnv.SUPABASE_ACCESS_TOKEN;
   report(
     Boolean(accessToken),
     'SUPABASE_ACCESS_TOKEN is available for management-only auth checks'

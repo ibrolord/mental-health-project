@@ -7,6 +7,7 @@ const read = (path: string) =>
 
 const acquisition = read('mobile/lib/acquisition.ts');
 const webAcquisition = read('lib/acquisition.ts');
+const lifecycleVerifier = read('scripts/verify-live-data-lifecycle.mjs');
 const tracker = read('mobile/app/(tabs)/tracker.tsx');
 const today = read('mobile/app/(tabs)/index.tsx');
 const migration = read(
@@ -24,6 +25,7 @@ describe('iOS check-in owner binding', () => {
       /saveCheckInWithAttribution\(\s*expectedUserId: string,\s*checkIn:/
     );
     expect(webAcquisition).toContain('p_expected_user_id: expectedUserId');
+    expect(lifecycleVerifier).toContain('p_expected_user_id: testUserId');
 
     for (const source of [tracker, today]) {
       expect(source).toContain('const expectedUserId = user');
