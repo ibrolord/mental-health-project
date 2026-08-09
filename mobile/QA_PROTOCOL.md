@@ -119,8 +119,10 @@ npm run qa:ios:physical-preflight -- --run qa/runs/<build>.json
 ```
 
    It verifies the exact IPA hash, required identity declarations, available
-   physical iPhone/iPad devices, Developer Mode access, installed TestFlight
-   bundle metadata, and the presence of the scoped Supabase management token.
+   physical iPhone/iPad devices, installed TestFlight bundle metadata, and
+   either a scoped Supabase management credential or fresh ignored dashboard
+   evidence. Developer Mode enables automated Xcode inspection; when it is off,
+   the TestFlight version/build check is recorded manually instead.
    Follow `QA_HARDWARE_RUNBOOK.md` to resolve every reported blocker.
 6. Execute every route, control, state boundary, workflow, privacy matrix, and
    regression row from `qa/ios-release-checklist.json`.

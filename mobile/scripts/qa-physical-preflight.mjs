@@ -9,6 +9,9 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  validateSocialAuthDashboardEvidence,
+} from '../../scripts/lib/social-auth-evidence.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MOBILE_ROOT = resolve(SCRIPT_DIR, '..');
@@ -276,12 +279,42 @@ async function main() {
     ...parseEnvFile(resolve(MOBILE_ROOT, '.env.local')),
     ...process.env,
   };
-  report(
-    Boolean(env.SUPABASE_ACCESS_TOKEN),
-    env.SUPABASE_ACCESS_TOKEN
-      ? 'scoped SUPABASE_ACCESS_TOKEN is available without printing it'
-      : 'Add a scoped SUPABASE_ACCESS_TOKEN with auth_config_read access to the ignored .env.local file.'
-  );
+  const evidenceArgument =
+    args['social-auth-evidence'] ?? env.SUPABASE_AUTH_DASHBOARD_EVIDENCE;
+  const evidencePath = evidenceArgument
+    ? (isAbsolute(evidenceArgument)
+        ? evidenceArgument
+        : resolve(process.cwd(), evidenceArgument))
+    : '';
+  if (env.SUPABASE_ACCESS_TOKEN) {
+    report(
+      true,
+      'scoped Supabase management credential is available without printing it'
+    );
+  } else if (evidencePath && existsSync(evidencePath)) {
+    try {
+      const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
+      const projectRef = supabaseUrl
+        ? new URL(supabaseUrl).hostname.split('.')[0]
+        : '';
+      const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
+      const evidenceErrors = validateSocialAuthDashboardEvidence(evidence, {
+        projectRef,
+      });
+      report(
+        evidenceErrors.length === 0,
+        evidenceErrors.join(' ') ||
+          'fresh Supabase dashboard evidence covers management-only social-auth checks'
+      );
+    } catch (error) {
+      report(false, `Supabase dashboard evidence is readable (${error.message})`);
+    }
+  } else {
+    report(
+      false,
+      'Provide a scoped Supabase OAuth credential with auth:read or --social-auth-evidence with a fresh ignored attestation.'
+    );
+  }
 
   if (failures.length > 0) {
     console.error(`Physical iOS preflight has ${failures.length} blocker(s).`);

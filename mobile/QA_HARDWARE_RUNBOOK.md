@@ -10,8 +10,10 @@ Use one physical iPhone and one physical iPad. On each device:
 1. Update to the intended supported iOS/iPadOS version.
 2. Connect by cable, unlock the device, tap **Trust This Computer**, and keep it
    awake during setup.
-3. Enable **Settings > Privacy & Security > Developer Mode**, restart, and
-   confirm Developer Mode after the restart.
+3. Enable **Settings > Privacy & Security > Developer Mode** when Xcode device
+   inspection or Accessibility Inspector will be used. TestFlight itself does
+   not require Developer Mode; if it remains off, record the installed version
+   and build manually in the TestFlight checklist row.
 4. Install the release through **TestFlight**. Do not sideload the IPA or use an
    Xcode development build.
 5. Open TestFlight and confirm the exact marketing version and build from the
@@ -91,8 +93,8 @@ npm run verify:partner-rls
 
 ## 5. Supabase management verification
 
-Create a short-lived, least-privilege Supabase access token with
-`auth_config_read` access. Store it only in the ignored repository `.env.local`:
+Prefer a short-lived Supabase OAuth credential with the official `auth:read`
+scope. Store it only in the ignored repository `.env.local`:
 
 ```text
 SUPABASE_ACCESS_TOKEN=<redacted>
@@ -107,6 +109,21 @@ npm run verify:social-auth
 ```
 
 Revoke the token after the release evidence is complete.
+
+If the account UI only offers a broad personal access token, do not create it.
+Inspect Authentication > Providers and URL Configuration in the authenticated
+Supabase dashboard, then store a non-secret attestation in the ignored
+`mobile/qa/runs/` directory. It must be less than 24 hours old, match the
+production project ref, and confirm all six management-only checks. Run:
+
+```bash
+npm run verify:social-auth -- \
+  --dashboard-evidence mobile/qa/runs/<build>-social-auth.json
+cd mobile
+npm run qa:ios:physical-preflight -- \
+  --run qa/runs/<build>.json \
+  --social-auth-evidence qa/runs/<build>-social-auth.json
+```
 
 ## 6. Final gate
 
