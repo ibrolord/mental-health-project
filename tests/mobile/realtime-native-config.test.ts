@@ -7,6 +7,7 @@ const appConfig = JSON.parse(
 ) as {
   expo: {
     android: { blockedPermissions: string[] };
+    ios: { infoPlist: { NSCameraUsageDescription: string } };
     plugins: unknown[];
   };
 };
@@ -20,7 +21,7 @@ const voiceScreen = readFileSync(
 );
 
 describe('audio-only Realtime native config', () => {
-  it('registers the audio-only cleanup so it runs after the WebRTC plist mod', () => {
+  it('restores an honest camera disclosure after the WebRTC plist mod', () => {
     const plugins = appConfig.expo.plugins;
     const webRtcIndex = plugins.findIndex(
       (entry) => Array.isArray(entry) && entry[0] === '@config-plugins/react-native-webrtc'
@@ -30,7 +31,16 @@ describe('audio-only Realtime native config', () => {
     expect(webRtcIndex).toBeGreaterThanOrEqual(0);
     // Expo evaluates mods for the same plist in reverse registration order.
     expect(audioOnlyIndex).toBeLessThan(webRtcIndex);
+    expect(appConfig.expo.ios.infoPlist.NSCameraUsageDescription).toContain(
+      'live voice sessions are audio-only'
+    );
+    expect(appConfig.expo.ios.infoPlist.NSCameraUsageDescription).toContain(
+      'never requests, captures, or transmits camera data'
+    );
     expect(audioOnlyPlugin).toContain(
+      'modConfig.modResults.NSCameraUsageDescription = cameraDisclosure'
+    );
+    expect(audioOnlyPlugin).not.toContain(
       'delete modConfig.modResults.NSCameraUsageDescription'
     );
   });

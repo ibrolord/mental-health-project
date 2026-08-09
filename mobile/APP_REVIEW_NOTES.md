@@ -1,11 +1,11 @@
-# App Review Notes - Version 1.0.1
+# App Review Notes - Version 1.0.2
 
-Last updated: August 6, 2026
+Last updated: August 9, 2026
 
 ## Build Under Review
 
-- Version: 1.0.1
-- iOS build: 34
+- Version: 1.0.2
+- iOS build: 42 candidate
 - Bundle ID: `com.mhtoolkit.app`
 - Support URL: https://mhtoolkit.vercel.app/support
 - Support email: bolajiag10@gmail.com
@@ -85,6 +85,10 @@ model-generated answer.
 - AI consent can be revoked from Settings. AI features ask again before sending
   new data after revocation.
 - MHtoolkit does not sell user data or share it for advertising.
+
+Live voice sessions are audio-only. The bundled WebRTC framework references
+camera APIs, so the signed app includes Apple's required camera purpose string.
+MHtoolkit does not request camera permission or capture or transmit camera data.
 
 The privacy policy at https://mhtoolkit.vercel.app/privacy identifies the AI
 providers, data categories, purposes, and consent controls.

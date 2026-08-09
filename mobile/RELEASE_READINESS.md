@@ -60,7 +60,7 @@ Waiting for Review. EAS upload `72330965-7667-4889-a32d-122e582e50cd`
 completed successfully. The refreshed icon and store screenshots are prepared
 for the next version and are not part of build 34.
 
-## Notification-enabled follow-up build
+## iOS 1.0.2 notification-enabled update
 
 - [x] Source uses Expo SDK 54's fixed `expo-notifications` 0.32.17 package.
 - [x] The unnecessary `expo-device` dependency and old iOS exclusion plugin are removed.
@@ -70,9 +70,15 @@ for the next version and are not part of build 34.
   `expo-notifications` 0.32.17 and omit `expo-device`.
 - [x] Release simulator launch stress passes 20/20 on iPhone and 20/20 in iPad
   compatibility mode with no matching crash or fatal log pattern.
+- [x] Version 1.0.2 is higher than the documented last approved version 1.0.1;
+  Apple processed build 41 on the 1.0.2 train before reporting the separate
+  camera-purpose-string issue.
+- [x] The explicit audio-only WebRTC camera API disclosure is generated into
+  Info.plist and checked in the signed IPA after Apple rejected build 41.
 - [ ] Physical notification permission, delivery, tap-routing, denial,
   later-enable, force-quit, target-date, affirmation, and library-pick checks pass.
-- [ ] A new exact artifact is uploaded only after the exhaustive QA run is complete.
+- [ ] Build 42 passes the complete signed-IPA review gate.
+- [ ] Build 42 is uploaded and accepted by App Store Connect processing.
 
 ## Android 1.0.1
 
