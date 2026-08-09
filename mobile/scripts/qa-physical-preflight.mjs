@@ -164,6 +164,7 @@ function inspectInstalledApp(device, bundleId, expectedVersion, expectedBuild) {
     if (/Developer Mode is disabled/i.test(details)) {
       return {
         ok: false,
+        code: 'developer-mode-disabled',
         reason: 'Developer Mode is disabled. Enable it in Settings > Privacy & Security, then restart the device.',
       };
     }
@@ -171,6 +172,21 @@ function inspectInstalledApp(device, bundleId, expectedVersion, expectedBuild) {
   } finally {
     rmSync(outputDir, { recursive: true, force: true });
   }
+}
+
+export function classifyInstalledAppInspection(result, installSource) {
+  if (result.ok) return { blocker: false, manual: false };
+  if (
+    result.code === 'developer-mode-disabled' &&
+    installSource === 'TestFlight'
+  ) {
+    return {
+      blocker: false,
+      manual: true,
+      reason: 'Developer Mode is off, so Xcode cannot inspect the install. TestFlight execution remains available; verify the installed version and build in TestFlight and record the install.testflight checklist row.',
+    };
+  }
+  return { blocker: true, manual: false, reason: result.reason };
 }
 
 async function main() {
@@ -181,9 +197,14 @@ async function main() {
     : '';
   let run = null;
   const failures = [];
+  const manualChecks = [];
   const report = (ok, message) => {
     console.log(`${ok ? 'PASS' : 'BLOCKED'} ${message}`);
     if (!ok) failures.push(message);
+  };
+  const reportManual = (message) => {
+    console.log(`MANUAL ${message}`);
+    manualChecks.push(message);
   };
 
   if (runPath && existsSync(runPath)) {
@@ -229,6 +250,7 @@ async function main() {
 
   const expectedVersion = run?.metadata?.appVersion;
   const expectedBuild = run?.metadata?.buildNumber;
+  const installSource = run?.metadata?.installSource;
   for (const device of [
     ...inventory.availableIphones,
     ...inventory.availableIpads,
@@ -239,12 +261,14 @@ async function main() {
       expectedVersion,
       expectedBuild
     );
-    report(
-      installed.ok,
-      installed.ok
-        ? `${device.modelName} has ${bundleId} ${expectedVersion} (${expectedBuild}) installed`
-        : `${device.modelName}: ${installed.reason}`
-    );
+    const classification = classifyInstalledAppInspection(installed, installSource);
+    if (installed.ok) {
+      report(true, `${device.modelName} has ${bundleId} ${expectedVersion} (${expectedBuild}) installed`);
+    } else if (classification.manual) {
+      reportManual(`${device.modelName}: ${classification.reason}`);
+    } else {
+      report(false, `${device.modelName}: ${classification.reason}`);
+    }
   }
 
   const env = {
@@ -263,7 +287,9 @@ async function main() {
     console.error(`Physical iOS preflight has ${failures.length} blocker(s).`);
     process.exit(1);
   }
-  console.log('Physical iOS preflight passed. Execute and record every QA_PROTOCOL.md row next.');
+  console.log(
+    `Physical iOS preflight passed${manualChecks.length > 0 ? ` with ${manualChecks.length} required manual check(s)` : ''}. Execute and record every QA_PROTOCOL.md row next.`
+  );
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

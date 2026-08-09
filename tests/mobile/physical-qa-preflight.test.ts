@@ -49,4 +49,22 @@ describe('physical iOS QA preflight', () => {
       })
     ).toContain('Missing identity role revoked-partner.');
   });
+
+  it('keeps TestFlight usable when Developer Mode prevents Xcode inspection', async () => {
+    const { classifyInstalledAppInspection } = await import(scriptUrl);
+    const result = {
+      ok: false,
+      code: 'developer-mode-disabled',
+      reason: 'Developer Mode is disabled.',
+    };
+
+    expect(classifyInstalledAppInspection(result, 'TestFlight')).toMatchObject({
+      blocker: false,
+      manual: true,
+    });
+    expect(classifyInstalledAppInspection(result, 'Xcode')).toMatchObject({
+      blocker: true,
+      manual: false,
+    });
+  });
 });
