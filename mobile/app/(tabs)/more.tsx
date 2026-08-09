@@ -104,7 +104,7 @@ const GROUPS: {
       },
       {
         label: 'Mind games',
-        description: 'Five offline attention exercises',
+        description: 'Six offline attention exercises',
         icon: 'grid',
         route: '/mind-games',
       },
