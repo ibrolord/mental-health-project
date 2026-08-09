@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import * as mobileGoals from '../../mobile/lib/goals/deduplication';
 import * as webGoals from '../../lib/goals/deduplication';
@@ -79,4 +81,32 @@ describe.each(implementations)('%s goal deduplication', (_name, goals) => {
     expect(await third).toBe('next');
   });
 
+});
+
+describe('mobile goal completion feedback', () => {
+  it('moves between pending and complete with matching feedback', () => {
+    expect(mobileGoals.nextGoalCompletionStatus('pending')).toBe('completed');
+    expect(mobileGoals.goalCompletionFeedback('completed')).toBe('Goal completed.');
+    expect(mobileGoals.nextGoalCompletionStatus('completed')).toBe('pending');
+    expect(mobileGoals.goalCompletionFeedback('pending')).toBe(
+      'Goal moved back to pending.'
+    );
+  });
+
+  it('clears stale undo feedback before reloading an owner', () => {
+    const goalsScreen = readFileSync(resolve('mobile/app/goals.tsx'), 'utf8');
+
+    expect(goalsScreen).toMatch(
+      /const loadGoals = useCallback\(async \(\) => \{\s+setGoalStatusChange\(null\);/
+    );
+  });
+
+  it('preserves the original completion timestamp when undo restores completion', () => {
+    const goalsScreen = readFileSync(resolve('mobile/app/goals.tsx'), 'utf8');
+
+    expect(goalsScreen).toContain('fromCompletedAt: goal.completed_at');
+    expect(goalsScreen).toContain(
+      'updateGoalStatus(goal, change.from, change.fromCompletedAt)'
+    );
+  });
 });

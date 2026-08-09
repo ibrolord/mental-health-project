@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, View, Text, ScrollView, TouchableOpacity, StyleSheet, Share } from 'react-native';
+import { ActivityIndicator, Alert, View, Text, ScrollView, TouchableOpacity, StyleSheet, Share } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -31,6 +31,10 @@ import {
   type SavedLibraryStateRow,
   type SavedLibraryViewItem,
 } from '@/lib/product-state';
+import {
+  createDashboardPreferenceWriter,
+  dashboardPreferences,
+} from '@/lib/dashboard-preferences';
 
 const CHALLENGE_SHARE_URL =
   'https://mhtoolkit.vercel.app/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share';
@@ -44,6 +48,13 @@ export default function DashboardScreen() {
   const [affirmationBy, setAffirmationBy] = useState('');
   const [savingMood, setSavingMood] = useState(false);
   const [lowEnergyMode, setLowEnergyMode] = useState(false);
+  const [lowEnergyOwnerKey, setLowEnergyOwnerKey] = useState<string | null>(null);
+  const [lowEnergyLoadError, setLowEnergyLoadError] = useState(false);
+  const [lowEnergyLoadAttempt, setLowEnergyLoadAttempt] = useState(0);
+  const [viewPreferenceError, setViewPreferenceError] = useState(false);
+  const preferenceWriterRef = useRef(
+    createDashboardPreferenceWriter(dashboardPreferences)
+  );
   const [moodStatus, setMoodStatus] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -63,6 +74,37 @@ export default function DashboardScreen() {
   const ownerKeyRef = useRef(ownerKey);
   ownerKeyRef.current = ownerKey;
   const canSaveMood = Boolean(queryValue && user?.id);
+
+  useEffect(() => {
+    const expectedOwnerKey = ownerKey;
+    setLowEnergyMode(false);
+    setLowEnergyOwnerKey(null);
+    setLowEnergyLoadError(false);
+    setViewPreferenceError(false);
+    preferenceWriterRef.current.invalidate();
+    if (!expectedOwnerKey) return;
+
+    let active = true;
+    void dashboardPreferences
+      .readLowEnergyMode(expectedOwnerKey)
+      .then((enabled) => {
+        if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
+        preferenceWriterRef.current.hydrate(expectedOwnerKey, enabled);
+        setLowEnergyMode(enabled);
+        setLowEnergyOwnerKey(expectedOwnerKey);
+      })
+      .catch((error) => {
+        console.warn('Unable to restore the dashboard view preference:', error);
+        if (active && ownerKeyRef.current === expectedOwnerKey) {
+          setLowEnergyLoadError(true);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [lowEnergyLoadAttempt, ownerKey]);
+
   useEffect(() => {
     const expectedOwnerKey = ownerKey;
     setMoodOwnerKey(null);
@@ -237,6 +279,7 @@ export default function DashboardScreen() {
   const visibleWeeklySummary = weeklyOwnerId === user?.id ? weeklySummary : null;
   const visibleResumeProgress = productOwnerId === user?.id ? resumeProgress : null;
   const visibleSavedItem = productOwnerId === user?.id ? savedItem : null;
+  const visibleLowEnergyMode = lowEnergyOwnerKey === ownerKey && lowEnergyMode;
   const challengeDays = new Set(
     visibleWeekMoods.map((entry) => format(new Date(entry.created_at), 'yyyy-MM-dd'))
   ).size;
@@ -253,27 +296,89 @@ export default function DashboardScreen() {
     }
   };
 
+  const toggleLowEnergyMode = () => {
+    if (!ownerKey || lowEnergyOwnerKey !== ownerKey) return;
+    const next = !visibleLowEnergyMode;
+    setLowEnergyMode(next);
+    setLowEnergyOwnerKey(ownerKey);
+    setViewPreferenceError(false);
+    const expectedOwnerKey = ownerKey;
+    void preferenceWriterRef.current
+      .writeLatest(expectedOwnerKey, next)
+      .then((result) => {
+        if (
+          !result.current ||
+          ownerKeyRef.current !== expectedOwnerKey ||
+          !result.error
+        ) {
+          return;
+        }
+        console.warn('Unable to save the dashboard view preference:', result.error);
+        setLowEnergyMode(result.persisted);
+        setViewPreferenceError(true);
+      });
+  };
+
+  if (ownerKey && lowEnergyOwnerKey !== ownerKey) {
+    return (
+      <ScrollView style={s.container} contentContainerStyle={s.content}>
+        <View style={s.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.eyebrow}>TODAY</Text>
+            <Text style={s.title}>How are you today?</Text>
+            <Text style={s.subtitle}>Start with one small step.</Text>
+          </View>
+        </View>
+        <View style={[s.card, s.preferenceLoadingCard]}>
+          {lowEnergyLoadError ? (
+            <>
+              <Text accessibilityRole="alert" style={s.preferenceError}>
+                Your saved dashboard view could not be loaded.
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Retry loading dashboard view"
+                onPress={() => setLowEnergyLoadAttempt((attempt) => attempt + 1)}
+                style={s.preferenceRetry}
+              >
+                <Text style={s.preferenceRetryText}>Retry</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <ActivityIndicator accessibilityLabel="Loading dashboard view" color={Colors.primary} />
+          )}
+        </View>
+      </ScrollView>
+    );
+  }
+
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <View style={s.headerRow}>
         <View style={{ flex: 1 }}>
-          <Text style={s.eyebrow}>{lowEnergyMode ? 'ONE STEP' : 'TODAY'}</Text>
-          <Text style={s.title}>{lowEnergyMode ? 'Keep it simple' : 'How are you today?'}</Text>
+          <Text style={s.eyebrow}>{visibleLowEnergyMode ? 'ONE STEP' : 'TODAY'}</Text>
+          <Text style={s.title}>{visibleLowEnergyMode ? 'Keep it simple' : 'How are you today?'}</Text>
           <Text style={s.subtitle}>
-            {lowEnergyMode ? 'Choose one thing. You can stop there.' : 'Start with a quick, private check-in.'}
+            {visibleLowEnergyMode ? 'Choose one thing. You can stop there.' : 'Start with a quick, private check-in.'}
           </Text>
         </View>
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityState={{ selected: lowEnergyMode }}
-          accessibilityLabel={lowEnergyMode ? 'Show full dashboard' : 'Use low-energy view'}
+          accessibilityState={{ selected: visibleLowEnergyMode }}
+          accessibilityLabel={visibleLowEnergyMode ? 'Show full dashboard' : 'Use low-energy view'}
           style={s.energyToggle}
-          onPress={() => setLowEnergyMode((current) => !current)}
+          onPress={toggleLowEnergyMode}
+          disabled={!ownerKey || lowEnergyOwnerKey !== ownerKey}
         >
-          <Feather name={lowEnergyMode ? 'sun' : 'battery'} size={17} color={Colors.primary} />
-          <Text style={s.energyToggleText}>{lowEnergyMode ? 'Full view' : 'Low energy'}</Text>
+          <Feather name={visibleLowEnergyMode ? 'sun' : 'battery'} size={17} color={Colors.primary} />
+          <Text style={s.energyToggleText}>{visibleLowEnergyMode ? 'Full view' : 'Low energy'}</Text>
         </TouchableOpacity>
       </View>
+      {viewPreferenceError ? (
+        <Text accessibilityRole="alert" style={s.preferenceError}>
+          That view change was not saved. Your previous view was restored.
+        </Text>
+      ) : null}
 
       {/* Mood Check-in */}
       <View style={[s.card, s.checkInCard]}>
@@ -307,7 +412,7 @@ export default function DashboardScreen() {
       </View>
 
       {/* Week Overview */}
-      {!lowEnergyMode ? <View style={[s.card, s.weekCard]}>
+      {!visibleLowEnergyMode ? <View style={[s.card, s.weekCard]}>
         <View style={s.cardHeadingRow}>
           <View style={{ flex: 1 }}>
             <Text style={s.cardTitle}>Last 7 days</Text>
@@ -344,11 +449,11 @@ export default function DashboardScreen() {
         </View>
       </View> : null}
 
-      {visibleWeeklySummary && !lowEnergyMode ? (
+      {visibleWeeklySummary && !visibleLowEnergyMode ? (
         <WeeklyInsight summary={visibleWeeklySummary} />
       ) : null}
 
-      {!lowEnergyMode && (visibleResumeProgress || visibleSavedItem) ? (
+      {!visibleLowEnergyMode && (visibleResumeProgress || visibleSavedItem) ? (
         <View style={s.continueGrid} accessibilityLabel="Continue and saved">
           {visibleResumeProgress ? (
             <TouchableOpacity
@@ -375,7 +480,7 @@ export default function DashboardScreen() {
         </View>
       ) : null}
 
-      {visibleTodayMood && !lowEnergyMode ? (
+      {visibleTodayMood && !visibleLowEnergyMode ? (
         <View style={s.challengeCard}>
           <Text style={s.challengeEyebrow}>7-DAY PRIVATE CHECK-IN</Text>
           <Text style={s.challengeTitle}>{Math.min(challengeDays, 7)} of 7 check-in days</Text>
@@ -403,7 +508,7 @@ export default function DashboardScreen() {
       ) : null}
 
       {/* Affirmation */}
-      {visibleAffirmation && !lowEnergyMode ? (
+      {visibleAffirmation && !visibleLowEnergyMode ? (
         <View style={[s.card, { backgroundColor: Colors.primaryLight }]}>
           <Feather
             name={visibleAffirmationBy ? 'message-circle' : 'sun'}
@@ -418,7 +523,7 @@ export default function DashboardScreen() {
         </View>
       ) : null}
 
-      {lowEnergyMode ? (
+      {visibleLowEnergyMode ? (
         <View style={s.card}>
           <Text style={s.cardTitle}>Choose one</Text>
           <View style={s.actionsGrid}>
@@ -462,6 +567,10 @@ const s = StyleSheet.create({
   todayMood: { minWidth: 31, minHeight: 31, alignItems: 'center', justifyContent: 'center' },
   moodStatus: { color: Colors.primary, fontSize: 13, marginTop: 12 },
   moodStatusError: { color: '#b42318' },
+  preferenceLoadingCard: { minHeight: 92, alignItems: 'center', justifyContent: 'center' },
+  preferenceError: { color: '#b42318', fontSize: 13, lineHeight: 18, marginBottom: 10 },
+  preferenceRetry: { minHeight: 42, justifyContent: 'center', paddingHorizontal: 12 },
+  preferenceRetryText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
   weekCard: { paddingBottom: 15 },
   weekRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   weekDay: { flex: 1, alignItems: 'center' },

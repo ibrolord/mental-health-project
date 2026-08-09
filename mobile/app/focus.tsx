@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 import {
   AppButton,
@@ -22,6 +23,7 @@ import {
   completedFocusCycles,
   createFocusClock,
   formatClock,
+  normalizeGoalIdParam,
   type FocusClock,
 } from '@/lib/wellbeing/focus';
 import { Colors } from '@/lib/constants';
@@ -51,8 +53,14 @@ function safeNumber(value: string, fallback: number, min: number, max: number) {
 }
 
 export default function FocusScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{
+    source?: string | string[];
+    goalId?: string | string[];
+  }>();
   const { context, authLoading } = useDataContext();
   const [task, setTask] = useState('');
+  const [prefilledFromGoals, setPrefilledFromGoals] = useState(false);
   const [focusMinutes, setFocusMinutes] = useState('25');
   const [breakMinutes, setBreakMinutes] = useState('5');
   const [cycles, setCycles] = useState('1');
@@ -70,7 +78,58 @@ export default function FocusScreen() {
   const soundSyncGenerationRef = useRef(0);
   const lastTickAtRef = useRef<number | null>(null);
   const previousClockRef = useRef<FocusClock>(EMPTY_CLOCK);
+  const appliedTaskParamRef = useRef('');
   ownerRef.current = context.user_id;
+
+  useEffect(() => {
+    const source = Array.isArray(params.source)
+      ? params.source[0]
+      : params.source;
+    const goalId = normalizeGoalIdParam(params.goalId);
+    const ownerId = context.user_id;
+    const identity = source === 'goals' && ownerId ? `${ownerId}:${goalId}` : '';
+    if (
+      authLoading ||
+      !identity ||
+      appliedTaskParamRef.current === identity ||
+      sessionIdRef.current
+    ) {
+      return;
+    }
+
+    let active = true;
+    appliedTaskParamRef.current = identity;
+    void supabase
+      .from('goals')
+      .select('id, content, status')
+      .eq('id', goalId)
+      .eq('user_id', ownerId)
+      .maybeSingle()
+      .then(({ data, error: goalError }) => {
+        if (!active || ownerRef.current !== ownerId || sessionIdRef.current) {
+          return;
+        }
+        router.setParams({ source: undefined, goalId: undefined });
+        if (goalError || !data || data.status !== 'pending') {
+          setError('That goal is no longer available for focus.');
+          return;
+        }
+        const requestedTask = String(data.content)
+          .trim()
+          .replace(/\s+/g, ' ')
+          .slice(0, 200);
+        if (!requestedTask) {
+          setError('That goal is no longer available for focus.');
+          return;
+        }
+        setTask(requestedTask);
+        setPrefilledFromGoals(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authLoading, context.user_id, params.goalId, params.source, router]);
 
   const queueSoundSync = (
     activeId: string,
@@ -256,6 +315,7 @@ export default function FocusScreen() {
       }
 
       setConfig(nextConfig);
+      setPrefilledFromGoals(false);
       setSessionId(data.id as string);
       sessionIdRef.current = data.id as string;
       queueSoundSync(data.id as string, ownerId, soundModeRef.current);
@@ -423,10 +483,19 @@ export default function FocusScreen() {
         ) : (
           <>
             <Text style={styles.formTitle}>Plan the block</Text>
+            {prefilledFromGoals ? (
+              <View accessibilityLiveRegion="polite" style={styles.sourceBanner}>
+                <Feather name="check-circle" size={16} color={Colors.primary} />
+                <Text style={styles.sourceBannerText}>Ready from today&apos;s goals</Text>
+              </View>
+            ) : null}
             <AppInput
               label="Outcome for this block"
               value={task}
-              onChangeText={setTask}
+              onChangeText={(value) => {
+                setTask(value);
+                if (prefilledFromGoals) setPrefilledFromGoals(false);
+              }}
               maxLength={200}
               placeholder="By the bell, I will..."
             />
@@ -519,6 +588,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 17,
   },
+  sourceBanner: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 12,
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+  },
+  sourceBannerText: { color: Colors.text, fontSize: 13, fontWeight: '600' },
   numberRow: { flexDirection: 'row', gap: 8 },
   presetsLabel: { color: Colors.text, fontSize: 13, fontWeight: '700' },
   presets: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
