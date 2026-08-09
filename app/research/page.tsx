@@ -50,7 +50,7 @@ const SECTIONS: Array<{
     id: 'reflection',
     title: 'Reflection and journaling',
     summary:
-      'Guided reflections borrow narrow structures from CBT-informed self-help, problem-solving, acceptance, self-compassion, and expressive writing. They organize a user\'s own words; they do not interpret entries, diagnose a condition, or reproduce practitioner-supported treatment.',
+      'Guided reflections use structured self-help prompts drawn from problem-solving, acceptance, self-compassion, and expressive-writing research. They organize a user\'s own words; they do not interpret entries, diagnose a condition, or reproduce practitioner-supported treatment.',
     evidenceIds: [
       'guided-self-help',
       'implementation-intentions',
