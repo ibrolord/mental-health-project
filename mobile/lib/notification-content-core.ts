@@ -151,14 +151,12 @@ function notificationForLibrary(item: LibraryItem | null): ReminderContent {
 
   return {
     title: 'Your library pick',
-    body: `${truncate(item.title, 92)} · ${truncate(item.durationLabel, 42)}`,
+    body: 'A library recommendation is ready. Open MHtoolkit when you are ready.',
     screen: '/library',
   };
 }
 
 function dueReminder(
-  title: string,
-  nextStep: string,
   targetDate: string,
   reminderTimes: readonly number[],
   now: Date,
@@ -170,9 +168,10 @@ function dueReminder(
 
   return {
     title: dueDateLabel(date, today),
-    body: nextStep.trim()
-      ? `${truncate(title, 88)} · Next: ${truncate(nextStep, 72)}`
-      : truncate(title, 150),
+    body:
+      screen === '/goals'
+        ? 'A goal is due. Open MHtoolkit when you are ready.'
+        : 'A plan item is due. Open MHtoolkit to review it.',
     screen,
     date,
   };
@@ -191,8 +190,6 @@ export function buildSmartReminderPlan({
   const firstGoal = goals[0];
   if (firstGoal) {
     const reminder = dueReminder(
-      firstGoal.content,
-      '',
       today,
       reminderTimes,
       now,
@@ -208,8 +205,6 @@ export function buildSmartReminderPlan({
   for (const plan of activePlans) {
     if (dueDates.length >= MAX_DUE_DATE_REMINDERS || !plan.target_date) break;
     const reminder = dueReminder(
-      plan.title,
-      plan.next_step,
       plan.target_date,
       reminderTimes,
       now,

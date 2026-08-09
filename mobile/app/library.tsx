@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   AppButton,
   AppCard,
@@ -73,6 +73,7 @@ const TEMPLATE_FILTERS: { id: LibraryTemplateFilter; label: string }[] = [
 ];
 
 type LibraryView = 'resources' | 'templates';
+const EMPTY_ITEM_STATES: Record<string, LibraryItemState> = {};
 
 function mediaLabel(item: LibraryItem): string {
   if (isVideoItem(item)) return 'Talk';
@@ -134,6 +135,7 @@ function DetailSection({
 
 export default function LibraryScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ item?: string }>();
   const { context, authLoading } = useDataContext();
   const [search, setSearch] = useState('');
   const [topic, setTopic] = useState<LibraryTopic>('All');
@@ -145,23 +147,36 @@ export default function LibraryScreen() {
   const [itemStates, setItemStates] = useState<
     Record<string, LibraryItemState>
   >({});
+  const [loadedOwnerId, setLoadedOwnerId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [loadingState, setLoadingState] = useState(true);
   const [savingKey, setSavingKey] = useState('');
   const [error, setError] = useState('');
   const ownerRef = useRef(context.user_id);
+  const appliedRequestRef = useRef('');
   ownerRef.current = context.user_id;
+
+  const currentOwnerId = context.user_id ?? null;
+  const ownerStateReady =
+    !authLoading && loadedOwnerId === currentOwnerId && !loadingState;
+  const effectiveItemStates = ownerStateReady ? itemStates : EMPTY_ITEM_STATES;
 
   useEffect(() => {
     if (authLoading) return;
     const ownerId = context.user_id;
+    setSelected(null);
+    setNoteDraft('');
+    setSavingKey('');
+    appliedRequestRef.current = '';
     if (!ownerId) {
       setItemStates({});
+      setLoadedOwnerId(null);
       setLoadingState(false);
       return;
     }
     let active = true;
     setLoadingState(true);
+    setLoadedOwnerId(null);
     setError('');
     void supabase
       .from('user_library_items')
@@ -178,6 +193,7 @@ export default function LibraryScreen() {
         } else {
           setItemStates(indexLibraryItemStates((data ?? []) as LibraryItemState[]));
         }
+        setLoadedOwnerId(ownerId);
         setLoadingState(false);
       });
     return () => {
@@ -185,23 +201,48 @@ export default function LibraryScreen() {
     };
   }, [authLoading, context.user_id]);
 
+  useEffect(() => {
+    if (!ownerStateReady) return;
+    const requestedItemId =
+      typeof params.item === 'string' ? params.item : params.item?.[0];
+    if (!requestedItemId) return;
+    const requestIdentity = `${context.user_id ?? 'none'}:${requestedItemId}`;
+    if (appliedRequestRef.current === requestIdentity) return;
+    appliedRequestRef.current = requestIdentity;
+    const requestedItem = UNIFIED_LIBRARY.find(
+      ({ id }) => id === requestedItemId
+    );
+    if (!requestedItem) {
+      setError('That saved library item is no longer available.');
+      return;
+    }
+    setSelected(requestedItem);
+    setNoteDraft(effectiveItemStates[requestedItem.id]?.custom_notes ?? '');
+    setError('');
+  }, [
+    context.user_id,
+    effectiveItemStates,
+    ownerStateReady,
+    params.item,
+  ]);
+
   const savedIds = useMemo(
     () =>
       new Set(
-        Object.values(itemStates)
+        Object.values(effectiveItemStates)
           .filter(({ is_saved }) => is_saved)
           .map(({ content_id }) => content_id)
       ),
-    [itemStates]
+    [effectiveItemStates]
   );
   const nextIds = useMemo(
     () =>
       new Set(
-        Object.values(itemStates)
+        Object.values(effectiveItemStates)
           .filter(({ priority }) => priority === 'next')
           .map(({ content_id }) => content_id)
       ),
-    [itemStates]
+    [effectiveItemStates]
   );
   const filtered = useMemo(
     () =>
@@ -225,7 +266,7 @@ export default function LibraryScreen() {
   );
 
   const stateFor = (item: LibraryItem): LibraryItemStateDraft =>
-    itemStates[item.id] ?? {
+    effectiveItemStates[item.id] ?? {
       ...EMPTY_LIBRARY_ITEM_STATE,
       media_type: item.mediaType,
     };
@@ -241,7 +282,7 @@ export default function LibraryScreen() {
     patch: Partial<LibraryItemStateDraft>
   ) => {
     const ownerId = context.user_id;
-    if (!ownerId) return;
+    if (!ownerId || !ownerStateReady) return;
     const current = stateFor(item);
     const next = nextLibraryState(current, item.mediaType, patch);
     const key = `${item.id}:${Object.keys(patch).join(',')}`;
@@ -301,12 +342,15 @@ export default function LibraryScreen() {
   };
 
   const openItem = (item: LibraryItem) => {
+    if (!ownerStateReady) return;
     setSelected(item);
-    setNoteDraft(itemStates[item.id]?.custom_notes ?? '');
+    setNoteDraft(effectiveItemStates[item.id]?.custom_notes ?? '');
     setError('');
   };
 
-  if (selected) {
+  const selectedForOwner = ownerStateReady ? selected : null;
+  if (selectedForOwner) {
+    const selected = selectedForOwner;
     const selectedState = stateFor(selected);
     const selectedIsBook = isBookItem(selected);
     const selectedIsStory = isStoryItem(selected);
@@ -626,7 +670,7 @@ export default function LibraryScreen() {
         }
       />
       {error ? <Text style={appUiStyles.error}>{error}</Text> : null}
-      {loadingState ? (
+      {!ownerStateReady ? (
         <Text style={appUiStyles.muted}>Loading your library...</Text>
       ) : (libraryView === 'resources' ? filtered.length : filteredTemplates.length) === 0 ? (
         <EmptyState

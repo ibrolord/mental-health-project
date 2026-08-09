@@ -16,6 +16,10 @@ import { clearStoredAcquisitionAttribution } from './acquisition';
 import { clearFullContextPreference } from './ai/full-context-preference';
 import { clearGoToActions } from './go-to-actions-storage';
 import {
+  clearWebReflectionDraft,
+  readWebReflectionDraft,
+} from './reflection-draft-storage';
+import {
   ANONYMOUS_PROFILE_DATA_CONFLICT,
   anonymousProfileDataConflict,
   discardAnonymousProfileSafely,
@@ -39,12 +43,15 @@ async function assertAnonymousAccountIsEmpty(): Promise<void> {
   }
   if (!session) return;
 
-  const result = await apiRequest(
-    '/api/data/switch-status',
-    {},
-    { accessToken: session.access_token }
-  );
-  if (result?.hasOwnedData !== false) {
+  const [result, reflectionDraft] = await Promise.all([
+    apiRequest(
+      '/api/data/switch-status',
+      {},
+      { accessToken: session.access_token }
+    ),
+    Promise.resolve(readWebReflectionDraft(session.user.id)),
+  ]);
+  if (result?.hasOwnedData !== false || reflectionDraft) {
     throw anonymousProfileDataConflict(session.user.id);
   }
 }
@@ -267,13 +274,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await discardAnonymousProfileSafely({
       expectedAnonymousUserId,
       currentUser: anonymousUser,
-      prepareLocalCleanup: async () =>
-        [
-          clearStoredAcquisitionAttribution(),
-          resetAiDataSharingConsent(ownerKey),
-          clearFullContextPreference(ownerKey),
-          clearGoToActions(ownerKey),
-        ].every(Boolean),
+      prepareLocalCleanup: async () => {
+        try {
+          clearStoredAcquisitionAttribution();
+          resetAiDataSharingConsent(ownerKey);
+          clearFullContextPreference(ownerKey);
+          clearGoToActions(ownerKey);
+          clearWebReflectionDraft(expectedAnonymousUserId);
+          return true;
+        } catch {
+          return false;
+        }
+      },
       deleteRemoteData: () =>
         apiRequest(
           '/api/data/delete',
@@ -295,6 +307,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const ownerKey = `user_id:${user.id}`;
       resetAiDataSharingConsent(ownerKey);
       clearGoToActions(ownerKey);
+      clearWebReflectionDraft(user.id);
     }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;

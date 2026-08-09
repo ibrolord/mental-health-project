@@ -47,6 +47,20 @@ const SECTIONS: Array<{
     evidenceIds: ['working-memory-training'],
   },
   {
+    id: 'reflection',
+    title: 'Reflection and journaling',
+    summary:
+      'Guided reflections borrow narrow structures from CBT-informed self-help, problem-solving, acceptance, self-compassion, and expressive writing. They organize a user\'s own words; they do not interpret entries, diagnose a condition, or reproduce practitioner-supported treatment.',
+    evidenceIds: [
+      'guided-self-help',
+      'implementation-intentions',
+      'who-stress-skills',
+      'journaling-reflection',
+      'self-compassion-reflection',
+      'gratitude-reflection',
+    ],
+  },
+  {
     id: 'calm',
     title: 'Breathing, meditation, and grounding',
     summary:

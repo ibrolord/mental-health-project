@@ -2,6 +2,8 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Anchor,
   BookOpen,
+  BookOpenCheck,
+  Bookmark,
   Brain,
   ClipboardList,
   Compass,
@@ -55,6 +57,18 @@ export const MORE_GROUPS: NavGroup[] = [
   {
     title: 'Reflect',
     items: [
+      {
+        href: '/reflect',
+        label: 'Guided reflection',
+        icon: BookOpenCheck,
+        blurb: 'Structured private prompts',
+      },
+      {
+        href: '/saved',
+        label: 'Saved',
+        icon: Bookmark,
+        blurb: 'Resources and important markers',
+      },
       { href: '/journal', label: 'Journal', icon: PenLine, blurb: 'Private writing' },
       {
         href: '/assessments',

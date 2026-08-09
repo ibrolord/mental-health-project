@@ -32,9 +32,13 @@ describe('iOS local notification configuration', () => {
   it('enables notification setup and testing on iOS', () => {
     expect(layout).not.toContain("if (Platform.OS === 'ios')");
     expect(layout).toContain('const router = useRouter();');
+    expect(layout).toContain('useRootNavigationState()');
+    expect(layout).toContain('createNotificationNavigationQueue');
+    expect(layout).toContain('navigationQueue.setReady(navigationReadyRef.current)');
     expect(layout).toContain('router.navigate(screen as any)');
     expect(layout).not.toContain('RouterCapture');
     expect(layout).toContain('clearLastNotificationResponseAsync');
+    expect(layout).not.toContain('if (!cancelled) router.navigate(screen as any)');
     expect(settings).toContain('Send Test Notification');
     expect(settings).toContain('reminders cycle through a plan, affirmation, and library pick.');
     expect(settings).not.toContain('iPhone reminders are not available');

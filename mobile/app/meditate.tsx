@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
@@ -19,10 +19,39 @@ import {
   type MeditationPractice,
 } from '@/lib/meditation';
 import { Colors } from '@/lib/constants';
+import { IDLE_GUIDED_TIMER, type GuidedTimerState } from '@/lib/guided-timer';
+import { useDataContext } from '@/lib/hooks/use-data-context';
+import {
+  PracticeProgressConflictError,
+  clearPausedPracticeProgress,
+  parsePracticeProgressRow,
+  pausedProgressFromTimer,
+  pausedTimerFromProgress,
+  savePausedPracticeProgress,
+  type PracticeProgressRow,
+  type ProductStateRpc,
+} from '@/lib/product-state';
+import { supabase } from '@/lib/supabase';
 
 export default function MeditateScreen() {
+  const { context, authLoading } = useDataContext();
   const [issue, setIssue] = useState<MeditationIssue | 'all'>('all');
   const [selected, setSelected] = useState<MeditationPractice | null>(null);
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(null);
+  const [initialTimer, setInitialTimer] =
+    useState<GuidedTimerState>(IDLE_GUIDED_TIMER);
+  const [storedProgress, setStoredProgress] =
+    useState<PracticeProgressRow | null>(null);
+  const [progressLoading, setProgressLoading] = useState(true);
+  const [progressBusy, setProgressBusy] = useState(false);
+  const [progressConflict, setProgressConflict] = useState(false);
+  const [progressMessage, setProgressMessage] = useState('');
+  const [progressOwnerId, setProgressOwnerId] = useState<string | null>(null);
+  const ownerRef = useRef(context.user_id);
+  const progressRef = useRef<PracticeProgressRow | null>(storedProgress);
+  const pendingPauseRef = useRef<Promise<void> | null>(null);
+  ownerRef.current = context.user_id;
+  progressRef.current = storedProgress;
   const practices = useMemo(
     () =>
       issue === 'all'
@@ -32,6 +61,171 @@ export default function MeditateScreen() {
           ),
     [issue]
   );
+  const rpc: ProductStateRpc = (name, args) => supabase.rpc(name, args);
+  const ownerReady = Boolean(
+    context.user_id && progressOwnerId === context.user_id && !authLoading
+  );
+  const selectedPractice =
+    ownerReady && selectedOwnerId === context.user_id ? selected : null;
+
+  useEffect(() => {
+    if (authLoading) return;
+    const ownerId = context.user_id;
+    setStoredProgress(null);
+    progressRef.current = null;
+    setProgressBusy(false);
+    setProgressConflict(false);
+    setInitialTimer(IDLE_GUIDED_TIMER);
+    setSelected(null);
+    setSelectedOwnerId(null);
+    setProgressOwnerId(null);
+    setProgressMessage('');
+
+    if (!ownerId) {
+      setProgressLoading(false);
+      return;
+    }
+
+    let active = true;
+    setProgressLoading(true);
+    void supabase
+      .from('practice_progress')
+      .select(
+        'user_id, practice_type, practice_id, route, step_index, step_elapsed_seconds, version, created_at, updated_at'
+      )
+      .eq('user_id', ownerId)
+      .eq('practice_type', 'meditation')
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!active || ownerRef.current !== ownerId) return;
+        setProgressLoading(false);
+        setProgressOwnerId(ownerId);
+        if (error) {
+          setProgressMessage('Paused progress could not be loaded.');
+          return;
+        }
+        if (!data) return;
+
+        const parsed = parsePracticeProgressRow(data);
+        const practice = parsed
+          ? MEDITATION_PRACTICES.find(({ id }) => id === parsed.practice_id)
+          : null;
+        if (!parsed || parsed.user_id !== ownerId || !practice) {
+          setProgressMessage('Saved practice progress was invalid and was not resumed.');
+          return;
+        }
+        progressRef.current = parsed;
+        setStoredProgress(parsed);
+        setInitialTimer(pausedTimerFromProgress(parsed));
+        setSelected(practice);
+        setSelectedOwnerId(ownerId);
+        setProgressMessage('Paused progress restored. Continue when you are ready.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authLoading, context.user_id]);
+
+  const clearStored = async (expectedOwnerId: string): Promise<boolean> => {
+    await pendingPauseRef.current;
+    if (ownerRef.current !== expectedOwnerId) return false;
+    const current = progressRef.current;
+    if (!current) return true;
+    if (current.user_id !== expectedOwnerId) return false;
+
+    setProgressBusy(true);
+    setProgressMessage('');
+    try {
+      await clearPausedPracticeProgress(rpc, expectedOwnerId, current);
+      if (ownerRef.current !== expectedOwnerId) return false;
+      progressRef.current = null;
+      setStoredProgress(null);
+      return true;
+    } catch (error) {
+      if (ownerRef.current !== expectedOwnerId) return false;
+      if (error instanceof PracticeProgressConflictError) {
+        setProgressConflict(true);
+      }
+      setProgressMessage(
+        error instanceof PracticeProgressConflictError
+          ? 'Progress changed in another session. Reload before continuing.'
+          : 'Paused progress could not be cleared. Try again.'
+      );
+      return false;
+    } finally {
+      if (ownerRef.current === expectedOwnerId) setProgressBusy(false);
+    }
+  };
+
+  const persistPaused = async (
+    timer: GuidedTimerState,
+    practiceId: string,
+    expectedOwnerId: string
+  ): Promise<void> => {
+    if (ownerRef.current !== expectedOwnerId) return;
+    const draft = pausedProgressFromTimer('meditation', practiceId, timer);
+    if (!draft) {
+      await clearStored(expectedOwnerId);
+      return;
+    }
+
+    const previous = pendingPauseRef.current;
+    const operation = (previous
+      ? previous.catch(() => undefined)
+      : Promise.resolve()
+    ).then(async () => {
+      if (ownerRef.current !== expectedOwnerId) return;
+      const current = progressRef.current;
+      if (current && current.user_id !== expectedOwnerId) return;
+      const expectedVersion = current?.version ?? 0;
+      setProgressBusy(true);
+      setProgressMessage('Saving paused progress...');
+      try {
+        const saved = await savePausedPracticeProgress(
+          rpc,
+          expectedOwnerId,
+          draft,
+          expectedVersion
+        );
+        if (ownerRef.current !== expectedOwnerId) return;
+        progressRef.current = saved;
+        setStoredProgress(saved);
+        setProgressMessage('Paused progress saved.');
+      } catch (error) {
+        if (ownerRef.current !== expectedOwnerId) return;
+        if (error instanceof PracticeProgressConflictError) {
+          setProgressConflict(true);
+        }
+        setProgressMessage(
+          error instanceof PracticeProgressConflictError
+            ? 'Progress changed in another session. Reload before saving again.'
+            : 'Paused progress could not be saved.'
+        );
+      } finally {
+        if (ownerRef.current === expectedOwnerId) setProgressBusy(false);
+      }
+    });
+    pendingPauseRef.current = operation;
+    try {
+      await operation;
+    } finally {
+      if (pendingPauseRef.current === operation) pendingPauseRef.current = null;
+    }
+  };
+
+  const choosePractice = (practice: MeditationPractice) => {
+    const ownerId = context.user_id;
+    if (!ownerId || progressOwnerId !== ownerId) return;
+    const current = progressRef.current;
+    setInitialTimer(
+      current?.practice_id === practice.id
+        ? pausedTimerFromProgress(current)
+        : IDLE_GUIDED_TIMER
+    );
+    setSelected(practice);
+    setSelectedOwnerId(ownerId);
+  };
 
   return (
     <AppScreen>
@@ -42,29 +236,45 @@ export default function MeditateScreen() {
         icon="sunrise"
       />
 
-      {selected ? (
+      {selectedPractice && selectedOwnerId ? (
         <>
           <AppButton
             label="Choose another practice"
             icon="arrow-left"
             variant="quiet"
-            onPress={() => setSelected(null)}
+            disabled={progressBusy || progressConflict}
+            onPress={() => {
+              setSelected(null);
+              setSelectedOwnerId(null);
+            }}
             style={styles.backButton}
           />
           <AppCard quiet>
             <Text style={appUiStyles.label}>Guided practice</Text>
-            <Text style={styles.selectedTitle}>{selected.title}</Text>
+            <Text style={styles.selectedTitle}>{selectedPractice.title}</Text>
             <Text style={[appUiStyles.muted, { marginTop: 8 }]}>
-              {selected.summary}
+              {selectedPractice.summary}
             </Text>
-            {selected.safetyNote ? (
+            {selectedPractice.safetyNote ? (
               <View style={styles.safety}>
                 <Feather name="info" size={16} color={Colors.accent} />
-                <Text style={styles.safetyText}>{selected.safetyNote}</Text>
+                <Text style={styles.safetyText}>{selectedPractice.safetyNote}</Text>
               </View>
             ) : null}
           </AppCard>
-          <GuidedPractice steps={selected.steps} startLabel="Begin practice" />
+          <GuidedPractice
+            key={`${selectedOwnerId}:${selectedPractice.id}`}
+            steps={selectedPractice.steps}
+            startLabel="Begin practice"
+            initialTimer={initialTimer}
+            persistenceBusy={progressBusy || progressConflict || progressLoading}
+            persistenceMessage={progressMessage}
+            onBeforeStart={() => clearStored(selectedOwnerId)}
+            onBeforeReset={() => clearStored(selectedOwnerId)}
+            onPause={(timer) =>
+              persistPaused(timer, selectedPractice.id, selectedOwnerId)
+            }
+          />
           <OptionalSoundscape title="Background sound" compact />
         </>
       ) : (
@@ -99,7 +309,23 @@ export default function MeditateScreen() {
                 <Pressable
                   key={practice.id}
                   accessibilityRole="button"
-                  onPress={() => setSelected(practice)}
+                  accessibilityState={{
+                    disabled:
+                      !ownerReady ||
+                      progressBusy ||
+                      progressConflict ||
+                      progressLoading,
+                  }}
+                  onPress={() => {
+                    if (
+                      ownerReady &&
+                      !progressBusy &&
+                      !progressConflict &&
+                      !progressLoading
+                    ) {
+                      choosePractice(practice);
+                    }
+                  }}
                   style={({ pressed }) => [
                     styles.practiceCard,
                     pressed && styles.pressed,

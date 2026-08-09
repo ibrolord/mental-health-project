@@ -8,6 +8,7 @@ import { Analytics } from "@vercel/analytics/react";
 import { CampaignCapture } from "@/components/launch/campaign-capture";
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
 import { AiConsentProvider } from "@/components/ai-consent-provider";
+import { I18nProvider } from "@/components/i18n-provider";
 
 const sans = DM_Sans({
   subsets: ["latin"],
@@ -45,15 +46,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en-CA">
       <body className={`${sans.variable} ${display.variable} font-sans`}>
         <ServiceWorkerRegistration />
         <CampaignCapture />
         <AuthProvider>
-          <AiConsentProvider>
-            <Navigation />
-            <AppShell>{children}</AppShell>
-          </AiConsentProvider>
+          <I18nProvider>
+            <AiConsentProvider>
+              <Navigation />
+              <AppShell>{children}</AppShell>
+            </AiConsentProvider>
+          </I18nProvider>
         </AuthProvider>
         <Analytics />
       </body>

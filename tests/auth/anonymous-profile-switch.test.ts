@@ -80,7 +80,7 @@ describe('anonymous profile switch safety', () => {
     const migration = readFileSync(
       resolve(
         process.cwd(),
-        'supabase/migrations/20260805115245_add_private_wellbeing_plans.sql'
+        'supabase/migrations/20260808234500_add_privacy_safe_operational_events.sql'
       ),
       'utf8'
     );

@@ -272,6 +272,31 @@ try {
   });
   if (privacyEventError) throw privacyEventError;
 
+  const { error: operationalEventError } = await client.rpc(
+    'record_operational_event',
+    {
+      p_event_type: 'route_error',
+      p_source: 'web',
+    }
+  );
+  if (operationalEventError) throw operationalEventError;
+
+  const { data: practiceProgress, error: practiceProgressError } =
+    await client.rpc('save_practice_progress', {
+      p_expected_user_id: testUserId,
+      p_practice_type: 'meditation',
+      p_practice_id: 'gentle-breath-reset',
+      p_route: '/meditate',
+      p_step_index: 0,
+      p_step_elapsed_seconds: 5,
+      p_expected_version: 0,
+    });
+  if (practiceProgressError) throw practiceProgressError;
+  assert(
+    practiceProgress?.user_id === testUserId && practiceProgress.version === 1,
+    'Practice progress did not preserve owner and version'
+  );
+
   const { error: focusError } = await client.from('focus_sessions').insert({
     user_id: testUserId,
     task_label: 'Lifecycle test focus',
@@ -371,6 +396,8 @@ try {
     'sleep_diary_entries',
     'partner_support_preferences',
     'privacy_events',
+    'operational_events',
+    'practice_progress',
     'acquisition_attribution',
     'ai_response_reports',
     'migration_history',
@@ -414,6 +441,8 @@ try {
     'staying_well_plan_items',
     'sleep_diary_entries',
     'partner_support_preferences',
+    'operational_events',
+    'practice_progress',
     'ai_response_reports',
   ];
   for (const section of expectedSingleRowSections) {
@@ -459,6 +488,8 @@ try {
     'sleep_diary_entries',
     'partner_support_preferences',
     'privacy_events',
+    'operational_events',
+    'practice_progress',
     'acquisition_attribution',
     'ai_response_reports',
   ];

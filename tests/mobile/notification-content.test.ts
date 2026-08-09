@@ -48,24 +48,29 @@ describe('smart local reminder content', () => {
       }),
       expect.objectContaining({
         title: 'Your library pick',
-        body: expect.stringContaining('Atomic Habits'),
+        body: 'A library recommendation is ready. Open MHtoolkit when you are ready.',
         screen: '/library',
       }),
     ]);
     expect(plan.dueDates).toEqual([
       expect.objectContaining({
         title: 'Due today',
-        body: 'Send the application',
+        body: 'A goal is due. Open MHtoolkit when you are ready.',
         screen: '/goals',
         date: new Date(2026, 7, 7, 9),
       }),
       expect.objectContaining({
         title: 'Due Aug 9',
-        body: 'Finish my portfolio · Next: Choose three projects',
+        body: 'A plan item is due. Open MHtoolkit to review it.',
         screen: '/planner',
         date: new Date(2026, 7, 9, 9),
       }),
     ]);
+    const serialized = JSON.stringify(plan.dueDates);
+    expect(serialized).not.toContain('Send the application');
+    expect(serialized).not.toContain('Finish my portfolio');
+    expect(serialized).not.toContain('Choose three projects');
+    expect(serialized).not.toContain('Atomic Habits');
   });
 
   it('uses only future device times for a due-today notification', () => {

@@ -21,6 +21,20 @@ import {
 } from '@/lib/affirmations';
 import { loadAffirmationCatalog } from '@/lib/affirmations-client';
 import { GoToActions } from '@/components/go-to-actions';
+import { WeeklyInsight } from '@/components/weekly-insight';
+import {
+  loadWeeklyOwnerSummary,
+  type WeeklyOwnerSummary,
+  type WeeklySummaryRpc,
+} from '@/lib/weekly-insights';
+import { UNIFIED_LIBRARY } from '@/lib/library/content';
+import {
+  composeSavedCollection,
+  parsePracticeProgressRow,
+  type PracticeProgressRow,
+  type SavedLibraryStateRow,
+  type SavedLibraryViewItem,
+} from '@/lib/product-state';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -38,6 +52,17 @@ export default function DashboardPage() {
     type: 'success' | 'error';
     message: string;
   } | null>(null);
+  const [weeklySummary, setWeeklySummary] =
+    useState<WeeklyOwnerSummary | null>(null);
+  const [weeklySummaryOwnerId, setWeeklySummaryOwnerId] =
+    useState<string | null>(null);
+  const [resumeProgress, setResumeProgress] =
+    useState<PracticeProgressRow | null>(null);
+  const [savedItem, setSavedItem] = useState<SavedLibraryViewItem | null>(null);
+  const [productStateOwnerId, setProductStateOwnerId] =
+    useState<string | null>(null);
+  const [moodStateOwnerKey, setMoodStateOwnerKey] =
+    useState<string | null>(null);
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
@@ -51,6 +76,7 @@ export default function DashboardPage() {
     const ownerKey = moodOwnerKey;
     setTodayMood(null);
     setWeekMoods([]);
+    setMoodStateOwnerKey(null);
     setSavingMood(false);
     setMoodStatus(null);
     if (!queryValue || !ownerKey) return;
@@ -80,6 +106,7 @@ export default function DashboardPage() {
             created_at: entry.created_at,
           }))
         );
+        setMoodStateOwnerKey(ownerKey);
         if (affRes.records.length > 0) {
           setAffirmation(chooseRandomAffirmation(affRes.records));
         }
@@ -95,6 +122,77 @@ export default function DashboardPage() {
 
     void loadData();
   }, [moodOwnerKey, queryColumn, queryValue]);
+
+  useEffect(() => {
+    const ownerId = user?.id ?? null;
+    setWeeklySummary(null);
+    setWeeklySummaryOwnerId(null);
+    if (!ownerId) return;
+
+    let active = true;
+    const rpc: WeeklySummaryRpc = async (args) => {
+      const result = await supabase.rpc('weekly_owner_summary', args);
+      return { data: result.data, error: result.error };
+    };
+    void loadWeeklyOwnerSummary(rpc)
+      .then((summary) => {
+        if (active && user?.id === ownerId) {
+          setWeeklySummary(summary);
+          setWeeklySummaryOwnerId(ownerId);
+        }
+      })
+      .catch(() => {
+        if (active && user?.id === ownerId) {
+          setWeeklySummary(null);
+          setWeeklySummaryOwnerId(ownerId);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    const ownerId = user?.id ?? null;
+    setResumeProgress(null);
+    setSavedItem(null);
+    setProductStateOwnerId(null);
+    if (!ownerId) return;
+
+    let active = true;
+    void Promise.all([
+      supabase
+        .from('practice_progress')
+        .select('*')
+        .eq('user_id', ownerId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('user_library_items')
+        .select('content_id, media_type, is_saved, priority, updated_at')
+        .eq('user_id', ownerId)
+        .or('is_saved.eq.true,priority.eq.next')
+        .order('updated_at', { ascending: false }),
+    ]).then(([progressResult, libraryResult]) => {
+      if (!active || user?.id !== ownerId) return;
+      setResumeProgress(parsePracticeProgressRow(progressResult.data));
+      if (!libraryResult.error) {
+        const collection = composeSavedCollection(
+          UNIFIED_LIBRARY,
+          (libraryResult.data ?? []) as SavedLibraryStateRow[],
+          []
+        );
+        setSavedItem(collection.upNext[0] ?? collection.saved[0] ?? null);
+      }
+      setProductStateOwnerId(ownerId);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const saveMood = async (mood: MoodEmoji) => {
     if (savingMood) return;
@@ -113,7 +211,8 @@ export default function DashboardPage() {
     try {
       setSavingMood(true);
       setMoodStatus(null);
-      await saveCheckInWithAttribution({
+      if (!user?.id) throw new Error('Your private profile is not ready.');
+      await saveCheckInWithAttribution(user.id, {
         emoji: mood,
         ...getLocalCheckInFields(),
       });
@@ -127,6 +226,7 @@ export default function DashboardPage() {
         ),
         { emoji: mood, created_at: new Date().toISOString() },
       ]);
+      setMoodStateOwnerKey(ownerKey);
       setMoodStatus({ type: 'success', message: 'Check-in saved.' });
     } catch (e) {
       if (operationIsCurrent()) {
@@ -145,8 +245,20 @@ export default function DashboardPage() {
 
   const moodEmojis: MoodEmoji[] = ['😄', '🙂', '😐', '😞', '😢'];
   const moodLabels = ['Great', 'Good', 'Okay', 'Low', 'Very Low'];
+  const visibleTodayMood =
+    moodStateOwnerKey === moodOwnerKey ? todayMood : null;
+  const visibleWeekMoods =
+    moodStateOwnerKey === moodOwnerKey ? weekMoods : [];
+  const visibleWeeklySummary =
+    weeklySummaryOwnerId === user?.id ? weeklySummary : null;
+  const visibleResumeProgress =
+    productStateOwnerId === user?.id ? resumeProgress : null;
+  const visibleSavedItem =
+    productStateOwnerId === user?.id ? savedItem : null;
   const challengeDays = new Set(
-    weekMoods.map((entry) => format(new Date(entry.created_at), 'yyyy-MM-dd'))
+    visibleWeekMoods.map((entry) =>
+      format(new Date(entry.created_at), 'yyyy-MM-dd')
+    )
   ).size;
 
   return (
@@ -193,9 +305,9 @@ export default function DashboardPage() {
                     onClick={() => saveMood(emoji)}
                     disabled={savingMood || authLoading || !moodOwnerKey}
                     aria-label={`Feeling ${moodLabels[index]}`}
-                    aria-pressed={todayMood === emoji}
+                    aria-pressed={visibleTodayMood === emoji}
                     className={`flex min-w-0 flex-1 flex-col items-center rounded-xl p-2 transition-all ${
-                      todayMood === emoji
+                      visibleTodayMood === emoji
                         ? 'bg-secondary ring-2 ring-primary'
                         : 'hover:bg-secondary'
                     } disabled:cursor-wait disabled:opacity-60`}
@@ -237,7 +349,7 @@ export default function DashboardPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               Your recent check-in rhythm.
             </p>
-            {weekMoods.length === 0 ? (
+            {visibleWeekMoods.length === 0 ? (
               <div className="mt-5 grid min-h-24 place-items-center rounded-xl border border-dashed border-border bg-secondary/40 px-4 text-center">
                 <p className="max-w-xs text-sm text-muted-foreground">
                   Your pattern will appear after a few check-ins.
@@ -247,7 +359,7 @@ export default function DashboardPage() {
               <div className="mt-5 grid grid-cols-7 gap-1.5">
                 {Array.from({ length: 7 }).map((_, i) => {
                   const date = subDays(new Date(), 6 - i);
-                  const dayMood = getLatestCheckInForDate(weekMoods, date);
+                  const dayMood = getLatestCheckInForDate(visibleWeekMoods, date);
                   return (
                     <div key={i} className="flex min-w-0 flex-col items-center gap-1.5">
                       <span
@@ -276,7 +388,50 @@ export default function DashboardPage() {
           </section>}
         </div>
 
-        {todayMood && !lowEnergyMode && (
+        {visibleWeeklySummary && !lowEnergyMode ? (
+          <WeeklyInsight summary={visibleWeeklySummary} />
+        ) : null}
+
+        {!lowEnergyMode && (visibleResumeProgress || visibleSavedItem) ? (
+          <section className="grid gap-3 sm:grid-cols-2" aria-label="Continue and saved">
+            {visibleResumeProgress ? (
+              <button
+                type="button"
+                onClick={() => router.push(visibleResumeProgress.route)}
+                className="app-panel p-5 text-left transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-accent">
+                  Continue
+                </p>
+                <h2 className="mt-2 font-display text-xl font-medium text-foreground">
+                  Resume meditation
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Return to your paused practice.
+                </p>
+              </button>
+            ) : null}
+            {visibleSavedItem ? (
+              <button
+                type="button"
+                onClick={() => router.push('/saved')}
+                className="app-panel p-5 text-left transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-accent">
+                  Saved for later
+                </p>
+                <h2 className="mt-2 font-display text-xl font-medium text-foreground">
+                  {visibleSavedItem.title}
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Open your saved space.
+                </p>
+              </button>
+            ) : null}
+          </section>
+        ) : null}
+
+        {visibleTodayMood && !lowEnergyMode && (
           <DismissibleNotice
             noticeKey="dashboard-seven-day-challenge-v1"
             dismissLabel="Hide the seven-day check-in card"

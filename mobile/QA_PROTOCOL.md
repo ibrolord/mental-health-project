@@ -34,10 +34,13 @@ Every manual result must record:
 - A concrete observed outcome of at least 20 characters.
 - The resulting route, persisted state, external destination, or error state.
 
-Every automated result must also record the exact command, exit code `0`, and
-an output/log/receipt reference. A screenshot of a button before it is pressed
-is not evidence. A toast is not persistence evidence. A local build is not
-TestFlight evidence.
+Every automated result must use `qa:ios:run`. The gate executes the allowlisted
+command itself, captures its exit code and output, and binds a receipt to the
+commit and artifact. The verifier re-hashes the non-empty regular output file,
+rejects symlinks and hard-link aliases, and prevents one filesystem object from
+proving multiple checks. A
+screenshot of a button before it is pressed is not evidence. A toast is not
+persistence evidence. A local build is not TestFlight evidence.
 
 A successful deep link, running process, or screenshot capture does not prove
 that a route rendered correctly. Route-render evidence must be inspected by a
@@ -125,6 +128,20 @@ npm run qa:ios:record -- \
   --observed "Back returned to Dashboard without resetting tab state"
 ```
 
+Automated example:
+
+```bash
+npm run qa:ios:run -- \
+  --run qa/runs/build-35.json \
+  --id external.links \
+  --actors identity-email-owner \
+  --evidence-type log \
+  --evidence "qa-gate:external.links:build-35" \
+  --observed "The gate verified every allowlisted production resource link." \
+  --command "npm run verify:resource-links" \
+  --output-ref /tmp/mhtoolkit-build-35-external-links.log
+```
+
 8. Set `metadata.completedAt` only after the last observation. Once set, the
    recorder refuses further changes.
 9. Run `qa:ios:digest` and pin its SHA-256 outside the mutable run file in the
@@ -145,7 +162,7 @@ npm run qa:ios:verify -- \
 ## Coverage model
 
 The manifest and its reviewed SHA-256 enforce all native route files. Its exact
-26-route, 491 route/control, 95 workflow, and 586 total-row inventory cannot
+28-route, 534 route/control, 95 workflow, and 629 total-row inventory cannot
 silently shrink. Each route requires render,
 control, state-boundary, restoration, and navigation evidence appropriate to
 its tab, stack, or modal type. Every named control is a separate required row.

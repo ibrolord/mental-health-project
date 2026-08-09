@@ -10,7 +10,7 @@ const exportRoute = readFileSync(
 const lifecycleMigration = readFileSync(
   resolve(
     process.cwd(),
-    'supabase/migrations/20260805115245_add_private_wellbeing_plans.sql'
+    'supabase/migrations/20260808234500_add_privacy_safe_operational_events.sql'
   ),
   'utf8'
 );
@@ -36,6 +36,7 @@ describe('user-data lifecycle registry', () => {
       'sleep_diary_entries',
       'partner_support_preferences',
       'privacy_events',
+      'operational_events',
     ] as const) {
       expect(USER_DATA_REGISTRY[table].partner).toBe('none');
       expect(USER_DATA_REGISTRY[table].ai).toBe('never');

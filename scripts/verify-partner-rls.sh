@@ -258,6 +258,30 @@ STAYING_WELL_ITEM_ID=33333333-3333-4333-8333-333333333332
 SLEEP_ENTRY_ID=44444444-4444-4444-8444-444444444441
 
 echo ""
+echo "== PRACTICE PROGRESS: owner-bound RPC and raw-row privacy =="
+check "A saves version 1 of paused practice progress" \
+  "$(run_as $A "SELECT (public.save_practice_progress('$A', 'meditation', 'gentle-breath-reset', '/meditate', 0, 5, 0)).version;")" \
+  '^1$'
+check "A cannot save with a stale owner identity" \
+  "$(run_as $A "SELECT public.save_practice_progress('$C', 'meditation', 'gentle-breath-reset', '/meditate', 0, 6, 1);")" \
+  'practice_progress_owner_changed|ERROR'
+check "B reads 0 of A's paused practice rows" \
+  "$(run_as $B "SELECT count(*) FROM public.practice_progress WHERE user_id='$A';")" \
+  '^0$'
+check "B cannot save a paused practice for A" \
+  "$(run_as $B "SELECT public.save_practice_progress('$A', 'meditation', 'gentle-breath-reset', '/meditate', 0, 6, 1);")" \
+  'practice_progress_owner_changed|ERROR'
+check "A gets an optimistic-version conflict" \
+  "$(run_as $A "SELECT public.save_practice_progress('$A', 'meditation', 'gentle-breath-reset', '/meditate', 0, 6, 0);")" \
+  'practice_progress_conflict|ERROR'
+check "A clears the exact saved version" \
+  "$(run_as $A "SELECT public.clear_practice_progress('$A', 'meditation', 'gentle-breath-reset', '/meditate', 1);")" \
+  '^t$'
+check "A has no paused practice row after clear" \
+  "$(run_as $A "SELECT count(*) FROM public.practice_progress WHERE user_id='$A';")" \
+  '^0$'
+
+echo ""
 echo "== PRIVATE WELLBEING: owner A can create and read every owned row =="
 check "A creates an activity plan" \
   "$(run_as $A "INSERT INTO public.activity_plans (id, user_id, plan_date, activity_kind, title, details, planned_minutes) VALUES ('$ACTIVITY_PLAN_ID', '$A', CURRENT_DATE, 'movement', 'PRIVATE ACTIVITY', 'PRIVATE ACTIVITY DETAILS', 20) RETURNING id;")" \
@@ -412,6 +436,33 @@ check "direct privacy-event DML left the append unchanged" \
 check "privacy RPC rejects arbitrary metadata" \
   "$(run_as $A "SELECT public.record_privacy_event('consent_granted', 'ios', '{\"private_note\":\"must not be logged\"}'::jsonb);")" \
   'privacy_events_metadata_shape_check|violates check constraint|ERROR'
+
+echo ""
+echo "== OPERATIONAL EVENTS: fixed authenticated taxonomy only =="
+run_as $A "SELECT public.record_operational_event('render_error', 'ios');" >/dev/null
+check "A appends one operational event through the approved RPC" \
+  "$(run_as $A "SELECT count(*) FROM public.operational_events WHERE event_type='render_error' AND source='ios';")" \
+  '^1$'
+check "B reads 0 of A's operational events" "$(run_as $B "SELECT count(*) FROM public.operational_events WHERE user_id='$A';")" '^0$'
+check "C reads 0 of A's operational events" "$(run_as $C "SELECT count(*) FROM public.operational_events WHERE user_id='$A';")" '^0$'
+check "A cannot directly insert an operational event" \
+  "$(run_as $A "INSERT INTO public.operational_events (user_id, event_type, source) VALUES ('$A', 'render_error', 'ios');")" \
+  'row-level security|permission denied|ERROR'
+check "A updates 0 operational events" \
+  "$(run_as $A "UPDATE public.operational_events SET event_type='notification_response_failed' WHERE user_id='$A' RETURNING event_type;")" \
+  '^$'
+check "A deletes 0 operational events" \
+  "$(run_as $A "DELETE FROM public.operational_events WHERE user_id='$A' RETURNING event_type;")" \
+  '^$'
+check "operational RPC rejects unknown event names" \
+  "$(run_as $A "SELECT public.record_operational_event('custom_event', 'ios');")" \
+  'operational_events_type_check|violates check constraint|ERROR'
+check "operational RPC rejects Android sources" \
+  "$(run_as $A "SELECT public.record_operational_event('render_error', 'android');")" \
+  'operational_events_source_check|violates check constraint|ERROR'
+check "operational RPC rejects cross-source error names" \
+  "$(run_as $A "SELECT public.record_operational_event('route_error', 'ios');")" \
+  'operational_events_source_type_check|violates check constraint|ERROR'
 
 echo ""
 echo "== NEGATIVE: partner B must not reach A's raw rows =="
@@ -624,9 +675,9 @@ echo "== DATA LIFECYCLE: delete_owned_data removes every new A-owned row =="
 check "service role deletes A's owned data" \
   "$(docker exec -i -e PGPASSWORD="$PGPASSWORD" "$CONTAINER" psql -U postgres -d postgres -tAq -c "SET ROLE service_role; SELECT public.delete_owned_data('$A', NULL);")" \
   '"deleted": true'
-check "all A-owned private wellbeing and privacy rows are gone" \
-  "$(psql -tAq -c "SELECT (SELECT count(*) FROM public.activity_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.activity_plan_steps WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.safety_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.safety_plan_items WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.staying_well_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.staying_well_plan_items WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.sleep_diary_entries WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.partner_support_preferences WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.privacy_events WHERE user_id='$A');")" \
-  '^0:0:0:0:0:0:0:0:0$'
+check "all A-owned private wellbeing, privacy, and operational rows are gone" \
+  "$(psql -tAq -c "SELECT (SELECT count(*) FROM public.activity_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.activity_plan_steps WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.safety_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.safety_plan_items WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.staying_well_plans WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.staying_well_plan_items WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.sleep_diary_entries WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.partner_support_preferences WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.privacy_events WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.operational_events WHERE user_id='$A');")" \
+  '^0:0:0:0:0:0:0:0:0:0$'
 check "user deletion removes its migration mapping and orphaned anonymous owner" \
   "$(psql -tAq -c "SELECT (SELECT count(*) FROM public.user_data_migration WHERE user_id='$A') || ':' || (SELECT count(*) FROM public.anonymous_sessions WHERE session_id='mapped-owner-a');")" \
   '^0:0$'

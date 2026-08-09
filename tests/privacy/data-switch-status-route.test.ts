@@ -72,6 +72,22 @@ describe('anonymous switch ownership inventory route', () => {
     await expect(response.json()).resolves.toEqual({ hasOwnedData: true });
   });
 
+  it('does not let operational telemetry block account switching', async () => {
+    mocks.from.mockImplementation((table: string) =>
+      queryResult(table === 'operational_events' ? [{ id: 'event-1' }] : [])
+    );
+
+    const response = await POST(
+      new NextRequest('https://mhtoolkit.test/api/data/switch-status', {
+        method: 'POST',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ hasOwnedData: false });
+    expect(mocks.from).not.toHaveBeenCalledWith('operational_events');
+  });
+
   it('rejects a permanent account instead of inventorying it for a switch', async () => {
     mocks.verifyAuth.mockResolvedValue({
       valid: true,

@@ -31,11 +31,15 @@ describe('privacy state transitions', () => {
   it('clears local AI state only after online deletion succeeds', () => {
     const web = read('app/settings/page.tsx');
     const mobile = read('mobile/app/settings.tsx');
-    const webDelete = web.indexOf("apiRequest('/api/data/delete', {})");
-    const mobileDelete = mobile.indexOf("apiRequest('/api/data/delete', {})");
+    const webDelete = web.indexOf("'/api/data/delete'");
+    const mobileDelete = mobile.indexOf("'/api/data/delete'");
     expect(webDelete).toBeGreaterThanOrEqual(0);
     expect(web.indexOf('clearLocalPrivacyState(consentSubjectId)', webDelete)).toBeGreaterThan(webDelete);
     expect(mobileDelete).toBeGreaterThanOrEqual(0);
+    expect(web).toContain('{ expectedUserId: expectedOwnerId }');
+    expect(mobile).toContain('{ expectedUserId: expectedOwnerId }');
+    expect(web).toContain('{ accessToken: current.session.access_token }');
+    expect(mobile).toContain('{ accessToken }');
     expect(mobile.indexOf('resetAiDataSharingConsent(consentSubjectId)', mobileDelete)).toBeGreaterThan(mobileDelete);
     for (const cleanup of [
       'clearFullContextPreference(consentSubjectId)',

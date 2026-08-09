@@ -47,6 +47,10 @@ import { clearContextSelections } from './chat-context-preference';
 import { areRemindersEnabled, setRemindersEnabled } from './notifications';
 import { Colors } from './constants';
 import {
+  clearReflectionDraft,
+  reflectionDraftStorage,
+} from './reflection-draft-storage';
+import {
   ANONYMOUS_PROFILE_DATA_CONFLICT,
   anonymousProfileDataConflict,
   discardAnonymousProfileSafely,
@@ -78,15 +82,16 @@ async function assertAnonymousAccountIsEmpty(): Promise<void> {
   }
   if (!session) return;
 
-  const [result, remindersEnabled] = await Promise.all([
+  const [result, remindersEnabled, reflectionDraft] = await Promise.all([
     apiRequest<{ hasOwnedData?: boolean }>(
       '/api/data/switch-status',
       {},
       { accessToken: session.access_token }
     ),
     areRemindersEnabled(),
+    reflectionDraftStorage.read(session.user.id),
   ]);
-  if (result.hasOwnedData !== false || remindersEnabled) {
+  if (result.hasOwnedData !== false || remindersEnabled || reflectionDraft) {
     throw anonymousProfileDataConflict(session.user.id);
   }
 }
@@ -473,7 +478,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     if (user) {
       const ownerKey = `user_id:${user.id}`;
-      await runDeletedAccountLocalCleanup(
+      const localCleanupComplete = await runDeletedAccountLocalCleanup(
         [
           clearStoredAcquisitionAttribution(),
           resetAiDataSharingConsent(ownerKey),
@@ -482,9 +487,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           clearContextSelections(ownerKey),
           setRemindersEnabled(false),
           offlineSafetyPlanCache.clear(user.id),
+          clearReflectionDraft(user.id),
         ],
         (error) => console.error('Sign-out local cleanup failed:', error)
       );
+      if (!localCleanupComplete) {
+        throw new Error(
+          'Local reminders or private drafts could not be cleared. Restart MHtoolkit and try signing out again.'
+        );
+      }
     }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
@@ -510,6 +521,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             clearContextSelections(ownerKey),
             setRemindersEnabled(false),
             offlineSafetyPlanCache.clear(expectedAnonymousUserId),
+            clearReflectionDraft(expectedAnonymousUserId),
           ],
           (error) => console.error('Anonymous-profile local cleanup failed:', error)
         ),
@@ -530,7 +542,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const deletedOwnerId = user.id;
-    const result = await apiRequest('/api/account/delete', {});
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    if (!current.session || current.session.user.id !== deletedOwnerId) {
+      throw new Error('The account changed before deletion. No account was deleted.');
+    }
+    const result = await apiRequest(
+      '/api/account/delete',
+      { expectedUserId: deletedOwnerId },
+      { accessToken: current.session.access_token }
+    );
     if (!result?.deleted) {
       throw new Error(result?.error || 'Failed to delete account');
     }
@@ -547,6 +568,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           clearContextSelections(deletedOwnerKey),
           setRemindersEnabled(false),
           offlineSafetyPlanCache.clear(deletedOwnerId),
+          clearReflectionDraft(deletedOwnerId),
         ],
         (error) => console.error('Deleted-account local cleanup failed:', error)
       );

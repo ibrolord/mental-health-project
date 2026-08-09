@@ -50,10 +50,14 @@ export default function JournalPage() {
   const [error, setError] = useState('');
   const [loadedOwnerId, setLoadedOwnerId] = useState<string | null>(null);
   const [draftOwnerId, setDraftOwnerId] = useState<string | null>(null);
+  const [highlightedEntryId, setHighlightedEntryId] = useState<string | null>(
+    null
+  );
   const [quoteStorySchemaReady, setQuoteStorySchemaReady] = useState<
     boolean | null
   >(null);
   const appliedLinkRef = useRef(false);
+  const appliedEntryRef = useRef('');
   const ownerIdentityRef = useRef<{ userId: string | null } | null>(null);
   const currentOwnerIdRef = useRef(context.user_id);
   currentOwnerIdRef.current = context.user_id;
@@ -94,7 +98,9 @@ export default function JournalPage() {
     setFilter('all');
     setError('');
     setSaving(false);
+    setHighlightedEntryId(null);
     appliedLinkRef.current = false;
+    appliedEntryRef.current = '';
   }, [context.user_id]);
 
   useEffect(() => {
@@ -147,6 +153,28 @@ export default function JournalPage() {
     setEditorOpen(true);
     window.history.replaceState({}, '', window.location.pathname);
   }, [authLoading, context.user_id]);
+
+  useEffect(() => {
+    if (authLoading || loading || !context.user_id) return;
+    const entryId = new URLSearchParams(window.location.search).get('entry');
+    if (!entryId) return;
+    const requestIdentity = `${context.user_id}:${entryId}`;
+    if (appliedEntryRef.current === requestIdentity) return;
+    appliedEntryRef.current = requestIdentity;
+    if (!ownerEntries.some(({ id }) => id === entryId)) {
+      setHighlightedEntryId(null);
+      setError('That journal entry is no longer available.');
+      return;
+    }
+    setFilter('all');
+    setSearch('');
+    setHighlightedEntryId(entryId);
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById(`journal-entry-${entryId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, [authLoading, context.user_id, loading, ownerEntries]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -362,14 +390,23 @@ export default function JournalPage() {
                 Capture what matters, connect useful ideas to action, and return to your own words.
               </p>
             </div>
-            <Button
-              type="button"
-              onClick={startNewEntry}
-              className="w-fit bg-amber-300 text-emerald-950 hover:bg-amber-200"
-            >
-              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
-              New entry
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                asChild
+                variant="outline"
+                className="w-fit border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              >
+                <Link href="/reflect">Guided reflection</Link>
+              </Button>
+              <Button
+                type="button"
+                onClick={startNewEntry}
+                className="w-fit bg-amber-300 text-emerald-950 hover:bg-amber-200"
+              >
+                <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+                New entry
+              </Button>
+            </div>
           </div>
         </section>
 
@@ -637,7 +674,12 @@ export default function JournalPage() {
               {visibleEntries.map((entry) => (
                 <article
                   key={entry.id}
-                  className="flex min-h-64 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                  id={`journal-entry-${entry.id}`}
+                  className={`flex min-h-64 flex-col rounded-2xl border bg-white p-5 shadow-sm ${
+                    highlightedEntryId === entry.id
+                      ? 'border-emerald-700 ring-2 ring-emerald-700/20'
+                      : 'border-slate-200'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2 text-xs font-medium text-slate-500">

@@ -22,6 +22,20 @@ export async function POST(request: NextRequest) {
       typeof body?.expectedAnonymousUserId === 'string'
         ? body.expectedAnonymousUserId
         : null;
+    const expectedUserId =
+      typeof body?.expectedUserId === 'string' ? body.expectedUserId : null;
+    if (auth.userId && !expectedUserId && !expectedAnonymousUserId) {
+      return NextResponse.json(
+        { error: 'The profile could not be verified. No data was deleted.' },
+        { status: 409, headers: corsHeaders() }
+      );
+    }
+    if (expectedUserId && auth.userId !== expectedUserId) {
+      return NextResponse.json(
+        { error: 'The profile changed before deletion. No data was deleted.' },
+        { status: 409, headers: corsHeaders() }
+      );
+    }
     if (
       expectedAnonymousUserId &&
       (auth.userId !== expectedAnonymousUserId || auth.isAnonymous !== true)

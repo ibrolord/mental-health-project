@@ -8,6 +8,7 @@ import {
   createRun,
   checklistDigest,
   expandChecklist,
+  gateExecutionReceipt,
   resolveRunPath,
   validateChecklist,
   validateRunData,
@@ -37,7 +38,7 @@ function completeRun() {
     identities,
   });
   const items = new Map(expandChecklist(checklist).map((item) => [item.id, item]));
-  for (const result of run.results) {
+  for (const [resultIndex, result] of run.results.entries()) {
     const item = items.get(result.id)!;
     result.status = 'pass';
     result.testedAt = new Date().toISOString();
@@ -72,6 +73,9 @@ function completeRun() {
       result.command = commands[result.id];
       result.exitCode = 0;
       result.outputRef = `/tmp/qa-output-${result.id}.log`;
+      result.outputSha256 = resultIndex.toString(16).padStart(64, '0');
+      result.executionMode = 'gate';
+      result.executionReceipt = gateExecutionReceipt(run.metadata, result);
     }
     result.actorIds = item.identityRequirements.map((role: string) => `identity-${role}`);
   }
@@ -80,11 +84,26 @@ function completeRun() {
 }
 
 function exactContext(run: ReturnType<typeof completeRun>['run'], commit: string, overrides = {}) {
+  const automatedOutputFiles = Object.fromEntries(
+    run.results
+      .filter((result) => typeof result.command === 'string')
+      .map((result, index) => [
+        result.id,
+        {
+          canonicalPath: result.outputRef,
+          dev: '1',
+          ino: String(index + 1),
+          sha256: result.outputSha256,
+          size: 100,
+        },
+      ])
+  );
   return {
     mobileRoot: MOBILE_ROOT,
     currentCommit: commit,
     worktreeClean: true,
     artifactFileSha256: 'b'.repeat(64),
+    automatedOutputFiles,
     expectedRunSha256: checklistDigest(run),
     ...overrides,
   };
@@ -95,10 +114,10 @@ describe('exhaustive mobile QA release gate', () => {
     expect(validateChecklist(checklist, MOBILE_ROOT)).toEqual([]);
     const ids = expandChecklist(checklist).map((item) => item.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(checklist.expectedInventory).toEqual({ routes: 26, routeChecks: 491, workflows: 95, total: 586 });
-    expect(checklist.routes).toHaveLength(26);
+    expect(checklist.expectedInventory).toEqual({ routes: 28, routeChecks: 534, workflows: 95, total: 629 });
+    expect(checklist.routes).toHaveLength(28);
     expect(checklist.workflows).toHaveLength(95);
-    expect(ids).toHaveLength(586);
+    expect(ids).toHaveLength(629);
     expect(checklistDigest(checklist)).toMatch(/^[a-f0-9]{64}$/);
   });
 
@@ -218,6 +237,68 @@ describe('exhaustive mobile QA release gate', () => {
 
     expect(errors).toContain('Exact IPA bytes do not match run metadata.artifactSha256.');
     expect(errors).toContain('artifact.identity command must reference the run artifactPath and buildNumber exactly.');
+  });
+
+  it('binds automated checks to unique, non-empty output files by SHA-256', () => {
+    const { run, commit } = completeRun();
+    const tests = run.results.find((result) => result.id === 'artifact.tests')!;
+    const prebuild = run.results.find((result) => result.id === 'artifact.prebuild')!;
+    const links = run.results.find((result) => result.id === 'external.links')!;
+    prebuild.outputRef = tests.outputRef;
+    links.outputRef = 'relative-output.log';
+
+    const errors = validateRunData(checklist, run, exactContext(run, commit, {
+      automatedOutputFiles: {
+        ...exactContext(run, commit).automatedOutputFiles,
+        'artifact.tests': { sha256: 'e'.repeat(64), size: 100 },
+        'artifact.prebuild': { error: 'outputRef is empty' },
+        'external.links': { sha256: links.outputSha256, size: 0 },
+      },
+    }));
+
+    expect(errors).toContain('artifact.prebuild reuses automated output already claimed by artifact.tests.');
+    expect(errors).toContain('artifact.tests automated output SHA-256 does not match the referenced file.');
+    expect(errors).toContain('artifact.prebuild automated output verification failed: outputRef is empty.');
+    expect(errors).toContain('external.links outputRef must be absolute.');
+    expect(errors).toContain('external.links automated output must be a non-empty file.');
+  });
+
+  it('rejects hard-linked output reuse and forged gate execution receipts', () => {
+    const { run, commit } = completeRun();
+    const tests = run.results.find((result) => result.id === 'artifact.tests')!;
+    const prebuild = run.results.find((result) => result.id === 'artifact.prebuild')!;
+    prebuild.outputSha256 = tests.outputSha256;
+    prebuild.executionReceipt = 'f'.repeat(64);
+    const context = exactContext(run, commit);
+    context.automatedOutputFiles![prebuild.id] = {
+      canonicalPath: prebuild.outputRef,
+      dev: context.automatedOutputFiles![tests.id].dev,
+      ino: context.automatedOutputFiles![tests.id].ino,
+      sha256: tests.outputSha256,
+      size: 100,
+    };
+
+    const errors = validateRunData(checklist, run, context);
+
+    expect(errors).toContain(
+      'artifact.prebuild reuses automated output bytes already claimed by artifact.tests.'
+    );
+    expect(errors).toContain(
+      'artifact.prebuild reuses automated output content already claimed by artifact.tests.'
+    );
+    expect(errors).toContain('artifact.prebuild has an invalid QA gate execution receipt.');
+  });
+
+  it('does not let the manual record command attest automated checks', () => {
+    const source = readFileSync(
+      path.join(MOBILE_ROOT, 'scripts/qa-release-gate.mjs'),
+      'utf8'
+    );
+    expect(source).toContain(
+      "throw new Error('Automated checks must use the QA gate run command.')"
+    );
+    expect(source).toContain("spawnSync('/bin/bash', ['-lc', automationCommand]");
+    expect(source).toContain("result.executionMode = 'gate'");
   });
 
   it('rejects future timestamps and runs lasting longer than 14 days', () => {

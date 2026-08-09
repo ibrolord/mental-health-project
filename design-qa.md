@@ -43,3 +43,43 @@ The full-view comparison keeps the complete source card readable at 800 pixels w
 - [x] Verify primary controls and browser console.
 
 final result: passed
+
+---
+
+# Mood Tracker Design QA
+
+## Evidence
+
+- Source layout: `/tmp/mhtoolkit-mood-audit/figma-opus-refined-v2.png`
+- Mobile implementation: `/tmp/mhtoolkit-mood-audit/current-mobile-emoji.png`
+- Desktop implementation: `/tmp/mhtoolkit-mood-audit/current-desktop-emoji.png`
+- Side-by-side comparison: `/tmp/mhtoolkit-mood-audit/reference-vs-current.png`
+- Browser viewports: 390 x 844 and 1024 x 900.
+
+## Findings
+
+No actionable P0, P1, or P2 visual issues remain.
+
+- The five mood choices stay on one row at the mobile viewport without horizontal overflow.
+- Emoji are the primary mood cue, while labels and a visible check mark preserve clarity and selection state.
+- The card follows the source hierarchy and spacing without the former two-column mobile stack.
+- Emotion words and suggested actions now adapt to the selected mood, including positive language for positive moods.
+- History, export, and the sleep diary remain available without dominating the primary check-in flow.
+- The trend card is compact and renders a visible point when only one check-in exists.
+- Context and the secondary history disclosure were exercised in the browser with no console warnings or errors.
+
+## Intentional Differences
+
+- The source used text-only mood chips. The implementation restores emoji at the user's request.
+- The source showed a selected neutral mood. Current evidence preserves the user's saved positive check-in rather than changing private mood data for a screenshot.
+
+## Verification
+
+- [x] Mobile layout at 390 x 844.
+- [x] Desktop layout at 1024 x 900.
+- [x] Context expand and collapse.
+- [x] History and sleep expand and collapse.
+- [x] Positive, neutral, and lower mood vocabularies covered by tests.
+- [x] No browser console warnings or errors.
+
+final result: passed

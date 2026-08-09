@@ -23,6 +23,8 @@ import { offlineSafetyPlanCache } from '@/lib/offline-safety-plan-cache';
 import { clearFullContextPreference } from '@/lib/full-context-preference';
 import { clearContextSelections } from '@/lib/chat-context-preference';
 import { clearGoToActions } from '@/lib/go-to-actions-storage';
+import { clearReflectionDraft } from '@/lib/reflection-draft-storage';
+import { supabase } from '@/lib/supabase';
 
 const HOUR_OPTIONS = [
   { label: '7 AM', value: 7 },
@@ -54,6 +56,15 @@ export default function SettingsScreen() {
   const [reminderStatus, setReminderStatus] = useState('');
   const [aiConsentGranted, setAiConsentGranted] = useState(false);
   const [dataGeneration, setDataGeneration] = useState(0);
+
+  const captureOwnerSession = async (expectedOwnerId: string) => {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    if (!data.session || data.session.user.id !== expectedOwnerId) {
+      throw new Error('The profile changed. Try again from the current profile.');
+    }
+    return data.session.access_token;
+  };
 
   useEffect(() => {
     (async () => {
@@ -160,25 +171,41 @@ export default function SettingsScreen() {
   };
 
   const handleExport = async () => {
-    if (!query) return;
+    const expectedOwnerId = user?.id;
+    if (!query || !expectedOwnerId) return;
     setLoading(true);
+    let exportPath: string | null = null;
     try {
-      const exportData = await apiRequest('/api/data/export', {});
+      const accessToken = await captureOwnerSession(expectedOwnerId);
+      const exportData = await apiRequest(
+        '/api/data/export',
+        { expectedUserId: expectedOwnerId },
+        { accessToken }
+      );
       const data = JSON.stringify(exportData, null, 2);
-
-      const path = `${FileSystem.documentDirectory}mental-health-data.json`;
-      await FileSystem.writeAsStringAsync(path, data);
+      if (!FileSystem.cacheDirectory) {
+        throw new Error('A private export location is unavailable.');
+      }
+      exportPath = `${FileSystem.cacheDirectory}mhtoolkit-data-export-${Date.now()}.json`;
+      await FileSystem.writeAsStringAsync(exportPath, data);
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(path);
+        await Sharing.shareAsync(exportPath);
       }
     } catch {
       Alert.alert('Error', 'Failed to export data');
+    } finally {
+      if (exportPath) {
+        await FileSystem.deleteAsync(exportPath, { idempotent: true }).catch(
+          (error) => console.warn('Unable to remove temporary export:', error)
+        );
+      }
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleDeleteAll = async () => {
-    if (!query) return;
+    const expectedOwnerId = user?.id;
+    if (!query || !expectedOwnerId) return;
     Alert.alert(
       'Delete All Data?',
       'This will permanently delete all your check-ins, assessments, goals, habits, chat history, favorites, AI reports, and acquisition attribution. This cannot be undone.',
@@ -190,7 +217,12 @@ export default function SettingsScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              const result = await apiRequest('/api/data/delete', {});
+              const accessToken = await captureOwnerSession(expectedOwnerId);
+              const result = await apiRequest(
+                '/api/data/delete',
+                { expectedUserId: expectedOwnerId },
+                { accessToken }
+              );
               if (!result?.deleted) throw new Error(result?.error || 'Deletion failed');
               const cleanup = await Promise.allSettled([
                 clearStoredAcquisitionAttribution(),
@@ -199,7 +231,8 @@ export default function SettingsScreen() {
                 clearContextSelections(consentSubjectId),
                 clearGoToActions(consentSubjectId),
                 setRemindersEnabled(false),
-                user ? offlineSafetyPlanCache.clear(user.id) : Promise.resolve(),
+                offlineSafetyPlanCache.clear(expectedOwnerId),
+                clearReflectionDraft(expectedOwnerId),
               ]);
               setDataGeneration((current) => current + 1);
               const cleanupFailed = cleanup.some((item) => item.status === 'rejected');

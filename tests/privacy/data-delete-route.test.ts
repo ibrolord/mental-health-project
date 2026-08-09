@@ -49,6 +49,7 @@ describe('transactional data deletion route', () => {
     const response = await POST(
       new NextRequest('https://mhtoolkit.test/api/data/delete', {
         method: 'POST',
+        body: JSON.stringify({ expectedUserId: 'owner-1' }),
       })
     );
 
@@ -89,6 +90,35 @@ describe('transactional data deletion route', () => {
       new NextRequest('https://mhtoolkit.test/api/data/delete', {
         method: 'POST',
         body: JSON.stringify({ expectedAnonymousUserId: 'anonymous-1' }),
+      })
+    );
+
+    expect(response.status).toBe(409);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects deletion when the captured signed-in owner no longer matches', async () => {
+    mocks.verifyAuth.mockResolvedValueOnce({
+      valid: true,
+      userId: 'different-user',
+      isAnonymous: false,
+    });
+
+    const response = await POST(
+      new NextRequest('https://mhtoolkit.test/api/data/delete', {
+        method: 'POST',
+        body: JSON.stringify({ expectedUserId: 'owner-1' }),
+      })
+    );
+
+    expect(response.status).toBe(409);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects deletion when a signed-in request omits the captured owner', async () => {
+    const response = await POST(
+      new NextRequest('https://mhtoolkit.test/api/data/delete', {
+        method: 'POST',
       })
     );
 

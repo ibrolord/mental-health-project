@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-08-07.1",
+  "checklistVersion": "2026-08-08.1",
   "platform": "ios",
-  "expectedInventory": { "routes": 26, "routeChecks": 491, "workflows": 95, "total": 586 },
+  "expectedInventory": { "routes": 28, "routeChecks": 534, "workflows": 95, "total": 629 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -108,7 +108,7 @@
       "source": "app/(tabs)/index.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "share-challenge", "low-energy-mode", "grounding", "focus", "habits", "go-to-customize", "go-to-select-limit", "go-to-cue", "go-to-reorder", "go-to-save-relaunch", "go-to-storage-failure"]
+      "controls": ["mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "share-challenge", "low-energy-mode", "weekly-insight", "weekly-reflection", "resume-practice", "saved-space", "grounding", "focus", "habits", "go-to-customize", "go-to-select-limit", "go-to-cue", "go-to-reorder", "go-to-save-relaunch", "go-to-storage-failure"]
     },
     {
       "id": "mood-tracker",
@@ -116,7 +116,7 @@
       "source": "app/(tabs)/tracker.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["open-close-entry", "five-mood-options", "note", "tags", "save", "save-double-tap", "all-filter", "tag-filter", "refresh-after-save", "sleep-open-close", "sleep-wake-date", "sleep-five-times", "sleep-awakenings", "sleep-awake-minutes", "sleep-nap-minutes", "sleep-notes", "sleep-save", "sleep-delete"]
+      "controls": ["open-close-entry", "five-mood-options", "details-collapse", "emotion-options", "custom-emotion", "suggested-action", "note", "save", "save-double-tap", "history-collapse", "all-filter", "tag-filter", "refresh-after-save", "sleep-open-close", "sleep-wake-date", "sleep-five-times", "sleep-awakenings", "sleep-awake-minutes", "sleep-nap-minutes", "sleep-notes", "sleep-save", "sleep-delete"]
     },
     {
       "id": "ai-chat",
@@ -140,7 +140,7 @@
       "source": "app/(tabs)/more.tsx",
       "kind": "tab",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["goals", "habits", "plans", "focus", "journal", "affirmations", "grounding", "meditation", "yoga", "mind-games", "library", "accountability", "resources", "research", "support", "settings"]
+      "controls": ["goals", "habits", "plans", "focus", "guided-reflection", "journal", "affirmations", "grounding", "meditation", "yoga", "mind-games", "library", "saved", "accountability", "resources", "research", "support", "settings"]
     },
     {
       "id": "login",
@@ -215,6 +215,22 @@
       "controls": ["new-close", "title", "entry", "tags", "favorite", "context-toggle", "save", "double-submit", "search", "filters", "edit", "delete", "library-prefill"]
     },
     {
+      "id": "guided-reflection",
+      "path": "/reflect",
+      "source": "app/reflect.tsx",
+      "kind": "stack",
+      "identityRequirements": ["saved-anonymous"],
+      "controls": ["template-select", "more-templates", "restore-encrypted-draft", "response-input", "previous-step", "next-step", "save-to-journal", "open-journal", "start-another", "weekly-pattern-deep-link"]
+    },
+    {
+      "id": "saved",
+      "path": "/saved",
+      "source": "app/saved.tsx",
+      "kind": "stack",
+      "identityRequirements": ["saved-anonymous"],
+      "controls": ["browse-library-empty", "open-up-next", "open-saved-resource", "open-important-journal-marker"]
+    },
+    {
       "id": "library",
       "path": "/library",
       "source": "app/library.tsx",
@@ -228,7 +244,7 @@
       "source": "app/meditate.tsx",
       "kind": "stack",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["all-filter", "issue-filters", "open-practice", "start", "pause", "resume", "reset", "sound", "choose-another"]
+      "controls": ["all-filter", "issue-filters", "open-practice", "start", "pause", "resume", "resume-after-relaunch", "version-conflict", "reset", "sound", "choose-another"]
     },
     {
       "id": "yoga",
@@ -244,7 +260,7 @@
       "source": "app/mind-games.tsx",
       "kind": "stack",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["open-each-game", "color-switch", "paced-counting", "category-fluency", "memory-sequence", "sensory-scan", "start", "pause", "reset", "new-round", "exit-game"]
+      "controls": ["open-each-game", "color-switch", "paced-counting", "category-fluency", "memory-sequence", "sensory-scan", "number-flow", "number-difficulty", "number-answer", "start", "pause", "reset", "new-round", "exit-game"]
     },
     {
       "id": "accountability",

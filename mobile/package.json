@@ -14,6 +14,7 @@
     "qa:ios:inventory": "node scripts/qa-release-gate.mjs inventory",
     "qa:ios:init": "node scripts/qa-release-gate.mjs init",
     "qa:ios:record": "node scripts/qa-release-gate.mjs record",
+    "qa:ios:run": "node scripts/qa-release-gate.mjs run",
     "qa:ios:status": "node scripts/qa-release-gate.mjs status",
     "qa:ios:digest": "node scripts/qa-release-gate.mjs digest",
     "qa:ios:verify": "node scripts/qa-release-gate.mjs verify"

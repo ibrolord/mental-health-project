@@ -13,6 +13,7 @@ import {
   advanceGuidedTimerBy,
   IDLE_GUIDED_TIMER,
   resetGuidedTimer,
+  type GuidedTimerState,
 } from '@/lib/guided-timer';
 
 export type GuidedStep = {
@@ -29,27 +30,47 @@ function formatTime(seconds: number) {
 export function GuidedPractice<TStep extends GuidedStep>({
   steps,
   startLabel = 'Begin',
+  initialTimer = IDLE_GUIDED_TIMER,
+  persistenceBusy = false,
+  persistenceMessage = '',
+  onBeforeStart,
+  onPause,
+  onBeforeReset,
   onComplete,
   renderStepVisual,
 }: {
   steps: readonly TStep[];
   startLabel?: string;
+  initialTimer?: GuidedTimerState;
+  persistenceBusy?: boolean;
+  persistenceMessage?: string;
+  onBeforeStart?: (timer: GuidedTimerState) => Promise<boolean>;
+  onPause?: (timer: GuidedTimerState) => void | Promise<void>;
+  onBeforeReset?: (timer: GuidedTimerState) => Promise<boolean>;
   onComplete?: () => void;
   renderStepVisual?: (step: TStep, index: number) => ReactNode;
 }) {
-  const [timer, setTimer] = useState(IDLE_GUIDED_TIMER);
+  const [timer, setTimer] = useState<GuidedTimerState>({
+    ...initialTimer,
+    running: false,
+  });
+  const [controlBusy, setControlBusy] = useState(false);
   const [pauseNotice, setPauseNotice] = useState('');
   const lastTickRef = useRef<number | null>(null);
   const announcedStepRef = useRef<number | null>(null);
-  const runningRef = useRef(false);
-  runningRef.current = timer.running;
+  const timerRef = useRef(timer);
+  const onPauseRef = useRef(onPause);
+  timerRef.current = timer;
+  onPauseRef.current = onPause;
   const activeStep = steps[timer.stepIndex] ?? steps[0];
 
   useEffect(() => {
-    setTimer(IDLE_GUIDED_TIMER);
+    const restored = { ...initialTimer, running: false };
+    timerRef.current = restored;
+    setTimer(restored);
     setPauseNotice('');
     announcedStepRef.current = null;
-  }, [steps]);
+  }, [initialTimer, steps]);
 
   useEffect(() => {
     if (!timer.running || timer.complete || steps.length === 0) {
@@ -66,24 +87,42 @@ export function GuidedPractice<TStep extends GuidedStep>({
       if (elapsedSeconds < 1) return;
 
       lastTickRef.current = previous + elapsedSeconds * 1000;
-      setTimer((current) =>
-        advanceGuidedTimerBy(current, stepDurations, elapsedSeconds)
-      );
+      setTimer((current) => {
+        const next = advanceGuidedTimerBy(
+          current,
+          stepDurations,
+          elapsedSeconds
+        );
+        timerRef.current = next;
+        return next;
+      });
     }, 250);
     return () => clearInterval(interval);
   }, [steps, timer.complete, timer.running]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state !== 'active' && runningRef.current) {
+      const current = timerRef.current;
+      if (state !== 'active' && current.running) {
+        const paused = { ...current, running: false };
+        timerRef.current = paused;
         setPauseNotice('Paused while the app was in the background.');
         AccessibilityInfo.announceForAccessibility(
           'Practice paused while the app was in the background.'
         );
-        setTimer((current) => ({ ...current, running: false }));
+        setTimer(paused);
+        void onPauseRef.current?.(paused);
       }
     });
-    return () => subscription.remove();
+    return () => {
+      subscription.remove();
+      const current = timerRef.current;
+      if (current.running && !current.complete) {
+        const paused = { ...current, running: false };
+        timerRef.current = paused;
+        void onPauseRef.current?.(paused);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -106,6 +145,47 @@ export function GuidedPractice<TStep extends GuidedStep>({
   }, [onComplete, timer.complete]);
 
   if (!activeStep) return null;
+
+  const start = async () => {
+    if (controlBusy || persistenceBusy) return;
+    setControlBusy(true);
+    try {
+      if (onBeforeStart && !(await onBeforeStart(timerRef.current))) return;
+      setPauseNotice('');
+      const current = timerRef.current;
+      if (current.complete) announcedStepRef.current = null;
+      const next = current.complete
+        ? resetGuidedTimer(true)
+        : { ...current, running: true };
+      timerRef.current = next;
+      setTimer(next);
+    } finally {
+      setControlBusy(false);
+    }
+  };
+
+  const pause = () => {
+    const current = timerRef.current;
+    if (!current.running || current.complete) return;
+    const paused = { ...current, running: false };
+    timerRef.current = paused;
+    setTimer(paused);
+    void onPause?.(paused);
+  };
+
+  const reset = async () => {
+    if (controlBusy || persistenceBusy) return;
+    setControlBusy(true);
+    try {
+      if (onBeforeReset && !(await onBeforeReset(timerRef.current))) return;
+      setPauseNotice('');
+      announcedStepRef.current = null;
+      timerRef.current = IDLE_GUIDED_TIMER;
+      setTimer(IDLE_GUIDED_TIMER);
+    } finally {
+      setControlBusy(false);
+    }
+  };
 
   const remaining = Math.max(0, activeStep.seconds - timer.elapsed);
   const totalSeconds = steps.reduce((total, step) => total + step.seconds, 0);
@@ -168,15 +248,8 @@ export function GuidedPractice<TStep extends GuidedStep>({
                   : startLabel
             }
             icon={timer.complete ? 'rotate-ccw' : 'play'}
-            onPress={() => {
-              setPauseNotice('');
-              if (timer.complete) announcedStepRef.current = null;
-              setTimer((current) =>
-                current.complete
-                  ? resetGuidedTimer(true)
-                  : { ...current, running: true }
-              );
-            }}
+            disabled={controlBusy || persistenceBusy}
+            onPress={() => void start()}
             style={{ flex: 1 }}
           />
         ) : (
@@ -184,9 +257,8 @@ export function GuidedPractice<TStep extends GuidedStep>({
             label="Pause"
             icon="pause"
             variant="secondary"
-            onPress={() =>
-              setTimer((current) => ({ ...current, running: false }))
-            }
+            disabled={controlBusy || persistenceBusy}
+            onPress={pause}
             style={{ flex: 1 }}
           />
         )}
@@ -195,11 +267,8 @@ export function GuidedPractice<TStep extends GuidedStep>({
             label="Reset"
             icon="rotate-ccw"
             variant="quiet"
-            onPress={() => {
-              setPauseNotice('');
-              announcedStepRef.current = null;
-              setTimer(IDLE_GUIDED_TIMER);
-            }}
+            disabled={controlBusy || persistenceBusy}
+            onPress={() => void reset()}
           />
         ) : null}
       </View>
@@ -207,6 +276,12 @@ export function GuidedPractice<TStep extends GuidedStep>({
       {pauseNotice ? (
         <Text accessibilityLiveRegion="polite" style={styles.pauseNotice}>
           {pauseNotice}
+        </Text>
+      ) : null}
+
+      {persistenceMessage ? (
+        <Text accessibilityLiveRegion="polite" style={styles.pauseNotice}>
+          {persistenceMessage}
         </Text>
       ) : null}
 
@@ -219,14 +294,18 @@ export function GuidedPractice<TStep extends GuidedStep>({
               accessibilityLabel={`Go to step ${index + 1}: ${step.label}`}
               selected={timer.stepIndex === index}
               onPress={() => {
-                setPauseNotice('');
-                announcedStepRef.current = null;
-                setTimer({
+                if (controlBusy || persistenceBusy) return;
+                const paused = {
                   stepIndex: index,
                   elapsed: 0,
                   running: false,
                   complete: false,
-                });
+                };
+                setPauseNotice('');
+                announcedStepRef.current = null;
+                timerRef.current = paused;
+                setTimer(paused);
+                void onPause?.(paused);
               }}
             />
           ))}

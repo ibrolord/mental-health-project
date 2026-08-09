@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Brain,
+  Calculator,
   Check,
   Eye,
   ListRestart,
@@ -16,9 +17,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { DismissibleNotice } from '@/components/dismissible-notice';
 import {
   MIND_GAMES,
+  createMathProblem,
   createDigitSequence,
+  scoreMathAnswer,
   scoreColorResponse,
   shuffledVisualGrid,
+  type MathDifficulty,
   type MindGameId,
 } from '@/lib/wellbeing/games';
 import { cn } from '@/lib/utils';
@@ -52,9 +56,9 @@ export default function MindGamesPage() {
             A short task for the attention you have now.
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground">
-            Five local-only exercises for orienting, attention, working memory, and
-            mental flexibility. Scores stay in this page and are never interpreted
-            clinically.
+            Six local-only exercises for orienting, attention, working memory,
+            calculation, and mental flexibility. Scores stay in this page and are
+            never interpreted clinically.
           </p>
         </header>
 
@@ -145,7 +149,8 @@ function GameSurface({ gameId }: { gameId: MindGameId }) {
   if (gameId === 'color-switch') return <ColorSwitch />;
   if (gameId === 'sequence-hold') return <SequenceHold />;
   if (gameId === 'visual-sweep') return <VisualSweep />;
-  return <CategorySprint />;
+  if (gameId === 'category-sprint') return <CategorySprint />;
+  return <NumberFlow />;
 }
 
 const SENSORY_STEPS = [
@@ -497,6 +502,160 @@ function CategorySprint() {
             Time. The count is not a cognitive score; notice whether a short verbal
             task helped you reorient.
           </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const MATH_DIFFICULTIES: Array<{
+  id: MathDifficulty;
+  label: string;
+  detail: string;
+}> = [
+  { id: 'easy', label: 'Easy', detail: 'Add and subtract to 20' },
+  { id: 'steady', label: 'Steady', detail: 'Add, subtract, and multiply' },
+  { id: 'challenge', label: 'Challenge', detail: 'All four operations' },
+];
+
+const INITIAL_NUMBER_FLOW_PROBLEM = createMathProblem('easy', () => 0);
+
+function NumberFlow() {
+  const [difficulty, setDifficulty] = useState<MathDifficulty>('easy');
+  const [problem, setProblem] = useState(INITIAL_NUMBER_FLOW_PROBLEM);
+  const [answer, setAnswer] = useState('');
+  const [round, setRound] = useState(0);
+  const [correct, setCorrect] = useState(0);
+  const [feedback, setFeedback] = useState(
+    'Choose a level and answer at your own pace.'
+  );
+  const complete = round >= 10;
+
+  const restart = (nextDifficulty = difficulty) => {
+    setDifficulty(nextDifficulty);
+    setProblem(createMathProblem(nextDifficulty));
+    setAnswer('');
+    setRound(0);
+    setCorrect(0);
+    setFeedback('Choose a level and answer at your own pace.');
+  };
+
+  const check = () => {
+    if (complete || !answer.trim()) return;
+    const isCorrect = scoreMathAnswer(problem, answer);
+    setCorrect((value) => value + (isCorrect ? 1 : 0));
+    setFeedback(
+      isCorrect
+        ? 'Correct.'
+        : `${problem.left} ${problem.operator} ${problem.right} = ${problem.answer}`
+    );
+    setRound((value) => value + 1);
+    setAnswer('');
+    setProblem(createMathProblem(difficulty));
+  };
+
+  return (
+    <div className="grid min-h-[21rem] place-items-center">
+      <div className="w-full max-w-lg">
+        <div
+          className="grid grid-cols-3 gap-2"
+          role="group"
+          aria-label="Math difficulty"
+        >
+          {MATH_DIFFICULTIES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => restart(option.id)}
+              aria-pressed={difficulty === option.id}
+              className={cn(
+                'rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                difficulty === option.id
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-foreground hover:bg-secondary'
+              )}
+            >
+              <span className="block text-sm font-semibold">{option.label}</span>
+              <span
+                className={cn(
+                  'mt-0.5 hidden text-[0.68rem] leading-tight sm:block',
+                  difficulty === option.id
+                    ? 'text-primary-foreground/70'
+                    : 'text-muted-foreground'
+                )}
+              >
+                {option.detail}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {complete ? (
+          <div className="py-10 text-center">
+            <Calculator
+              className="mx-auto h-8 w-8 text-accent"
+              aria-hidden="true"
+            />
+            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Ten questions complete
+            </p>
+            <p className="mt-3 font-display text-5xl text-foreground">
+              {correct}/10
+            </p>
+            <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
+              A practice result for this round, not a measure of intelligence or
+              cognitive health.
+            </p>
+            <Button className="mt-6" variant="outline" onClick={() => restart()}>
+              <ListRestart className="mr-2 h-4 w-4" aria-hidden="true" />
+              New round
+            </Button>
+          </div>
+        ) : (
+          <div className="py-8 text-center">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Question {round + 1} of 10</span>
+              <span>{correct} correct</span>
+            </div>
+            <div
+              className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary"
+              aria-hidden="true"
+            >
+              <div
+                className="h-full rounded-full bg-accent transition-[width]"
+                style={{ width: `${round * 10}%` }}
+              />
+            </div>
+            <p
+              className="my-9 font-display text-5xl text-foreground"
+              aria-label={`${problem.left} ${problem.operator} ${problem.right}`}
+            >
+              {problem.left} {problem.operator} {problem.right}
+            </p>
+            <div className="mx-auto flex max-w-sm gap-2">
+              <Input
+                value={answer}
+                onChange={(event) => setAnswer(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') check();
+                }}
+                inputMode="numeric"
+                autoComplete="off"
+                aria-label="Math answer"
+                placeholder="Answer"
+                className="text-center text-lg"
+              />
+              <Button onClick={check} disabled={!answer.trim()}>
+                Check
+              </Button>
+            </div>
+            <p
+              className="mt-4 min-h-5 text-sm text-muted-foreground"
+              aria-live="polite"
+            >
+              {feedback}
+            </p>
+          </div>
         )}
       </div>
     </div>

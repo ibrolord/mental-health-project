@@ -456,7 +456,7 @@ describe('campaign attribution taxonomy', () => {
 
     const saveSurfaces = [
       'app/onboarding/page.tsx',
-      'app/tracker/page.tsx',
+      'components/mood/inline-mood-check-in.tsx',
       'app/dashboard/page.tsx',
       'mobile/app/(tabs)/tracker.tsx',
       'mobile/app/(tabs)/index.tsx',
@@ -476,6 +476,7 @@ describe('campaign attribution taxonomy', () => {
       expect(source).toContain(
         ".rpc('save_check_in_with_attribution'"
       );
+      expect(source).toContain('p_expected_user_id: expectedUserId');
       expect(source).not.toContain("from('acquisition_attribution')");
       expect(source).not.toContain('queueActivationAttribution');
     }

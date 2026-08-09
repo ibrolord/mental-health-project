@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, View, Text, ScrollView, TouchableOpacity, StyleSheet, Share } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -17,6 +17,20 @@ import { chooseRandomAffirmation } from '@/lib/affirmations';
 import { loadAffirmationCatalog } from '@/lib/affirmations-client';
 import { GoToActions } from '@/components/GoToActions';
 import { getMoodLabel, MoodGlyph, MoodPicker } from '@/components/MoodPicker';
+import { WeeklyInsight } from '@/components/weekly-insight';
+import {
+  loadWeeklyOwnerSummary,
+  type WeeklyOwnerSummary,
+  type WeeklySummaryRpc,
+} from '@/lib/weekly-insights';
+import { UNIFIED_LIBRARY } from '@/lib/library/content';
+import {
+  composeSavedCollection,
+  parsePracticeProgressRow,
+  type PracticeProgressRow,
+  type SavedLibraryStateRow,
+  type SavedLibraryViewItem,
+} from '@/lib/product-state';
 
 const CHALLENGE_SHARE_URL =
   'https://mhtoolkit.vercel.app/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share';
@@ -34,13 +48,32 @@ export default function DashboardScreen() {
     type: 'success' | 'error';
     message: string;
   } | null>(null);
+  const [weeklySummary, setWeeklySummary] =
+    useState<WeeklyOwnerSummary | null>(null);
+  const [resumeProgress, setResumeProgress] =
+    useState<PracticeProgressRow | null>(null);
+  const [savedItem, setSavedItem] = useState<SavedLibraryViewItem | null>(null);
+  const [moodOwnerKey, setMoodOwnerKey] = useState<string | null>(null);
+  const [weeklyOwnerId, setWeeklyOwnerId] = useState<string | null>(null);
+  const [productOwnerId, setProductOwnerId] = useState<string | null>(null);
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
   const ownerKey = queryValue ? `${queryColumn}:${queryValue}` : null;
+  const ownerKeyRef = useRef(ownerKey);
+  ownerKeyRef.current = ownerKey;
   const canSaveMood = Boolean(queryValue && user?.id);
   useEffect(() => {
-    if (!queryValue) return;
+    const expectedOwnerKey = ownerKey;
+    setMoodOwnerKey(null);
+    setTodayMood(null);
+    setWeekMoods([]);
+    setAffirmation('');
+    setAffirmationBy('');
+    setMoodStatus(null);
+    setSavingMood(false);
+    if (!queryValue || !expectedOwnerKey) return;
+    let active = true;
     const loadData = async () => {
       const todayStart = startOfDay(new Date()).toISOString();
       const sevenDaysAgo = getSevenDayHistoryStart();
@@ -48,24 +81,102 @@ export default function DashboardScreen() {
         supabase.from('moods').select('emoji').eq(queryColumn, queryValue).gte('created_at', todayStart).order('created_at', { ascending: false }).limit(1).single(),
         supabase.from('moods').select('emoji, created_at').eq(queryColumn, queryValue).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }),
       ]);
-      if (moodRes.data) setTodayMood(moodRes.data.emoji as MoodEmoji);
-      if (weekRes.data) setWeekMoods(weekRes.data);
+      if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
+      setTodayMood((moodRes.data?.emoji as MoodEmoji | undefined) ?? null);
+      setWeekMoods(weekRes.data ?? []);
+      setMoodOwnerKey(expectedOwnerKey);
       try {
         const catalog = await loadAffirmationCatalog(
           moodRes.data?.emoji ?? null
         );
         const selected = chooseRandomAffirmation(catalog.records);
-        if (selected) {
+        if (
+          selected &&
+          active &&
+          ownerKeyRef.current === expectedOwnerKey
+        ) {
           setAffirmation(selected.content);
           setAffirmationBy(selected.attribution_name ?? '');
         }
       } catch {
-        setAffirmation('');
-        setAffirmationBy('');
+        if (active && ownerKeyRef.current === expectedOwnerKey) {
+          setAffirmation('');
+          setAffirmationBy('');
+        }
       }
     };
-    loadData();
-  }, [queryColumn, queryValue]);
+    void loadData();
+    return () => {
+      active = false;
+    };
+  }, [ownerKey, queryColumn, queryValue]);
+
+  useEffect(() => {
+    const ownerId = user?.id ?? null;
+    setWeeklyOwnerId(null);
+    setWeeklySummary(null);
+    if (!ownerId) return;
+
+    let active = true;
+    const rpc: WeeklySummaryRpc = async (args) => {
+      const result = await supabase.rpc('weekly_owner_summary', args);
+      return { data: result.data, error: result.error };
+    };
+    void loadWeeklyOwnerSummary(rpc)
+      .then((summary) => {
+        if (active && user?.id === ownerId) {
+          setWeeklySummary(summary);
+          setWeeklyOwnerId(ownerId);
+        }
+      })
+      .catch(() => {
+        if (active && user?.id === ownerId) setWeeklySummary(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    const ownerId = user?.id ?? null;
+    setProductOwnerId(null);
+    setResumeProgress(null);
+    setSavedItem(null);
+    if (!ownerId) return;
+
+    let active = true;
+    void Promise.all([
+      supabase
+        .from('practice_progress')
+        .select('*')
+        .eq('user_id', ownerId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('user_library_items')
+        .select('content_id, media_type, is_saved, priority, updated_at')
+        .eq('user_id', ownerId)
+        .or('is_saved.eq.true,priority.eq.next')
+        .order('updated_at', { ascending: false }),
+    ]).then(([progressResult, libraryResult]) => {
+      if (!active || user?.id !== ownerId) return;
+      setResumeProgress(parsePracticeProgressRow(progressResult.data));
+      setProductOwnerId(ownerId);
+      if (libraryResult.error) return;
+      const collection = composeSavedCollection(
+        UNIFIED_LIBRARY,
+        (libraryResult.data ?? []) as SavedLibraryStateRow[],
+        []
+      );
+      setSavedItem(collection.upNext[0] ?? collection.saved[0] ?? null);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const saveMood = async (mood: MoodEmoji) => {
     if (savingMood) return;
@@ -76,13 +187,17 @@ export default function DashboardScreen() {
       });
       return;
     }
+    const expectedOwnerKey = ownerKey;
+    const expectedUserId = user?.id;
+    if (!expectedOwnerKey || !expectedUserId) return;
     setSavingMood(true);
     setMoodStatus(null);
     try {
-      await saveCheckInWithAttribution({
+      await saveCheckInWithAttribution(expectedUserId, {
         emoji: mood,
         ...getLocalCheckInFields(),
       });
+      if (ownerKeyRef.current !== expectedOwnerKey) return;
       setTodayMood(mood);
       setWeekMoods((current) => [
         ...current.filter(
@@ -92,8 +207,10 @@ export default function DashboardScreen() {
         ),
         { emoji: mood, created_at: new Date().toISOString() },
       ]);
+      setMoodOwnerKey(expectedOwnerKey);
       setMoodStatus({ type: 'success', message: 'Check-in saved.' });
     } catch (error) {
+      if (ownerKeyRef.current !== expectedOwnerKey) return;
       console.warn('Unable to save check-in:', error);
       Alert.alert(
         'Unable to Save Check-In',
@@ -104,7 +221,7 @@ export default function DashboardScreen() {
         message: 'Your check-in was not saved. Please try again.',
       });
     } finally {
-      setSavingMood(false);
+      if (ownerKeyRef.current === expectedOwnerKey) setSavingMood(false);
     }
   };
 
@@ -113,8 +230,15 @@ export default function DashboardScreen() {
     { label: 'One small step', icon: 'repeat' as const, route: '/habits' as const },
     { label: 'Write a note', icon: 'edit-3' as const, route: '/journal' as const },
   ];
+  const visibleTodayMood = moodOwnerKey === ownerKey ? todayMood : null;
+  const visibleWeekMoods = moodOwnerKey === ownerKey ? weekMoods : [];
+  const visibleAffirmation = moodOwnerKey === ownerKey ? affirmation : '';
+  const visibleAffirmationBy = moodOwnerKey === ownerKey ? affirmationBy : '';
+  const visibleWeeklySummary = weeklyOwnerId === user?.id ? weeklySummary : null;
+  const visibleResumeProgress = productOwnerId === user?.id ? resumeProgress : null;
+  const visibleSavedItem = productOwnerId === user?.id ? savedItem : null;
   const challengeDays = new Set(
-    weekMoods.map((entry) => format(new Date(entry.created_at), 'yyyy-MM-dd'))
+    visibleWeekMoods.map((entry) => format(new Date(entry.created_at), 'yyyy-MM-dd'))
   ).size;
 
   const shareChallenge = async () => {
@@ -158,14 +282,14 @@ export default function DashboardScreen() {
             <Text style={s.cardTitle}>Name the feeling</Text>
             <Text style={s.cardSubtitle}>No score. Just a moment to notice.</Text>
           </View>
-          {todayMood ? (
+          {visibleTodayMood ? (
             <View style={s.todayMood}>
-              <MoodGlyph mood={todayMood} size={25} />
+              <MoodGlyph mood={visibleTodayMood} size={25} />
             </View>
           ) : null}
         </View>
         <MoodPicker
-          value={todayMood}
+          value={visibleTodayMood}
           onChange={(mood) => void saveMood(mood)}
           disabled={savingMood || !canSaveMood}
         />
@@ -186,15 +310,15 @@ export default function DashboardScreen() {
       {!lowEnergyMode ? <View style={[s.card, s.weekCard]}>
         <View style={s.cardHeadingRow}>
           <View style={{ flex: 1 }}>
-            <Text style={s.cardTitle}>Your week</Text>
-            <Text style={s.cardSubtitle}>Seven days at a glance</Text>
+            <Text style={s.cardTitle}>Last 7 days</Text>
+            <Text style={s.cardSubtitle}>Your recent check-ins</Text>
           </View>
           <Feather name="calendar" size={18} color={Colors.sage} />
         </View>
         <View style={s.weekRow}>
           {Array.from({ length: 7 }).map((_, i) => {
             const date = subDays(new Date(), 6 - i);
-            const dayMood = getLatestCheckInForDate(weekMoods, date);
+            const dayMood = getLatestCheckInForDate(visibleWeekMoods, date);
             return (
               <View
                 key={i}
@@ -220,7 +344,38 @@ export default function DashboardScreen() {
         </View>
       </View> : null}
 
-      {todayMood && !lowEnergyMode ? (
+      {visibleWeeklySummary && !lowEnergyMode ? (
+        <WeeklyInsight summary={visibleWeeklySummary} />
+      ) : null}
+
+      {!lowEnergyMode && (visibleResumeProgress || visibleSavedItem) ? (
+        <View style={s.continueGrid} accessibilityLabel="Continue and saved">
+          {visibleResumeProgress ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={s.continueCard}
+              onPress={() => router.push(visibleResumeProgress.route)}
+            >
+              <Text style={s.continueEyebrow}>CONTINUE</Text>
+              <Text style={s.continueTitle}>Resume meditation</Text>
+              <Text style={s.continueCopy}>Return to your paused practice.</Text>
+            </TouchableOpacity>
+          ) : null}
+          {visibleSavedItem ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={s.continueCard}
+              onPress={() => router.push('/saved')}
+            >
+              <Text style={s.continueEyebrow}>SAVED FOR LATER</Text>
+              <Text style={s.continueTitle}>{visibleSavedItem.title}</Text>
+              <Text style={s.continueCopy}>Open your saved space.</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
+      {visibleTodayMood && !lowEnergyMode ? (
         <View style={s.challengeCard}>
           <Text style={s.challengeEyebrow}>7-DAY PRIVATE CHECK-IN</Text>
           <Text style={s.challengeTitle}>{Math.min(challengeDays, 7)} of 7 check-in days</Text>
@@ -248,17 +403,17 @@ export default function DashboardScreen() {
       ) : null}
 
       {/* Affirmation */}
-      {affirmation && !lowEnergyMode ? (
+      {visibleAffirmation && !lowEnergyMode ? (
         <View style={[s.card, { backgroundColor: Colors.primaryLight }]}>
           <Feather
-            name={affirmationBy ? 'message-circle' : 'sun'}
+            name={visibleAffirmationBy ? 'message-circle' : 'sun'}
             size={21}
             color={Colors.primary}
             style={{ alignSelf: 'center', marginBottom: 12 }}
           />
-          <Text style={s.affirmationText}>{affirmation}</Text>
+          <Text style={s.affirmationText}>{visibleAffirmation}</Text>
           <Text style={s.affirmationLabel}>
-            {affirmationBy || 'Daily affirmation'}
+            {visibleAffirmationBy || 'Daily affirmation'}
           </Text>
         </View>
       ) : null}
@@ -321,6 +476,27 @@ const s = StyleSheet.create({
   challengeBar: { flex: 1, height: 8, borderRadius: 8, backgroundColor: '#cbd8ce' },
   challengeBarDone: { backgroundColor: '#c65f3d' },
   challengeCopy: { color: '#587169', fontSize: 13, marginTop: 12 },
+  continueGrid: { gap: 10, marginBottom: 16 },
+  continueCard: {
+    backgroundColor: Colors.card,
+    borderColor: Colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+  },
+  continueEyebrow: {
+    color: Colors.accent,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.3,
+  },
+  continueTitle: {
+    color: Colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  continueCopy: { color: Colors.textSecondary, fontSize: 13, marginTop: 3 },
   shareBtn: { alignSelf: 'flex-start', borderWidth: 1, borderColor: '#9db4a6', backgroundColor: '#fff', borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16, marginTop: 16 },
   shareBtnText: { color: '#24483e', fontSize: 14, fontWeight: '600' },
   affirmationText: { fontSize: 18, fontStyle: 'italic', color: Colors.text, textAlign: 'center', marginBottom: 8 },

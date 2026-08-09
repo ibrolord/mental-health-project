@@ -156,6 +156,7 @@ export default function LibraryPage() {
   >(null);
   const stateOwnerIdRef = useRef<string | null>(null);
   const currentOwnerIdRef = useRef(context.user_id);
+  const appliedRequestRef = useRef<string | null>(null);
   const ownerGenerationRef = useRef(0);
   currentOwnerIdRef.current = context.user_id;
   const stateOwnerMatches = Boolean(
@@ -210,6 +211,8 @@ export default function LibraryPage() {
         return;
       }
       if (error) {
+        stateOwnerIdRef.current = ownerId;
+        setItemStates({});
         setFeedback({
           tone: 'error',
           message: 'Your saved library could not be loaded. The catalog is still available.',
@@ -226,6 +229,38 @@ export default function LibraryPage() {
       active = false;
     };
   }, [authLoading, context.user_id]);
+
+  useEffect(() => {
+    if (
+      authLoading ||
+      stateLoading ||
+      !context.user_id ||
+      stateOwnerIdRef.current !== context.user_id
+    ) {
+      return;
+    }
+    const requestedItemId = new URLSearchParams(window.location.search).get(
+      'item'
+    );
+    if (!requestedItemId) return;
+    const requestKey = `${context.user_id}:${requestedItemId}`;
+    if (appliedRequestRef.current === requestKey) return;
+    appliedRequestRef.current = requestKey;
+    const requestedItem = UNIFIED_LIBRARY.find(
+      ({ id }) => id === requestedItemId
+    );
+    if (!requestedItem) {
+      setSelectedItem(null);
+      setFeedback({
+        tone: 'error',
+        message: 'That saved library item is no longer available.',
+      });
+      return;
+    }
+    setSelectedItem(requestedItem);
+    setNoteDraft(scopedItemStates[requestedItem.id]?.custom_notes ?? '');
+    setNoteDirty(false);
+  }, [authLoading, context.user_id, scopedItemStates, stateLoading]);
 
   const savedIds = useMemo(
     () =>

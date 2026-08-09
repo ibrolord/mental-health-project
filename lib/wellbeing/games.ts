@@ -3,7 +3,17 @@ export type MindGameId =
   | 'color-switch'
   | 'sequence-hold'
   | 'visual-sweep'
-  | 'category-sprint';
+  | 'category-sprint'
+  | 'number-flow';
+
+export type MathDifficulty = 'easy' | 'steady' | 'challenge';
+
+export type MathProblem = {
+  left: number;
+  right: number;
+  operator: '+' | '-' | '×' | '÷';
+  answer: number;
+};
 
 export type MindGame = {
   id: MindGameId;
@@ -71,7 +81,78 @@ export const MIND_GAMES: MindGame[] = [
     evidenceNote:
       'Uses a familiar verbal-fluency format for practice. Scores are not interpreted clinically.',
   },
+  {
+    id: 'number-flow',
+    title: 'Number flow',
+    skill: 'Focused calculation',
+    duration: '2–4 min',
+    description:
+      'Work through ten short arithmetic questions at a comfortable difficulty, without a timer.',
+    evidenceIds: ['working-memory-training'],
+    evidenceNote:
+      'A focused arithmetic practice task. Results are not an IQ score, clinical measure, or proof of broader cognitive improvement.',
+  },
 ];
+
+function randomInteger(min: number, max: number, random: () => number): number {
+  const sample = Math.min(0.999999, Math.max(0, random()));
+  return Math.floor(sample * (max - min + 1)) + min;
+}
+
+export function createMathProblem(
+  difficulty: MathDifficulty,
+  random = Math.random
+): MathProblem {
+  const operators =
+    difficulty === 'easy'
+      ? (['+', '-'] as const)
+      : difficulty === 'steady'
+        ? (['+', '-', '×'] as const)
+        : (['+', '-', '×', '÷'] as const);
+  const operator = operators[randomInteger(0, operators.length - 1, random)];
+
+  if (operator === '÷') {
+    const right = randomInteger(2, 12, random);
+    const answer = randomInteger(2, 12, random);
+    return { left: right * answer, right, operator, answer };
+  }
+
+  if (operator === '×') {
+    const maxFactor = difficulty === 'steady' ? 12 : 15;
+    const left = randomInteger(2, maxFactor, random);
+    const right = randomInteger(2, maxFactor, random);
+    return { left, right, operator, answer: left * right };
+  }
+
+  if (difficulty === 'easy' && operator === '+') {
+    const left = randomInteger(1, 19, random);
+    const right = randomInteger(1, 20 - left, random);
+    return { left, right, operator, answer: left + right };
+  }
+
+  const [minOperand, maxOperand] =
+    difficulty === 'steady'
+        ? [10, 60]
+        : difficulty === 'challenge'
+          ? [20, 99]
+          : [1, 20];
+  const first = randomInteger(minOperand, maxOperand, random);
+  const second = randomInteger(minOperand, maxOperand, random);
+  const left = operator === '-' ? Math.max(first, second) : first;
+  const right = operator === '-' ? Math.min(first, second) : second;
+
+  return {
+    left,
+    right,
+    operator,
+    answer: operator === '+' ? left + right : left - right,
+  };
+}
+
+export function scoreMathAnswer(problem: MathProblem, answer: string): boolean {
+  const clean = answer.trim();
+  return /^-?\d+$/.test(clean) && Number(clean) === problem.answer;
+}
 
 export function createDigitSequence(length: number, random = Math.random): string[] {
   return Array.from({ length: Math.max(1, Math.min(9, length)) }, () =>

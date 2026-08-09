@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRootNavigationState, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AppState } from 'react-native';
 import { AuthProvider } from '@/lib/auth-context';
@@ -7,20 +7,37 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { loadNotificationsBundle } from '@/lib/notifications-runtime';
 import type {
   NotificationResponseLike,
+  NotificationScreen,
   NotificationSubscription,
 } from '@/lib/notifications-types';
 import { notificationScreenFromResponse } from '@/lib/notifications-types';
+import {
+  createNotificationNavigationQueue,
+  type NotificationNavigationQueue,
+} from '@/lib/notifications';
 import { AcquisitionCapture } from '@/components/AcquisitionCapture';
 import { AppBackButton } from '@/components/AppBackButton';
+import { recordOperationalEvent } from '@/lib/observability';
 
 export default function RootLayout() {
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
   const notificationResponseRef = useRef<NotificationSubscription | null>(null);
+  const notificationQueueRef = useRef<
+    NotificationNavigationQueue<NotificationScreen> | null
+  >(null);
+  const navigationReadyRef = useRef(Boolean(rootNavigationState?.key));
+  navigationReadyRef.current = Boolean(rootNavigationState?.key);
+
+  useEffect(() => {
+    const queue = notificationQueueRef.current;
+    queue?.setReady(Boolean(rootNavigationState?.key));
+    if (rootNavigationState?.key) queue?.retry();
+  }, [rootNavigationState?.key]);
 
   useEffect(() => {
     let cancelled = false;
     let pendingTimer: ReturnType<typeof setTimeout> | null = null;
-    let routeTimer: ReturnType<typeof setTimeout> | null = null;
     let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
 
     // Defer past first paint. rAF → setTimeout(0) guarantees we're past the
@@ -38,34 +55,44 @@ export default function RootLayout() {
           return;
         }
         const { Notifications, notificationsHelper } = notificationBundle;
+        const navigationQueue = createNotificationNavigationQueue({
+          navigate: (screen: NotificationScreen) => router.navigate(screen as any),
+          clearResponse: () => Notifications.clearLastNotificationResponseAsync(),
+          onError: (error) => {
+            void recordOperationalEvent('notification_response_failed');
+            console.warn('Notification response navigation is waiting to retry:', error);
+          },
+        });
+        notificationQueueRef.current = navigationQueue;
+        navigationQueue.setReady(navigationReadyRef.current);
 
-        const openNotification = async (
+        const openNotification = (
           response: NotificationResponseLike | null
         ) => {
           if (!response) return;
 
+          void recordOperationalEvent('notification_response_received');
+
           const screen = notificationScreenFromResponse(response);
           if (screen) {
-            if (routeTimer) clearTimeout(routeTimer);
-            // iOS can deliver a response while the app is still transitioning
-            // from background to active. Navigate after that transition settles.
-            routeTimer = setTimeout(() => {
-              routeTimer = null;
-              if (!cancelled) router.navigate(screen as any);
-            }, 250);
+            navigationQueue.enqueue(screen);
+            return;
           }
-          try {
-            await Notifications.clearLastNotificationResponseAsync();
-          } catch (error) {
-            console.warn('Failed to clear notification response:', error);
-          }
+
+          // An invalid or obsolete destination cannot be opened. Clear only
+          // this no-op response so it cannot be reconciled forever.
+          void Notifications.clearLastNotificationResponseAsync().catch((error) => {
+            void recordOperationalEvent('notification_response_failed');
+            console.warn('Failed to clear invalid notification response:', error);
+          });
         };
 
         const reconcileLastNotificationResponse = async () => {
           try {
             const last = await Notifications.getLastNotificationResponseAsync();
-            await openNotification(last);
+            openNotification(last);
           } catch (e) {
+            void recordOperationalEvent('notification_response_failed');
             console.warn('Failed to read last notification response:', e);
           }
         };
@@ -89,6 +116,7 @@ export default function RootLayout() {
         // listener callback. Re-check the native response when it becomes active.
         appStateSubscription = AppState.addEventListener('change', (state) => {
           if (state === 'active') {
+            navigationQueue.retry();
             void reconcileLastNotificationResponse();
           }
         });
@@ -110,8 +138,9 @@ export default function RootLayout() {
       cancelled = true;
       cancelAnimationFrame(raf);
       if (pendingTimer) clearTimeout(pendingTimer);
-      if (routeTimer) clearTimeout(routeTimer);
       appStateSubscription?.remove();
+      notificationQueueRef.current?.dispose();
+      notificationQueueRef.current = null;
       notificationResponseRef.current?.remove();
       notificationResponseRef.current = null;
     };
@@ -137,6 +166,8 @@ export default function RootLayout() {
           <Stack.Screen name="goals" options={stackScreenOptions('Life Organizer')} />
           <Stack.Screen name="habits" options={stackScreenOptions('Habit Tracker')} />
           <Stack.Screen name="journal" options={stackScreenOptions('Private Journal')} />
+          <Stack.Screen name="reflect" options={stackScreenOptions('Guided Reflection')} />
+          <Stack.Screen name="saved" options={stackScreenOptions('Saved')} />
           <Stack.Screen name="affirmations" options={stackScreenOptions('Affirmations')} />
           <Stack.Screen name="library" options={stackScreenOptions('Library')} />
           <Stack.Screen name="ground" options={stackScreenOptions('Grounding')} />

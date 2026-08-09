@@ -26,6 +26,8 @@ type Route =
   | '/yoga'
   | '/mind-games'
   | '/journal'
+  | '/reflect'
+  | '/saved'
   | '/affirmations'
   | '/library'
   | '/partner'
@@ -107,6 +109,12 @@ const GROUPS: {
         route: '/mind-games',
       },
       {
+        label: 'Guided reflection',
+        description: 'Structured private prompts',
+        icon: 'book-open',
+        route: '/reflect',
+      },
+      {
         label: 'Private journal',
         description: 'Freeform and guided notes',
         icon: 'edit-3',
@@ -130,6 +138,12 @@ const GROUPS: {
         description: 'Books, talks, and real stories',
         icon: 'book-open',
         route: '/library',
+      },
+      {
+        label: 'Saved',
+        description: 'Resources and important markers',
+        icon: 'bookmark',
+        route: '/saved',
       },
       {
         label: 'Accountability',

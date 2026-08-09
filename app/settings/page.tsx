@@ -12,6 +12,7 @@ import { hasAiDataSharingConsent, resetAiDataSharingConsent } from '@/lib/ai-con
 import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
 import { clearFullContextPreference } from '@/lib/ai/full-context-preference';
 import { clearGoToActions } from '@/lib/go-to-actions-storage';
+import { clearWebReflectionDraft } from '@/lib/reflection-draft-storage';
 import { PushNotificationSettings } from '@/components/push-notification-settings';
 import { PrivacyActivity } from '@/components/privacy-activity';
 import { VisitBriefBuilder } from '@/components/visit-brief-builder';
@@ -30,6 +31,10 @@ export default function SettingsPage() {
       () => resetAiDataSharingConsent(ownerKey),
       () => clearFullContextPreference(ownerKey),
       () => clearGoToActions(ownerKey),
+      () => {
+        if (user) clearWebReflectionDraft(user.id);
+        return true;
+      },
     ].map((operation) => {
       try {
         return operation();
@@ -45,11 +50,21 @@ export default function SettingsPage() {
   }, [consentSubjectId]);
 
   const handleExportData = async () => {
-    if (!query) return;
+    const expectedOwnerId = user?.id;
+    if (!query || !expectedOwnerId) return;
 
     try {
       setLoading(true);
-      const exportData = await apiRequest('/api/data/export', {});
+      const { data: current, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!current.session || current.session.user.id !== expectedOwnerId) {
+        throw new Error('The profile changed before export.');
+      }
+      const exportData = await apiRequest(
+        '/api/data/export',
+        { expectedUserId: expectedOwnerId },
+        { accessToken: current.session.access_token }
+      );
 
       // Create JSON file
       const dataStr = JSON.stringify(exportData, null, 2);
@@ -71,7 +86,8 @@ export default function SettingsPage() {
   };
 
   const handleDeleteAllData = async () => {
-    if (!query) return;
+    const expectedOwnerId = user?.id;
+    if (!query || !expectedOwnerId) return;
 
     const confirmed = confirm(
       'Are you sure you want to delete ALL your data? This action cannot be undone.\n\n' +
@@ -94,7 +110,16 @@ export default function SettingsPage() {
     try {
       setLoading(true);
 
-      const result = await apiRequest('/api/data/delete', {});
+      const { data: current, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!current.session || current.session.user.id !== expectedOwnerId) {
+        throw new Error('The profile changed before deletion.');
+      }
+      const result = await apiRequest(
+        '/api/data/delete',
+        { expectedUserId: expectedOwnerId },
+        { accessToken: current.session.access_token }
+      );
       if (!result?.deleted) {
         throw new Error(result?.error || 'Deletion failed');
       }
@@ -117,6 +142,7 @@ export default function SettingsPage() {
 
   const handleDeleteAccount = async () => {
     if (isAnonymous || !user) return;
+    const expectedOwnerId = user.id;
 
     const confirmed = confirm(
       'Are you sure you want to delete your account?\n\n' +
@@ -137,15 +163,24 @@ export default function SettingsPage() {
     try {
       setLoading(true);
 
-      const result = await apiRequest('/api/account/delete', {});
+      const { data: current, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!current.session || current.session.user.id !== expectedOwnerId) {
+        throw new Error('The account changed before deletion.');
+      }
+      const result = await apiRequest(
+        '/api/account/delete',
+        { expectedUserId: expectedOwnerId },
+        { accessToken: current.session.access_token }
+      );
       if (!result?.deleted) {
         throw new Error(result?.error || 'Failed to delete account');
       }
 
       const localCleanupComplete = clearLocalPrivacyState(consentSubjectId);
       const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
-      const { data: clearedSession, error: sessionError } = await supabase.auth.getSession();
-      if (signOutError || sessionError || clearedSession.session) {
+      const { data: clearedSession, error: clearSessionError } = await supabase.auth.getSession();
+      if (signOutError || clearSessionError || clearedSession.session) {
         throw new Error(
           'Your account was deleted, but this browser session could not be cleared. Close this tab and contact support before continuing.'
         );

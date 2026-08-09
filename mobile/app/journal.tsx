@@ -54,6 +54,7 @@ export default function JournalScreen() {
     mediaType?: string | string[];
     book?: string | string[];
     bookTitle?: string | string[];
+    entry?: string | string[];
   }>();
   const { context, authLoading } = useDataContext();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -67,10 +68,14 @@ export default function JournalScreen() {
   const [error, setError] = useState('');
   const [loadedOwnerId, setLoadedOwnerId] = useState<string | null>(null);
   const [draftOwnerId, setDraftOwnerId] = useState<string | null>(null);
+  const [highlightedEntryId, setHighlightedEntryId] = useState<string | null>(
+    null
+  );
   const [quoteStorySchemaReady, setQuoteStorySchemaReady] = useState<
     boolean | null
   >(null);
   const appliedLinkRef = useRef('');
+  const appliedEntryRef = useRef('');
   const ownerIdentityRef = useRef<{ userId: string | null } | null>(null);
   const currentOwnerIdRef = useRef(context.user_id);
   const ownerGenerationRef = useRef(0);
@@ -113,6 +118,8 @@ export default function JournalScreen() {
     setError('');
     setSaving(false);
     appliedLinkRef.current = '';
+    appliedEntryRef.current = '';
+    setHighlightedEntryId(null);
   }, [context.user_id]);
 
   useEffect(() => {
@@ -215,6 +222,24 @@ export default function JournalScreen() {
     };
   }, [authLoading, context.user_id]);
 
+  useEffect(() => {
+    if (authLoading || loading || !context.user_id) return;
+    const entryId = firstParam(params.entry);
+    if (!entryId) return;
+    const requestIdentity = `${context.user_id}:${entryId}`;
+    if (appliedEntryRef.current === requestIdentity) return;
+    appliedEntryRef.current = requestIdentity;
+    if (!ownerEntries.some(({ id }) => id === entryId)) {
+      setHighlightedEntryId(null);
+      setError('That journal entry is no longer available.');
+      return;
+    }
+    setSearch('');
+    setFilter('all');
+    setEditorOpen(false);
+    setHighlightedEntryId(entryId);
+  }, [authLoading, context.user_id, loading, ownerEntries, params.entry]);
+
   const visibleEntries = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return ownerEntries.filter((entry) => {
@@ -238,6 +263,14 @@ export default function JournalScreen() {
       ].some((value) => value.toLocaleLowerCase().includes(query));
     });
   }, [filter, ownerEntries, search]);
+  const displayedEntries = useMemo(() => {
+    if (!highlightedEntryId) return visibleEntries;
+    return [...visibleEntries].sort((a, b) => {
+      if (a.id === highlightedEntryId) return -1;
+      if (b.id === highlightedEntryId) return 1;
+      return 0;
+    });
+  }, [highlightedEntryId, visibleEntries]);
 
   const resetEditor = () => {
     setDraft(emptyJournalDraft());
@@ -592,8 +625,14 @@ export default function JournalScreen() {
           </Text>
         </View>
       ) : (
-        visibleEntries.map((entry) => (
-          <View key={entry.id} style={s.entryCard}>
+        displayedEntries.map((entry) => (
+          <View
+            key={entry.id}
+            style={[
+              s.entryCard,
+              highlightedEntryId === entry.id && s.entryCardHighlighted,
+            ]}
+          >
             <View style={s.entryMeta}>
               <Text style={s.entryDate}>{format(new Date(entry.created_at), 'MMM d, yyyy')}</Text>
               {entry.is_favorite ? <Text style={s.heart}>♥</Text> : null}
@@ -779,6 +818,10 @@ const s = StyleSheet.create({
     borderColor: Colors.border,
     padding: 17,
     marginTop: 12,
+  },
+  entryCardHighlighted: {
+    borderColor: Colors.primary,
+    borderWidth: 2,
   },
   entryMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   entryDate: { color: Colors.textSecondary, fontSize: 11 },
