@@ -1,13 +1,34 @@
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
+import {
+  validateSocialAuthDashboardEvidence,
+} from './lib/social-auth-evidence.mjs';
 
 const MOBILE_REDIRECT = 'mhtoolkit://auth/callback';
 const WEB_CALLBACK = 'https://mhtoolkit.vercel.app/auth/callback';
 const MOBILE_CONFIRMATION = 'https://mhtoolkit.vercel.app/auth/mobile-confirmed';
 const IOS_BUNDLE_ID = 'com.mhtoolkit.app';
 const REQUEST_TIMEOUT_MS = 10_000;
-const publicOnly = process.argv.includes('--public-only');
 const failures = [];
+
+function parseArgs(argv) {
+  const values = {};
+  for (let index = 0; index < argv.length; index += 1) {
+    const key = argv[index];
+    if (!key.startsWith('--')) continue;
+    const value = argv[index + 1];
+    if (!value || value.startsWith('--')) {
+      values[key.slice(2)] = true;
+      continue;
+    }
+    values[key.slice(2)] = value;
+    index += 1;
+  }
+  return values;
+}
+
+const args = parseArgs(process.argv.slice(2));
+const publicOnly = Boolean(args['public-only']);
 
 function report(ok, message) {
   console.log(`${ok ? 'PASS' : 'BLOCKED'} ${message}`);
@@ -57,6 +78,24 @@ function splitConfigList(value) {
   return typeof value === 'string'
     ? value.split(',').map((item) => item.trim()).filter(Boolean)
     : [];
+}
+
+function reportManagementChecks(checks) {
+  report(checks.redirectMobile, `redirect allowlist includes ${MOBILE_REDIRECT}`);
+  report(checks.redirectWeb, `redirect allowlist includes ${WEB_CALLBACK}`);
+  report(
+    checks.redirectConfirmation,
+    `redirect allowlist includes ${MOBILE_CONFIRMATION}`
+  );
+  report(
+    checks.manualLinking,
+    'manual identity linking is enabled for anonymous-profile upgrades'
+  );
+  report(
+    checks.appleNativeAudience,
+    `Apple client IDs accept native audience ${IOS_BUNDLE_ID}`
+  );
+  report(checks.googleClientIdConfigured, 'Google OAuth client ID is configured');
 }
 
 const fileEnv = await readOptionalEnv(resolve('.env.local'));
@@ -112,11 +151,17 @@ if (supabaseUrl && anonKey) {
 if (publicOnly) {
   console.log('SKIP management-only redirect, client ID, and identity-linking checks');
 } else {
-  const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
-  report(
-    Boolean(accessToken),
-    'SUPABASE_ACCESS_TOKEN is available for management-only auth checks'
-  );
+  const accessToken =
+    process.env.SUPABASE_ACCESS_TOKEN ?? fileEnv.SUPABASE_ACCESS_TOKEN;
+  const evidenceArgument =
+    args['dashboard-evidence'] ??
+    process.env.SUPABASE_AUTH_DASHBOARD_EVIDENCE ??
+    fileEnv.SUPABASE_AUTH_DASHBOARD_EVIDENCE;
+  const evidencePath = evidenceArgument
+    ? (isAbsolute(evidenceArgument)
+        ? evidenceArgument
+        : resolve(evidenceArgument))
+    : '';
 
   if (accessToken && supabaseUrl) {
     try {
@@ -127,38 +172,48 @@ if (publicOnly) {
       );
       const redirects = splitConfigList(config.uri_allow_list);
       const appleClientIds = splitConfigList(config.external_apple_client_id);
-
-      report(
-        redirects.includes(MOBILE_REDIRECT),
-        `redirect allowlist includes ${MOBILE_REDIRECT}`
-      );
-      report(
-        redirects.includes(WEB_CALLBACK),
-        `redirect allowlist includes ${WEB_CALLBACK}`
-      );
-      report(
-        redirects.some((redirect) => redirect.startsWith(MOBILE_CONFIRMATION)),
-        `redirect allowlist includes ${MOBILE_CONFIRMATION}`
-      );
-      report(
-        config.security_manual_linking_enabled === true,
-        'manual identity linking is enabled for anonymous-profile upgrades'
-      );
-      report(
-        appleClientIds.includes(IOS_BUNDLE_ID),
-        `Apple client IDs accept native audience ${IOS_BUNDLE_ID}`
-      );
-      report(
-        typeof config.external_google_client_id === 'string' &&
+      report(true, 'scoped Supabase management credential was accepted');
+      reportManagementChecks({
+        redirectMobile: redirects.includes(MOBILE_REDIRECT),
+        redirectWeb: redirects.includes(WEB_CALLBACK),
+        redirectConfirmation: redirects.some((redirect) =>
+          redirect.startsWith(MOBILE_CONFIRMATION)
+        ),
+        manualLinking: config.security_manual_linking_enabled === true,
+        appleNativeAudience: appleClientIds.includes(IOS_BUNDLE_ID),
+        googleClientIdConfigured:
+          typeof config.external_google_client_id === 'string' &&
           config.external_google_client_id.trim().length > 0,
-        'Google OAuth client ID is configured'
-      );
+      });
     } catch (error) {
       report(
         false,
         `Supabase management auth settings are reachable (${error.message})`
       );
     }
+  } else if (evidencePath && supabaseUrl) {
+    try {
+      const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
+      const evidence = JSON.parse(await readFile(evidencePath, 'utf8'));
+      const evidenceErrors = validateSocialAuthDashboardEvidence(evidence, {
+        projectRef,
+      });
+      report(
+        evidenceErrors.length === 0,
+        evidenceErrors.join(' ') ||
+          'fresh Supabase dashboard evidence matches the production project'
+      );
+      if (evidenceErrors.length === 0) {
+        reportManagementChecks(evidence.checks);
+      }
+    } catch (error) {
+      report(false, `Supabase dashboard evidence is readable (${error.message})`);
+    }
+  } else {
+    report(
+      false,
+      'Provide a scoped Supabase OAuth credential with auth:read or --dashboard-evidence with a fresh ignored attestation.'
+    );
   }
 }
 

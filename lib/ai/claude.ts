@@ -65,7 +65,10 @@ export async function chat(messages: Message[], userContext?: UserContext): Prom
     const textContent = response.content.find((c) => c.type === 'text');
     return textContent && 'text' in textContent ? textContent.text : '';
   } catch (error) {
-    console.error('Error calling Claude API:', error);
+    console.error(
+      'Claude API error:',
+      error instanceof Error ? error.name : 'UnknownError'
+    );
     throw new Error('Failed to get AI response');
   }
 }

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-08-08.1",
+  "checklistVersion": "2026-08-09.1",
   "platform": "ios",
-  "expectedInventory": { "routes": 28, "routeChecks": 534, "workflows": 95, "total": 629 },
+  "expectedInventory": { "routes": 28, "routeChecks": 543, "workflows": 102, "total": 645 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -34,6 +34,13 @@
       "data.safety-plan": { "identityRequirements": ["saved-anonymous"] },
       "data.staying-well": { "identityRequirements": ["saved-anonymous"] },
       "data.sleep-diary": { "identityRequirements": ["saved-anonymous"] },
+      "health.permission-allow": { "identityRequirements": ["saved-anonymous"] },
+      "health.permission-partial-deny": { "identityRequirements": ["saved-anonymous"] },
+      "health.permission-revoked": { "identityRequirements": ["saved-anonymous"] },
+      "health.data-states": { "identityRequirements": ["saved-anonymous"] },
+      "health.privacy-on-device": { "identityRequirements": ["saved-anonymous"] },
+      "health.owner-isolation": { "identityRequirements": ["saved-anonymous", "email-owner"] },
+      "health.older-ios": { "identityRequirements": ["saved-anonymous"] },
       "data.go-to-owner-isolation": { "identityRequirements": ["saved-anonymous", "email-owner"] },
       "safety.offline-plan": { "identityRequirements": ["saved-anonymous", "email-owner"] },
       "ai.context": { "identityRequirements": ["email-owner"] },
@@ -116,7 +123,7 @@
       "source": "app/(tabs)/tracker.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["open-close-entry", "five-mood-options", "details-collapse", "emotion-options", "custom-emotion", "suggested-action", "note", "save", "save-double-tap", "history-collapse", "all-filter", "tag-filter", "refresh-after-save", "sleep-open-close", "sleep-wake-date", "sleep-five-times", "sleep-awakenings", "sleep-awake-minutes", "sleep-nap-minutes", "sleep-notes", "sleep-save", "sleep-delete"]
+      "controls": ["open-close-entry", "five-mood-options", "details-collapse", "emotion-options", "custom-emotion", "suggested-action", "note", "save", "save-double-tap", "history-collapse", "all-filter", "tag-filter", "refresh-after-save", "health-collapse", "health-settings-link", "health-refresh", "sleep-open-close", "sleep-wake-date", "sleep-five-times", "sleep-awakenings", "sleep-awake-minutes", "sleep-nap-minutes", "sleep-notes", "sleep-save", "sleep-delete"]
     },
     {
       "id": "ai-chat",
@@ -124,7 +131,7 @@
       "source": "app/(tabs)/chat.tsx",
       "kind": "tab",
       "identityRequirements": ["email-owner"],
-      "controls": ["voice", "grounding", "resources", "context-collapse", "full-context", "individual-context-toggles", "prompt-chips", "report-response", "save-response", "message-input", "send", "send-double-tap", "consent-accept", "consent-decline"]
+      "controls": ["voice", "grounding", "resources", "context-collapse", "full-context", "individual-context-toggles", "health-summary-toggle", "health-share-preview", "health-share-once", "health-share-cancel", "prompt-chips", "report-response", "save-response", "message-input", "send", "send-double-tap", "consent-accept", "consent-decline"]
     },
     {
       "id": "assessments-list",
@@ -308,7 +315,7 @@
       "source": "app/settings.tsx",
       "kind": "stack",
       "identityRequirements": ["email-owner"],
-      "controls": ["create-account", "finish-account", "sign-in", "sign-out", "reminders", "reminder-times", "test-reminder", "permission-denied-open-settings", "export", "revoke-ai-consent", "privacy", "visit-brief-collapse", "visit-brief-section-toggles", "visit-brief-safety-opt-in", "visit-brief-exact-preview", "visit-brief-share", "privacy-activity-collapse", "privacy-activity-refresh", "email-support", "support-page", "delete-saved-data", "delete-account"]
+      "controls": ["create-account", "finish-account", "sign-in", "sign-out", "reminders", "reminder-times", "test-reminder", "permission-denied-open-settings", "health-setup", "health-disable", "export", "revoke-ai-consent", "privacy", "visit-brief-collapse", "visit-brief-section-toggles", "visit-brief-safety-opt-in", "visit-brief-exact-preview", "visit-brief-share", "privacy-activity-collapse", "privacy-activity-refresh", "email-support", "support-page", "delete-saved-data", "delete-account"]
     },
     {
       "id": "support",
@@ -368,6 +375,13 @@
     { "id": "data.safety-plan", "area": "safety", "kind": "manual", "title": "All six Safety Plan parts save, update, delete, and remain owner-only without inferred content" },
     { "id": "data.staying-well", "area": "data", "kind": "manual", "title": "Staying Well items create, validate, update, delete, and persist without clinical claims" },
     { "id": "data.sleep-diary", "area": "data", "kind": "manual", "title": "Sleep diary saves the complete factual timeline, validates ordering, upserts one entry per wake date, and deletes cleanly" },
+    { "id": "health.permission-allow", "area": "health", "kind": "manual", "title": "Apple Health opt-in requests only the six disclosed read categories and succeeds with permitted data" },
+    { "id": "health.permission-partial-deny", "area": "health", "kind": "manual", "title": "Partial and full read denial complete without a crash, false granted claim, or blocked mood tracking" },
+    { "id": "health.permission-revoked", "area": "health", "kind": "manual", "title": "Revoking Health permissions later yields a private empty or recoverable state while mood tracking remains usable" },
+    { "id": "health.data-states", "area": "health", "kind": "manual", "title": "Loading, empty, populated, refresh, collapse, background, relaunch, and malformed-sample states remain stable" },
+    { "id": "health.privacy-on-device", "area": "privacy", "kind": "manual", "title": "Raw Health samples never leave the device; the bounded aggregate reaches AI only after a per-request preview and never enters persistence, partners, analytics, advertising, logs, or backups" },
+    { "id": "health.owner-isolation", "area": "privacy", "kind": "manual", "title": "The local Apple Health display preference is owner-scoped and clears on saved-data deletion without persisting samples" },
+    { "id": "health.older-ios", "area": "health", "kind": "manual", "title": "Older supported iOS versions omit unavailable State of Mind access while all available Health categories remain usable" },
     { "id": "data.go-to-owner-isolation", "area": "privacy", "kind": "manual", "title": "Two distinct owners keep separate go-to actions and cue text through switches and relaunches without cross-owner display" },
     { "id": "safety.offline-plan", "area": "safety", "kind": "manual", "title": "Encrypted per-owner Safety Plan cache is read-only offline, survives relaunch, and clears on owner change or deletion" },
     { "id": "data.focus-clock", "area": "data", "kind": "manual", "title": "Focus clock remains accurate through backgrounding, pause, resume, stop, and completion" },

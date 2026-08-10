@@ -8,7 +8,22 @@ const messageSchema = z.object({
   content: boundedText(4_000),
 }).strict();
 
+const healthWindowSchema = (maxCoverageDays: number) => z.object({
+  coverageDays: z.number().int().min(0).max(maxCoverageDays),
+  averageSteps: z.number().int().min(0).max(200_000).nullable(),
+  averageSleepMinutes: z.number().int().min(0).max(1_440).nullable(),
+  exerciseMinutes: z.number().int().min(0).max(maxCoverageDays * 1_440),
+  mindfulMinutes: z.number().int().min(0).max(maxCoverageDays * 1_440),
+  workoutCount: z.number().int().min(0).max(maxCoverageDays * 100),
+  stateOfMindCount: z.number().int().min(0).max(maxCoverageDays * 100),
+}).strict();
+
 const userContextSchema = z.object({
+  appleHealthSummary: z.object({
+    sevenDay: healthWindowSchema(7),
+    thirtyDay: healthWindowSchema(30),
+    moodComparison: boundedText(240),
+  }).strict().optional(),
   recentMoods: z.array(z.object({
     emoji: boundedText(16),
     created_at: boundedText(64),

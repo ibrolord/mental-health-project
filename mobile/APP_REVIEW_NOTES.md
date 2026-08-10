@@ -1,11 +1,11 @@
-# App Review Notes - Version 1.0.2
+# App Review Notes - Version 1.0.3
 
 Last updated: August 9, 2026
 
 ## Build Under Review
 
-- Version: 1.0.2
-- iOS build: 42
+- Version: 1.0.3
+- iOS build: assigned by EAS Build
 - Bundle ID: `com.mhtoolkit.app`
 - Support URL: https://mhtoolkit.vercel.app/support
 - Support email: bolajiag10@gmail.com
@@ -35,9 +35,37 @@ needed to establish a partnership.
    the user chooses Quiet or leaves Focus Mode.
 7. Open AI Chat. Sending a message first displays the AI data-sharing consent
    flow. Personal context is off by default and can be enabled category by
-   category from the collapsible "Context for this chat" panel.
+   category from the collapsible "Context for this chat" panel. Apple Health is
+   excluded from "Use all my app context." If enabled separately, the App shows
+   the exact derived summary and requires "Share once" before every request.
 8. Open Settings. The user can revoke AI consent, export data, delete saved
    data, delete a permanent account, contact support, and open crisis resources.
+9. On an iPhone with Apple Health available, open Settings and select "Set up
+   Apple Health." The app requests read-only access to steps, exercise minutes,
+   workouts, sleep, mindful sessions, and State of Mind. Return to Mood and
+   expand "Apple Health context" to view permitted 7-day and 30-day summaries.
+   The integration remains usable when access is partial or declined.
+
+## Apple Health Privacy
+
+- Apple Health integration is optional and read-only. MHtoolkit does not write
+  samples to HealthKit.
+- Raw HealthKit samples, dates, source devices, and identifiers remain on the
+  device and are never included in a network request.
+- A user may separately enable an aggregate-only Apple Health summary in AI
+  Chat. The App previews the exact 7-day and 30-day averages/counts and requires
+  "Share once" for every request. The aggregate is processed transiently through
+  the MHtoolkit backend and selected AI provider. The aggregate payload is not
+  persisted to Supabase, included in saved chat payloads, partner sharing,
+  operational events, analytics, advertising, or marketing. An AI response may
+  reflect the summary and is stored only if the user saves the chat or reports
+  that response.
+- This path is fail-closed behind matching mobile and backend release flags. It
+  is enabled in a submitted build only after the production provider's
+  no-training data handling and App Store privacy answers have been verified.
+- The only persisted setting is an account-scoped local boolean indicating
+  whether the person chose to show Apple Health insights in MHtoolkit.
+- HealthKit access can be changed at any time in the Apple Health app.
 
 ## Medical And Safety Boundaries
 
@@ -80,6 +108,9 @@ model-generated answer.
   assessment names and scores, goals and reflections, habit names and streaks,
   journal entries, private library notes, life-planner items, and focus
   sessions.
+- On iOS, a derived Apple Health summary can be added separately. It is never
+  included by the full-context switch and requires a one-time preview and
+  confirmation before every request.
 - Context is off by default, each category has its own toggle, and the current
   toggles are reapplied immediately before every request.
 - AI consent can be revoked from Settings. AI features ask again before sending

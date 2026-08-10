@@ -1,6 +1,6 @@
 # Mobile Release Readiness
 
-Last updated: August 6, 2026
+Last updated: August 9, 2026
 
 This file separates verified source behavior, packaged artifacts, store
 uploads, and public release. A successful build is not a store submission.
@@ -92,6 +92,39 @@ Build 42 artifact:
 - Apple processing observation: no build-42 issue email was present after the
   stated 5-10 minute window; direct TestFlight status remains to be verified.
 
+## iOS 1.0.3 Apple Health update
+
+- [x] Integration is opt-in, read-only, and limited to six disclosed categories.
+- [x] Raw samples are processed in memory and excluded from every network path.
+  A strict aggregate can enter AI context only after a per-request preview and
+  is not persisted to Supabase, partner sharing, analytics, or operational events.
+- [x] Settings and Mood expose owner-scoped setup, disable, collapse, empty,
+  retry, refresh, and populated states without blocking mood tracking.
+- [x] Privacy policy, App Store description, release notes, and review notes
+  describe the same categories and data boundary.
+- [x] Unit tests and TypeScript pass for the integration source.
+- [x] Clean Expo prebuild emits the HealthKit entitlement, read usage string, no
+  write usage string, and no background-delivery entitlement.
+- [x] Native Release simulator build links HealthKit 14.0.2 and Nitro 0.36.5
+  successfully with the legacy React Native architecture.
+- [ ] The 645-row QA checklist is completed against the exact TestFlight build.
+- [ ] Physical iPhone permission, partial-denial, revocation, data-state,
+  per-request AI consent, network minimization, owner-isolation, older-iOS,
+  VoiceOver, and Dynamic Type checks pass.
+- [ ] App Store Connect App Privacy answers declare the optional derived Health
+  aggregate and its app-functionality purpose consistently with the in-app
+  disclosure and privacy policy.
+- [ ] Current Google and Anthropic data-processing and retention settings are
+  verified for the production project before Health summaries are enabled in a
+  submitted build.
+- [ ] `HEALTH_AI_ENABLED=true` is set on the production backend and
+  `EXPO_PUBLIC_HEALTH_AI_ENABLED=true` is baked into iOS only after those
+  provider and App Store privacy gates pass; both default to disabled.
+- [ ] A new signed 1.0.3 artifact is uploaded, processed, selected, and submitted.
+
+This section tracks new source work only. It is not included in the already
+submitted 1.0.2 build 44.
+
 ## Android 1.0.1
 
 - [x] Local Android Hermes export succeeds.
@@ -125,15 +158,19 @@ No Google Play upload has been performed.
 
 ## Dependency Audit
 
-- [x] Root production audit reports zero vulnerabilities.
-- [x] Mobile audit findings trace to one `brace-expansion` advisory cascading
-  through Expo/React Native build tools.
-- [x] The affected 1.x and 2.x copies contain the backported expansion-count
-  and expansion-length guards, and both pass a bounded-expansion probe.
-- [x] The Node build tooling is not embedded in the native Hermes bundle.
-- [ ] Revisit the registry advisory when Expo supports a compatible dependency
-  refresh. Do not force the suggested Expo 57 / React Native 0.86 upgrade into
-  this release.
+- [x] The root `postcss` dependency is patched to `8.5.25`.
+- [x] Mobile audit exceptions and mitigations are recorded in
+  `SECURITY_DEPENDENCY_EXCEPTIONS.md`; they affect build tooling, not the native
+  Hermes runtime bundle.
+- [x] No critical advisory is present in either production dependency audit.
+- [ ] Upgrade the root and mobile `nanoid` override to `3.3.17` after the
+  repository's seven-day package-age gate opens at `2026-08-10T10:39:22Z`,
+  then rerun both audits and remove the temporary exception.
+- [ ] Re-check Metro's transitive `image-size` advisory before every build; no
+  patched release currently exists, so Metro must process trusted repository
+  assets only.
+- [ ] Do not use `npm audit fix --force`; its proposed Expo / React Native
+  changes are incompatible and do not patch `image-size`.
 
 ## Release Decision
 

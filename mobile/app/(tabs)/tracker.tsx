@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
 import { SleepDiary } from '@/components/SleepDiary';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, startOfDay, subDays } from 'date-fns';
 import type { MoodEmoji } from '@/lib/types';
 import { saveCheckInWithAttribution } from '@/lib/acquisition';
 import { getLocalCheckInFields } from '@/lib/check-in';
@@ -47,6 +47,7 @@ import {
   type MoodCheckInDraft,
 } from '@/lib/mood-draft';
 import { moodDraftStorage } from '@/lib/mood-draft-storage';
+import { AppleHealthInsights } from '@/components/AppleHealthInsights';
 
 interface MoodEntry {
   id: string;
@@ -103,15 +104,16 @@ export default function TrackerScreen() {
 
     const loadMoods = async () => {
       setLoading(true);
-      const monthStart = startOfMonth(new Date()).toISOString();
-      const monthEnd = endOfMonth(new Date()).toISOString();
+      const now = new Date();
+      const rangeStart = startOfDay(subDays(now, 29)).toISOString();
+      const rangeEnd = now.toISOString();
 
       let qb = supabase
         .from('moods')
         .select('*')
         .eq(query.column, query.value)
-        .gte('created_at', monthStart)
-        .lte('created_at', monthEnd)
+        .gte('created_at', rangeStart)
+        .lte('created_at', rangeEnd)
         .order('created_at', { ascending: false });
 
       const { data } = await qb;
@@ -727,6 +729,7 @@ export default function TrackerScreen() {
           </View>
         ) : null}
       </AppCard>
+      <AppleHealthInsights ownerId={user?.id ?? null} moods={visibleMoods} />
       <SleepDiary />
     </AppScreen>
   );

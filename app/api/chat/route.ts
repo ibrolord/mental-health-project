@@ -4,6 +4,7 @@ import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
 import { chatRequestSchema } from '@/lib/ai/chat-validation';
 import { createReportTokenIfConfigured, subjectForAuth } from '@/lib/ai/report-token';
 import { readBoundedJson, RequestBodyError } from '@/lib/ai/request-body';
+import { isHealthAiEnabled } from '@/lib/ai/health-ai-gate';
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 
@@ -25,6 +26,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { messages, userContext } = parsed.data;
+    if (userContext?.appleHealthSummary && !isHealthAiEnabled()) {
+      return NextResponse.json(
+        { error: 'Apple Health AI context is not enabled' },
+        { status: 503, headers: corsHeaders() }
+      );
+    }
     const { response, model } = await chat(messages, userContext);
     const report = createReportTokenIfConfigured({
       subject: subjectForAuth(auth),

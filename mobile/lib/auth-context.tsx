@@ -50,6 +50,7 @@ import {
   clearReflectionDraft,
   reflectionDraftStorage,
 } from './reflection-draft-storage';
+import { appleHealthPreference } from './apple-health-preference';
 import {
   ANONYMOUS_PROFILE_DATA_CONFLICT,
   anonymousProfileDataConflict,
@@ -199,6 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [initializationError, setInitializationError] = useState('');
   const [authAttempt, setAuthAttempt] = useState(0);
   const accountDeletionInProgress = useRef(false);
+  const lastOwnerId = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -211,6 +213,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // The authenticated profile can save immediately; the legacy migration
         // is a one-time background task and must not hold the app on its loader.
+        lastOwnerId.current = session.user.id;
         setUser(session.user);
         setLoading(false);
         void migrateLegacyData(session).catch((error) => {
@@ -233,19 +236,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!active) return;
 
       if (session) {
+        lastOwnerId.current = session.user.id;
         setUser(session.user);
         setInitializationError('');
         setLoading(false);
       } else {
         if (accountDeletionInProgress.current) return;
+        const previousOwnerId = lastOwnerId.current;
+        lastOwnerId.current = null;
         setLoading(true);
         setUser(null);
         setInitializationError('');
+        const localCleanup = previousOwnerId
+          ? runDeletedAccountLocalCleanup(
+              [
+                clearStoredAcquisitionAttribution(),
+                resetAiDataSharingConsent(`user_id:${previousOwnerId}`),
+                clearFullContextPreference(`user_id:${previousOwnerId}`),
+                clearGoToActions(`user_id:${previousOwnerId}`),
+                clearContextSelections(`user_id:${previousOwnerId}`),
+                setRemindersEnabled(false),
+                offlineSafetyPlanCache.clear(previousOwnerId),
+                clearReflectionDraft(previousOwnerId),
+                appleHealthPreference.clear(previousOwnerId),
+              ],
+              (error) => console.error('Expired-session local cleanup failed:', error)
+            )
+          : Promise.resolve(true);
         // Avoid calling another auth method from inside the auth callback lock.
         setTimeout(() => {
-          void ensureAnonymousSession()
+          void localCleanup
+            .then((cleanupComplete) => {
+              if (!cleanupComplete) {
+                throw new Error(
+                  'Local reminders or private drafts could not be cleared after this session ended.'
+                );
+              }
+              return ensureAnonymousSession();
+            })
             .then(async (anonymousSession) => {
               if (!active) return;
+              lastOwnerId.current = anonymousSession.user.id;
               setUser(anonymousSession.user);
               setLoading(false);
               void migrateLegacyData(anonymousSession).catch((error) => {
@@ -488,6 +519,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setRemindersEnabled(false),
           offlineSafetyPlanCache.clear(user.id),
           clearReflectionDraft(user.id),
+          appleHealthPreference.clear(user.id),
         ],
         (error) => console.error('Sign-out local cleanup failed:', error)
       );
@@ -522,6 +554,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setRemindersEnabled(false),
             offlineSafetyPlanCache.clear(expectedAnonymousUserId),
             clearReflectionDraft(expectedAnonymousUserId),
+            appleHealthPreference.clear(expectedAnonymousUserId),
           ],
           (error) => console.error('Anonymous-profile local cleanup failed:', error)
         ),
@@ -569,6 +602,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setRemindersEnabled(false),
           offlineSafetyPlanCache.clear(deletedOwnerId),
           clearReflectionDraft(deletedOwnerId),
+          appleHealthPreference.clear(deletedOwnerId),
         ],
         (error) => console.error('Deleted-account local cleanup failed:', error)
       );

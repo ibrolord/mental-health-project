@@ -2,7 +2,7 @@
   "expo": {
     "name": "MHtoolkit",
     "slug": "mhtoolkit",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "mhtoolkit",
@@ -67,6 +67,14 @@
       "./plugins/ios-build-fixes",
       "expo-router",
       "expo-secure-store",
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "MHtoolkit reads the Apple Health categories you choose to show personal summaries. Raw samples stay on your device. A derived summary is sent to an AI provider only when you preview it and choose Share once.",
+          "NSHealthUpdateUsageDescription": false,
+          "background": false
+        }
+      ],
       [
         "expo-notifications",
         {

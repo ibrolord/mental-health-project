@@ -63,6 +63,7 @@ try {
   const { error: moodError } = await client.rpc(
     'save_check_in_with_attribution',
     {
+      p_expected_user_id: testUserId,
       p_emoji: '😐',
       p_note: 'Temporary lifecycle note',
       p_tags: ['lifecycle-test'],

@@ -101,4 +101,41 @@ describe('model router crisis interception', () => {
     expect(geminiChat).toHaveBeenCalledOnce();
     expect(claudeChat).toHaveBeenCalledOnce();
   });
+
+  it('uses Gemini for standard Apple Health reflections when both providers exist', async () => {
+    process.env.GOOGLE_API_KEY = 'configured';
+    process.env.ANTHROPIC_API_KEY = 'configured';
+    geminiChat.mockResolvedValue('A cautious reflection');
+
+    const result = await chat(
+      [{ role: 'user', content: 'Reflect on my recent patterns.' }],
+      {
+        appleHealthSummary: {
+          sevenDay: {
+            coverageDays: 4,
+            averageSteps: 4000,
+            averageSleepMinutes: 420,
+            exerciseMinutes: 80,
+            mindfulMinutes: 15,
+            workoutCount: 2,
+            stateOfMindCount: 1,
+          },
+          thirtyDay: {
+            coverageDays: 20,
+            averageSteps: 3900,
+            averageSleepMinutes: 410,
+            exerciseMinutes: 250,
+            mindfulMinutes: 45,
+            workoutCount: 5,
+            stateOfMindCount: 3,
+          },
+          moodComparison: 'Not enough overlap for a comparison.',
+        },
+      }
+    );
+
+    expect(result.model).toBe('gemini');
+    expect(geminiChat).toHaveBeenCalledOnce();
+    expect(claudeChat).not.toHaveBeenCalled();
+  });
 });

@@ -13,7 +13,7 @@ export default function PrivacyPolicyPage() {
           Privacy Policy
         </h1>
         <p className="text-sm text-muted-foreground mb-8">
-          Effective date: August 8, 2026
+          Effective date: August 9, 2026
         </p>
 
         <p className="text-foreground mb-6 leading-relaxed">
@@ -80,13 +80,28 @@ export default function PrivacyPolicyPage() {
               individual context categories, recent moods, mood notes,
               assessment scores, goals, habits, journal entries, private library
               notes, and related timestamps may be included with that AI request.
-              Every category is off by default.
+              Every category is off by default. On iOS, Apple Health summaries
+              require a separate preview and confirmation for each request.
             </li>
             <li>
               <strong>AI response reports:</strong> If you report an AI response,
               we collect that response, your selected reason, app version, and
               platform. We do not attach the rest of your conversation or your
               optional personalization context to the report.
+            </li>
+            <li>
+              <strong>Apple Health data (iOS only):</strong> If you enable Apple
+              Health insights, the App reads only the categories you choose:
+              steps, exercise minutes, workouts, sleep, mindful sessions, and
+              State of Mind. Raw Apple Health samples, dates, source devices, and
+              identifiers stay on your device. If you explicitly choose Apple
+              Health summary in AI Chat, the App shows the exact derived 7-day and
+              30-day aggregate first and sends it through the MHtoolkit backend to
+              the selected AI provider only after you choose Share once. The
+              aggregate payload is not stored in Supabase, shared with
+              accountability partners, or used for analytics, advertising, or
+              marketing. The AI response may reflect the summary and is stored
+              only if you choose to save that chat or report the response.
             </li>
             <li>
               <strong>Anonymous page view analytics:</strong> Collected via
@@ -124,6 +139,16 @@ export default function PrivacyPolicyPage() {
           </p>
           <ul className="list-disc list-inside text-foreground space-y-2 ml-2">
             <li>Displaying your mood history, trends, and progress.</li>
+            <li>
+              Showing optional, on-device Apple Health context beside your mood
+              check-ins without claiming that a relationship is causal or
+              diagnostic.
+            </li>
+            <li>
+              Generating an optional, non-diagnostic reflection from a derived
+              Apple Health aggregate after you preview and approve that single AI
+              request.
+            </li>
             <li>
               Powering AI chat conversations and generating affirmations after
               you consent to AI data sharing in the App.
@@ -200,9 +225,13 @@ export default function PrivacyPolicyPage() {
             submit, the generated transcript, and only the optional context
             categories you select for that conversation. Journal entries and
             private library notes are not sent unless you select those categories
-            explicitly. We do not intentionally send your email address or
-            account identifiers to AI providers. AI providers process data
-            according to their own data processing terms and privacy policies.
+            explicitly. On iOS, an Apple Health aggregate is never part of the
+            reusable full-context choice: you must preview and confirm it for each
+            request. It includes averages and counts only, not raw samples, dates,
+            source devices, or identifiers. We do not intentionally send your
+            email address or account identifiers to AI providers. AI providers
+            process data according to their own data processing terms and privacy
+            policies.
           </p>
         </section>
 

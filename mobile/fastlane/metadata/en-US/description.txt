@@ -16,6 +16,9 @@ These tools report non-diagnostic symptom ranges. A positive PHQ-9 self-harm res
 MOOD, GOALS, AND HABITS
 Save mood check-ins, view patterns, plan goals using several frameworks, and build or reduce habits with streaks, routines, rewards, and optional accountability.
 
+OPTIONAL APPLE HEALTH CONTEXT
+On iPhone, you can choose to view permitted Apple Health sleep, movement, workout, mindfulness, and State of Mind data beside your mood check-ins. The integration is read-only and raw samples stay on your device. In AI Chat, you can separately preview and share a derived aggregate for one request at a time. The aggregate payload is not saved to Supabase or shared with accountability partners, analytics, advertising, or marketing. An AI response may reflect it and is saved only when you choose to save the chat or report the response.
+
 JOURNAL AND LIFE PLANNING
 Write and organize private journal entries, map dreams and priorities, plan morning, afternoon, and evening routines, and turn selected ideas into goals or habits.
 
@@ -29,5 +32,6 @@ PRIVACY CONTROLS
 - Export or delete saved data
 - Delete a permanent account in the app
 - Accountability partners receive only user-enabled activity counts and fixed-format celebrations, not raw private content
+- Apple Health access is optional and read-only; AI aggregates require confirmation for every request
 
 MHtoolkit supports self-management and reflection. It is not medical care or emergency response.

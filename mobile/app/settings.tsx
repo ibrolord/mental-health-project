@@ -25,6 +25,8 @@ import { clearContextSelections } from '@/lib/chat-context-preference';
 import { clearGoToActions } from '@/lib/go-to-actions-storage';
 import { clearReflectionDraft } from '@/lib/reflection-draft-storage';
 import { supabase } from '@/lib/supabase';
+import { AppleHealthSettingsCard } from '@/components/AppleHealthSettingsCard';
+import { appleHealthPreference } from '@/lib/apple-health-preference';
 
 const HOUR_OPTIONS = [
   { label: '7 AM', value: 7 },
@@ -233,6 +235,7 @@ export default function SettingsScreen() {
                 setRemindersEnabled(false),
                 offlineSafetyPlanCache.clear(expectedOwnerId),
                 clearReflectionDraft(expectedOwnerId),
+                appleHealthPreference.clear(expectedOwnerId),
               ]);
               setDataGeneration((current) => current + 1);
               const cleanupFailed = cleanup.some((item) => item.status === 'rejected');
@@ -406,6 +409,8 @@ export default function SettingsScreen() {
           </Text>
         ) : null}
       </View>
+
+      <AppleHealthSettingsCard ownerId={user?.id ?? null} />
 
       {/* Export */}
       <View style={s.card}>

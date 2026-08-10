@@ -3,6 +3,7 @@ import type { Message } from './claude';
 import { buildContextualPrompt, type UserContext } from './context';
 
 const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash';
+const DEFAULT_GEMINI_HEALTH_MODEL = 'gemini-3.5-flash-lite';
 
 const BASE_SYSTEM_PROMPT = `You are a compassionate self-help support coach. Your role is to:
 
@@ -41,7 +42,9 @@ Keep responses focused and actionable. Ask one question at a time. Match the use
 export async function chat(messages: Message[], userContext?: UserContext): Promise<string> {
   try {
     const genAI = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! });
-    const modelName = process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+    const modelName = userContext?.appleHealthSummary
+      ? process.env.GEMINI_HEALTH_MODEL?.trim() || DEFAULT_GEMINI_HEALTH_MODEL
+      : process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
     const conversation = genAI.chats.create({
       model: modelName,
       config: {
@@ -60,7 +63,10 @@ export async function chat(messages: Message[], userContext?: UserContext): Prom
     if (!response) throw new Error('Gemini returned an empty response');
     return response;
   } catch (error) {
-    console.error('Gemini API error:', error);
+    console.error(
+      'Gemini API error:',
+      error instanceof Error ? error.name : 'UnknownError'
+    );
     throw new Error('Failed to get AI response from Gemini');
   }
 }

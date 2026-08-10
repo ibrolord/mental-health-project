@@ -40,7 +40,7 @@ describe('AI data sharing consent', () => {
     expect(hasAiDataSharingConsent('user_id:owner-a')).toBe(false);
     expect(grantAiDataSharingConsent('user_id:owner-a')).toBe(true);
     expect(hasAiDataSharingConsent('user_id:owner-a')).toBe(true);
-    expect(values.get('mhtoolkit.ai_data_sharing_consent.v3:user_id%3Aowner-a'))
+    expect(values.get('mhtoolkit.ai_data_sharing_consent.v4:user_id%3Aowner-a'))
       .toBe('granted');
     expect(hasAiDataSharingConsent('user_id:owner-b')).toBe(false);
     expect(confirm).not.toHaveBeenCalled();
@@ -55,7 +55,9 @@ describe('AI data sharing consent', () => {
       'utf8'
     );
 
-    expect(source).toContain('mhtoolkit.ai_data_sharing_consent.v3');
+    expect(source).toContain('mhtoolkit.ai_data_sharing_consent.v4');
+    expect(source).toContain('derived Apple Health summary');
+    expect(source).toContain('Raw Health samples are never sent');
     expect(source).toContain('response text to Google Gemini or OpenAI for generated speech');
     expect(source).toContain('device speech service may be used');
   });

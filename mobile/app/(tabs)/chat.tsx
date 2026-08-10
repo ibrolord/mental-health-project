@@ -30,6 +30,14 @@ import {
   ensureAiDataSharingConsent,
   hasAiDataSharingConsent,
 } from '@/lib/ai-consent';
+import { confirmAppleHealthAiShare } from '@/lib/apple-health-ai-consent';
+import {
+  createAppleHealthAiSummary,
+  createAppleHealthOverview,
+  type AppleHealthAiSummary,
+} from '@/lib/apple-health-core';
+import { appleHealthPreference } from '@/lib/apple-health-preference';
+import { loadAppleHealthSnapshot } from '@/lib/apple-health';
 import { apiRequest } from '@/lib/api';
 import { Colors } from '@/lib/constants';
 import {
@@ -75,6 +83,9 @@ const QUICK_PROMPTS = [
   'I need one small plan',
   'I need to talk',
 ];
+const APPLE_HEALTH_AI_ENABLED =
+  process.env.EXPO_PUBLIC_HEALTH_AI_ENABLED === 'true';
+
 export default function ChatScreen() {
   const router = useRouter();
   const { context, query, authLoading } = useDataContext();
@@ -97,6 +108,14 @@ export default function ChatScreen() {
   const [contextExpanded, setContextExpanded] = useState(false);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
   const [contextError, setContextError] = useState('');
+  const [healthSummaryEnabled, setHealthSummaryEnabled] = useState(false);
+  const [healthSummary, setHealthSummary] = useState<AppleHealthAiSummary | null>(
+    null
+  );
+  const [healthStatus, setHealthStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle');
+  const [healthError, setHealthError] = useState('');
   const scrollRef = useRef<ScrollView>(null);
   const requestRef = useRef(false);
   const saveRef = useRef(false);
@@ -137,6 +156,10 @@ export default function ChatScreen() {
     setContextStatus('idle');
     setContextExpanded(false);
     setContextError('');
+    setHealthSummaryEnabled(false);
+    setHealthSummary(null);
+    setHealthStatus('idle');
+    setHealthError('');
     requestRef.current = false;
     saveRef.current = false;
 
@@ -376,6 +399,82 @@ export default function ChatScreen() {
     };
   }, [authLoading, ownerKey, query, selections]);
 
+  useEffect(() => {
+    if (
+      Platform.OS !== 'ios' ||
+      !APPLE_HEALTH_AI_ENABLED ||
+      !healthSummaryEnabled ||
+      !ownerKey ||
+      (selections.moodPattern && contextStatus !== 'ready')
+    ) {
+      setHealthSummary(null);
+      const moodContextFailed =
+        healthSummaryEnabled &&
+        selections.moodPattern &&
+        contextStatus === 'error';
+      setHealthStatus(
+        !healthSummaryEnabled
+          ? 'idle'
+          : moodContextFailed
+            ? 'error'
+            : 'loading'
+      );
+      setHealthError(
+        moodContextFailed
+          ? 'Mood context is unavailable. Turn off Mood pattern or try again.'
+          : ''
+      );
+      return;
+    }
+
+    let active = true;
+    const expectedOwner = ownerKey;
+    setHealthSummary(null);
+    setHealthStatus('loading');
+    setHealthError('');
+
+    void Promise.all([
+      appleHealthPreference.read(expectedOwner),
+      loadAppleHealthSnapshot(),
+    ])
+      .then(([enabled, snapshot]) => {
+        if (!active || ownerRef.current !== expectedOwner) return;
+        if (!enabled) {
+          setHealthStatus('error');
+          setHealthError('Set up Apple Health in Settings first.');
+          return;
+        }
+        const moods = selections.moodPattern
+          ? (userContext?.recentMoods ?? [])
+          : [];
+        const summary = createAppleHealthAiSummary(
+          createAppleHealthOverview(snapshot, moods)
+        );
+        if (summary.thirtyDay.coverageDays === 0) {
+          setHealthStatus('error');
+          setHealthError('No permitted Apple Health data was found.');
+          return;
+        }
+        setHealthSummary(summary);
+        setHealthStatus('ready');
+      })
+      .catch(() => {
+        if (!active || ownerRef.current !== expectedOwner) return;
+        setHealthStatus('error');
+        setHealthError('Apple Health summary could not be loaded.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    contextStatus,
+    healthSummaryEnabled,
+    ownerKey,
+    selections.moodPattern,
+    userContext?.recentMoods,
+  ]);
+
   const setContextSelection = async (
     key: AiContextSelectionKey,
     enabled: boolean
@@ -403,6 +502,41 @@ export default function ChatScreen() {
     ]);
   };
 
+  const setAppleHealthContext = async (enabled: boolean) => {
+    if (
+      !ownerKey ||
+      Platform.OS !== 'ios' ||
+      !APPLE_HEALTH_AI_ENABLED
+    ) return;
+    if (!enabled) {
+      setHealthSummaryEnabled(false);
+      setHealthSummary(null);
+      setHealthStatus('idle');
+      setHealthError('');
+      return;
+    }
+    try {
+      if (!(await ensureAiDataSharingConsent(ownerKey))) return;
+      if (!(await appleHealthPreference.read(ownerKey))) {
+        Alert.alert(
+          'Set up Apple Health first',
+          'Enable read-only Apple Health context in Settings before using a summary in chat.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => router.push('/settings') },
+          ]
+        );
+        return;
+      }
+      setHealthSummaryEnabled(true);
+    } catch {
+      Alert.alert(
+        'Apple Health unavailable',
+        'Apple Health setup could not be checked. Please try again.'
+      );
+    }
+  };
+
   const send = async (text: string) => {
     const trimmed = text.trim();
     if (
@@ -410,12 +544,32 @@ export default function ChatScreen() {
       loading ||
       requestRef.current ||
       saveRef.current ||
-      (hasSelectedAiContext(selections) && contextStatus !== 'ready')
+      (hasSelectedAiContext(selections) && contextStatus !== 'ready') ||
+      (healthSummaryEnabled && healthStatus !== 'ready')
     ) {
       return;
     }
-    if (!ownerKey || !(await ensureAiDataSharingConsent(ownerKey))) return;
     requestRef.current = true;
+    try {
+      if (!ownerKey || !(await ensureAiDataSharingConsent(ownerKey))) {
+        requestRef.current = false;
+        return;
+      }
+      if (
+        healthSummaryEnabled &&
+        (!healthSummary || !(await confirmAppleHealthAiShare(healthSummary)))
+      ) {
+        requestRef.current = false;
+        return;
+      }
+    } catch {
+      requestRef.current = false;
+      Alert.alert(
+        'Could not confirm sharing',
+        'Nothing was sent. Please try again.'
+      );
+      return;
+    }
     const newMessage: Message = { role: 'user', content: trimmed };
     const nextMessages = [...messages, newMessage];
     setMessages(nextMessages);
@@ -423,12 +577,17 @@ export default function ChatScreen() {
     setSaveState('idle');
     setLoading(true);
     try {
+      const selectedContext = selectUserContext(userContext, selections);
+      const requestContext =
+        healthSummaryEnabled && healthSummary
+          ? { ...selectedContext, appleHealthSummary: healthSummary }
+          : selectedContext;
       const response = await apiRequest<ChatApiResponse>('/api/chat', {
         messages: nextMessages.map(({ role, content: value }) => ({
           role,
           content: value,
         })),
-        userContext: selectUserContext(userContext, selections),
+        userContext: requestContext,
       });
       if (typeof response.response !== 'string' || !response.response.trim()) {
         throw new Error('AI response was empty');
@@ -523,15 +682,16 @@ export default function ChatScreen() {
     ]);
   };
 
-  const contextSelected = hasSelectedAiContext(selections);
   const allContext = CONTEXT_ORDER.every((key) => selections[key]);
   const contextSummary =
     contextStatus === 'ready' ? summarizeUserContext(userContext ?? undefined) : [];
-  const sendDisabled =
-    !input.trim() ||
+  if (healthStatus === 'ready') contextSummary.push('Apple Health summary');
+  const interactionDisabled =
     loading ||
     saveState === 'saving' ||
-    (contextSelected && contextStatus !== 'ready');
+    (hasSelectedAiContext(selections) && contextStatus !== 'ready') ||
+    (healthSummaryEnabled && healthStatus !== 'ready');
+  const sendDisabled = !input.trim() || interactionDisabled;
 
   return (
     <KeyboardAvoidingView
@@ -607,7 +767,7 @@ export default function ChatScreen() {
                   Use all my app context
                 </Text>
                 <Text style={styles.contextOptionDescription}>
-                  You can still turn individual items off.
+                  You can still turn individual items off. Apple Health stays separate.
                 </Text>
               </View>
               <Switch
@@ -617,6 +777,38 @@ export default function ChatScreen() {
                 thumbColor="#fffef8"
               />
             </View>
+            {Platform.OS === 'ios' && APPLE_HEALTH_AI_ENABLED ? (
+              <View style={styles.contextOption}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.contextOptionTitle}>
+                    Apple Health summary
+                  </Text>
+                  <Text style={styles.contextOptionDescription}>
+                    Averages only. Raw samples stay on-device. Confirm every send.
+                  </Text>
+                  {healthSummaryEnabled && healthStatus !== 'ready' ? (
+                    <Text
+                      accessibilityRole={healthStatus === 'error' ? 'alert' : undefined}
+                      style={[
+                        styles.contextOptionDescription,
+                        healthStatus === 'error' && { color: Colors.danger },
+                      ]}
+                    >
+                      {healthStatus === 'loading'
+                        ? 'Preparing summary...'
+                        : healthError}
+                    </Text>
+                  ) : null}
+                </View>
+                <Switch
+                  accessibilityLabel="Include Apple Health summary"
+                  value={healthSummaryEnabled}
+                  onValueChange={(next) => void setAppleHealthContext(next)}
+                  trackColor={{ false: Colors.border, true: Colors.sage }}
+                  thumbColor="#fffef8"
+                />
+              </View>
+            ) : null}
             {CONTEXT_ORDER.map((key) => {
               const option = AI_CONTEXT_OPTIONS[key];
               return (
@@ -687,13 +879,27 @@ export default function ChatScreen() {
                 <Pressable
                   key={prompt}
                   accessibilityRole="button"
-                  disabled={contextSelected && contextStatus !== 'ready'}
+                  disabled={interactionDisabled}
                   onPress={() => void send(prompt)}
                   style={styles.prompt}
                 >
                   <Text style={styles.promptText}>{prompt}</Text>
                 </Pressable>
               ))}
+              {healthSummaryEnabled && healthStatus === 'ready' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={interactionDisabled}
+                  onPress={() =>
+                    void send('Reflect on my recent Apple Health patterns.')
+                  }
+                  style={styles.prompt}
+                >
+                  <Text style={styles.promptText}>
+                    Reflect on my Health patterns
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
         ) : (

@@ -101,6 +101,8 @@ export async function chat(messages: Message[], userContext?: UserContext): Prom
   const primary: ModelProvider =
     prefersClaude && hasProviderCredential('claude')
       ? 'claude'
+      : userContext?.appleHealthSummary && hasProviderCredential('gemini')
+        ? 'gemini'
       : configuredPrimaryProvider();
   const fallback: ModelProvider = primary === 'claude' ? 'gemini' : 'claude';
   

@@ -82,6 +82,45 @@ describe('chatRequestSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts only the bounded Apple Health aggregate shape', () => {
+    const appleHealthSummary = {
+      sevenDay: {
+        coverageDays: 5,
+        averageSteps: 4200,
+        averageSleepMinutes: 410,
+        exerciseMinutes: 90,
+        mindfulMinutes: 25,
+        workoutCount: 2,
+        stateOfMindCount: 3,
+      },
+      thirtyDay: {
+        coverageDays: 21,
+        averageSteps: 3900,
+        averageSleepMinutes: null,
+        exerciseMinutes: 280,
+        mindfulMinutes: 80,
+        workoutCount: 7,
+        stateOfMindCount: 8,
+      },
+      moodComparison: 'Not enough overlapping mood check-ins for a comparison.',
+    };
+
+    expect(
+      chatRequestSchema.safeParse({
+        messages: [{ role: 'user', content: 'Help me reflect.' }],
+        userContext: { appleHealthSummary },
+      }).success
+    ).toBe(true);
+    expect(
+      chatRequestSchema.safeParse({
+        messages: [{ role: 'user', content: 'Help me reflect.' }],
+        userContext: {
+          appleHealthSummary: { ...appleHealthSummary, rawSamples: [{ value: 1 }] },
+        },
+      }).success
+    ).toBe(false);
+  });
+
   it('does not allow mood notes to hide inside the pattern-only field', () => {
     expect(
       chatRequestSchema.safeParse({

@@ -112,6 +112,18 @@ npm run qa:ios:init -- \
    the signed TestFlight build; simulator evidence is supplemental only.
    Add all seven disposable roles to `metadata.identities`; duplicate device or
    identity IDs are rejected.
+   Before recording results, run the physical readiness diagnostic:
+
+```bash
+npm run qa:ios:physical-preflight -- --run qa/runs/<build>.json
+```
+
+   It verifies the exact IPA hash, required identity declarations, available
+   physical iPhone/iPad devices, installed TestFlight bundle metadata, and
+   either a scoped Supabase management credential or fresh ignored dashboard
+   evidence. Developer Mode enables automated Xcode inspection; when it is off,
+   the TestFlight version/build check is recorded manually instead.
+   Follow `QA_HARDWARE_RUNBOOK.md` to resolve every reported blocker.
 6. Execute every route, control, state boundary, workflow, privacy matrix, and
    regression row from `qa/ios-release-checklist.json`.
 7. Record each result immediately. Example:
@@ -162,7 +174,7 @@ npm run qa:ios:verify -- \
 ## Coverage model
 
 The manifest and its reviewed SHA-256 enforce all native route files. Its exact
-28-route, 534 route/control, 95 workflow, and 629 total-row inventory cannot
+28-route, 543 route/control, 102 workflow, and 645 total-row inventory cannot
 silently shrink. Each route requires render,
 control, state-boundary, restoration, and navigation evidence appropriate to
 its tab, stack, or modal type. Every named control is a separate required row.

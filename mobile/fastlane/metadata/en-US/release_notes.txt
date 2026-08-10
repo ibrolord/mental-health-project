@@ -1,9 +1,6 @@
-What's new:
+What's new in 1.0.3:
 
-- Expanded Library to 100+ source-backed books, videos, and real-life profiles with takeaways, citations, notes, and practical actions.
-- Added Journal, Life Planner, Meditation, Ground Me, Focus Mode, routines, mind games, and daily affirmations.
-- Added explicit per-conversation AI context controls, with every category off by default.
-- Improved AI chat reliability, mood saving, account setup, and duplicate protection for goals and habits.
-- Improved assessment guidance, non-diagnostic wording, safety actions, and source citations.
-- Added accountability sharing controls and streak celebrations while keeping raw private content protected.
-- Hardened iOS launch stability, including iPad compatibility mode.
+- Added optional, read-only Apple Health context for sleep, steps, exercise minutes, workouts, mindful sessions, and State of Mind.
+- Added collapsible 7-day and 30-day Apple Health summaries beside mood check-ins.
+- Added an optional AI reflection from aggregate Apple Health context. Raw samples stay on-device, the aggregate is previewed, and every request requires Share once.
+- Improved privacy controls and HealthKit permission handling across supported iOS versions.

@@ -224,6 +224,7 @@ export function AppInput({
       {label ? <Text style={styles.inputLabel}>{label}</Text> : null}
       <TextInput
         {...props}
+        accessibilityLabel={props.accessibilityLabel ?? label}
         placeholderTextColor={Colors.textSecondary}
         style={[styles.input, props.multiline && styles.multiline, inputStyle]}
       />
