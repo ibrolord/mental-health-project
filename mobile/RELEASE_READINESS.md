@@ -103,8 +103,9 @@ Build 42 artifact:
 - [x] Privacy policy, App Store description, release notes, and review notes
   describe the same categories and data boundary.
 - [x] Unit tests and TypeScript pass for the integration source.
-- [x] Clean Expo prebuild emits the HealthKit entitlement, read usage string, no
-  write usage string, and no background-delivery entitlement.
+- [x] Clean Expo prebuild emits the HealthKit entitlement, the read usage string,
+  Apple's required honest update-purpose string, and no background-delivery
+  entitlement. The app still requests read types only and never writes samples.
 - [x] Native Release simulator build links HealthKit 14.0.2 and Nitro 0.36.5
   successfully with the legacy React Native architecture.
 - [ ] The 645-row QA checklist is completed against the exact TestFlight build.

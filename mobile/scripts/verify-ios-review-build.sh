@@ -8,6 +8,8 @@ RUN_ISOLATED_DOCTOR=1
 SOURCE_ONLY=0
 MIC_PERMISSION="MHtoolkit uses the microphone only during a live voice session so the AI can hear and respond to you."
 CAMERA_PERMISSION="MHtoolkit's live voice sessions are audio-only. The bundled WebRTC library references camera APIs, but MHtoolkit never requests, captures, or transmits camera data."
+HEALTH_READ_PERMISSION="MHtoolkit reads the Apple Health categories you choose to show personal summaries. Raw samples stay on your device. A derived summary is sent to an AI provider only when you preview it and choose Share once."
+HEALTH_UPDATE_PERMISSION="MHtoolkit does not add or change Apple Health data. Apple requires this description because the app links HealthKit for optional read-only summaries."
 AI_CONSENT_TITLE="AI Data Sharing Consent"
 AI_PROVIDER_COPY="Google Gemini, Anthropic Claude, or OpenAI"
 APP_STORE_BASELINE="$ROOT_DIR/qa/app-store-release-baseline.json"
@@ -157,15 +159,17 @@ GENERATED_CONFIG="$(mktemp -t mhtoolkit-expo-config)"
 if npx expo config --type introspect --json >"$GENERATED_CONFIG" &&
   node -e '
     const fs = require("node:fs");
-    const [configPath, expectedVersion, expectedCamera] = process.argv.slice(1);
+    const [configPath, expectedVersion, expectedCamera, expectedHealthRead, expectedHealthUpdate] = process.argv.slice(1);
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     const plist = config.ios?.infoPlist ?? {};
     if (plist.CFBundleShortVersionString !== expectedVersion) process.exit(1);
     if (plist.NSCameraUsageDescription !== expectedCamera) process.exit(1);
-  ' "$GENERATED_CONFIG" "$SOURCE_VERSION" "$CAMERA_PERMISSION"; then
-  pass "Generated iOS plist contains the release version and camera disclosure"
+    if (plist.NSHealthShareUsageDescription !== expectedHealthRead) process.exit(1);
+    if (plist.NSHealthUpdateUsageDescription !== expectedHealthUpdate) process.exit(1);
+  ' "$GENERATED_CONFIG" "$SOURCE_VERSION" "$CAMERA_PERMISSION" "$HEALTH_READ_PERMISSION" "$HEALTH_UPDATE_PERMISSION"; then
+  pass "Generated iOS plist contains the release version and required privacy disclosures"
 else
-  fail "Generated iOS plist is missing the release version or camera disclosure"
+  fail "Generated iOS plist is missing the release version or required privacy disclosures"
 fi
 rm -f "$GENERATED_CONFIG"
 
@@ -273,6 +277,13 @@ if grep -Fq "$CAMERA_PERMISSION" "$ROOT_DIR/app.json" &&
   pass "WebRTC camera API disclosure is present and explicitly audio-only"
 else
   fail "WebRTC camera API disclosure is missing or inconsistent"
+fi
+
+if grep -Fq "$HEALTH_READ_PERMISSION" "$ROOT_DIR/app.json" &&
+  grep -Fq "$HEALTH_UPDATE_PERMISSION" "$ROOT_DIR/app.json"; then
+  pass "HealthKit read and required honest update-purpose strings are present"
+else
+  fail "HealthKit privacy purpose strings are missing or inconsistent"
 fi
 
 if (cd "$ROOT_DIR/.." && npm run verify:social-auth); then
@@ -462,6 +473,8 @@ if [ -n "$IPA_PATH" ]; then
     device_family="$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily' "$APP_DIR/Info.plist")"
     mic_description="$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$APP_DIR/Info.plist")"
     camera_description="$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$APP_DIR/Info.plist" 2>/dev/null || true)"
+    health_read_description="$(/usr/libexec/PlistBuddy -c 'Print :NSHealthShareUsageDescription' "$APP_DIR/Info.plist" 2>/dev/null || true)"
+    health_update_description="$(/usr/libexec/PlistBuddy -c 'Print :NSHealthUpdateUsageDescription' "$APP_DIR/Info.plist" 2>/dev/null || true)"
     ENTITLEMENTS_PATH="$IPA_TMP/entitlements.plist"
     if codesign -d --entitlements - "$APP_DIR" >"$ENTITLEMENTS_PATH" 2>/dev/null; then
       apple_sign_in_entitlement="$(grep -A3 -F 'com.apple.developer.applesignin' "$ENTITLEMENTS_PATH" || true)"
@@ -515,6 +528,13 @@ if [ -n "$IPA_PATH" ]; then
       pass "IPA includes the required honest WebRTC camera API disclosure"
     else
       fail "IPA is missing the required WebRTC camera API disclosure"
+    fi
+
+    if [ "$health_read_description" = "$HEALTH_READ_PERMISSION" ] &&
+      [ "$health_update_description" = "$HEALTH_UPDATE_PERMISSION" ]; then
+      pass "IPA includes both required HealthKit privacy purpose strings"
+    else
+      fail "IPA is missing or has inconsistent HealthKit privacy purpose strings"
     fi
 
     if printf '%s\n' "$apple_sign_in_entitlement" | grep -q 'Default'; then

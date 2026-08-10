@@ -71,7 +71,7 @@
         "@kingstinct/react-native-healthkit",
         {
           "NSHealthShareUsageDescription": "MHtoolkit reads the Apple Health categories you choose to show personal summaries. Raw samples stay on your device. A derived summary is sent to an AI provider only when you preview it and choose Share once.",
-          "NSHealthUpdateUsageDescription": false,
+          "NSHealthUpdateUsageDescription": "MHtoolkit does not add or change Apple Health data. Apple requires this description because the app links HealthKit for optional read-only summaries.",
           "background": false
         }
       ],

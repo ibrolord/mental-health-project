@@ -315,11 +315,13 @@ describe('Apple Health release boundaries', () => {
     );
     expect(app.version).toBe('1.0.3');
     expect(plugin?.[1]).toMatchObject({
-      NSHealthUpdateUsageDescription: false,
       background: false,
     });
     expect(plugin?.[1].NSHealthShareUsageDescription).toContain(
       'Raw samples stay on your device'
+    );
+    expect(plugin?.[1].NSHealthUpdateUsageDescription).toContain(
+      'does not add or change Apple Health data'
     );
   });
 

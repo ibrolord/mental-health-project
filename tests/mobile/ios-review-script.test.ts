@@ -64,7 +64,9 @@ describe('iOS review artifact checks', () => {
     expect(reviewScript).toContain('CFBundleShortVersionString');
     expect(reviewScript).toContain('IPA marketing version matches source');
     expect(reviewScript).toContain('must be higher than approved version');
-    expect(reviewScript).toContain('Generated iOS plist contains the release version and camera disclosure');
+    expect(reviewScript).toContain(
+      'Generated iOS plist contains the release version and required privacy disclosures'
+    );
   });
 
   it('fails closed unless the signed IPA and expected build are supplied', () => {

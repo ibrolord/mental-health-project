@@ -50,6 +50,10 @@ needed to establish a partnership.
 
 - Apple Health integration is optional and read-only. MHtoolkit does not write
   samples to HealthKit.
+- `NSHealthUpdateUsageDescription` is present because App Store processing
+  requires it for the HealthKit-linked binary. Its copy states that MHtoolkit
+  does not add or change Apple Health data; authorization requests contain read
+  types only.
 - Raw HealthKit samples, dates, source devices, and identifiers remain on the
   device and are never included in a network request.
 - A user may separately enable an aggregate-only Apple Health summary in AI
