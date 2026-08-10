@@ -7,6 +7,14 @@ const rootLayout = readFileSync(
   resolve(process.cwd(), 'mobile/app/_layout.tsx'),
   'utf8'
 );
+const backButton = readFileSync(
+  resolve(process.cwd(), 'mobile/components/AppBackButton.tsx'),
+  'utf8'
+);
+const appUi = readFileSync(
+  resolve(process.cwd(), 'mobile/components/AppUI.tsx'),
+  'utf8'
+);
 const checklist = JSON.parse(
   readFileSync(
     resolve(process.cwd(), 'mobile/qa/ios-release-checklist.json'),
@@ -55,5 +63,12 @@ describe('mobile back navigation', () => {
         `<Stack.Screen name="${route}" options={stackScreenOptions(`
       );
     }
+  });
+
+  it('keeps shared headers usable at large Dynamic Type sizes', () => {
+    expect(backButton).not.toContain('maxFontSizeMultiplier');
+    expect(backButton).not.toContain('numberOfLines={1}');
+    expect(appUi).toContain("flexWrap: 'wrap'");
+    expect(appUi).toContain('flexBasis: 220');
   });
 });

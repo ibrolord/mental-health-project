@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import {
   Alert,
@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import Constants from 'expo-constants';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { formatISO, subDays } from 'date-fns';
 import {
   AI_CONTEXT_OPTIONS,
@@ -88,6 +88,10 @@ const APPLE_HEALTH_AI_ENABLED =
 
 export default function ChatScreen() {
   const router = useRouter();
+  const { health, healthRequest } = useLocalSearchParams<{
+    health?: string | string[];
+    healthRequest?: string | string[];
+  }>();
   const { context, query, authLoading } = useDataContext();
   const ownerKey = query ? `${query.column}:${query.value}` : null;
   const [messages, setMessages] = useState<Message[]>([]);
@@ -119,8 +123,11 @@ export default function ChatScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const requestRef = useRef(false);
   const saveRef = useRef(false);
+  const healthEntryHandledRef = useRef<string | null>(null);
   const ownerRef = useRef(ownerKey);
   ownerRef.current = ownerKey;
+  const healthEntryRequested =
+    health === '1' || (Array.isArray(health) && health.includes('1'));
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
@@ -502,7 +509,7 @@ export default function ChatScreen() {
     ]);
   };
 
-  const setAppleHealthContext = async (enabled: boolean) => {
+  const setAppleHealthContext = useCallback(async (enabled: boolean) => {
     if (
       !ownerKey ||
       Platform.OS !== 'ios' ||
@@ -535,7 +542,25 @@ export default function ChatScreen() {
         'Apple Health setup could not be checked. Please try again.'
       );
     }
-  };
+  }, [ownerKey, router]);
+
+  useEffect(() => {
+    if (
+      !healthEntryRequested ||
+      !ownerKey ||
+      Platform.OS !== 'ios' ||
+      !APPLE_HEALTH_AI_ENABLED
+    ) return;
+
+    const requestToken = Array.isArray(healthRequest)
+      ? healthRequest[0]
+      : healthRequest;
+    const requestKey = `${ownerKey}:apple-health:${requestToken ?? 'direct'}`;
+    if (healthEntryHandledRef.current === requestKey) return;
+    healthEntryHandledRef.current = requestKey;
+    setContextExpanded(true);
+    void setAppleHealthContext(true);
+  }, [healthEntryRequested, healthRequest, ownerKey, setAppleHealthContext]);
 
   const send = async (text: string) => {
     const trimmed = text.trim();

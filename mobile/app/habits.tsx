@@ -859,6 +859,8 @@ export default function HabitsScreen() {
                   </Text>
                 </View>
                 <Switch
+                  accessibilityLabel={`Enable partner check-ins for ${habit.name}`}
+                  accessibilityHint="Shares only scheduled and completed counts with your accountability partner."
                   value={habit.accountability_enabled}
                   onValueChange={(enabled) =>
                     void updateAccountability(habit, {
@@ -911,6 +913,7 @@ export default function HabitsScreen() {
                   </View>
                   <Pressable
                     accessibilityRole="checkbox"
+                    accessibilityLabel={`Include streak count for ${habit.name}`}
                     accessibilityState={{
                       checked: habit.accountability_share_streak,
                     }}

@@ -29,8 +29,8 @@ describe('iOS check-in owner binding', () => {
 
     for (const source of [tracker, today]) {
       expect(source).toContain('const expectedUserId = user');
-      expect(source).toContain(
-        'saveCheckInWithAttribution(expectedUserId, {'
+      expect(source).toMatch(
+        /saveCheckInWithAttribution\(\s*expectedUserId,/
       );
     }
   });

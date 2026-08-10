@@ -65,6 +65,8 @@ export default function GoalsScreen() {
   const [adding, setAdding] = useState(false);
   const [goalError, setGoalError] = useState<string | null>(null);
   const [input, setInput] = useState('');
+  const inputRef = useRef('');
+  const inputControlRef = useRef<TextInput>(null);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [librarySourceTitle, setLibrarySourceTitle] = useState('');
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
@@ -77,6 +79,20 @@ export default function GoalsScreen() {
   const appliedLibraryActionRef = useRef('');
   const goalIdsByKeyRef = useRef(new Map<string, string[]>());
   const runGoalInsertRef = useRef(createSingleFlight());
+
+  const updateInput = useCallback((value: string) => {
+    inputRef.current = value;
+    setInput(value);
+  }, []);
+
+  const submitCurrentInput = (submit: (content: string) => void) => {
+    if (inputControlRef.current?.isFocused()) {
+      inputControlRef.current.blur();
+      setTimeout(() => submit(inputRef.current), 0);
+      return;
+    }
+    submit(inputRef.current);
+  };
 
   const refreshReminderContent = () => {
     void refreshReminders().catch((error) => {
@@ -132,9 +148,9 @@ export default function GoalsScreen() {
     if (appliedLibraryActionRef.current === actionIdentity) return;
     appliedLibraryActionRef.current = actionIdentity;
     setFramework('simple');
-    setInput(content);
+    updateInput(content);
     setLibrarySourceTitle(bookTitle || 'the library');
-  }, [params.bookTitle, params.content, params.source]);
+  }, [params.bookTitle, params.content, params.source, updateInput]);
 
   const addGoal = async (content: string, priority?: string, quadrant?: string) => {
     const normalizedContent = content.trim().replace(/\s+/g, ' ');
@@ -184,9 +200,11 @@ export default function GoalsScreen() {
 
         goalIdsByKeyRef.current.set(identityKey, [data.id]);
         setGoals((current) => appendUniqueGoal(current, data as Goal));
-        setInput((current) =>
-          current.trim().replace(/\s+/g, ' ') === normalizedContent ? '' : current
-        );
+        setInput((current) => {
+          if (current.trim().replace(/\s+/g, ' ') !== normalizedContent) return current;
+          inputRef.current = '';
+          return '';
+        });
         setActiveSection(null);
         setLibrarySourceTitle('');
         refreshReminderContent();
@@ -315,22 +333,25 @@ export default function GoalsScreen() {
     </View>
   );
 
-  const renderAddInput = (onSubmit: () => void) => (
+  const renderAddInput = (onSubmit: (content: string) => void) => (
     <View style={s.inputRow}>
       <TextInput
+        ref={inputControlRef}
         style={s.input}
         placeholder="Add task..."
         value={input}
-        onChangeText={setInput}
-        onSubmitEditing={() => {
-          if (!adding) onSubmit();
+        onChangeText={updateInput}
+        onEndEditing={(event) => updateInput(event.nativeEvent.text)}
+        onSubmitEditing={(event) => {
+          updateInput(event.nativeEvent.text);
+          if (!adding) onSubmit(event.nativeEvent.text);
         }}
         placeholderTextColor={Colors.textSecondary}
         editable={!adding}
       />
       <TouchableOpacity
         style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]}
-        onPress={onSubmit}
+        onPress={() => submitCurrentInput(onSubmit)}
         disabled={adding || !input.trim()}
       >
         {adding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addSmallBtnText}>+</Text>}
@@ -394,7 +415,7 @@ export default function GoalsScreen() {
 
         {framework === 'simple' && (
           <>
-            {frameworkGoals.length < 3 && renderAddInput(() => { void addGoal(input); })}
+            {frameworkGoals.length < 3 && renderAddInput((content) => { void addGoal(content); })}
             {frameworkGoals.map((g, i) => renderGoalItem(g, i + 1))}
             {frameworkGoals.length === 0 && <Text style={s.empty}>What are your top priorities today?</Text>}
           </>
@@ -407,8 +428,8 @@ export default function GoalsScreen() {
               <Text style={s.sectionTitle}>{q.icon} {q.label}</Text>
               {activeSection === q.id ? (
                 <View style={s.inputRow}>
-                  <TextInput style={s.input} placeholder="Add task..." value={input} onChangeText={setInput} onSubmitEditing={() => { void addGoal(input, undefined, q.id); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
-                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => { void addGoal(input, undefined, q.id); }} disabled={adding || !input.trim()}>
+                  <TextInput ref={inputControlRef} style={s.input} placeholder="Add task..." value={input} onChangeText={updateInput} onEndEditing={(event) => updateInput(event.nativeEvent.text)} onSubmitEditing={(event) => { updateInput(event.nativeEvent.text); void addGoal(event.nativeEvent.text, undefined, q.id); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
+                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => submitCurrentInput((content) => { void addGoal(content, undefined, q.id); })} disabled={adding || !input.trim()}>
                     {adding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addSmallBtnText}>+</Text>}
                   </TouchableOpacity>
                 </View>
@@ -424,7 +445,7 @@ export default function GoalsScreen() {
 
         {framework === 'ivy_lee' && (
           <>
-            {frameworkGoals.length < 6 && renderAddInput(() => { void addGoal(input); })}
+            {frameworkGoals.length < 6 && renderAddInput((content) => { void addGoal(content); })}
             {frameworkGoals.length >= 6 && <Text style={s.limitMsg}>✓ You have your 6 tasks. Now focus on #1!</Text>}
             {frameworkGoals.map((g, i) => renderGoalItem(g, i + 1))}
           </>
@@ -441,8 +462,8 @@ export default function GoalsScreen() {
               </View>
               {!atLimit && activeSection === p.id ? (
                 <View style={s.inputRow}>
-                  <TextInput style={s.input} placeholder="Add task..." value={input} onChangeText={setInput} onSubmitEditing={() => { void addGoal(input, p.id); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
-                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => { void addGoal(input, p.id); }} disabled={adding || !input.trim()}>
+                  <TextInput ref={inputControlRef} style={s.input} placeholder="Add task..." value={input} onChangeText={updateInput} onEndEditing={(event) => updateInput(event.nativeEvent.text)} onSubmitEditing={(event) => { updateInput(event.nativeEvent.text); void addGoal(event.nativeEvent.text, p.id); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
+                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => submitCurrentInput((content) => { void addGoal(content, p.id); })} disabled={adding || !input.trim()}>
                     {adding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addSmallBtnText}>+</Text>}
                   </TouchableOpacity>
                 </View>
@@ -466,8 +487,8 @@ export default function GoalsScreen() {
               <Text style={s.sectionTitle}>{labels[p]}</Text>
               {activeSection === p ? (
                 <View style={s.inputRow}>
-                  <TextInput style={s.input} placeholder="Add task..." value={input} onChangeText={setInput} onSubmitEditing={() => { void addGoal(input, p); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
-                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => { void addGoal(input, p); }} disabled={adding || !input.trim()}>
+                  <TextInput ref={inputControlRef} style={s.input} placeholder="Add task..." value={input} onChangeText={updateInput} onEndEditing={(event) => updateInput(event.nativeEvent.text)} onSubmitEditing={(event) => { updateInput(event.nativeEvent.text); void addGoal(event.nativeEvent.text, p); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
+                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => submitCurrentInput((content) => { void addGoal(content, p); })} disabled={adding || !input.trim()}>
                     {adding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addSmallBtnText}>+</Text>}
                   </TouchableOpacity>
                 </View>

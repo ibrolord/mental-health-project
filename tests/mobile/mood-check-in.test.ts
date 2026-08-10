@@ -9,6 +9,7 @@ import {
   getMoodSupportOptions,
   MAX_MOOD_EMOTIONS,
   parseMoodMetadata,
+  reconcileMoodTagsForMood,
   toggleMoodEmotion,
   type MoodEmotion,
 } from '../../mobile/lib/mood-check-in';
@@ -108,6 +109,20 @@ describe('mobile mood check-in metadata', () => {
       ])
     ).toEqual(['Steady', 'Unsure but okay', 'Pause']);
   });
+
+  it('preserves private context while removing choices that do not fit a new mood', () => {
+    expect(
+      reconcileMoodTagsForMood(
+        [
+          'sleep',
+          'mood-emotion:anxious',
+          'mood-custom-emotion:Mixed feelings',
+          'mood-support:rest',
+        ],
+        '\u{1F604}'
+      )
+    ).toEqual(['sleep', 'mood-custom-emotion:Mixed feelings']);
+  });
 });
 
 describe('mobile tracker mood parity contract', () => {
@@ -121,7 +136,12 @@ describe('mobile tracker mood parity contract', () => {
     expect(trackerSource).toContain("'Add details'");
     expect(trackerSource).toContain("'Hide details'");
     expect(trackerSource).toContain('accessibilityState={{ expanded: detailsOpen }}');
-    expect(trackerSource).toContain('setDetailsOpen(true)');
+    expect(trackerSource).toContain('setDetailsOpen(false)');
+    expect(trackerSource).toContain("message: 'Check-in saved.'");
+    expect(trackerSource).toContain('label="Save details"');
+    expect(trackerSource).not.toContain('label="Save check-in"');
+    expect(trackerSource).toContain('updateContext: true');
+    expect(trackerSource).toContain('reconcileMoodTagsForMood(');
   });
 
   it('includes custom emotion, suggested action, and history disclosures', () => {
@@ -134,9 +154,37 @@ describe('mobile tracker mood parity contract', () => {
   });
 
   it('stores metadata in existing tags and protects legacy tag rendering', () => {
-    expect(trackerSource).toContain('const tags = composeMoodTags({');
+    expect(trackerSource).toContain('tags: composeMoodTags({');
     expect(trackerSource).toContain('const visibleTags = parseMoodMetadata(tags).visibleTags;');
     expect(trackerSource).not.toContain('newTags');
     expect(trackerSource).not.toContain('Tags (optional)');
+  });
+
+  it('preserves dirty drafts when details collapse and locks details while saving', () => {
+    expect(trackerSource).toContain(
+      'if (!detailsDirty || !hasMoodCheckInDraft(draft)) return;'
+    );
+    expect(trackerSource).not.toContain(
+      'detailsOpen && hasMoodCheckInDraft(draft)'
+    );
+    expect(trackerSource).toContain('editable={!saving}');
+    expect(trackerSource).toContain('disabled={saving}');
+  });
+});
+
+describe('mobile Today mood parity contract', () => {
+  const todaySource = readFileSync(
+    fileURLToPath(new URL('../../mobile/app/(tabs)/index.tsx', import.meta.url)),
+    'utf8'
+  );
+
+  it('preserves existing context and links to optional details', () => {
+    expect(todaySource).toContain('saveCheckInWithAttribution(expectedUserId, {');
+    expect(todaySource).toMatch(
+      /saveCheckInWithAttribution\(expectedUserId, \{\s*emoji: mood,\s*\.\.\.localFields/
+    );
+    expect(todaySource).not.toContain('todayMoodNote');
+    expect(todaySource).not.toContain('todayMoodTags');
+    expect(todaySource).toContain('router.push(\'/(tabs)/tracker\')');
   });
 });

@@ -145,12 +145,14 @@ export function AppleHealthInsights({
   ) return null;
 
   const coverage = overview?.thirtyDay.coverageDays ?? 0;
+  const aiReflectionEnabled =
+    process.env.EXPO_PUBLIC_HEALTH_AI_ENABLED === 'true';
 
   return (
     <AppCard style={s.card} quiet>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Apple Health context"
+        accessibilityLabel="Apple Health insights"
         accessibilityState={{ expanded }}
         onPress={() => setExpanded((current) => !current)}
         style={({ pressed }) => [s.header, pressed && s.pressed]}
@@ -159,9 +161,9 @@ export function AppleHealthInsights({
           <Feather name="heart" size={17} color={Colors.primary} />
         </View>
         <View style={s.headerCopy}>
-          <Text style={s.title}>Apple Health context</Text>
+          <Text style={s.title}>Apple Health</Text>
           <Text style={s.description}>
-            {enabled ? 'Sleep, movement, and mindfulness' : 'Optional and read-only'}
+            {enabled ? 'Sleep · movement · mindfulness' : 'Connect for read-only summaries'}
           </Text>
         </View>
         <Feather
@@ -174,31 +176,36 @@ export function AppleHealthInsights({
       {expanded ? (
         <View style={s.body}>
           {!enabled ? (
-            <>
-              <Text style={appUiStyles.muted}>
-                Choose what MHtoolkit can read, then see it beside your mood check-ins.
-              </Text>
+            <View style={s.stateRow}>
+              <View style={s.stateCopy}>
+                <Text style={s.stateTitle}>Not connected</Text>
+                <Text style={s.stateDescription}>Choose access in Settings.</Text>
+              </View>
               <AppButton
-                label="Set up in Settings"
+                label="Set up"
                 icon="settings"
-                variant="secondary"
+                variant="quiet"
+                style={s.compactAction}
                 onPress={() => router.push('/settings')}
               />
-            </>
+            </View>
           ) : loading ? (
             <View style={s.loading}>
               <ActivityIndicator color={Colors.primary} />
               <Text style={appUiStyles.muted}>Reading permitted Apple Health data...</Text>
             </View>
           ) : error ? (
-            <View>
-              <Text accessibilityRole="alert" style={s.error}>
-                {error}
-              </Text>
+            <View style={s.stateRow}>
+              <View style={s.stateCopy}>
+                <Text accessibilityRole="alert" style={s.error}>
+                  {error}
+                </Text>
+              </View>
               <AppButton
                 label="Try again"
                 icon="refresh-cw"
-                variant="secondary"
+                variant="quiet"
+                style={s.compactAction}
                 onPress={() => setRefreshKey((key) => key + 1)}
               />
             </View>
@@ -223,6 +230,25 @@ export function AppleHealthInsights({
                 <Text style={s.patternNote}>A personal pattern, not a cause or diagnosis.</Text>
               </View>
 
+              {aiReflectionEnabled ? (
+                <AppButton
+                  label="Ask AI about this"
+                  accessibilityLabel="Ask AI to reflect on this Apple Health summary"
+                  icon="message-circle"
+                  variant="secondary"
+                  style={s.aiAction}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/chat',
+                      params: {
+                        health: '1',
+                        healthRequest: Date.now().toString(),
+                      },
+                    })
+                  }
+                />
+              ) : null}
+
               <Text style={s.windowLabel}>LAST 30 DAYS</Text>
               <View style={s.summaryRow}>
                 <Text style={s.summaryText}>{overview.thirtyDay.workoutCount} workouts</Text>
@@ -237,28 +263,32 @@ export function AppleHealthInsights({
                 label="Refresh"
                 icon="refresh-cw"
                 variant="quiet"
+                style={s.refreshAction}
                 onPress={() => setRefreshKey((key) => key + 1)}
               />
             </>
           ) : (
-            <View>
-              <Text style={appUiStyles.muted}>
-                No permitted Apple Health data was found in the last 30 days.
-              </Text>
-              <Text style={s.manage}>You can adjust access in the Apple Health app.</Text>
+            <View style={s.stateRow}>
+              <View style={s.stateCopy}>
+                <Text style={s.stateTitle}>No recent Health data</Text>
+                <Text style={s.stateDescription}>Nothing available from the last 30 days.</Text>
+              </View>
               <AppButton
                 label="Refresh"
                 icon="refresh-cw"
-                variant="secondary"
+                variant="quiet"
+                style={s.compactAction}
                 onPress={() => setRefreshKey((key) => key + 1)}
               />
             </View>
           )}
 
-          <View style={s.privateRow}>
-            <Feather name="lock" size={13} color={Colors.textSecondary} />
-            <Text style={s.privateText}>Raw Health data stays on this device.</Text>
-          </View>
+          {enabled ? (
+            <View style={s.privateRow}>
+              <Feather name="lock" size={12} color={Colors.textSecondary} />
+              <Text style={s.privateText}>Raw data stays on-device.</Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
     </AppCard>
@@ -266,26 +296,39 @@ export function AppleHealthInsights({
 }
 
 const s = StyleSheet.create({
-  card: { paddingVertical: 4 },
+  card: { paddingVertical: 0 },
   header: {
-    minHeight: 68,
+    minHeight: 62,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
   headerIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.primaryLight,
   },
   headerCopy: { flex: 1 },
-  title: { color: Colors.text, fontSize: 17, fontWeight: '700' },
-  description: { color: Colors.textSecondary, fontSize: 13, marginTop: 3 },
-  body: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 16, paddingBottom: 14 },
-  loading: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 54 },
+  title: { color: Colors.text, fontSize: 16, fontWeight: '700' },
+  description: { color: Colors.textSecondary, fontSize: 12, marginTop: 2 },
+  body: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 13, paddingBottom: 11 },
+  loading: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
+  stateRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  stateCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 180 },
+  stateTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' },
+  stateDescription: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 2 },
+  compactAction: { paddingVertical: 7, paddingHorizontal: 13 },
+  refreshAction: { alignSelf: 'flex-start', marginTop: 12 },
   error: { color: Colors.danger, fontSize: 14, lineHeight: 20 },
   windowLabel: {
     color: Colors.accent,
@@ -298,11 +341,11 @@ const s = StyleSheet.create({
   pattern: { backgroundColor: Colors.primaryLight, borderRadius: 14, padding: 14, marginBottom: 18 },
   patternText: { color: Colors.text, fontSize: 14, lineHeight: 20, fontWeight: '600' },
   patternNote: { color: Colors.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 4 },
+  aiAction: { alignSelf: 'flex-start', marginBottom: 18 },
   summaryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
   summaryText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19 },
   dot: { color: Colors.sage },
-  manage: { color: Colors.textSecondary, fontSize: 12, marginTop: 6 },
-  privateRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
+  privateRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 9 },
   privateText: { color: Colors.textSecondary, fontSize: 11 },
   pressed: { opacity: 0.72 },
 });

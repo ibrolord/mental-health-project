@@ -109,4 +109,15 @@ describe('mobile goal completion feedback', () => {
       'updateGoalStatus(goal, change.from, change.fromCompletedAt)'
     );
   });
+
+  it('submits the latest native input value instead of a stale render value', () => {
+    const goalsScreen = readFileSync(resolve('mobile/app/goals.tsx'), 'utf8');
+
+    expect(goalsScreen).toContain("const inputRef = useRef('');");
+    expect(goalsScreen).toContain('inputRef.current = value;');
+    expect(goalsScreen).toContain('onEndEditing={(event) => updateInput(event.nativeEvent.text)}');
+    expect(goalsScreen).toContain('onSubmit(event.nativeEvent.text)');
+    expect(goalsScreen).toContain('setTimeout(() => submit(inputRef.current), 0);');
+    expect(goalsScreen).not.toContain('void addGoal(input);');
+  });
 });

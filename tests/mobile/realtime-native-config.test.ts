@@ -72,6 +72,12 @@ describe('audio-only Realtime native config', () => {
     expect(voiceScreen).toContain(
       "process.env.EXPO_PUBLIC_REALTIME_VOICE_ENABLED === 'true'"
     );
+    expect(voiceScreen).toContain(
+      "status === 'idle' && REALTIME_VOICE_ENABLED"
+    );
+    expect(voiceScreen).toMatch(
+      /REALTIME_VOICE_ENABLED \? 'realtime' : 'fallback'/
+    );
   });
 
   it('uses generated speech with an authenticated device-voice fallback', () => {

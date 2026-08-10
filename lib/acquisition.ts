@@ -68,11 +68,13 @@ export async function saveCheckInWithAttribution(
   checkIn: AttributedCheckIn
 ): Promise<string> {
   const attribution = readAttribution();
-  const { data, error } = await supabase.rpc('save_check_in_with_attribution', {
+  const { data, error } = await supabase.rpc('patch_daily_mood_check_in', {
     p_expected_user_id: expectedUserId,
     p_emoji: checkIn.emoji,
     p_note: checkIn.note ?? null,
+    p_update_note: Object.prototype.hasOwnProperty.call(checkIn, 'note'),
     p_tags: checkIn.tags ?? [],
+    p_update_tags: Object.prototype.hasOwnProperty.call(checkIn, 'tags'),
     p_local_date: checkIn.local_date,
     p_utc_offset_minutes: checkIn.utc_offset_minutes,
     p_source: attribution.source,

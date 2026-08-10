@@ -809,6 +809,7 @@ function ReflectionRunner({
         <View style={styles.actionRow}>
           <AppButton
             label="Back"
+            accessibilityLabel="Previous reflection step"
             icon="arrow-left"
             variant="secondary"
             disabled={stepIndex === 0 || saveState === 'saving'}

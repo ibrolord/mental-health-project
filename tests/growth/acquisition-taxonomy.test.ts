@@ -474,9 +474,11 @@ describe('campaign attribution taxonomy', () => {
     for (const path of ['lib/acquisition.ts', 'mobile/lib/acquisition.ts']) {
       const source = readFileSync(resolve(process.cwd(), path), 'utf8');
       expect(source).toContain(
-        ".rpc('save_check_in_with_attribution'"
+        ".rpc('patch_daily_mood_check_in'"
       );
       expect(source).toContain('p_expected_user_id: expectedUserId');
+      expect(source).toContain("hasOwnProperty.call(checkIn, 'note')");
+      expect(source).toContain("hasOwnProperty.call(checkIn, 'tags')");
       expect(source).not.toContain("from('acquisition_attribution')");
       expect(source).not.toContain('queueActivationAttribution');
     }

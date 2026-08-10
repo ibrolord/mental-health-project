@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  InputAccessoryView,
+  Keyboard,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -57,6 +60,7 @@ export default function JournalScreen() {
     entry?: string | string[];
   }>();
   const { context, authLoading } = useDataContext();
+  const notesAccessoryId = `journal-notes-${useId().replace(/:/g, '')}`;
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [draft, setDraft] = useState<JournalDraft>(emptyJournalDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -435,6 +439,8 @@ export default function JournalScreen() {
       <View style={s.actionRow}>
         <TouchableOpacity
           style={s.primaryButton}
+          accessibilityRole="button"
+          accessibilityLabel="New journal entry"
           onPress={() => {
             resetEditor();
             setDraftOwnerId(context.user_id);
@@ -477,6 +483,7 @@ export default function JournalScreen() {
           <Text style={s.label}>Title (optional)</Text>
           <TextInput
             style={s.input}
+            accessibilityLabel="Journal title"
             value={draft.title}
             onChangeText={(title) => setDraft((current) => ({ ...current, title }))}
             maxLength={JOURNAL_LIMITS.title}
@@ -492,6 +499,8 @@ export default function JournalScreen() {
           </View>
           <TextInput
             style={s.textArea}
+            accessibilityLabel="Journal notes"
+            inputAccessoryViewID={Platform.OS === 'ios' ? notesAccessoryId : undefined}
             value={draft.content}
             onChangeText={(content) => setDraft((current) => ({ ...current, content }))}
             maxLength={JOURNAL_LIMITS.content}
@@ -500,10 +509,25 @@ export default function JournalScreen() {
             textAlignVertical="top"
             multiline
           />
+          {Platform.OS === 'ios' ? (
+            <InputAccessoryView nativeID={notesAccessoryId}>
+              <View style={s.keyboardToolbar}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss journal keyboard"
+                  onPress={Keyboard.dismiss}
+                  style={s.keyboardDone}
+                >
+                  <Text style={s.keyboardDoneText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </InputAccessoryView>
+          ) : null}
 
           <Text style={s.label}>Tags (comma separated)</Text>
           <TextInput
             style={s.input}
+            accessibilityLabel="Journal tags"
             value={draft.tags}
             onChangeText={(tags) => setDraft((current) => ({ ...current, tags }))}
             placeholder="work, rest, boundaries"
@@ -535,6 +559,11 @@ export default function JournalScreen() {
 
           <TouchableOpacity
             style={[s.favoriteButton, draft.isFavorite && s.favoriteButtonActive]}
+            accessibilityRole="button"
+            accessibilityLabel={
+              draft.isFavorite ? 'Remove important mark' : 'Mark journal entry important'
+            }
+            accessibilityState={{ selected: draft.isFavorite }}
             onPress={() =>
               setDraft((current) => ({ ...current, isFavorite: !current.isFavorite }))
             }
@@ -580,6 +609,7 @@ export default function JournalScreen() {
       <View style={s.filterCard}>
         <TextInput
           style={s.searchInput}
+          accessibilityLabel="Search journal entries"
           value={search}
           onChangeText={setSearch}
           placeholder="Search your entries"
@@ -656,10 +686,19 @@ export default function JournalScreen() {
               </View>
             ) : null}
             <View style={s.entryActions}>
-              <TouchableOpacity style={s.editButton} onPress={() => editEntry(entry)}>
+              <TouchableOpacity
+                style={s.editButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${entry.title}`}
+                onPress={() => editEntry(entry)}
+              >
                 <Text style={s.editButtonText}>Edit</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => deleteEntry(entry)}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Delete ${entry.title}`}
+                onPress={() => deleteEntry(entry)}
+              >
                 <Text style={s.deleteButtonText}>Delete</Text>
               </TouchableOpacity>
             </View>
@@ -697,6 +736,16 @@ const s = StyleSheet.create({
     paddingVertical: 11,
   },
   primaryButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  keyboardToolbar: {
+    alignItems: 'flex-end',
+    backgroundColor: '#f4f1e8',
+    borderTopColor: '#cbd8d2',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  keyboardDone: { paddingHorizontal: 10, paddingVertical: 6 },
+  keyboardDoneText: { color: '#173f38', fontSize: 16, fontWeight: '700' },
   editor: {
     backgroundColor: '#fff',
     borderRadius: 18,

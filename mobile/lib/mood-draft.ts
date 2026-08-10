@@ -3,6 +3,7 @@ import {
   getMoodEmotionOptions,
   getMoodSupportOptions,
   MAX_MOOD_EMOTIONS,
+  parseMoodMetadata,
   type MoodEmotion,
   type MoodSupport,
 } from './mood-check-in';
@@ -14,6 +15,7 @@ export interface MoodCheckInDraft {
   emotions: MoodEmotion[];
   customEmotions: string[];
   support: MoodSupport | null;
+  visibleTags: string[];
   detailsOpen: boolean;
 }
 
@@ -44,6 +46,7 @@ export function emptyMoodCheckInDraft(): MoodCheckInDraft {
     emotions: [],
     customEmotions: [],
     support: null,
+    visibleTags: [],
     detailsOpen: false,
   };
 }
@@ -104,6 +107,11 @@ export function parseMoodCheckInDraft(value: unknown): MoodCheckInDraft | null {
     emotions,
     customEmotions,
     support,
+    visibleTags: parseMoodMetadata(
+      Array.isArray(raw.visibleTags)
+        ? raw.visibleTags.filter((tag): tag is string => typeof tag === 'string')
+        : []
+    ).visibleTags,
     detailsOpen: raw.detailsOpen === true,
   };
 }

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Feather from '@expo/vector-icons/Feather';
+import { useFocusEffect } from 'expo-router';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
 import { SleepDiary } from '@/components/SleepDiary';
-import { format, startOfDay, subDays } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import type { MoodEmoji } from '@/lib/types';
 import { saveCheckInWithAttribution } from '@/lib/acquisition';
 import { getLocalCheckInFields } from '@/lib/check-in';
@@ -26,6 +27,7 @@ import {
   getMoodSupportOptions,
   MAX_MOOD_EMOTIONS,
   parseMoodMetadata,
+  reconcileMoodTagsForMood,
   toggleMoodEmotion,
   type MoodEmotion,
   type MoodSupport,
@@ -54,6 +56,7 @@ interface MoodEntry {
   emoji: MoodEmoji;
   note: string | null;
   tags: string[];
+  local_date: string | null;
   created_at: string;
 }
 
@@ -69,10 +72,12 @@ export default function TrackerScreen() {
   const [customEmotionOpen, setCustomEmotionOpen] = useState(false);
   const [customEmotionMessage, setCustomEmotionMessage] = useState('');
   const [newSupport, setNewSupport] = useState<MoodSupport | null>(null);
+  const [visibleTags, setVisibleTags] = useState<string[]>([]);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [moodsLoadError, setMoodsLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [saveStatus, setSaveStatus] = useState<{
@@ -85,17 +90,38 @@ export default function TrackerScreen() {
   const [moodsOwnerKey, setMoodsOwnerKey] = useState<string | null>(null);
   const [draftOwnerKey, setDraftOwnerKey] = useState<string | null>(null);
   const [draftHydratedOwnerKey, setDraftHydratedOwnerKey] = useState<string | null>(null);
+  const [editorHydratedOwnerKey, setEditorHydratedOwnerKey] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [detailsDirty, setDetailsDirty] = useState(false);
   const [draftLoadError, setDraftLoadError] = useState(false);
   const [draftLoadAttempt, setDraftLoadAttempt] = useState(0);
   const draftPersistenceRef = useRef(
     createMoodDraftPersistenceQueue(moodDraftStorage)
+  );
+  const detailsOpenRef = useRef(detailsOpen);
+  const focusedOwnerRef = useRef<string | null>(null);
+  detailsOpenRef.current = detailsOpen;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!ownerKey) return;
+      if (focusedOwnerRef.current === ownerKey) {
+        if (!detailsOpenRef.current) {
+          setMoodsOwnerKey(null);
+          setEditorHydratedOwnerKey(null);
+          setRefreshKey((key) => key + 1);
+        }
+      } else {
+        focusedOwnerRef.current = ownerKey;
+      }
+    }, [ownerKey])
   );
 
   useEffect(() => {
     const expectedOwnerKey = ownerKey;
     setMoodsOwnerKey(null);
     setMoods([]);
+    setMoodsLoadError(false);
     if (!query || !expectedOwnerKey) {
       setLoading(false);
       return;
@@ -105,22 +131,30 @@ export default function TrackerScreen() {
     const loadMoods = async () => {
       setLoading(true);
       const now = new Date();
-      const rangeStart = startOfDay(subDays(now, 29)).toISOString();
-      const rangeEnd = now.toISOString();
+      const rangeStart = format(subDays(now, 29), 'yyyy-MM-dd');
+      const rangeEnd = format(now, 'yyyy-MM-dd');
 
-      let qb = supabase
-        .from('moods')
-        .select('*')
-        .eq(query.column, query.value)
-        .gte('created_at', rangeStart)
-        .lte('created_at', rangeEnd)
-        .order('created_at', { ascending: false });
-
-      const { data } = await qb;
-      if (active && ownerKeyRef.current === expectedOwnerKey) {
-        setMoods(data ?? []);
-        setMoodsOwnerKey(expectedOwnerKey);
-        setLoading(false);
+      try {
+        const { data, error } = await supabase
+          .from('moods')
+          .select('*')
+          .eq(query.column, query.value)
+          .gte('local_date', rangeStart)
+          .lte('local_date', rangeEnd)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        if (active && ownerKeyRef.current === expectedOwnerKey) {
+          setMoods(data ?? []);
+          setMoodsOwnerKey(expectedOwnerKey);
+          setMoodsLoadError(false);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.warn('Unable to load mood history:', error);
+        if (active && ownerKeyRef.current === expectedOwnerKey) {
+          setMoodsLoadError(true);
+          setLoading(false);
+        }
       }
     };
 
@@ -136,7 +170,9 @@ export default function TrackerScreen() {
     const expectedOwnerId = user?.id ?? null;
     setDraftOwnerKey(null);
     setDraftHydratedOwnerKey(null);
+    setEditorHydratedOwnerKey(null);
     setDraftRestored(false);
+    setDetailsDirty(false);
     setDraftLoadError(false);
     draftPersistenceRef.current.invalidatePendingWrites();
     setFilterTag(null);
@@ -150,6 +186,7 @@ export default function TrackerScreen() {
     setCustomEmotionOpen(false);
     setCustomEmotionMessage('');
     setNewSupport(null);
+    setVisibleTags([]);
     setDetailsOpen(false);
     setSaveStatus(null);
     setSaving(false);
@@ -162,15 +199,17 @@ export default function TrackerScreen() {
         if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
         setDraftOwnerKey(expectedOwnerKey);
         setDraftHydratedOwnerKey(expectedOwnerKey);
-        if (!draft) return;
         setShowAdd(true);
+        if (!draft) return;
         setNewMood(draft.mood);
         setNewNote(draft.note);
         setNewEmotions(draft.emotions);
         setCustomEmotions(draft.customEmotions);
         setNewSupport(draft.support);
+        setVisibleTags(draft.visibleTags);
         setDetailsOpen(draft.detailsOpen);
         setDraftRestored(true);
+        setDetailsDirty(true);
       })
       .catch((error) => {
         console.warn('Unable to restore the mood check-in draft:', error);
@@ -184,6 +223,40 @@ export default function TrackerScreen() {
       active = false;
     };
   }, [draftLoadAttempt, ownerKey, user?.id]);
+
+  useEffect(() => {
+    if (
+      !ownerKey ||
+      moodsOwnerKey !== ownerKey ||
+      draftHydratedOwnerKey !== ownerKey ||
+      editorHydratedOwnerKey === ownerKey
+    ) {
+      return;
+    }
+
+    const localDate = getLocalCheckInFields().local_date;
+    const todayEntry = moods.find((mood) => mood.local_date === localDate);
+    setShowAdd(true);
+    if (todayEntry) {
+      const metadata = parseMoodMetadata(todayEntry.tags ?? []);
+      if (draftRestored) {
+        setVisibleTags((current) => [
+          ...new Set([...metadata.visibleTags, ...current]),
+        ]);
+      } else {
+        setNewMood(todayEntry.emoji);
+        setNewNote(todayEntry.note ?? '');
+        setNewEmotions(metadata.emotions);
+        setCustomEmotions(metadata.customEmotions);
+        setNewSupport(metadata.support);
+        setVisibleTags(metadata.visibleTags);
+        setDetailsOpen(false);
+      }
+    } else if (!draftRestored) {
+      setDetailsOpen(false);
+    }
+    setEditorHydratedOwnerKey(ownerKey);
+  }, [draftHydratedOwnerKey, draftRestored, editorHydratedOwnerKey, moods, moodsOwnerKey, ownerKey]);
 
   useEffect(() => {
     const expectedOwnerKey = ownerKey;
@@ -204,13 +277,12 @@ export default function TrackerScreen() {
       emotions: newEmotions,
       customEmotions,
       support: newSupport,
+      visibleTags,
       detailsOpen,
     };
     const timeout = setTimeout(() => {
-      const operation = hasMoodCheckInDraft(draft)
-        ? draftPersistenceRef.current.write(expectedOwnerId, draft)
-        : draftPersistenceRef.current.clear(expectedOwnerId);
-      void operation.catch((error) => {
+      if (!detailsDirty || !hasMoodCheckInDraft(draft)) return;
+      void draftPersistenceRef.current.write(expectedOwnerId, draft).catch((error) => {
         console.warn('Unable to preserve the mood check-in draft:', error);
       });
     }, 250);
@@ -219,6 +291,7 @@ export default function TrackerScreen() {
   }, [
     customEmotions,
     detailsOpen,
+    detailsDirty,
     draftHydratedOwnerKey,
     draftOwnerKey,
     newEmotions,
@@ -228,32 +301,137 @@ export default function TrackerScreen() {
     ownerKey,
     saving,
     user?.id,
+    visibleTags,
   ]);
 
+  const persistMood = async ({
+    mood,
+    note,
+    emotions,
+    custom,
+    support,
+    message,
+    updateContext,
+  }: {
+    mood: MoodEmoji;
+    note: string;
+    emotions: MoodEmotion[];
+    custom: string[];
+    support: MoodSupport | null;
+    message: string;
+    updateContext: boolean;
+  }): Promise<boolean> => {
+    if (saving) return false;
+    if (!user?.id) {
+      setSaveStatus({
+        type: 'error',
+        message: 'Your private profile is not ready. Restart the app and try again.',
+      });
+      return false;
+    }
+    const expectedOwnerKey = ownerKey;
+    const expectedUserId = user.id;
+    if (
+      !expectedOwnerKey ||
+      draftOwnerKey !== expectedOwnerKey ||
+      moodsOwnerKey !== expectedOwnerKey ||
+      editorHydratedOwnerKey !== expectedOwnerKey
+    ) {
+      return false;
+    }
+    setSaving(true);
+    setSaveStatus(null);
+    try {
+      const checkIn = {
+        emoji: mood,
+        ...getLocalCheckInFields(),
+      };
+      await saveCheckInWithAttribution(
+        expectedUserId,
+        updateContext
+          ? {
+              ...checkIn,
+              note: note.trim() || null,
+              tags: composeMoodTags({
+                emotions,
+                customEmotions: custom,
+                support,
+                visibleTags,
+              }),
+            }
+          : checkIn
+      );
+      if (ownerKeyRef.current !== expectedOwnerKey) return false;
+      if (updateContext) {
+        setDraftRestored(false);
+        setDetailsDirty(false);
+      }
+      setFilterTag(null);
+      if (updateContext) {
+        try {
+          await draftPersistenceRef.current.clear(expectedUserId);
+        } catch (draftError) {
+          console.warn('Unable to clear the saved mood check-in draft:', draftError);
+        }
+      }
+      setRefreshKey((key) => key + 1);
+      setSaveStatus({ type: 'success', message });
+      return true;
+    } catch (error) {
+      if (ownerKeyRef.current !== expectedOwnerKey) return false;
+      console.warn('Unable to save check-in:', error);
+      Alert.alert(
+        'Unable to Save Check-In',
+        'Your check-in was not saved. Please try again.'
+      );
+      setSaveStatus({
+        type: 'error',
+        message: 'Your mood entry was not saved. Please try again.',
+      });
+      return false;
+    } finally {
+      if (ownerKeyRef.current === expectedOwnerKey) setSaving(false);
+    }
+  };
+
   const selectMood = (mood: MoodEmoji) => {
-    const allowedEmotions = new Set(
-      getMoodEmotionOptions(mood).map(({ id }) => id)
-    );
-    const allowedSupports = new Set(
-      getMoodSupportOptions(mood).map(({ id }) => id)
+    const reconciled = parseMoodMetadata(
+      reconcileMoodTagsForMood(
+        composeMoodTags({
+          emotions: newEmotions,
+          customEmotions,
+          support: newSupport,
+          visibleTags,
+        }),
+        mood
+      )
     );
     setNewMood(mood);
-    setNewEmotions((current) =>
-      current.filter((emotion) => allowedEmotions.has(emotion))
-    );
-    setNewSupport((current) =>
-      current && allowedSupports.has(current) ? current : null
-    );
-    setDetailsOpen(true);
+    setNewEmotions(reconciled.emotions);
+    setCustomEmotions(reconciled.customEmotions);
+    setNewSupport(reconciled.support);
+    setDetailsOpen(false);
+    void persistMood({
+      mood,
+      note: newNote,
+      emotions: reconciled.emotions,
+      custom: reconciled.customEmotions,
+      support: reconciled.support,
+      message: 'Check-in saved.',
+      updateContext: true,
+    });
   };
 
   const selectEmotion = (emotion: MoodEmotion) => {
+    if (saving) return;
     setNewEmotions((current) =>
       toggleMoodEmotion(current, emotion, customEmotions.length)
     );
+    setDetailsDirty(true);
   };
 
   const addCustomEmotion = () => {
+    if (saving) return;
     const next = addCustomMoodEmotion(
       customEmotions,
       customEmotionInput,
@@ -271,76 +449,34 @@ export default function TrackerScreen() {
     setCustomEmotionInput('');
     setCustomEmotionMessage('');
     setCustomEmotionOpen(false);
+    setDetailsDirty(true);
   };
 
   const handleAdd = async () => {
-    if (!newMood || saving) return;
-    if (!user?.id) {
-      setSaveStatus({
-        type: 'error',
-        message: 'Your private profile is not ready. Restart the app and try again.',
-      });
-      return;
-    }
-    const expectedOwnerKey = ownerKey;
-    const expectedUserId = user.id;
-    if (!expectedOwnerKey || draftOwnerKey !== expectedOwnerKey) return;
-    setSaving(true);
-    setSaveStatus(null);
-    try {
-      const tags = composeMoodTags({
-        emotions: newEmotions,
-        customEmotions,
-        support: newSupport,
-        visibleTags: [],
-      });
-      await saveCheckInWithAttribution(expectedUserId, {
-        emoji: newMood,
-        note: newNote.trim() || null,
-        tags,
-        ...getLocalCheckInFields(),
-      });
-      if (ownerKeyRef.current !== expectedOwnerKey) return;
-      setNewMood(null);
-      setNewNote('');
-      setNewEmotions([]);
-      setCustomEmotions([]);
-      setCustomEmotionInput('');
-      setCustomEmotionMessage('');
-      setCustomEmotionOpen(false);
-      setNewSupport(null);
+    if (!newMood) return;
+    const saved = await persistMood({
+      mood: newMood,
+      note: newNote,
+      emotions: newEmotions,
+      custom: customEmotions,
+      support: newSupport,
+      message: 'Details saved.',
+      updateContext: true,
+    });
+    if (saved) {
       setDetailsOpen(false);
-      setDraftRestored(false);
-      setFilterTag(null);
-      setShowAdd(false);
-      setHistoryOpen(true);
-      try {
-        await draftPersistenceRef.current.clear(expectedUserId);
-      } catch (draftError) {
-        console.warn('Unable to clear the saved mood check-in draft:', draftError);
-      }
-      setRefreshKey((key) => key + 1);
-      setSaveStatus({ type: 'success', message: 'Mood entry saved.' });
-    } catch (error) {
-      if (ownerKeyRef.current !== expectedOwnerKey) return;
-      console.warn('Unable to save check-in:', error);
-      Alert.alert(
-        'Unable to Save Check-In',
-        'Your check-in was not saved. Please try again.'
-      );
-      setSaveStatus({
-        type: 'error',
-        message: 'Your mood entry was not saved. Please try again.',
-      });
-    } finally {
-      if (ownerKeyRef.current === expectedOwnerKey) setSaving(false);
     }
   };
 
   const visibleMoods = moodsOwnerKey === ownerKey ? moods : [];
   const visibleFilterTag = moodsOwnerKey === ownerKey ? filterTag : null;
   const draftMatchesOwner = draftOwnerKey === ownerKey;
-  const visibleShowAdd = draftMatchesOwner ? showAdd : false;
+  const editorReady =
+    Boolean(ownerKey) &&
+    draftMatchesOwner &&
+    moodsOwnerKey === ownerKey &&
+    editorHydratedOwnerKey === ownerKey;
+  const visibleShowAdd = editorReady ? showAdd : false;
   const visibleNewMood = draftMatchesOwner ? newMood : null;
   const visibleHistoryOpen = moodsOwnerKey === ownerKey ? historyOpen : false;
   const allTags = collectMoodTags(
@@ -364,8 +500,11 @@ export default function TrackerScreen() {
     setCustomEmotionOpen(false);
     setCustomEmotionMessage('');
     setNewSupport(null);
+    setVisibleTags([]);
     setDetailsOpen(false);
     setDraftRestored(false);
+    setDetailsDirty(false);
+    setEditorHydratedOwnerKey(null);
     setSaveStatus({ type: 'success', message: 'Draft discarded.' });
     if (expectedOwnerId) {
       void draftPersistenceRef.current.clear(expectedOwnerId).catch((error) => {
@@ -380,19 +519,6 @@ export default function TrackerScreen() {
         eyebrow="NOTICE THE PATTERN"
         title="Mood"
         description="Check in, add context if it helps, and look back without judgment."
-        action={
-          <AppButton
-            label={visibleShowAdd ? 'Close' : 'Check in'}
-            icon={visibleShowAdd ? 'x' : 'plus'}
-            variant={visibleShowAdd ? 'secondary' : 'primary'}
-            onPress={() => {
-              setDraftOwnerKey(ownerKey);
-              setShowAdd(draftMatchesOwner ? !showAdd : true);
-            }}
-            disabled={!user?.id || draftLoadError}
-            style={s.headerButton}
-          />
-        }
       />
 
       {saveStatus ? (
@@ -423,11 +549,34 @@ export default function TrackerScreen() {
         </View>
       ) : null}
 
+      {moodsLoadError ? (
+        <View accessibilityRole="alert" style={s.draftErrorRow}>
+          <Text style={s.saveStatusError}>
+            Your saved check-ins could not be loaded. Nothing can be changed yet.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading mood check-ins"
+            onPress={() => setRefreshKey((key) => key + 1)}
+            style={({ pressed }) => [pressed && s.pressed]}
+          >
+            <Text style={s.retryDraft}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {!moodsLoadError && !draftLoadError && ownerKey && !editorReady ? (
+        <AppCard style={s.loadingCard}>
+          <ActivityIndicator color={Colors.primary} />
+          <Text style={appUiStyles.muted}>Loading your private check-in...</Text>
+        </AppCard>
+      ) : null}
+
       {visibleShowAdd && (
         <AppCard style={s.checkInCard}>
           <SectionHeader
             title="How are you right now?"
-            description="Choose the closest fit, then save."
+            description="Choose the closest fit. It saves right away."
           />
           {draftRestored ? (
             <View
@@ -458,14 +607,14 @@ export default function TrackerScreen() {
                   key={choice.emoji}
                   accessibilityRole="radio"
                   accessibilityLabel={`${choice.label} mood`}
-                  accessibilityState={{ selected, disabled: saving }}
-                  disabled={saving}
+                  accessibilityState={{ selected, disabled: saving || !editorReady }}
+                  disabled={saving || !editorReady}
                   onPress={() => selectMood(choice.emoji)}
                   style={({ pressed }) => [
                     s.moodChoice,
                     selected && { backgroundColor: choice.tint },
                     selected && s.moodChoiceSelected,
-                    pressed && !saving && s.pressed,
+                    pressed && !saving && editorReady && s.pressed,
                   ]}
                 >
                   <Text style={s.moodEmoji}>{choice.emoji}</Text>
@@ -482,10 +631,12 @@ export default function TrackerScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{ expanded: detailsOpen }}
+                disabled={saving}
                 onPress={() => setDetailsOpen((current) => !current)}
                 style={({ pressed }) => [
                   s.disclosure,
-                  pressed && s.pressed,
+                  saving && s.disabled,
+                  pressed && !saving && s.pressed,
                 ]}
               >
                 <Text style={s.disclosureText}>
@@ -511,6 +662,7 @@ export default function TrackerScreen() {
                           key={emotion.id}
                           label={emotion.label}
                           selected={newEmotions.includes(emotion.id)}
+                          disabled={saving}
                           onPress={() => selectEmotion(emotion.id)}
                         />
                       ))}
@@ -521,17 +673,20 @@ export default function TrackerScreen() {
                           accessibilityLabel={`Remove ${emotion}`}
                           selected
                           icon="x"
-                          onPress={() =>
+                          disabled={saving}
+                          onPress={() => {
                             setCustomEmotions((current) =>
                               current.filter((item) => item !== emotion)
-                            )
-                          }
+                            );
+                            setDetailsDirty(true);
+                          }}
                         />
                       ))}
                       <ChoiceChip
                         label="Add your own"
                         selected={customEmotionOpen}
                         icon="plus"
+                        disabled={saving}
                         onPress={() => {
                           setCustomEmotionMessage('');
                           setCustomEmotionOpen((current) => !current);
@@ -545,6 +700,7 @@ export default function TrackerScreen() {
                             accessibilityLabel="Custom emotion"
                             placeholder="Type a feeling"
                             value={customEmotionInput}
+                            editable={!saving}
                             maxLength={32}
                             returnKeyType="done"
                             onSubmitEditing={addCustomEmotion}
@@ -559,7 +715,11 @@ export default function TrackerScreen() {
                           icon="plus"
                           variant="secondary"
                           onPress={addCustomEmotion}
-                          disabled={!customEmotionInput.trim() || emotionCount >= MAX_MOOD_EMOTIONS}
+                          disabled={
+                            saving ||
+                            !customEmotionInput.trim() ||
+                            emotionCount >= MAX_MOOD_EMOTIONS
+                          }
                           style={s.customEmotionButton}
                         />
                       </View>
@@ -580,11 +740,13 @@ export default function TrackerScreen() {
                           key={support.id}
                           label={support.label}
                           selected={newSupport === support.id}
-                          onPress={() =>
+                          disabled={saving}
+                          onPress={() => {
                             setNewSupport((current) =>
                               current === support.id ? null : support.id
-                            )
-                          }
+                            );
+                            setDetailsDirty(true);
+                          }}
                         />
                       ))}
                     </View>
@@ -594,7 +756,11 @@ export default function TrackerScreen() {
                     label="Add context (optional)"
                     placeholder="Anything you want to remember?"
                     value={newNote}
-                    onChangeText={setNewNote}
+                    editable={!saving}
+                    onChangeText={(value) => {
+                      setNewNote(value);
+                      setDetailsDirty(true);
+                    }}
                     maxLength={500}
                     multiline
                   />
@@ -603,13 +769,15 @@ export default function TrackerScreen() {
             </>
           ) : null}
 
-          <AppButton
-            label="Save check-in"
-            icon="check"
-            onPress={handleAdd}
-            disabled={!visibleNewMood || saving || !user?.id}
-            loading={saving}
-          />
+          {detailsOpen ? (
+            <AppButton
+              label="Save details"
+              icon="check"
+              onPress={handleAdd}
+              disabled={!visibleNewMood || saving || !user?.id || !editorReady}
+              loading={saving}
+            />
+          ) : null}
         </AppCard>
       )}
 
@@ -736,7 +904,6 @@ export default function TrackerScreen() {
 }
 
 const s = StyleSheet.create({
-  headerButton: { minHeight: 42, paddingHorizontal: 14 },
   saveStatus: { color: Colors.primary, fontSize: 13, marginBottom: 12 },
   saveStatusError: { color: '#b42318' },
   draftErrorRow: {
@@ -748,6 +915,7 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
   retryDraft: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
+  disabled: { opacity: 0.48 },
   checkInCard: { paddingTop: 5 },
   draftNotice: {
     minHeight: 42,

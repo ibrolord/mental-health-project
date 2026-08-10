@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, View, Text, ScrollView, TouchableOpacity, StyleSheet, Share } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { Colors } from '@/lib/constants';
-import { format, subDays, startOfDay } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import type { MoodEmoji } from '@/lib/types';
 import { saveCheckInWithAttribution } from '@/lib/acquisition';
 import {
@@ -67,6 +67,8 @@ export default function DashboardScreen() {
   const [moodOwnerKey, setMoodOwnerKey] = useState<string | null>(null);
   const [weeklyOwnerId, setWeeklyOwnerId] = useState<string | null>(null);
   const [productOwnerId, setProductOwnerId] = useState<string | null>(null);
+  const [moodRefreshKey, setMoodRefreshKey] = useState(0);
+  const focusedMoodOwnerRef = useRef<string | null>(null);
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
@@ -74,6 +76,17 @@ export default function DashboardScreen() {
   const ownerKeyRef = useRef(ownerKey);
   ownerKeyRef.current = ownerKey;
   const canSaveMood = Boolean(queryValue && user?.id);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!ownerKey) return;
+      if (focusedMoodOwnerRef.current === ownerKey) {
+        setMoodRefreshKey((key) => key + 1);
+      } else {
+        focusedMoodOwnerRef.current = ownerKey;
+      }
+    }, [ownerKey])
+  );
 
   useEffect(() => {
     const expectedOwnerKey = ownerKey;
@@ -117,11 +130,11 @@ export default function DashboardScreen() {
     if (!queryValue || !expectedOwnerKey) return;
     let active = true;
     const loadData = async () => {
-      const todayStart = startOfDay(new Date()).toISOString();
+      const localDate = getLocalCheckInFields().local_date;
       const sevenDaysAgo = getSevenDayHistoryStart();
       const [moodRes, weekRes] = await Promise.all([
-        supabase.from('moods').select('emoji').eq(queryColumn, queryValue).gte('created_at', todayStart).order('created_at', { ascending: false }).limit(1).single(),
-        supabase.from('moods').select('emoji, created_at').eq(queryColumn, queryValue).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }),
+        supabase.from('moods').select('emoji').eq(queryColumn, queryValue).eq('local_date', localDate).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('moods').select('emoji, created_at, local_date').eq(queryColumn, queryValue).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }),
       ]);
       if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
       setTodayMood((moodRes.data?.emoji as MoodEmoji | undefined) ?? null);
@@ -151,7 +164,7 @@ export default function DashboardScreen() {
     return () => {
       active = false;
     };
-  }, [ownerKey, queryColumn, queryValue]);
+  }, [moodRefreshKey, ownerKey, queryColumn, queryValue]);
 
   useEffect(() => {
     const ownerId = user?.id ?? null;
@@ -235,9 +248,10 @@ export default function DashboardScreen() {
     setSavingMood(true);
     setMoodStatus(null);
     try {
+      const localFields = getLocalCheckInFields();
       await saveCheckInWithAttribution(expectedUserId, {
         emoji: mood,
-        ...getLocalCheckInFields(),
+        ...localFields,
       });
       if (ownerKeyRef.current !== expectedOwnerKey) return;
       setTodayMood(mood);
@@ -399,15 +413,26 @@ export default function DashboardScreen() {
           disabled={savingMood || !canSaveMood}
         />
         {moodStatus ? (
-          <Text
-            accessibilityRole={moodStatus.type === 'error' ? 'alert' : 'text'}
-            style={[
-              s.moodStatus,
-              moodStatus.type === 'error' && s.moodStatusError,
-            ]}
-          >
-            {moodStatus.message}
-          </Text>
+          <View style={s.moodStatusRow}>
+            <Text
+              accessibilityRole={moodStatus.type === 'error' ? 'alert' : 'text'}
+              style={[
+                s.moodStatus,
+                moodStatus.type === 'error' && s.moodStatusError,
+              ]}
+            >
+              {moodStatus.message}
+            </Text>
+            {moodStatus.type === 'success' ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() => router.push('/(tabs)/tracker')}
+                style={s.addDetailsButton}
+              >
+                <Text style={s.addDetailsButtonText}>Add details</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         ) : null}
       </View>
 
@@ -565,8 +590,18 @@ const s = StyleSheet.create({
   cardTitle: { fontSize: 19, lineHeight: 24, fontWeight: '700', color: Colors.text },
   cardSubtitle: { fontSize: 13, lineHeight: 18, color: Colors.textSecondary, marginTop: 3 },
   todayMood: { minWidth: 31, minHeight: 31, alignItems: 'center', justifyContent: 'center' },
-  moodStatus: { color: Colors.primary, fontSize: 13, marginTop: 12 },
+  moodStatusRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 5,
+  },
+  moodStatus: { flex: 1, color: Colors.primary, fontSize: 13 },
   moodStatusError: { color: '#b42318' },
+  addDetailsButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+  addDetailsButtonText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
   preferenceLoadingCard: { minHeight: 92, alignItems: 'center', justifyContent: 'center' },
   preferenceError: { color: '#b42318', fontSize: 13, lineHeight: 18, marginBottom: 10 },
   preferenceRetry: { minHeight: 42, justifyContent: 'center', paddingHorizontal: 12 },

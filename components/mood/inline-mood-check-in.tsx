@@ -7,7 +7,6 @@ import { getLocalCheckInFields } from '@/lib/check-in';
 import {
   addCustomMoodEmotion,
   composeMoodTags,
-  createMoodUndoPlan,
   getMoodEmotionOptions,
   getMoodSupportOptions,
   isCurrentOwnerGeneration,
@@ -17,7 +16,6 @@ import {
   toggleMoodEmotion,
   type MoodDraft,
   type MoodEmotion,
-  type MoodUndoPlan,
   type OwnerGeneration,
   type MoodSupport,
 } from '@/lib/mood-check-in';
@@ -65,22 +63,6 @@ const moods: Array<{
   { emoji: '😢', label: 'Very low', color: 'bg-[#EBD6E2]' },
 ];
 
-function toEntry(
-  id: string,
-  draft: MoodDraft,
-  fallbackCreatedAt: string
-): TrackerMoodEntry {
-  const localFields = getLocalCheckInFields();
-  return {
-    id,
-    emoji: draft.emoji as MoodEmoji,
-    note: draft.note.trim() || null,
-    tags: composeMoodTags(draft),
-    created_at: fallbackCreatedAt,
-    ...localFields,
-  };
-}
-
 export function InlineMoodCheckIn({
   owner,
   ownerGeneration,
@@ -106,14 +88,12 @@ export function InlineMoodCheckIn({
   const cardRef = useRef<HTMLDivElement>(null);
   const draftRef = useRef(initialDraft);
   const entryRef = useRef<TrackerMoodEntry | null>(initialEntry);
-  const undoPlanRef = useRef<MoodUndoPlan<TrackerMoodEntry> | null>(null);
   const persistedDraftRef = useRef(serializeMoodDraft(initialDraft));
   const desiredRevisionRef = useRef(0);
   const persistedRevisionRef = useRef(0);
+  const contextRevisionRef = useRef(new Map<number, boolean>());
   const failedRevisionRef = useRef<number | null>(null);
   const persistenceRunningRef = useRef(false);
-  const deleteRunningRef = useRef(false);
-  const [deleteRunning, setDeleteRunning] = useState(false);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contextSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contextSaveOwnerRef = useRef<OwnerGeneration | null>(null);
@@ -177,7 +157,6 @@ export function InlineMoodCheckIn({
     const nextDraft = moodDraftFromEntry(initialEntry);
     stateOwnerGenerationRef.current = effectOwner;
     entryRef.current = initialEntry;
-    undoPlanRef.current = null;
     draftRef.current = nextDraft;
     persistedDraftRef.current = serializeMoodDraft(nextDraft);
     if (ownerChanged) {
@@ -186,6 +165,7 @@ export function InlineMoodCheckIn({
       contextSaveOwnerRef.current = null;
       desiredRevisionRef.current = 0;
       persistedRevisionRef.current = 0;
+      contextRevisionRef.current.clear();
       failedRevisionRef.current = null;
     }
     setDraft(nextDraft);
@@ -220,72 +200,49 @@ export function InlineMoodCheckIn({
           break;
         }
         const targetRevision = desiredRevisionRef.current;
+        const updateContext = [...contextRevisionRef.current].some(
+          ([revision, shouldUpdateContext]) =>
+            revision > persistedRevisionRef.current &&
+            revision <= targetRevision &&
+            shouldUpdateContext
+        );
         const snapshot: MoodDraft = {
           ...draftRef.current,
           emotions: [...draftRef.current.emotions],
           customEmotions: [...draftRef.current.customEmotions],
           visibleTags: [...draftRef.current.visibleTags],
         };
-        const serializedSnapshot = serializeMoodDraft(snapshot);
         if (mountedRef.current) setSaveState('saving');
 
         try {
-          let currentEntry = entryRef.current;
-
-          if (!currentEntry) {
-            const localDate = getLocalCheckInFields().local_date;
-            const { data: existing, error: existingError } = await supabase
-              .from('moods')
-              .select('*')
-              .eq(persistenceOwner.column, persistenceOwner.value)
-              .eq('local_date', localDate)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            if (existingError) throw existingError;
-            if (
-              !isCurrentOwnerGeneration(
-                ownerGenerationRef.current,
-                persistenceGeneration
-              )
-            ) {
-              break;
-            }
-            if (existing) currentEntry = existing as TrackerMoodEntry;
+          const previousId = entryRef.current?.id ?? null;
+          if (persistenceOwner.column !== 'user_id') {
+            throw new Error('Your private profile is not ready.');
           }
+          const localFields = getLocalCheckInFields();
+          const checkIn = {
+            emoji: snapshot.emoji as MoodEmoji,
+            ...localFields,
+          };
+          const id = await saveCheckInWithAttribution(
+            persistenceOwner.value,
+            updateContext
+              ? {
+                  ...checkIn,
+                  note: snapshot.note.trim() || null,
+                  tags: composeMoodTags(snapshot),
+                }
+              : checkIn
+          );
+          const { data, error } = await supabase
+            .from('moods')
+            .select('*')
+            .eq('id', id)
+            .eq(persistenceOwner.column, persistenceOwner.value)
+            .single();
 
-          const previousId = currentEntry?.id ?? null;
-          let savedEntry: TrackerMoodEntry;
-
-          if (currentEntry) {
-            const { data, error } = await supabase
-              .from('moods')
-              .update({
-                emoji: snapshot.emoji as MoodEmoji,
-                note: snapshot.note.trim() || null,
-                tags: composeMoodTags(snapshot),
-              })
-              .eq('id', currentEntry.id)
-              .eq(persistenceOwner.column, persistenceOwner.value)
-              .select('*')
-              .single();
-
-            if (error) throw error;
-            savedEntry = data as TrackerMoodEntry;
-          } else {
-            if (persistenceOwner.column !== 'user_id') {
-              throw new Error('Your private profile is not ready.');
-            }
-            const localFields = getLocalCheckInFields();
-            const id = await saveCheckInWithAttribution(persistenceOwner.value, {
-              emoji: snapshot.emoji as MoodEmoji,
-              note: snapshot.note.trim() || null,
-              tags: composeMoodTags(snapshot),
-              ...localFields,
-            });
-            savedEntry = toEntry(id, snapshot, new Date().toISOString());
-          }
+          if (error) throw error;
+          const savedEntry = data as TrackerMoodEntry;
 
           if (
             !isCurrentOwnerGeneration(
@@ -297,15 +254,20 @@ export function InlineMoodCheckIn({
           }
 
           entryRef.current = savedEntry;
-          undoPlanRef.current = createMoodUndoPlan(currentEntry, savedEntry);
-          persistedDraftRef.current = serializedSnapshot;
+          const savedDraft = moodDraftFromEntry(savedEntry);
+          persistedDraftRef.current = serializeMoodDraft(savedDraft);
           persistedRevisionRef.current = targetRevision;
+          for (const revision of contextRevisionRef.current.keys()) {
+            if (revision <= targetRevision) contextRevisionRef.current.delete(revision);
+          }
           failedRevisionRef.current = null;
           if (mountedRef.current) {
             onEntryChangeRef.current(previousId, savedEntry);
           }
 
           if (targetRevision === desiredRevisionRef.current && mountedRef.current) {
+            draftRef.current = savedDraft;
+            setDraft(savedDraft);
             showFreshSavedState(persistenceGeneration);
           }
         } catch (error) {
@@ -338,7 +300,7 @@ export function InlineMoodCheckIn({
     }
   };
 
-  const queueDraftPersistence = () => {
+  const queueDraftPersistence = (updateContext = true) => {
     if (
       !draftRef.current.emoji ||
       !isCurrentOwnerGeneration(
@@ -351,16 +313,20 @@ export function InlineMoodCheckIn({
     }
 
     desiredRevisionRef.current += 1;
+    contextRevisionRef.current.set(desiredRevisionRef.current, updateContext);
     failedRevisionRef.current = null;
     void persistQueuedDraft();
   };
 
-  const applyDraft = (nextDraft: MoodDraft, persist = true) => {
-    if (deleteRunningRef.current) return;
+  const applyDraft = (
+    nextDraft: MoodDraft,
+    persist = true,
+    updateContext = true
+  ) => {
     draftRef.current = nextDraft;
     setDraft(nextDraft);
     if (!persist || !nextDraft.emoji) return;
-    queueDraftPersistence();
+    queueDraftPersistence(updateContext);
   };
 
   const flushContextDraft = (
@@ -423,8 +389,8 @@ export function InlineMoodCheckIn({
         draftRef.current.support && allowedSupports.has(draftRef.current.support)
           ? draftRef.current.support
           : null,
-    });
-    setDetailsOpen(true);
+    }, true, false);
+    setDetailsOpen(false);
   };
 
   const toggleEmotion = (emotion: MoodEmotion) => {
@@ -468,94 +434,11 @@ export function InlineMoodCheckIn({
 
   const retrySave = () => {
     if (!draftRef.current.emoji) return;
-    desiredRevisionRef.current += 1;
-    failedRevisionRef.current = null;
-    void persistQueuedDraft();
-  };
-
-  const undoCheckIn = async () => {
-    const undoOwner = ownerRef.current;
-    const undoGeneration = ownerGenerationRef.current;
-    const currentEntry = entryRef.current;
-    const undoPlan = undoPlanRef.current;
-    if (
-      !undoOwner ||
-      !undoGeneration.ownerKey ||
-      !currentEntry ||
-      !undoPlan ||
-      undoPlan.savedEntry.id !== currentEntry.id ||
-      persistenceRunningRef.current ||
-      deleteRunningRef.current
-    ) {
-      return;
-    }
-
-    deleteRunningRef.current = true;
-    setDeleteRunning(true);
-    clearSavedTimer();
-    setSaveState('saving');
-    try {
-      let restoredEntry: TrackerMoodEntry | null = null;
-      if (undoPlan.kind === 'delete') {
-        const { error } = await supabase
-          .from('moods')
-          .delete()
-          .eq('id', currentEntry.id)
-          .eq(undoOwner.column, undoOwner.value);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from('moods')
-          .update({
-            emoji: undoPlan.previousEntry.emoji,
-            note: undoPlan.previousEntry.note,
-            tags: undoPlan.previousEntry.tags,
-          })
-          .eq('id', currentEntry.id)
-          .eq(undoOwner.column, undoOwner.value)
-          .select('*')
-          .single();
-        if (error || !data) throw error ?? new Error('Mood undo returned no row');
-        restoredEntry = data as TrackerMoodEntry;
-      }
-      if (
-        !isCurrentOwnerGeneration(
-          ownerGenerationRef.current,
-          undoGeneration
-        )
-      ) {
-        return;
-      }
-
-      const restoredDraft = moodDraftFromEntry(restoredEntry);
-      entryRef.current = restoredEntry;
-      undoPlanRef.current = null;
-      draftRef.current = restoredDraft;
-      persistedDraftRef.current = serializeMoodDraft(restoredDraft);
-      desiredRevisionRef.current = 0;
-      persistedRevisionRef.current = 0;
-      failedRevisionRef.current = null;
-      setDraft(restoredDraft);
-      setDetailsOpen(false);
-      setContextOpen(false);
-      setCustomEmotionOpen(false);
-      setCustomEmotionInput('');
-      setSaveState(restoredEntry ? 'saved-aged' : 'idle');
-      if (mountedRef.current) {
-        onEntryChangeRef.current(currentEntry.id, restoredEntry);
-      }
-    } catch (error) {
-      console.error('Unable to undo mood check-in:', error);
-      if (
-        mountedRef.current &&
-        isCurrentOwnerGeneration(ownerGenerationRef.current, undoGeneration)
-      ) {
-        setSaveState('error');
-      }
-    } finally {
-      deleteRunningRef.current = false;
-      if (mountedRef.current) setDeleteRunning(false);
-    }
+    const updateContext = [...contextRevisionRef.current].some(
+      ([revision, shouldUpdateContext]) =>
+        revision > persistedRevisionRef.current && shouldUpdateContext
+    );
+    queueDraftPersistence(updateContext);
   };
 
   const draftMatchesOwner = isCurrentOwnerGeneration(
@@ -564,7 +447,7 @@ export function InlineMoodCheckIn({
   );
   const visibleDraft = draftMatchesOwner ? draft : moodDraftFromEntry(null);
   const controlsUnavailable =
-    loading || !owner || deleteRunning || !draftMatchesOwner;
+    loading || !owner || !draftMatchesOwner;
   const emotionLimitReached =
     visibleDraft.emotions.length + visibleDraft.customEmotions.length >=
     MAX_MOOD_EMOTIONS;
@@ -649,16 +532,7 @@ export function InlineMoodCheckIn({
         ) : saveState === 'saving' ? (
           <span>Saving…</span>
         ) : saveState === 'saved-fresh' ? (
-          <>
-            <span className="font-semibold">Saved</span>
-            <button
-              type="button"
-              onClick={undoCheckIn}
-              className="font-semibold text-[#A8451A] underline-offset-4 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14402F]"
-            >
-              Undo
-            </button>
-          </>
+          <span className="font-semibold">Saved</span>
         ) : (
           <>
             <span role="alert" className="font-medium">Not saved</span>

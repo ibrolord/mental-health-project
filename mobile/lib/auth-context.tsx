@@ -458,7 +458,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     } catch (error) {
       if (isAppleAuthCancellation(error)) return false;
-      throw error;
+      throw new Error(
+        'Apple sign-in could not start. Make sure you are signed in to your Apple Account in Settings, then try again.'
+      );
     }
 
     if (!credential.identityToken) {

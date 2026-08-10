@@ -200,9 +200,10 @@ describe('tracker interaction contract', () => {
     expect(trackerSource).not.toContain('showAddMood');
   });
 
-  it('includes immediate save, undo, retry, and optional context states', () => {
+  it('includes immediate save, retry, and optional context states without destructive undo', () => {
     expect(checkInSource).toContain('One tap is enough.');
-    expect(checkInSource).toContain('Undo');
+    expect(checkInSource).not.toContain('undoCheckIn');
+    expect(checkInSource).not.toContain(".delete()");
     expect(checkInSource).toContain('Not saved');
     expect(checkInSource).toContain('Retry');
     expect(checkInSource).toContain('Add context');
@@ -211,8 +212,11 @@ describe('tracker interaction contract', () => {
     expect(checkInSource).toContain('aria-controls="mood-optional-details"');
     expect(checkInSource).toContain('Add your own');
     expect(checkInSource).toContain('Type a feeling');
-    expect(checkInSource).toContain(".update({");
-    expect(checkInSource).toContain(".delete()");
+    expect(checkInSource).toContain('saveCheckInWithAttribution');
+    expect(checkInSource).not.toContain(".update({");
+    expect(checkInSource).toContain('contextRevisionRef');
+    expect(checkInSource).toContain('updateContext');
+    expect(checkInSource).toContain('}, true, false);');
   });
 
   it('keeps settled save state quiet and nests history in the trend card', () => {

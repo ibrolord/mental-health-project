@@ -283,7 +283,12 @@ export default function AssessmentTakeScreen() {
         {showSafetySupport && <SafetySupport />}
 
         <View style={s.navRow}>
-          <TouchableOpacity style={[s.btnOutline, s.navButton]} onPress={handleBack}>
+          <TouchableOpacity
+            style={[s.btnOutline, s.navButton]}
+            accessibilityRole="button"
+            accessibilityLabel="Previous assessment question"
+            onPress={handleBack}
+          >
             <Text style={s.btnOutlineText}>Back</Text>
           </TouchableOpacity>
           <TouchableOpacity

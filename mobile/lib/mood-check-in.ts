@@ -195,6 +195,29 @@ export function composeMoodTags(metadata: MoodMetadata): string[] {
   return tags;
 }
 
+export function reconcileMoodTagsForMood(
+  tags: string[],
+  mood: MoodEmoji
+): string[] {
+  const metadata = parseMoodMetadata(tags);
+  const allowedEmotions = new Set(
+    getMoodEmotionOptions(mood).map(({ id }) => id)
+  );
+  const allowedSupports = new Set(
+    getMoodSupportOptions(mood).map(({ id }) => id)
+  );
+
+  return composeMoodTags({
+    emotions: metadata.emotions.filter((emotion) => allowedEmotions.has(emotion)),
+    customEmotions: metadata.customEmotions,
+    support:
+      metadata.support && allowedSupports.has(metadata.support)
+        ? metadata.support
+        : null,
+    visibleTags: metadata.visibleTags,
+  });
+}
+
 export function getMoodMetadataLabels(tags: string[]): string[] {
   const metadata = parseMoodMetadata(tags);
   const labels: string[] = metadata.emotions.map(

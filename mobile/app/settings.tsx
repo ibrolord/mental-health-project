@@ -360,6 +360,7 @@ export default function SettingsScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <Text style={s.cardTitle}>Daily Reminders</Text>
           <Switch
+            accessibilityLabel="Daily reminders"
             value={remindersOn}
             onValueChange={toggleReminders}
             disabled={reminderBusy}
@@ -380,6 +381,9 @@ export default function SettingsScreen() {
                 return (
                   <TouchableOpacity
                     key={opt.value}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`Reminder time ${opt.label}`}
                     onPress={() => toggleTime(opt.value)}
                     disabled={reminderBusy}
                     style={[

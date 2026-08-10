@@ -13,4 +13,16 @@ describe('shared mobile input accessibility', () => {
       'accessibilityLabel={props.accessibilityLabel ?? label}'
     );
   });
+
+  it('provides an iOS keyboard dismissal control for multiline and numeric inputs', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'mobile/components/AppUI.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain('InputAccessoryView');
+    expect(source).toContain("accessibilityLabel=\"Dismiss keyboard\"");
+    expect(source).toContain('onPress={Keyboard.dismiss}');
+    expect(source).toMatch(/usesNumericKeyboard \|\| props\.multiline === true/);
+  });
 });

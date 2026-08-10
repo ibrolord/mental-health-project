@@ -169,14 +169,16 @@ export interface AttributedCheckIn extends LocalCheckInFields {
 export async function saveCheckInWithAttribution(
   expectedUserId: string,
   checkIn: AttributedCheckIn
-): Promise<void> {
+): Promise<string> {
   const attribution = await readAttribution();
   const platform = Platform.OS === 'ios' ? 'ios' : 'android';
-  const { error } = await supabase.rpc('save_check_in_with_attribution', {
+  const { data, error } = await supabase.rpc('patch_daily_mood_check_in', {
     p_expected_user_id: expectedUserId,
     p_emoji: checkIn.emoji,
     p_note: checkIn.note ?? null,
+    p_update_note: Object.prototype.hasOwnProperty.call(checkIn, 'note'),
     p_tags: checkIn.tags ?? [],
+    p_update_tags: Object.prototype.hasOwnProperty.call(checkIn, 'tags'),
     p_local_date: checkIn.local_date,
     p_utc_offset_minutes: checkIn.utc_offset_minutes,
     p_source: attribution.source,
@@ -187,4 +189,8 @@ export async function saveCheckInWithAttribution(
   });
 
   if (error) throw error;
+  if (typeof data !== 'string' || !data) {
+    throw new Error('Check-in save did not return a mood entry ID.');
+  }
+  return data;
 }

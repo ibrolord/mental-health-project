@@ -33,6 +33,7 @@ describe('mobile mood check-in draft', () => {
       emotions: ['calm'] as const,
       customEmotions: ['Quietly hopeful'],
       support: 'keep-going' as const,
+      visibleTags: ['sleep'],
       detailsOpen: true,
     };
 
@@ -53,6 +54,7 @@ describe('mobile mood check-in draft', () => {
         emotions: ['joyful', 'sad', 'joyful'],
         customEmotions: ['Calm', 'Ready'],
         support: 'rest',
+        visibleTags: ['sleep', 'mood-support:rest', 42],
         detailsOpen: true,
       })
     ).toEqual({
@@ -61,6 +63,7 @@ describe('mobile mood check-in draft', () => {
       emotions: ['joyful'],
       customEmotions: ['Ready'],
       support: null,
+      visibleTags: ['sleep'],
       detailsOpen: true,
     });
   });
@@ -74,6 +77,7 @@ describe('mobile mood check-in draft', () => {
       emotions: [],
       customEmotions: [],
       support: null,
+      visibleTags: [],
       detailsOpen: false,
     };
 
@@ -113,6 +117,7 @@ describe('mobile mood check-in draft', () => {
       emotions: [],
       customEmotions: [],
       support: null,
+      visibleTags: [],
       detailsOpen: false,
     });
     await writeStarted;
@@ -143,6 +148,7 @@ describe('mobile mood check-in draft', () => {
       emotions: [],
       customEmotions: [],
       support: null,
+      visibleTags: [],
       detailsOpen: false,
     });
     queue.invalidatePendingWrites();

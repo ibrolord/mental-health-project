@@ -351,8 +351,21 @@ describe('Apple Health release boundaries', () => {
     expect(chat).toContain('confirmAppleHealthAiShare');
     expect(chat).toContain('Confirm every send');
     expect(chat).toContain("process.env.EXPO_PUBLIC_HEALTH_AI_ENABLED === 'true'");
+    expect(chat).toContain('useLocalSearchParams');
+    expect(chat).toContain('setAppleHealthContext(true)');
     expect(chat).not.toContain('snapshot.days');
     expect(chat).not.toContain('generatedAt');
+
+    const insights = readFileSync(
+      resolve(root, 'mobile/components/AppleHealthInsights.tsx'),
+      'utf8'
+    );
+    expect(insights).toContain('Ask AI about this');
+    expect(insights).toContain("health: '1'");
+    expect(insights).toContain('healthRequest: Date.now().toString()');
+    expect(insights).toContain(
+      "process.env.EXPO_PUBLIC_HEALTH_AI_ENABLED === 'true'"
+    );
 
     const consent = readFileSync(
       resolve(root, 'mobile/lib/apple-health-ai-consent.ts'),
@@ -395,7 +408,8 @@ describe('Apple Health release boundaries', () => {
       resolve(root, 'mobile/app/(tabs)/tracker.tsx'),
       'utf8'
     );
-    expect(tracker).toContain('startOfDay(subDays(now, 29))');
+    expect(tracker).toContain("format(subDays(now, 29), 'yyyy-MM-dd')");
+    expect(tracker).toContain(".gte('local_date', rangeStart)");
     expect(tracker).not.toContain('startOfMonth');
   });
 

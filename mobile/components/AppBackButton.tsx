@@ -32,6 +32,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: Colors.primary,
+    flexShrink: 1,
     fontSize: 17,
   },
   pressed: {

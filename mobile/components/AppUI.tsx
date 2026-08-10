@@ -1,6 +1,9 @@
-import type { ComponentProps, ReactNode } from 'react';
+import { useId, type ComponentProps, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  InputAccessoryView,
+  Keyboard,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -73,7 +76,7 @@ export function PageHeader({
             <Feather name={icon} size={21} color={Colors.primary} />
           </View>
         ) : null}
-        {action}
+        {action ? <View style={styles.headerAction}>{action}</View> : null}
       </View>
       {description ? <Text style={styles.description}>{description}</Text> : null}
     </View>
@@ -176,23 +179,27 @@ export function ChoiceChip({
   selected,
   onPress,
   icon,
+  disabled = false,
 }: {
   label: string;
   accessibilityLabel?: string;
   selected: boolean;
   onPress: () => void;
   icon?: FeatherName;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.chip,
         selected && styles.chipSelected,
-        pressed && styles.pressed,
+        disabled && styles.disabled,
+        pressed && !disabled && styles.pressed,
       ]}
     >
       {icon ? (
@@ -219,15 +226,46 @@ export function AppInput({
   helper?: string;
   inputStyle?: StyleProp<TextStyle>;
 }) {
+  const generatedAccessoryId = `app-input-${useId().replace(/:/g, '')}`;
+  const usesNumericKeyboard = [
+    'decimal-pad',
+    'number-pad',
+    'numeric',
+    'phone-pad',
+  ].includes(props.keyboardType ?? '');
+  const needsKeyboardDismiss =
+    Platform.OS === 'ios' && (usesNumericKeyboard || props.multiline === true);
+  const accessoryId =
+    props.inputAccessoryViewID ??
+    (needsKeyboardDismiss ? generatedAccessoryId : undefined);
+
   return (
     <View style={styles.inputGroup}>
       {label ? <Text style={styles.inputLabel}>{label}</Text> : null}
       <TextInput
         {...props}
+        inputAccessoryViewID={accessoryId}
         accessibilityLabel={props.accessibilityLabel ?? label}
         placeholderTextColor={Colors.textSecondary}
         style={[styles.input, props.multiline && styles.multiline, inputStyle]}
       />
+      {needsKeyboardDismiss && !props.inputAccessoryViewID ? (
+        <InputAccessoryView nativeID={generatedAccessoryId}>
+          <View style={styles.keyboardToolbar}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss keyboard"
+              onPress={Keyboard.dismiss}
+              style={({ pressed }) => [
+                styles.keyboardDone,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.keyboardDoneText}>Done</Text>
+            </Pressable>
+          </View>
+        </InputAccessoryView>
+      ) : null}
       {helper ? <Text style={styles.helper}>{helper}</Text> : null}
     </View>
   );
@@ -300,11 +338,13 @@ const styles = StyleSheet.create({
   header: { marginBottom: 22 },
   headerTop: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
   },
-  headerCopy: { flex: 1 },
+  headerCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 220, minWidth: 0 },
+  headerAction: { flexShrink: 0 },
   eyebrow: {
     color: Colors.accent,
     fontSize: 11,
@@ -451,6 +491,23 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 5,
   },
+  keyboardToolbar: {
+    minHeight: 44,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    backgroundColor: '#f3f0e8',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
+    paddingHorizontal: 12,
+  },
+  keyboardDone: {
+    minWidth: 64,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  keyboardDoneText: { color: Colors.primary, fontSize: 15, fontWeight: '700' },
   stat: { flex: 1, minWidth: 86 },
   statValue: {
     color: Colors.text,

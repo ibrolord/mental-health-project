@@ -1196,6 +1196,24 @@ export interface Database {
       };
     };
     Functions: {
+      patch_daily_mood_check_in: {
+        Args: {
+          p_expected_user_id: string;
+          p_emoji: MoodEmoji;
+          p_note: string | null;
+          p_update_note: boolean;
+          p_tags: string[];
+          p_update_tags: boolean;
+          p_local_date: string;
+          p_utc_offset_minutes: number;
+          p_source: string;
+          p_medium: string;
+          p_campaign: string;
+          p_content: string;
+          p_platform: string;
+        };
+        Returns: string;
+      };
       save_check_in_with_attribution: {
         Args: {
           p_expected_user_id: string;

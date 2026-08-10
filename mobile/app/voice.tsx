@@ -64,6 +64,8 @@ const MAX_TRANSCRIPTION_REQUEST_MS = 30_000;
 const MAX_CHAT_REQUEST_MS = 30_000;
 const MAX_REALTIME_CONTROL_REQUEST_MS = 10_000;
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';
+const REALTIME_VOICE_ENABLED =
+  process.env.EXPO_PUBLIC_REALTIME_VOICE_ENABLED === 'true';
 const FALLBACK_RECORDING_OPTIONS: Audio.RecordingOptions = {
   isMeteringEnabled: true,
   android: {
@@ -162,13 +164,12 @@ export default function VoiceSupportScreen() {
   const consentSubjectId = user ? `user_id:${user.id}` : '';
   const [status, setStatus] = useState<SessionStatus>('idle');
   const [mode, setMode] = useState<VoiceMode>(
-    process.env.EXPO_PUBLIC_REALTIME_VOICE_ENABLED === 'true'
-      ? 'realtime'
-      : 'fallback'
+    REALTIME_VOICE_ENABLED ? 'realtime' : 'fallback'
   );
   const [muted, setMuted] = useState(false);
   const [aiResponse, setAiResponse] = useState('');
   const [error, setError] = useState('');
+  const [fallbackNotice, setFallbackNotice] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [sessionLimitSeconds, setSessionLimitSeconds] = useState(4 * 60);
@@ -783,6 +784,7 @@ export default function VoiceSupportScreen() {
     const connectIsCurrent = () => generation === sessionGenerationRef.current;
     try {
       setError('');
+      setFallbackNotice('');
       const hasConsent = await ensureAiDataSharingConsent(consentSubjectId);
       if (!connectIsCurrent() || !hasConsent) return;
 
@@ -843,7 +845,7 @@ export default function VoiceSupportScreen() {
             );
           } else {
             setMode('fallback');
-            setError('Live voice disconnected. Push-to-talk is ready.');
+            setFallbackNotice('Live mode disconnected. Tap-to-talk is ready.');
           }
         }
         peerEvents.addEventListener('connectionstatechange', () => {
@@ -962,7 +964,7 @@ export default function VoiceSupportScreen() {
         disposeRealtimeSession();
         await cancellation;
         setMode('fallback');
-        setError('Live voice could not connect. Push-to-talk is ready.');
+        setFallbackNotice('Live mode is unavailable. Tap-to-talk is ready.');
       }
     } finally {
       connectInFlightRef.current = false;
@@ -985,6 +987,7 @@ export default function VoiceSupportScreen() {
     );
     try {
       setError('');
+      setFallbackNotice('');
       const hasConsent = await ensureAiDataSharingConsent(consentSubjectId);
       if (!startupIsCurrent() || !hasConsent) return;
       const { granted } = await Audio.requestPermissionsAsync();
@@ -1156,7 +1159,7 @@ export default function VoiceSupportScreen() {
       await speakText(responseText, false);
     } catch (reason) {
       if (!turnIsCurrent()) return;
-      console.error('Push-to-talk processing error:', reason);
+      console.error('Tap-to-talk processing error:', reason);
       setError('Voice support could not answer. Please try again.');
       setStatus('idle');
     } finally {
@@ -1234,7 +1237,7 @@ export default function VoiceSupportScreen() {
                 ? 'Microphone paused'
                 : 'Listening'
               : mode === 'fallback'
-                ? 'Push-to-talk mode'
+                ? 'Tap-to-talk ready'
                 : 'Live AI conversation';
   const timer = `${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}`;
   const statusColor =
@@ -1245,16 +1248,12 @@ export default function VoiceSupportScreen() {
         : status === 'idle'
           ? '#d8d1c0'
           : Colors.orange;
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
-        <Text style={styles.eyebrow}>LIVE SUPPORT</Text>
-        <Text style={styles.title}>Talk naturally.</Text>
-        <Text style={styles.subtitle}>
-          The conversation listens for your pauses, checks each turn, and answers
-          aloud.
-        </Text>
+        <Text style={styles.eyebrow}>VOICE SUPPORT</Text>
+        <Text style={styles.title}>Talk it through.</Text>
+        <Text style={styles.subtitle}>Speak freely. Pause when you need to.</Text>
       </View>
 
       <View style={styles.stage}>
@@ -1280,23 +1279,10 @@ export default function VoiceSupportScreen() {
         ) : null}
       </View>
 
-      {privacyOpen ? (
-        <View style={styles.disclosure}>
-          <View style={styles.disclosureCopy}>
-            <Feather name="lock" size={15} color="#675b47" />
-            <Text style={styles.disclosureText}>
-              Live audio uses OpenAI. Push-to-talk uses Gemini; compatible recordings
-              can fall back to OpenAI. Replies use Gemini&apos;s natural voice, with
-              OpenAI or your phone&apos;s voice as a fallback.
-            </Text>
-          </View>
-          <TouchableOpacity
-            accessibilityLabel="Dismiss live voice privacy note"
-            onPress={() => setPrivacyOpen(false)}
-            style={styles.dismiss}
-          >
-            <Feather name="x" size={17} color="#675b47" />
-          </TouchableOpacity>
+      {fallbackNotice ? (
+        <View style={styles.noticeBox}>
+          <Feather name="info" size={16} color={Colors.primary} />
+          <Text style={styles.noticeText}>{fallbackNotice}</Text>
         </View>
       ) : null}
 
@@ -1348,7 +1334,11 @@ export default function VoiceSupportScreen() {
                 <Text style={styles.primaryButtonText}>Interrupt &amp; talk</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={styles.secondaryButton} onPress={toggleMute}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                style={styles.secondaryButton}
+                onPress={toggleMute}
+              >
                 <Feather name={muted ? 'mic' : 'mic-off'} size={19} color={Colors.primary} />
                 <Text style={styles.secondaryButtonText}>
                   {muted ? 'Resume mic' : 'Pause mic'}
@@ -1356,6 +1346,7 @@ export default function VoiceSupportScreen() {
               </TouchableOpacity>
             )}
             <TouchableOpacity
+              accessibilityRole="button"
               style={styles.endButton}
               onPress={() => void endRealtimeSession()}
             >
@@ -1377,6 +1368,7 @@ export default function VoiceSupportScreen() {
               </TouchableOpacity>
             ) : status === 'listening' ? (
               <TouchableOpacity
+                accessibilityRole="button"
                 style={styles.primaryButton}
                 onPress={() => void stopFallbackRecording()}
               >
@@ -1385,6 +1377,8 @@ export default function VoiceSupportScreen() {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityState={{ disabled: status !== 'idle' }}
                 style={[
                   styles.primaryButton,
                   status !== 'idle' && styles.disabledButton,
@@ -1393,23 +1387,26 @@ export default function VoiceSupportScreen() {
                 onPress={() => void startFallbackRecording()}
               >
                 <Feather name="mic" size={19} color="#fff" />
-                <Text style={styles.primaryButtonText}>Hold a conversation</Text>
+                <Text style={styles.primaryButtonText}>Start talking</Text>
               </TouchableOpacity>
             )}
-            {status === 'idle' ? (
+            {status === 'idle' && REALTIME_VOICE_ENABLED ? (
               <TouchableOpacity
+                accessibilityRole="button"
                 style={styles.textButton}
                 onPress={() => {
                   setMode('realtime');
                   void connectRealtime();
                 }}
               >
-                <Text style={styles.textButtonText}>Try live mode again</Text>
+                <Text style={styles.textButtonText}>Try live voice</Text>
               </TouchableOpacity>
             ) : null}
           </>
         ) : (
           <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityState={{ disabled: status !== 'idle' }}
             style={[
               styles.primaryButton,
               status !== 'idle' && styles.disabledButton,
@@ -1423,16 +1420,49 @@ export default function VoiceSupportScreen() {
         )}
       </View>
 
-      <TouchableOpacity
-        style={styles.supportLink}
-        onPress={() => Alert.alert(
-          'Need urgent help?',
-          'If you may act on thoughts of harming yourself or someone else, contact local emergency services now. In the U.S. or Canada, call or text 988.'
-        )}
-      >
-        <Feather name="life-buoy" size={15} color={Colors.textSecondary} />
-        <Text style={styles.supportLinkText}>Urgent support</Text>
-      </TouchableOpacity>
+      {privacyOpen ? (
+        <View style={styles.disclosure}>
+          <View style={styles.disclosureCopy}>
+            <Feather name="lock" size={15} color="#675b47" />
+            <Text style={styles.disclosureText}>
+              Live voice uses OpenAI. Tap-to-talk uses Gemini, with OpenAI as a
+              fallback.
+            </Text>
+          </View>
+          <TouchableOpacity
+            accessibilityLabel="Dismiss voice privacy note"
+            accessibilityRole="button"
+            onPress={() => setPrivacyOpen(false)}
+            style={styles.dismiss}
+          >
+            <Feather name="x" size={17} color="#675b47" />
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      <View style={styles.footerLinks}>
+        {!privacyOpen ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={styles.supportLink}
+            onPress={() => setPrivacyOpen(true)}
+          >
+            <Feather name="lock" size={15} color={Colors.textSecondary} />
+            <Text style={styles.supportLinkText}>Voice privacy</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity
+          accessibilityRole="button"
+          style={styles.supportLink}
+          onPress={() => Alert.alert(
+            'Need urgent help?',
+            'If you may act on thoughts of harming yourself or someone else, contact local emergency services now. In the U.S. or Canada, call or text 988.'
+          )}
+        >
+          <Feather name="life-buoy" size={15} color={Colors.textSecondary} />
+          <Text style={styles.supportLinkText}>Urgent support</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -1461,19 +1491,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
     maxWidth: 360,
   },
-  stage: { alignItems: 'center', paddingVertical: 36 },
+  stage: { alignItems: 'center', paddingVertical: 30 },
   orbHalo: {
     position: 'absolute',
-    top: 42,
-    width: 132,
-    height: 132,
-    borderRadius: 66,
+    top: 36,
+    width: 116,
+    height: 116,
+    borderRadius: 58,
     opacity: 0.15,
   },
   orb: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
+    width: 98,
+    height: 98,
+    borderRadius: 49,
     borderWidth: 2,
     backgroundColor: '#fffdf7',
     alignItems: 'center',
@@ -1483,13 +1513,14 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 18,
     fontWeight: '700',
-    marginTop: 20,
+    marginTop: 16,
   },
   timer: { color: Colors.textSecondary, fontSize: 13, marginTop: 5 },
   disclosure: {
     backgroundColor: '#eee9dc',
     borderRadius: 14,
     padding: 13,
+    marginTop: 20,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
@@ -1501,7 +1532,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   disclosureText: { flex: 1, color: '#675b47', fontSize: 12, lineHeight: 18 },
-  dismiss: { padding: 2 },
+  dismiss: {
+    width: 44,
+    height: 44,
+    marginRight: -8,
+    marginTop: -8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   errorBox: {
     backgroundColor: Colors.dangerLight,
     borderColor: '#fecaca',
@@ -1513,6 +1551,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   errorText: { flex: 1, color: '#991b1b', fontSize: 13, lineHeight: 18 },
+  noticeBox: {
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  noticeText: { flex: 1, color: Colors.primary, fontSize: 13, lineHeight: 18 },
   conversation: { marginTop: 22, gap: 10 },
   conversationTitle: {
     color: Colors.text,
@@ -1547,7 +1595,7 @@ const styles = StyleSheet.create({
   },
   bubbleText: { color: Colors.text, fontSize: 15, lineHeight: 21 },
   controls: {
-    marginTop: 26,
+    marginTop: 22,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -1587,11 +1635,22 @@ const styles = StyleSheet.create({
   },
   endButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   disabledButton: { opacity: 0.5 },
-  textButton: { paddingHorizontal: 14, paddingVertical: 10 },
+  textButton: {
+    minHeight: 44,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    justifyContent: 'center',
+  },
   textButtonText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
+  footerLinks: {
+    marginTop: 20,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+  },
   supportLink: {
-    alignSelf: 'center',
-    marginTop: 28,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

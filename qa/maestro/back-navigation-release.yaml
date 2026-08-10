@@ -1,0 +1,16 @@
+appId: com.mhtoolkit.app
+---
+- launchApp
+- runFlow:
+    when:
+      visible: "Close"
+    commands:
+      - tapOn: "Close"
+- openLink: mhtoolkit:///auth/signup
+- assertVisible: "Create an account"
+- tapOn: "Back"
+- assertNotVisible: "Create an account"
+- openLink: mhtoolkit:///voice
+- assertVisible: "Talk it through."
+- tapOn: "Back"
+- assertNotVisible: "Talk it through."
