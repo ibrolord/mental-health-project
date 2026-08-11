@@ -44,8 +44,11 @@ export default function SignupScreen() {
     accountUpgradePending ? 'confirmation' : 'email'
   );
 
-  const returnToApp = () =>
-    router.dismissTo(params.returnTo === '/partner' ? '/partner' : '/(tabs)');
+  const returnTo =
+    params.returnTo === '/partner' || params.returnTo === '/accountability'
+      ? params.returnTo
+      : '/(tabs)';
+  const returnToApp = () => router.dismissTo(returnTo);
 
   const handleSignup = async () => {
     if (submissionRef.current) return;
@@ -241,7 +244,7 @@ export default function SignupScreen() {
               onPress={() =>
                 router.replace({
                   pathname: '/auth/login',
-                  params: params.returnTo === '/partner' ? { returnTo: '/partner' } : {},
+                  params: returnTo === '/(tabs)' ? {} : { returnTo },
                 })
               }
               accessibilityRole="button"
@@ -290,7 +293,7 @@ export default function SignupScreen() {
           onPress={() =>
             router.replace({
               pathname: '/auth/login',
-              params: params.returnTo === '/partner' ? { returnTo: '/partner' } : {},
+              params: returnTo === '/(tabs)' ? {} : { returnTo },
             })
           }
         >

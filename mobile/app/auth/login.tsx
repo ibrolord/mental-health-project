@@ -39,9 +39,11 @@ export default function LoginScreen() {
   const [blockedAttempt, setBlockedAttempt] = useState<BlockedAttempt | null>(null);
   const [anonymousDataDeleted, setAnonymousDataDeleted] = useState(false);
   const submissionRef = useRef(false);
-  const returnToPartner = params.returnTo === '/partner';
-  const returnToApp = () =>
-    router.dismissTo(returnToPartner ? '/partner' : '/(tabs)');
+  const returnTo =
+    params.returnTo === '/partner' || params.returnTo === '/accountability'
+      ? params.returnTo
+      : '/(tabs)';
+  const returnToApp = () => router.dismissTo(returnTo);
 
   const handleLogin = async () => {
     if (submissionRef.current || blockedAttempt) return;
@@ -147,7 +149,7 @@ export default function LoginScreen() {
               onPress={() =>
                 router.replace({
                   pathname: '/auth/signup',
-                  params: returnToPartner ? { returnTo: '/partner' } : {},
+                  params: returnTo === '/(tabs)' ? {} : { returnTo },
                 })
               }
             >
@@ -247,7 +249,7 @@ export default function LoginScreen() {
           onPress={() =>
             router.replace({
               pathname: '/auth/signup',
-              params: returnToPartner ? { returnTo: '/partner' } : {},
+              params: returnTo === '/(tabs)' ? {} : { returnTo },
             })
           }
         >

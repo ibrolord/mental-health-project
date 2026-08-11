@@ -31,6 +31,7 @@ type Route =
   | '/affirmations'
   | '/library'
   | '/partner'
+  | '/accountability'
   | '/resources'
   | '/research'
   | '/voice'
@@ -150,6 +151,12 @@ const GROUPS: {
         description: 'Share counts and celebrate progress',
         icon: 'users',
         route: '/partner',
+      },
+      {
+        label: 'Together',
+        description: 'Shared commitments with someone you trust',
+        icon: 'heart',
+        route: '/accountability',
       },
       {
         label: 'Find support',
