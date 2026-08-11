@@ -15,7 +15,7 @@ vi.mock('@/lib/api/auth', () => ({
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
-  supabaseAdmin: { from: mocks.from },
+  getSupabaseAdmin: () => ({ from: mocks.from }),
 }));
 
 function queryResult(data: Array<{ id: string }> = [], error: unknown = null) {

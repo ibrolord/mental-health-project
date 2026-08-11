@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-08-09.1",
+  "checklistVersion": "2026-08-11.1",
   "platform": "ios",
-  "expectedInventory": { "routes": 28, "routeChecks": 543, "workflows": 102, "total": 645 },
+  "expectedInventory": { "routes": 33, "routeChecks": 637, "workflows": 110, "total": 747 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -54,6 +54,14 @@
       "partner.support-preferences": { "identityRequirements": ["email-owner", "partner"] },
       "partner.revoke": { "identityRequirements": ["email-owner", "partner", "revoked-partner"] },
       "partner.account-upgrade": { "identityRequirements": ["saved-anonymous", "email-owner", "partner"] },
+      "together.invite-accept": { "identityRequirements": ["email-owner", "partner"] },
+      "together.explicit-sharing": { "identityRequirements": ["email-owner", "partner"] },
+      "together.scope-controls": { "identityRequirements": ["email-owner", "partner"] },
+      "together.check-in-privacy": { "identityRequirements": ["email-owner", "partner"] },
+      "together.support-actions": { "identityRequirements": ["email-owner", "partner"] },
+      "together.collaboration": { "identityRequirements": ["email-owner", "partner"] },
+      "together.revoke-block": { "identityRequirements": ["email-owner", "partner", "revoked-partner"] },
+      "together.owner-isolation": { "identityRequirements": ["email-owner", "partner", "revoked-partner"] },
       "privacy.export": { "identityRequirements": ["email-owner"] },
       "privacy.visit-brief": { "identityRequirements": ["email-owner"] },
       "privacy.activity": { "identityRequirements": ["email-owner"] },
@@ -278,6 +286,46 @@
       "controls": ["create-account", "sign-in", "label", "default-scopes", "more-scopes", "create-invite", "share-invite", "revoke-invite", "scope-toggle", "remove-partner", "leave-partner", "send-cheer", "offer-reward", "reward-options", "mark-seen", "support-style", "check-in-frequency", "advice-mode", "celebrate-progress", "gentle-reminders", "acknowledge-setbacks", "save-support-preferences", "share-support-preferences"]
     },
     {
+      "id": "together",
+      "path": "/accountability",
+      "source": "app/accountability/index.tsx",
+      "kind": "stack",
+      "identityRequirements": ["email-owner", "partner", "revoked-partner"],
+      "controls": ["anonymous-sign-in", "pull-refresh", "invite", "join", "share-commitment", "partner-privacy-collapse", "end-connection", "block-connection", "share-pending-invite", "cancel-pending-invite", "title-scope", "progress-scope", "notes-scope", "received-nudges", "mine-tab", "theirs-tab", "empty-state-create", "commitment-open", "error-retry"]
+    },
+    {
+      "id": "together-create",
+      "path": "/accountability/create",
+      "source": "app/accountability/create.tsx",
+      "kind": "stack",
+      "identityRequirements": ["email-owner"],
+      "controls": ["partner-select", "title", "cadence-daily", "cadence-weekly", "private-note", "note-sharing", "submit", "double-submit", "no-connection-back"]
+    },
+    {
+      "id": "together-invite",
+      "path": "/accountability/invite",
+      "source": "app/accountability/invite.tsx",
+      "kind": "stack",
+      "identityRequirements": ["email-owner"],
+      "controls": ["partner-email", "email-validation", "create-invite", "double-submit", "native-share", "done"]
+    },
+    {
+      "id": "together-join",
+      "path": "/accountability/join",
+      "source": "app/accountability/join.tsx",
+      "kind": "stack",
+      "identityRequirements": ["partner"],
+      "controls": ["invite-code", "join", "keyboard-submit", "double-submit", "invalid-or-used-code"]
+    },
+    {
+      "id": "together-commitment",
+      "path": "/accountability/[commitmentId]",
+      "source": "app/accountability/[commitmentId].tsx",
+      "kind": "stack",
+      "identityRequirements": ["email-owner", "partner", "revoked-partner"],
+      "controls": ["stop-sharing", "progress-state", "private-commitment-note", "hide-commitment-note", "check-in-note", "check-in-note-sharing", "check-in", "double-check-in", "hide-check-in-note", "encourage-nudge", "check-in-nudge", "celebrate-nudge", "priority-select", "send-suggestion", "reward", "accept-suggestion", "decline-suggestion", "comment", "comment-submit", "invalid-or-revoked-link"]
+    },
+    {
       "id": "plans",
       "path": "/plans",
       "source": "app/plans.tsx",
@@ -402,6 +450,14 @@
     { "id": "partner.support-preferences", "area": "partner", "kind": "manual", "title": "Owner support preferences save once, persist, and share only through an explicit native share action" },
     { "id": "partner.revoke", "area": "partner", "kind": "manual", "title": "Invite revoke, partner remove, partner leave, and post-revocation access denial work" },
     { "id": "partner.account-upgrade", "area": "partner", "kind": "manual", "title": "Anonymous data and pending partner intent survive account creation and authentication" },
+    { "id": "together.invite-accept", "area": "together", "kind": "manual", "title": "An owner creates an email-bound invite and the intended separate account accepts it exactly once" },
+    { "id": "together.explicit-sharing", "area": "together", "kind": "manual", "title": "Only a newly created Together commitment is shared; existing goals, moods, assessments, chats, journals, and reflections remain absent" },
+    { "id": "together.scope-controls", "area": "together", "kind": "manual", "title": "Title, progress-count, and explicitly shared-note controls update independently and survive relaunch" },
+    { "id": "together.check-in-privacy", "area": "together", "kind": "manual", "title": "Check-ins remain unique by date, private notes stay owner-only, and a shared note becomes private immediately when sharing is disabled" },
+    { "id": "together.support-actions", "area": "together", "kind": "manual", "title": "Encouragement, check-in, and celebration nudges are rate-limited, attributed, and visible only to the intended connection" },
+    { "id": "together.collaboration", "area": "together", "kind": "manual", "title": "Comments, priority suggestions with accept or decline, and owner-selected rewards persist and remain connection-scoped" },
+    { "id": "together.revoke-block", "area": "together", "kind": "manual", "title": "Ending or blocking a connection immediately removes partner access while retaining the owner's private records" },
+    { "id": "together.owner-isolation", "area": "privacy", "kind": "manual", "title": "Owner, partner, outsider, and revoked-partner identities cannot read or mutate another connection's Together records" },
     { "id": "privacy.export", "area": "privacy", "kind": "manual", "title": "Export contains every owner-scoped legacy and wellbeing record and no other user's records" },
     { "id": "privacy.visit-brief", "area": "privacy", "kind": "manual", "title": "Visit Brief starts empty, requires separate Safety Plan opt-in, excludes journal/chat/assessments/mood notes, and shares exactly the preview" },
     { "id": "privacy.activity", "area": "privacy", "kind": "manual", "title": "Privacy Activity shows only the owner's allowlisted event taxonomy and never content or arbitrary metadata" },

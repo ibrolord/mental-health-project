@@ -17,7 +17,7 @@ vi.mock('@/lib/api/auth', () => ({
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
-  supabaseAdmin: { rpc: mocks.rpc },
+  getSupabaseAdmin: () => ({ rpc: mocks.rpc }),
 }));
 
 vi.mock('@/lib/privacy-events/server', () => ({

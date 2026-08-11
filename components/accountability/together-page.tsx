@@ -15,7 +15,7 @@ import {
   UserRoundPlus,
   UsersRound,
 } from 'lucide-react';
-import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -607,10 +607,7 @@ export function TogetherPage(): React.ReactElement {
   };
 
   const commitments = overview ? (tab === 'mine' ? overview.mine : overview.theirs) : [];
-  const selected = useMemo(
-    () => commitments.find((item) => item.id === selectedId) ?? commitments[0] ?? null,
-    [commitments, selectedId]
-  );
+  const selected = commitments.find((item) => item.id === selectedId) ?? commitments[0] ?? null;
 
   const switchTab = (next: CommitmentTab): void => {
     setTab(next);

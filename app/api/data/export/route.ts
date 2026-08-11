@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import {
   privacyPlatformFromRequest,
   recordServerPrivacyEvent,
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
 
     const ownerColumn = auth.userId ? 'user_id' : 'session_id';
     const ownerValue = auth.userId ?? auth.sessionId!;
+    const supabaseAdmin = getSupabaseAdmin();
 
     if (auth.userId) {
       await recordServerPrivacyEvent({

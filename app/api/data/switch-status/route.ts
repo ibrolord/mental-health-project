@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { corsHeaders, unauthorizedResponse, verifyAuth } from '@/lib/api/auth';
 import { OWNED_DATA_SOURCES } from '@/lib/data/owned-data-inventory';
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
@@ -17,6 +17,8 @@ export async function POST(request: NextRequest) {
         { status: 409, headers: corsHeaders() }
       );
     }
+
+    const supabaseAdmin = getSupabaseAdmin();
 
     const results = await Promise.all(
       OWNED_DATA_SOURCES.filter(({ blocksAccountSwitch }) =>

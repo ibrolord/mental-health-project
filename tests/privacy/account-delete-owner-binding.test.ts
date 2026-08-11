@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   deleteUser: vi.fn(),
+  rpc: vi.fn(),
   verifyAuth: vi.fn(),
 }));
 
@@ -14,7 +15,10 @@ vi.mock('@/lib/api/auth', () => ({
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
-  supabaseAdmin: { auth: { admin: { deleteUser: mocks.deleteUser } } },
+  getSupabaseAdmin: () => ({
+    auth: { admin: { deleteUser: mocks.deleteUser } },
+    rpc: mocks.rpc,
+  }),
 }));
 
 import { POST } from '../../app/api/account/delete/route';
@@ -23,12 +27,14 @@ describe('account deletion owner binding', () => {
   beforeEach(() => {
     mocks.verifyAuth.mockReset();
     mocks.deleteUser.mockReset();
+    mocks.rpc.mockReset();
     mocks.verifyAuth.mockResolvedValue({
       valid: true,
       userId: 'owner-1',
       isAnonymous: false,
     });
     mocks.deleteUser.mockResolvedValue({ error: null });
+    mocks.rpc.mockResolvedValue({ data: { deleted: true }, error: null });
   });
 
   it('deletes only when the confirmed owner matches the captured token', async () => {

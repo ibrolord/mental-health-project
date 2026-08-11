@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { subjectForAuth } from '@/lib/ai/report-token';
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 
 export const REALTIME_HOURLY_SESSION_LIMIT = 2;
 export const REALTIME_DAILY_SESSION_LIMIT = 4;
@@ -33,6 +33,7 @@ export async function claimRealtimeVoiceSession(auth: {
   sessionId?: string;
 }): Promise<VoiceSessionClaimResult> {
   const subjectHash = realtimeVoiceSubjectHashForAuth(auth);
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin.rpc('claim_realtime_voice_session', {
     p_daily_limit: REALTIME_DAILY_SESSION_LIMIT,
     p_hourly_limit: REALTIME_HOURLY_SESSION_LIMIT,
@@ -54,6 +55,7 @@ export async function releaseRealtimeVoiceSession(
   grantId: string,
   subjectHash: string
 ): Promise<void> {
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin.rpc(
     'release_realtime_voice_session',
     {
@@ -74,6 +76,7 @@ export async function registerRealtimeVoiceSession(
   providerCallId: string,
   sessionSeconds: number
 ): Promise<void> {
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin.rpc(
     'register_realtime_voice_session',
     {
@@ -94,6 +97,7 @@ export async function confirmRealtimeVoiceSession(
   grantId: string,
   subjectHash: string
 ): Promise<'confirmed' | 'already_active' | 'not_found'> {
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin.rpc(
     'confirm_realtime_voice_session',
     {
@@ -118,6 +122,7 @@ export async function cancelRealtimeVoiceSession(
   grantId: string,
   subjectHash: string
 ): Promise<string | null> {
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin.rpc(
     'cancel_realtime_voice_session',
     {
@@ -139,6 +144,7 @@ export async function completeRealtimeVoiceSession(
     | 'provider_already_ended'
     | 'server_hangup_failed'
 ): Promise<'active_ended' | 'pending_released' | 'not_found'> {
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin.rpc(
     'complete_realtime_voice_session',
     {
