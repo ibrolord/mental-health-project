@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import {
   privacyPlatformFromRequest,
   recordServerPrivacyEvent,
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { data, error } = await supabaseAdmin.rpc('delete_owned_data', {
+    const { data, error } = await getSupabaseAdmin().rpc('delete_owned_data', {
       p_user_id: auth.userId ?? null,
       p_session_id: auth.sessionId ?? null,
     });

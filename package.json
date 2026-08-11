@@ -21,7 +21,8 @@
     "typecheck:tests": "tsc -p tsconfig.test.json",
     "test": "npm run typecheck:tests && vitest run tests",
     "test:ai": "vitest run tests/ai",
-    "test:growth": "vitest run tests/growth"
+    "test:growth": "vitest run tests/growth",
+    "test:accountability": "vitest run tests/accountability components/accountability/accountability-state.test.ts components/accountability/accountability-client.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

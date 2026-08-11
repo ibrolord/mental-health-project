@@ -178,6 +178,7 @@ export default function RootLayout() {
           <Stack.Screen name="plans" options={stackScreenOptions('My Plans')} />
           <Stack.Screen name="focus" options={stackScreenOptions('Focus Mode')} />
           <Stack.Screen name="partner" options={stackScreenOptions('Accountability')} />
+          <Stack.Screen name="accountability" options={{ headerShown: false }} />
           <Stack.Screen name="resources" options={stackScreenOptions('Find Support')} />
           <Stack.Screen name="research" options={stackScreenOptions('Research')} />
           <Stack.Screen name="support" options={stackScreenOptions('Support')} />

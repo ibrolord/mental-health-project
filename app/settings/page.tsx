@@ -94,7 +94,7 @@ export default function SettingsPage() {
       'This will permanently delete:\n' +
       '- Check-ins, assessments, goals, habits, journal entries, and chat history\n' +
       '- Life plans, focus sessions, reminders, and push subscriptions\n' +
-      '- Library state, partner links, and affirmation history\n' +
+      '- Library state, partner links, Together activity, and affirmation history\n' +
       '- AI response reports and acquisition attribution\n\n' +
       'Type "DELETE" in the next prompt to confirm.'
     );
@@ -279,6 +279,24 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Together</CardTitle>
+            <CardDescription>
+              Share commitments with one person you trust
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-muted-foreground">
+              You choose what to share. Your moods, assessments, AI chats, goals,
+              and reflections are not added automatically.
+            </p>
+            <Button onClick={() => router.push(isAnonymous ? '/auth/signup?next=/accountability' : '/accountability')}>
+              {isAnonymous ? 'Create an Account for Together' : 'Open Together'}
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Data Export */}
         <Card className="mb-6">
           <CardHeader>
@@ -291,7 +309,8 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground mb-4">
               This includes your private journal, moods, assessments, goals,
               habits, life plans, focus sessions, reminders, library state, and
-              chat history.
+              chat history. For permanent accounts, it also includes your
+              Together activity.
             </p>
             <Button onClick={handleExportData} disabled={loading}>
               {loading ? 'Exporting...' : 'Export Data (JSON)'}
@@ -348,6 +367,7 @@ export default function SettingsPage() {
                 <li>Private journal entries and reflections</li>
                 <li>Chat conversations with AI (stored securely)</li>
                 <li>Affirmation history, library state, and AI response reports</li>
+                <li>Partner links and the Together activity you created or received</li>
                 <li>Optional browser push subscription details</li>
                 <li>Allowlisted first-touch campaign labels after your first saved check-in</li>
                 <li>Email address (only if you create an account)</li>

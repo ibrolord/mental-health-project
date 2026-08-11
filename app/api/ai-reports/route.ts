@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import {
   getReportSigningSecret,
   hashResponse,
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Too many reports' }, { status: 429, headers: corsHeaders() });
     }
 
-    const { data: result, error: insertError } = await supabaseAdmin.rpc('submit_ai_response_report', {
+    const { data: result, error: insertError } = await getSupabaseAdmin().rpc('submit_ai_response_report', {
       p_max_reports_per_hour: MAX_REPORTS_PER_HOUR,
       p_response_id: parsed.data.responseId,
       p_user_id: auth.userId,
