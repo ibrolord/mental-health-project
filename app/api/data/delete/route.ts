@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     if (!auth.userId && !auth.sessionId) return unauthorizedResponse();
 
-    const { data, error } = await supabaseAdmin.rpc('delete_owned_data', {
+    const { data, error } = await getSupabaseAdmin().rpc('delete_owned_data', {
       p_user_id: auth.userId ?? null,
       p_session_id: auth.sessionId ?? null,
     });

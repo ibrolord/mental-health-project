@@ -1,10 +1,10 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from './supabase';
+import * as Linking from 'expo-linking';
+import { clearPersistedSupabaseSession, supabase } from './supabase';
 import type { Session, User } from '@supabase/supabase-js';
 import { apiRequest } from './api';
-import { clearPersistedSupabaseSession } from './supabase';
 
 let anonymousSignIn: Promise<Session> | null = null;
 const LEGACY_SESSION_KEY = 'anonymous_session_id';
@@ -155,8 +155,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const signUp = async (_email: string, _password: string) => {
-    throw new Error('Account creation is temporarily unavailable while email verification is being upgraded.');
+  const signUp = async (email: string, password: string) => {
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+
+    // Preserve the same user ID. Supabase requires email verification before
+    // a password can be added, so the callback completes that second step.
+    if (current.session?.user.is_anonymous) {
+      const { error } = await supabase.auth.updateUser(
+        { email },
+        { emailRedirectTo: Linking.createURL('/auth/complete-signup') }
+      );
+      if (error) throw error;
+      return;
+    }
+
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
   };
 
   const signOut = async () => {

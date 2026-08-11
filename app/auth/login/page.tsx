@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -17,6 +17,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [nextPath, setNextPath] = useState('/dashboard');
+
+  useEffect(() => {
+    const candidate = new URLSearchParams(window.location.search).get('next');
+    if (candidate?.startsWith('/') && !candidate.startsWith('//')) setNextPath(candidate);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +31,7 @@ export default function LoginPage() {
 
     try {
       await signIn(email, password);
-      router.push('/dashboard');
+      router.push(nextPath);
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
     } finally {
@@ -84,6 +90,12 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-6 text-center">
+              <p className="text-sm text-slate-600">
+                New to MHtoolkit?{' '}
+                <Link href={`/auth/signup?next=${encodeURIComponent(nextPath)}`} className="text-primary hover:underline">
+                  Create an account
+                </Link>
+              </p>
               <p className="text-sm text-slate-600 mt-2">
                 or{' '}
                 <Link href="/" className="text-primary hover:underline">
@@ -97,4 +109,3 @@ export default function LoginPage() {
     </main>
   );
 }
-

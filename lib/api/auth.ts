@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -30,7 +30,7 @@ export async function verifyAuth(request: NextRequest): Promise<{ valid: boolean
   // 2. LEGACY COMPATIBILITY ONLY: service-role lookup avoids exposing the
   // anonymous_sessions registry through public RLS.
   if (sessionIdHeader) {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await getSupabaseAdmin()
       .from('anonymous_sessions')
       .select('session_id')
       .eq('session_id', sessionIdHeader)
@@ -60,7 +60,7 @@ export function unauthorizedResponse() {
 export function corsHeaders(): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Session-Id',
   };
 }

@@ -54,7 +54,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAnonymous: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, redirectPath?: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -132,8 +132,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const signUp = async (_email: string, _password: string) => {
-    throw new Error('Account creation is temporarily unavailable while email verification is being upgraded.');
+  const signUp = async (email: string, password: string, redirectPath = '/dashboard') => {
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+
+    const safePath = redirectPath.startsWith('/') && !redirectPath.startsWith('//') ? redirectPath : '/dashboard';
+    const emailRedirectTo = `${window.location.origin}/auth/login?next=${encodeURIComponent(safePath)}`;
+
+    // Convert the current anonymous identity in place so locally created data
+    // remains attached to the same user ID after email verification. Supabase
+    // requires the email to be verified before a password can be added.
+    if (current.session?.user.is_anonymous) {
+      const { error } = await supabase.auth.updateUser(
+        { email },
+        { emailRedirectTo: `${window.location.origin}/auth/complete-signup?next=${encodeURIComponent(safePath)}` }
+      );
+      if (error) throw error;
+      return;
+    }
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo },
+    });
+    if (error) throw error;
   };
 
   const signOut = async () => {

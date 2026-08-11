@@ -40,6 +40,27 @@ export default function SettingsPage() {
         supabase.from('chat_history').select('*').eq(query.column, query.value),
       ]);
 
+      const accountability = !isAnonymous && user
+        ? Object.fromEntries(await Promise.all([
+          'accountability_connections',
+          'accountability_memberships',
+          'accountability_scope_controls',
+          'accountability_commitments',
+          'accountability_commitment_notes',
+          'accountability_check_ins',
+          'accountability_check_in_notes',
+          'accountability_comments',
+          'accountability_nudges',
+          'accountability_priority_suggestions',
+          'accountability_rewards',
+          'accountability_blocks',
+        ].map(async (table) => {
+          const { data, error } = await supabase.from(table).select('*');
+          if (error) throw error;
+          return [table, data ?? []] as const;
+        })))
+        : {};
+
       const exportData = {
         exported_at: new Date().toISOString(),
         user_type: isAnonymous ? 'anonymous' : 'authenticated',
@@ -49,6 +70,7 @@ export default function SettingsPage() {
         habits: habits.data || [],
         habit_logs: habitLogs.data || [],
         chat_history: chatHistory.data || [],
+        together: accountability,
       };
 
       // Create JSON file
@@ -80,7 +102,8 @@ export default function SettingsPage() {
       '- All assessments\n' +
       '- All goals\n' +
       '- All habits and logs\n' +
-      '- All chat history\n\n' +
+      '- All chat history\n' +
+      '- Your Together connection and shared activity\n\n' +
       'Type "DELETE" in the next prompt to confirm.'
     );
 
@@ -182,11 +205,16 @@ export default function SettingsPage() {
             {isAnonymous ? (
               <div>
                 <p className="text-slate-700 mb-4">
-                  You are currently using the app anonymously. New account creation is temporarily unavailable while email verification is upgraded.
+                  You are using the app anonymously. Create a permanent account to sync across devices and use Together.
                 </p>
-                <Button onClick={() => router.push('/auth/login')}>
-                  Sign In to an Existing Account
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => router.push('/auth/signup')}>
+                    Create an Account
+                  </Button>
+                  <Button variant="outline" onClick={() => router.push('/auth/login')}>
+                    Sign In
+                  </Button>
+                </div>
               </div>
             ) : (
               <div>
@@ -204,6 +232,24 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Together */}
+        <Card className="mb-6 border-blue-100">
+          <CardHeader>
+            <CardTitle>Together</CardTitle>
+            <CardDescription>
+              Share selected commitments with one accountability partner
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-slate-600 mb-4">
+              Moods, assessments, AI chat, and private reflections are never part of Together.
+            </p>
+            <Button onClick={() => router.push(isAnonymous ? '/auth/signup' : '/accountability')}>
+              {isAnonymous ? 'Create an Account for Together' : 'Open Together'}
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Data Export */}
         <Card className="mb-6">
           <CardHeader>
@@ -214,7 +260,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-slate-600 mb-4">
-              This includes all your moods, assessments, goals, habits, and chat history.
+              This includes your moods, assessments, goals, habits, chat history, and Together activity.
             </p>
             <Button onClick={handleExportData} disabled={loading}>
               {loading ? 'Exporting...' : 'Export Data (JSON)'}

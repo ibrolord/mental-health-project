@@ -1,7 +1,15 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { UserContext, Message } from './claude';
+import type { UserContext, Message } from './claude';
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
+let geminiClient: GoogleGenerativeAI | null = null;
+
+function getGemini(): GoogleGenerativeAI {
+  if (geminiClient) return geminiClient;
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new Error('Gemini is not configured');
+  geminiClient = new GoogleGenerativeAI(apiKey);
+  return geminiClient;
+}
 
 const BASE_SYSTEM_PROMPT = `You are a compassionate self-help support coach. Your role is to:
 
@@ -102,7 +110,7 @@ function buildContextualPrompt(userContext?: UserContext): string {
 
 export async function chat(messages: Message[], userContext?: UserContext): Promise<string> {
   try {
-    const model = genAI.getGenerativeModel({ 
+    const model = getGemini().getGenerativeModel({
       model: "gemini-1.5-flash",
       systemInstruction: buildContextualPrompt(userContext)
     });

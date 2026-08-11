@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { corsHeaders, unauthorizedResponse, verifyAuth } from '@/lib/api/auth';
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 
 const LEGACY_SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const supabaseAdmin = getSupabaseAdmin();
     const { data, error } = await supabaseAdmin.rpc('migrate_legacy_anonymous_data', {
       p_legacy_session_id: legacySessionId,
       p_user_id: auth.userId,

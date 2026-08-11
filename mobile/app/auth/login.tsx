@@ -53,6 +53,10 @@ export default function LoginScreen() {
         <Text style={s.btnText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity accessibilityRole="link" onPress={() => router.push('/auth/signup')} style={{ marginTop: 18 }}>
+        <Text style={s.link}>New to MHtoolkit? Create an account</Text>
+      </TouchableOpacity>
+
     </View>
   );
 }

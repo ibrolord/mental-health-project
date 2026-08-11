@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+let anthropicClient: Anthropic | null = null;
+
+function getAnthropic(): Anthropic {
+  if (anthropicClient) return anthropicClient;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('Claude is not configured');
+  anthropicClient = new Anthropic({ apiKey });
+  return anthropicClient;
+}
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
@@ -50,7 +56,7 @@ export async function POST(request: NextRequest) {
 
 Return ONLY the affirmation text, no explanation or formatting.`;
 
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: 'claude-3-5-sonnet-20241022',
       max_tokens: 150,
       messages: [
@@ -76,5 +82,4 @@ Return ONLY the affirmation text, no explanation or formatting.`;
     );
   }
 }
-
 

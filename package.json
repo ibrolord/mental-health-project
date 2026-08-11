@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:ai": "vitest run tests/ai"
+    "test:ai": "vitest run tests/ai",
+    "test:accountability": "vitest run tests/accountability components/accountability/accountability-state.test.ts components/accountability/accountability-client.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

@@ -1,8 +1,14 @@
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+let openaiClient: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (openaiClient) return openaiClient;
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('OpenAI is not configured');
+  openaiClient = new OpenAI({ apiKey });
+  return openaiClient;
+}
 
 const SUPPORT_INSTRUCTIONS = `You are a warm, empathetic AI support companion conducting a voice support conversation.
 
@@ -64,7 +70,7 @@ export async function createVoiceSession(config: VoiceSessionConfig = {}) {
 // Server-side streaming for voice responses
 export async function generateVoiceResponse(text: string, voice: string = 'nova') {
   try {
-    const mp3 = await openai.audio.speech.create({
+    const mp3 = await getOpenAI().audio.speech.create({
       model: 'tts-1-hd',
       voice: voice as any,
       input: text,
@@ -81,7 +87,7 @@ export async function generateVoiceResponse(text: string, voice: string = 'nova'
 // Transcribe user audio to text
 export async function transcribeAudio(audioFile: File | Blob) {
   try {
-    const transcription = await openai.audio.transcriptions.create({
+    const transcription = await getOpenAI().audio.transcriptions.create({
       file: audioFile as any,
       model: 'whisper-1',
       language: 'en',

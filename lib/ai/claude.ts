@@ -1,8 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+let anthropicClient: Anthropic | null = null;
+
+function getAnthropic(): Anthropic {
+  if (anthropicClient) return anthropicClient;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('Claude is not configured');
+  anthropicClient = new Anthropic({ apiKey });
+  return anthropicClient;
+}
 
 const BASE_SYSTEM_PROMPT = `You are a compassionate self-help support coach. Your role is to:
 
@@ -127,7 +133,7 @@ export async function chat(messages: Message[], userContext?: UserContext): Prom
   try {
     const systemPrompt = buildContextualPrompt(userContext);
     
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       system: systemPrompt,

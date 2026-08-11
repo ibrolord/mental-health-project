@@ -102,6 +102,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="auth/login" options={{ presentation: 'modal', headerShown: true, title: 'Sign In' }} />
           <Stack.Screen name="auth/signup" options={{ presentation: 'modal', headerShown: true, title: 'Sign Up' }} />
+          <Stack.Screen name="auth/complete-signup" options={{ presentation: 'modal', headerShown: true, title: 'Create Password' }} />
           <Stack.Screen name="assessments/[type]" options={{ headerShown: true, title: 'Assessment' }} />
           <Stack.Screen name="goals" options={{ headerShown: true, title: 'Life Organizer' }} />
           <Stack.Screen name="habits" options={{ headerShown: true, title: 'Habit Tracker' }} />
@@ -109,6 +110,7 @@ export default function RootLayout() {
           <Stack.Screen name="library" options={{ headerShown: true, title: 'Book Library' }} />
           <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings' }} />
           <Stack.Screen name="voice" options={{ headerShown: true, title: 'Voice Support' }} />
+          <Stack.Screen name="accountability" options={{ headerShown: false }} />
         </Stack>
       </AuthProvider>
     </ErrorBoundary>

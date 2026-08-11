@@ -75,6 +75,27 @@ export default function SettingsScreen() {
         supabase.from('user_book_favorites').select('*').eq(query.column, query.value),
       ]);
 
+      const accountability = !isAnonymous && user
+        ? Object.fromEntries(await Promise.all([
+          'accountability_connections',
+          'accountability_memberships',
+          'accountability_scope_controls',
+          'accountability_commitments',
+          'accountability_commitment_notes',
+          'accountability_check_ins',
+          'accountability_check_in_notes',
+          'accountability_comments',
+          'accountability_nudges',
+          'accountability_priority_suggestions',
+          'accountability_rewards',
+          'accountability_blocks',
+        ].map(async (table) => {
+          const { data: rows, error } = await supabase.from(table).select('*');
+          if (error) throw error;
+          return [table, rows ?? []] as const;
+        })))
+        : {};
+
       const data = JSON.stringify({
         exported_at: new Date().toISOString(),
         user_type: isAnonymous ? 'anonymous' : 'authenticated',
@@ -84,6 +105,7 @@ export default function SettingsScreen() {
         habits: habits.data || [],
         chat_history: chatHistory.data || [],
         book_favorites: bookFavorites.data || [],
+        together: accountability,
       }, null, 2);
 
       const path = `${FileSystem.documentDirectory}mental-health-data.json`;
@@ -101,7 +123,7 @@ export default function SettingsScreen() {
     if (!query) return;
     Alert.alert(
       'Delete All Data?',
-      'This will permanently delete all your moods, assessments, goals, habits, and chat history. This cannot be undone.',
+      'This will permanently delete all your moods, assessments, goals, habits, chat history, and Together connection. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -181,9 +203,12 @@ export default function SettingsScreen() {
         {isAnonymous ? (
           <>
             <Text style={s.bodyText}>You are using the app anonymously.</Text>
-            <Text style={[s.bodyText, { marginTop: 4 }]}>New account creation is temporarily unavailable while email verification is upgraded.</Text>
+            <Text style={[s.bodyText, { marginTop: 4 }]}>Create a permanent account to sync across devices and use Together.</Text>
+            <TouchableOpacity style={s.btn} onPress={() => router.push('/auth/signup')}>
+              <Text style={s.btnText}>Create an Account</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={s.btnOutline} onPress={() => router.push('/auth/login')}>
-              <Text style={s.btnOutlineText}>Sign In to an Existing Account</Text>
+              <Text style={s.btnOutlineText}>Sign In</Text>
             </TouchableOpacity>
           </>
         ) : (
@@ -195,6 +220,15 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </>
         )}
+      </View>
+
+      {/* Together */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>Together</Text>
+        <Text style={s.bodyText}>Share selected commitments with one accountability partner. Private moods, assessments, AI chat, and reflections stay outside Together.</Text>
+        <TouchableOpacity style={s.btnOutline} onPress={() => router.push(isAnonymous ? '/auth/signup' : '/accountability')}>
+          <Text style={s.btnOutlineText}>{isAnonymous ? 'Create an Account for Together' : 'Open Together'}</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Notifications — hidden on iOS where the native module is excluded */}
@@ -239,7 +273,7 @@ export default function SettingsScreen() {
       {/* Export */}
       <View style={s.card}>
         <Text style={s.cardTitle}>Export Your Data</Text>
-        <Text style={s.bodyText}>Download all your mental health data in JSON format.</Text>
+        <Text style={s.bodyText}>Download your mental health data and Together activity in JSON format.</Text>
         <TouchableOpacity style={s.btnOutline} onPress={handleExport} disabled={loading}>
           <Text style={s.btnOutlineText}>{loading ? 'Exporting...' : 'Export Data (JSON)'}</Text>
         </TouchableOpacity>

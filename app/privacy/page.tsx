@@ -13,7 +13,7 @@ export default function PrivacyPolicyPage() {
           Privacy Policy
         </h1>
         <p className="text-sm text-gray-500 mb-8">
-          Effective date: May 6, 2026
+          Effective date: August 11, 2026
         </p>
 
         <p className="text-gray-700 mb-6 leading-relaxed">
@@ -34,9 +34,9 @@ export default function PrivacyPolicyPage() {
           </p>
           <ul className="list-disc list-inside text-gray-700 space-y-2 ml-2">
             <li>
-              <strong>Account information:</strong> Email address for existing
-              account holders who sign in. New account creation is temporarily
-              unavailable. Anonymous sessions require no personal information.
+              <strong>Account information:</strong> Email address for people
+              who create or sign in to an account. Anonymous sessions require
+              no personal information.
             </li>
             <li>
               <strong>Mood entries:</strong> Mood ratings, notes, and timestamps
@@ -72,6 +72,12 @@ export default function PrivacyPolicyPage() {
               optional personalization context to the report.
             </li>
             <li>
+              <strong>Together:</strong> Partner invitations, Together-only
+              commitments, check-in dates, comments, fixed support nudges,
+              rewards, and sharing choices. Together does not automatically
+              include moods, assessments, AI chat, goals, or reflections.
+            </li>
+            <li>
               <strong>Anonymous page view analytics:</strong> Collected via
               Vercel Analytics (no cookies, no personal identifiers).
             </li>
@@ -105,6 +111,11 @@ export default function PrivacyPolicyPage() {
               App.
             </li>
             <li>Reviewing user-reported AI responses for safety and quality.</li>
+            <li>
+              Showing an accountability partner only the Together information
+              you choose to share, and stopping that access when you change a
+              sharing control or end the connection.
+            </li>
           </ul>
           <p className="text-gray-700 mt-3 leading-relaxed">
             We do <strong>not</strong> sell, rent, or share your personal data
@@ -169,8 +180,9 @@ export default function PrivacyPolicyPage() {
             </li>
             <li>Data at rest is encrypted by Supabase&apos;s infrastructure.</li>
             <li>
-              Row Level Security (RLS) policies ensure that users can only access
-              their own data.
+              Row Level Security (RLS) policies restrict access to records you
+              own and the specific Together records an active partner is allowed
+              to see. Private MHtoolkit tables are not queried by Together.
             </li>
             <li>
               Anonymous use is assigned a random Supabase Auth user ID without
@@ -242,6 +254,12 @@ export default function PrivacyPolicyPage() {
             <li>
               When you delete your data (see Section 7), it is permanently
               removed from our database.
+            </li>
+            <li>
+              Ending a Together connection or stopping sharing preserves your
+              own check-in history privately. Deleting your account removes the
+              Together content you authored, but does not delete content your
+              former partner authored in their account.
             </li>
             <li>
               Anonymous session data that has not been accessed for an extended

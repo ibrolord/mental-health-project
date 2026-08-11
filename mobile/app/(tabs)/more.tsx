@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Colors } from '@/lib/constants';
 
 const menuItems = [
+  { label: 'Together', icon: '🤝', desc: 'Share commitments with someone you trust', route: '/accountability' as const },
   { label: 'Voice Support', icon: '🎙️', desc: 'Talk to your AI companion', route: '/voice' as const },
   { label: 'Goals', icon: '✅', desc: 'Plan your day with intention', route: '/goals' as const },
   { label: 'Habits', icon: '🎯', desc: 'Build positive habits', route: '/habits' as const },
@@ -18,7 +19,14 @@ export default function MoreScreen() {
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <Text style={s.title}>More</Text>
       {menuItems.map((item) => (
-        <TouchableOpacity key={item.route} style={s.row} onPress={() => router.push(item.route)}>
+        <TouchableOpacity
+          key={item.route}
+          accessibilityRole="button"
+          accessibilityLabel={item.label}
+          accessibilityHint={`Opens ${item.desc.toLowerCase()}`}
+          style={s.row}
+          onPress={() => router.push(item.route)}
+        >
           <Text style={s.icon}>{item.icon}</Text>
           <View style={{ flex: 1 }}>
             <Text style={s.rowTitle}>{item.label}</Text>
