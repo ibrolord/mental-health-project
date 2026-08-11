@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Alert, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -134,6 +135,9 @@ export default function TogetherScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
       >
+        <View accessibilityLabel="Together leaf" accessibilityRole="image" style={styles.leafMark}>
+          <MaterialCommunityIcons color={Colors.primary} name="leaf" size={30} />
+        </View>
         <Text style={styles.intro}>Only commitments you explicitly share appear here. Moods, assessments, chats, goals, and reflections stay private.</Text>
         <View style={styles.actionRow}>
           <TouchableOpacity accessibilityRole="button" accessibilityHint="Creates an invite for an accountability partner" style={styles.secondaryButton} onPress={() => router.push('/accountability/invite')}>
@@ -250,6 +254,7 @@ export default function TogetherScreen() {
 const styles = StyleSheet.create({
   safe: { backgroundColor: Colors.background, flex: 1 },
   content: { padding: 16, paddingBottom: 40 },
+  leafMark: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: Colors.primaryLight, borderRadius: 16, height: 56, justifyContent: 'center', marginBottom: 14, width: 56 },
   intro: { backgroundColor: Colors.primaryLight, borderRadius: 12, color: Colors.textSecondary, fontSize: 14, lineHeight: 21, padding: 14 },
   actionRow: { flexDirection: 'row', gap: 10, marginVertical: 16 },
   primaryButton: { alignItems: 'center', backgroundColor: Colors.primary, borderRadius: 12, flex: 1, paddingVertical: 13 },
