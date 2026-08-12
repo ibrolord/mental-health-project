@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-08-12.1",
+  "checklistVersion": "2026-08-12.2",
   "platform": "ios",
-  "expectedInventory": { "routes": 33, "routeChecks": 669, "workflows": 110, "total": 779 },
+  "expectedInventory": { "routes": 33, "routeChecks": 670, "workflows": 110, "total": 780 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -123,7 +123,7 @@
       "source": "app/(tabs)/index.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "share-challenge", "low-energy-mode", "weekly-insight", "weekly-reflection", "resume-practice", "saved-space", "grounding", "focus", "habits", "go-to-customize", "go-to-select-limit", "go-to-cue", "go-to-reorder", "go-to-save-relaunch", "go-to-storage-failure"]
+      "controls": ["mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "share-challenge", "low-energy-mode", "weekly-insight", "weekly-reflection", "resume-practice", "saved-space", "open-together", "grounding", "focus", "habits", "go-to-customize", "go-to-select-limit", "go-to-cue", "go-to-reorder", "go-to-save-relaunch", "go-to-storage-failure"]
     },
     {
       "id": "mood-tracker",

@@ -19,6 +19,7 @@ const intentions = [
   { id: 'feel-better', label: 'Feel better emotionally', icon: '💚' },
   { id: 'track', label: 'Track my mental health', icon: '📊' },
   { id: 'habits', label: 'Build good habits', icon: '✅' },
+  { id: 'accountability', label: 'Stay accountable with someone', icon: '🌿' },
   { id: 'explore', label: 'Just exploring', icon: '🔍' },
 ];
 
@@ -75,6 +76,15 @@ export default function OnboardingPage() {
   };
 
   const getRecommendation = () => {
+    if (selectedIntentions.includes('accountability')) {
+      return {
+        title: 'Set Up Together',
+        description: 'Invite someone you trust, share one commitment, and check in together.',
+        route: '/accountability',
+        icon: '🌿',
+      };
+    }
+
     // Low mood → suggest assessment
     if (mood === '😞' || mood === '😢') {
       return {
@@ -270,6 +280,13 @@ export default function OnboardingPage() {
                     onClick={() => handleRoute('/assessments')}
                   >
                     📋 Assessment
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="col-span-2"
+                    onClick={() => handleRoute('/accountability')}
+                  >
+                    🌿 Together
                   </Button>
                 </div>
               </div>

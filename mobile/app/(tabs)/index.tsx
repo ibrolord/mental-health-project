@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
@@ -399,6 +399,41 @@ export default function DashboardScreen() {
         </View>
       </View>
 
+      {!visibleLowEnergyMode ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            isAuthenticated
+              ? 'Open Together accountability partner'
+              : 'Set up Together accountability partner'
+          }
+          accessibilityHint="Share a commitment and check in with someone you trust"
+          onPress={() => router.push('/accountability')}
+          style={({ pressed }) => [s.togetherCard, pressed && s.pressed]}
+        >
+          <View style={s.togetherLeaf}>
+            <MaterialCommunityIcons
+              accessible={false}
+              name="leaf"
+              size={24}
+              color={Colors.primary}
+            />
+          </View>
+          <View style={s.togetherCopy}>
+            <Text style={s.togetherEyebrow}>ACCOUNTABILITY PARTNER</Text>
+            <Text style={s.togetherTitle}>Do it together</Text>
+            <Text style={s.togetherDescription}>
+              {isAuthenticated
+                ? 'Share one commitment, check in, and celebrate progress.'
+                : 'Invite someone you trust and share only what you choose.'}
+            </Text>
+          </View>
+          <View style={s.togetherArrow}>
+            <Feather name="arrow-right" size={20} color={Colors.primary} />
+          </View>
+        </Pressable>
+      ) : null}
+
       <Text style={s.sectionLabel}>YOUR DAY</Text>
       <View style={s.dayList}>
         <ListRow
@@ -511,6 +546,38 @@ const s = StyleSheet.create({
     marginTop: Spacing.md,
   },
   nextStepButtonText: { color: Colors.card, ...Typography.label },
+  togetherCard: {
+    minHeight: 132,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    borderWidth: 1,
+    borderColor: '#c7d7c8',
+    borderRadius: Radius.lg,
+    backgroundColor: '#e9f1e8',
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
+  },
+  togetherLeaf: {
+    width: 48,
+    height: 48,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 24,
+    backgroundColor: Colors.card,
+  },
+  togetherCopy: { flex: 1 },
+  togetherEyebrow: { color: Colors.accent, ...Typography.eyebrow, marginBottom: Spacing.xxs },
+  togetherTitle: { color: Colors.text, ...Typography.cardTitle, fontSize: 20 },
+  togetherDescription: { color: Colors.textSecondary, ...Typography.bodySmall, marginTop: Spacing.xs },
+  togetherArrow: {
+    width: 32,
+    height: 44,
+    flexShrink: 0,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
   dayList: { marginBottom: Spacing.xl },
   patternsRow: {
     minHeight: 72,

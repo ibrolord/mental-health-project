@@ -21,4 +21,25 @@ describe('Together identity mark', () => {
     expect(source).toContain('accessibilityLabel="Together leaf"');
     expect(source).toContain('style={styles.leafMark}');
   });
+
+  it('keeps Together prominent on the web dashboard and onboarding', () => {
+    const dashboard = fs.readFileSync(path.join(root, 'app/dashboard/page.tsx'), 'utf8');
+    const onboarding = fs.readFileSync(path.join(root, 'app/onboarding/page.tsx'), 'utf8');
+
+    expect(dashboard).toContain('Accountability partner');
+    expect(dashboard).toContain('Do it together');
+    expect(dashboard).toContain("router.push('/accountability')");
+    expect(dashboard).toContain('<Leaf aria-hidden="true"');
+    expect(onboarding).toContain('Stay accountable with someone');
+    expect(onboarding).toContain("route: '/accountability'");
+  });
+
+  it('keeps Together prominent on the iOS Today screen', () => {
+    const source = fs.readFileSync(path.join(root, 'mobile/app/(tabs)/index.tsx'), 'utf8');
+
+    expect(source).toContain('ACCOUNTABILITY PARTNER');
+    expect(source).toContain('Do it together');
+    expect(source).toContain("router.push('/accountability')");
+    expect(source).toContain('name="leaf"');
+  });
 });
