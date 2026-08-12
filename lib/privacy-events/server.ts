@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 
 export type PrivacyEventType =
   | 'privacy_notice_viewed'
@@ -35,6 +35,7 @@ export async function recordServerPrivacyEvent(input: {
   platform: PrivacyPlatform;
   metadata?: PrivacyEventMetadata;
 }): Promise<void> {
+  const supabaseAdmin = getSupabaseAdmin();
   const { error } = await supabaseAdmin.from('privacy_events').insert({
     user_id: input.userId,
     event_type: input.eventType,

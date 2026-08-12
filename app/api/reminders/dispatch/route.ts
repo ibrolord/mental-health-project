@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import webPush from 'web-push';
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import {
   reminderDeliveryKey,
   type ReminderSchedule,
@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
   }
 
   webPush.setVapidDetails(subject, publicKey, privateKey);
+  const supabaseAdmin = getSupabaseAdmin();
 
   const { data: rawReminders, error: reminderError } = await supabaseAdmin
     .from('wellbeing_reminders')

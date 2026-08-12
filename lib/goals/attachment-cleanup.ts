@@ -1,9 +1,10 @@
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { GOAL_ATTACHMENT_BUCKET } from '@/lib/goals/details';
 
 const STORAGE_PAGE_SIZE = 1000;
 
 async function listStorageEntries(prefix: string) {
+  const supabaseAdmin = getSupabaseAdmin();
   const entries: Array<{ id: string | null; name: string }> = [];
   for (let offset = 0; ; offset += STORAGE_PAGE_SIZE) {
     const { data, error } = await supabaseAdmin.storage
@@ -24,6 +25,7 @@ async function listStorageEntries(prefix: string) {
 export async function removeGoalAttachmentObjectsForUser(
   userId: string
 ): Promise<{ error: string | null }> {
+  const supabaseAdmin = getSupabaseAdmin();
   const paths = new Set<string>();
   for (let from = 0; ; from += STORAGE_PAGE_SIZE) {
     const { data, error } = await supabaseAdmin

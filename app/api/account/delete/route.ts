@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
-import { supabaseAdmin } from '@/lib/supabase/server';
 import { removeGoalAttachmentObjectsForUser } from '@/lib/goals/attachment-cleanup';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: deletionResult, error: deletionError } = await supabaseAdmin.rpc(
+    const admin = getSupabaseAdmin();
+    const { data: deletionResult, error: deletionError } = await admin.rpc(
       'delete_owned_data',
       { p_user_id: auth.userId, p_session_id: null }
     );
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(auth.userId);
+    const { error } = await admin.auth.admin.deleteUser(auth.userId);
     if (error) {
       console.error('Account deletion error:', error);
       return NextResponse.json(

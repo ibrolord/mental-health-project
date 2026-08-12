@@ -10,16 +10,23 @@ const exportRoute = readFileSync(
 const lifecycleMigration = readFileSync(
   resolve(
     process.cwd(),
-    'supabase/migrations/20260811081540_expand_goal_details.sql'
+    'supabase/migrations/20260812095352_restore_complete_owned_data_deletion.sql'
   ),
   'utf8'
 );
 
 describe('user-data lifecycle registry', () => {
   it('requires every classified table in complete export and deletion paths', () => {
+    const cascadeDeletedTables = new Set([
+      'habit_logs',
+      'accountability_check_ins',
+      'accountability_commitment_notes',
+      'accountability_check_in_notes',
+      'accountability_rewards',
+    ]);
     for (const [table, classification] of Object.entries(USER_DATA_REGISTRY)) {
       if (classification.export) expect(exportRoute).toContain(`'${table}'`);
-      if (classification.delete && table !== 'habit_logs') {
+      if (classification.delete && !cascadeDeletedTables.has(table)) {
         expect(lifecycleMigration).toContain(`DELETE FROM public.${table}`);
       }
     }

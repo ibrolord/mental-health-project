@@ -212,7 +212,7 @@ export default function SettingsScreen() {
     if (!query || !expectedOwnerId) return;
     Alert.alert(
       'Delete profile data?',
-      'This permanently deletes data saved in this profile, including attached files. It does not delete a sign-in account. This cannot be undone.',
+      'This permanently deletes check-ins, assessments, goals, habits, chat history, files, Together activity, and other data saved in this profile. It does not delete a sign-in account. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -365,6 +365,21 @@ export default function SettingsScreen() {
       </AppCard>
 
       <AppCard>
+        <Text style={s.cardTitle}>Together</Text>
+        <Text style={s.bodyText}>
+          Share commitments with one person you trust. You control what they can see.
+        </Text>
+        <TouchableOpacity
+          style={s.btnOutline}
+          onPress={() => router.push(isAnonymous ? '/auth/signup?returnTo=/accountability' : '/accountability')}
+        >
+          <Text style={s.btnOutlineText}>
+            {isAnonymous ? 'Create an account for Together' : 'Open Together'}
+          </Text>
+        </TouchableOpacity>
+      </AppCard>
+
+      <AppCard>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <Text style={s.cardTitle}>Daily Reminders</Text>
           <Switch
@@ -427,7 +442,7 @@ export default function SettingsScreen() {
       {/* Export */}
       <AppCard>
         <Text style={s.cardTitle}>Export your data</Text>
-        <Text style={s.bodyText}>Download a copy of your MHtoolkit data as a JSON file.</Text>
+        <Text style={s.bodyText}>Download a copy of your MHtoolkit data, including Together activity, as a JSON file.</Text>
         <TouchableOpacity style={s.btnOutline} onPress={handleExport} disabled={loading}>
           <Text style={s.btnOutlineText}>{loading ? 'Exporting...' : 'Export Data (JSON)'}</Text>
         </TouchableOpacity>
@@ -442,6 +457,7 @@ export default function SettingsScreen() {
         <Text style={s.privacyItem}>Voice sends audio and transcripts to OpenAI or Gemini; AI affirmations can use recent mood, assessment, and goal data</Text>
         <Text style={s.privacyItem}>Apple Health sharing asks every time</Text>
         <Text style={s.privacyItem}>Anonymous usage requires no personal info</Text>
+        <Text style={s.privacyItem}>Together shares only the commitments and details you choose</Text>
         <Text style={s.privacyItem}>Export or delete your data anytime</Text>
         <Text style={[s.privacyItem, { marginTop: 6 }]}>
           AI data sharing consent: {aiConsentGranted ? 'Granted' : 'Not granted yet'}

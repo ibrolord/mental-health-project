@@ -104,6 +104,12 @@ export default function PrivacyPolicyPage() {
               only if you choose to save that chat or report the response.
             </li>
             <li>
+              <strong>Together:</strong> Partner invitations, Together-only
+              commitments, check-in dates, comments, fixed support nudges,
+              rewards, and your sharing choices. Together does not automatically
+              include moods, assessments, AI chat, goals, or reflections.
+            </li>
+            <li>
               <strong>Anonymous page view analytics:</strong> Collected via
               Vercel Analytics (no cookies, no personal identifiers).
             </li>
@@ -165,6 +171,11 @@ export default function PrivacyPolicyPage() {
             <li>
               Sharing only the accountability counts you turn on and delivering
               fixed-format partner cheers or reward ideas.
+            </li>
+            <li>
+              Showing an active Together partner only the commitments, progress,
+              and notes you choose to share. Changing a sharing control or ending
+              the connection stops that access.
             </li>
             <li>
               Providing self-assessment scores and mental health resources.
@@ -271,6 +282,11 @@ export default function PrivacyPolicyPage() {
               Life-plan text, focus sessions, push subscriptions, reminders, and
               dismissed notice preferences use the same owner-scoped Row Level
               Security model.
+            </li>
+            <li>
+              Together uses separate tables and Row Level Security. A partner
+              cannot query your private mood, assessment, journal, AI chat, goal,
+              or reflection tables through Together.
             </li>
             <li>
               Operational events are written directly to Supabase through an
@@ -397,6 +413,11 @@ export default function PrivacyPolicyPage() {
               <strong>Deletion:</strong> You can permanently delete all your data
               or your full account from the Settings page. This action is
               irreversible.
+            </li>
+            <li>
+              <strong>Together controls:</strong> You can unshare a note, archive
+              a commitment, end a connection, or block a partner. Your own private
+              history remains yours after sharing stops.
             </li>
             <li>
               <strong>AI consent:</strong> You can decline AI data sharing before

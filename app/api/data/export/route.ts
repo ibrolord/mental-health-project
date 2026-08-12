@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import {
   privacyPlatformFromRequest,
   recordServerPrivacyEvent,
@@ -26,6 +26,7 @@ type GoalAttachmentExportRow = Record<string, unknown> & {
 const ATTACHMENT_PAGE_SIZE = 1000;
 
 async function loadGoalAttachmentRows(userId: string): Promise<QueryResult> {
+  const supabaseAdmin = getSupabaseAdmin();
   const rows: unknown[] = [];
   for (let from = 0; ; from += ATTACHMENT_PAGE_SIZE) {
     const { data, error } = await supabaseAdmin
@@ -45,6 +46,7 @@ function streamExportWithAttachments(
   payload: Record<string, unknown>,
   rows: GoalAttachmentExportRow[]
 ): NextResponse {
+  const supabaseAdmin = getSupabaseAdmin();
   const encoder = new TextEncoder();
   const payloadJson = JSON.stringify(payload);
   const prefix = `${payloadJson.slice(0, -1)},"goal_attachments":[`;
@@ -113,6 +115,7 @@ export async function POST(request: NextRequest) {
 
     const ownerColumn = auth.userId ? 'user_id' : 'session_id';
     const ownerValue = auth.userId ?? auth.sessionId!;
+    const supabaseAdmin = getSupabaseAdmin();
 
     if (auth.userId) {
       await recordServerPrivacyEvent({
@@ -139,6 +142,18 @@ export async function POST(request: NextRequest) {
       partnerInvitesResult,
       partnerLinksResult,
       partnerCelebrationsResult,
+      togetherConnectionsResult,
+      togetherMembershipsResult,
+      togetherScopesResult,
+      togetherCommitmentsResult,
+      togetherCheckInsResult,
+      togetherCommitmentNotesResult,
+      togetherCheckInNotesResult,
+      togetherCommentsResult,
+      togetherNudgesResult,
+      togetherSuggestionsResult,
+      togetherRewardsResult,
+      togetherBlocksResult,
       lifePlanItemsResult,
       focusSessionsResult,
       wellbeingRemindersResult,
@@ -212,6 +227,48 @@ export async function POST(request: NextRequest) {
             .from('partner_celebrations')
             .select('*')
             .or(`owner_id.eq.${auth.userId},partner_id.eq.${auth.userId}`)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('accountability_connections')
+            .select('id,owner_id,partner_id,status,expires_at,used_at,accepted_at,ended_at,ended_by,created_at')
+            .or(`owner_id.eq.${auth.userId},partner_id.eq.${auth.userId}`)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin.from('accountability_memberships').select('*').eq('user_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin.from('accountability_scope_controls').select('*').eq('owner_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin.from('accountability_commitments').select('*').eq('owner_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin.from('accountability_check_ins').select('*').eq('owner_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin.from('accountability_commitment_notes').select('*').eq('owner_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin.from('accountability_check_in_notes').select('*').eq('owner_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin.from('accountability_comments').select('*').eq('author_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin
+            .from('accountability_nudges')
+            .select('*')
+            .or(`sender_id.eq.${auth.userId},recipient_id.eq.${auth.userId}`)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin.from('accountability_priority_suggestions').select('*').eq('suggested_by', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin.from('accountability_rewards').select('*').eq('owner_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? supabaseAdmin.from('accountability_blocks').select('*').eq('blocker_id', auth.userId)
         : Promise.resolve({ data: [], error: null }),
       auth.userId
         ? supabaseAdmin
@@ -364,6 +421,20 @@ export async function POST(request: NextRequest) {
           'partner celebrations',
           partnerCelebrationsResult
         ),
+        together: {
+          connections: requireQuery('Together connections', togetherConnectionsResult),
+          memberships: requireQuery('Together memberships', togetherMembershipsResult),
+          sharing_controls: requireQuery('Together sharing controls', togetherScopesResult),
+          commitments: requireQuery('Together commitments', togetherCommitmentsResult),
+          check_ins: requireQuery('Together check-ins', togetherCheckInsResult),
+          commitment_notes: requireQuery('Together commitment notes', togetherCommitmentNotesResult),
+          check_in_notes: requireQuery('Together check-in notes', togetherCheckInNotesResult),
+          comments_authored: requireQuery('Together comments', togetherCommentsResult),
+          nudges_sent_or_received: requireQuery('Together nudges', togetherNudgesResult),
+          suggestions_authored: requireQuery('Together suggestions', togetherSuggestionsResult),
+          rewards: requireQuery('Together rewards', togetherRewardsResult),
+          blocks_created: requireQuery('Together blocks', togetherBlocksResult),
+        },
         life_plan_items: requireQuery('life plan items', lifePlanItemsResult),
         focus_sessions: requireQuery('focus sessions', focusSessionsResult),
         wellbeing_reminders: requireQuery(

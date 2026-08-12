@@ -13,8 +13,8 @@ export const MOBILE_ROOT = path.resolve(SCRIPT_DIR, '..');
 export const REPO_ROOT = path.resolve(MOBILE_ROOT, '..');
 export const CHECKLIST_PATH = path.join(MOBILE_ROOT, 'qa', 'ios-release-checklist.json');
 export const RUNS_ROOT = path.join(MOBILE_ROOT, 'qa', 'runs');
-export const EXPECTED_INVENTORY = Object.freeze({ routes: 28, routeChecks: 575, workflows: 102, total: 677 });
-export const EXPECTED_CHECKLIST_SHA256 = '329205c5985a1a258c250352bc211d39ee1adc5cb541a9438011db667ece62ed';
+export const EXPECTED_INVENTORY = Object.freeze({ routes: 33, routeChecks: 669, workflows: 110, total: 779 });
+export const EXPECTED_CHECKLIST_SHA256 = '30405c110c656b0eff5a6d5ebc601bca58ce99745e31375d03b5c1c74acddd27';
 const REQUIRED_ROUTE_CONTROLS = Object.freeze({
   'ai-chat': ['individual-context-toggles', 'local-safety-region', 'local-safety-country'],
   assessment: ['about-collapse', 'safety-region', 'country-support', 'safety-plan'],

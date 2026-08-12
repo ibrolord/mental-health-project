@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   deleteUser: vi.fn(),
-  deleteOwnedData: vi.fn(),
+  rpc: vi.fn(),
   removeGoalAttachmentObjectsForUser: vi.fn(),
   verifyAuth: vi.fn(),
 }));
@@ -16,10 +16,10 @@ vi.mock('@/lib/api/auth', () => ({
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
-  supabaseAdmin: {
+  getSupabaseAdmin: () => ({
     auth: { admin: { deleteUser: mocks.deleteUser } },
-    rpc: mocks.deleteOwnedData,
-  },
+    rpc: mocks.rpc,
+  }),
 }));
 
 vi.mock('@/lib/goals/attachment-cleanup', () => ({
@@ -32,7 +32,7 @@ describe('account deletion owner binding', () => {
   beforeEach(() => {
     mocks.verifyAuth.mockReset();
     mocks.deleteUser.mockReset();
-    mocks.deleteOwnedData.mockReset();
+    mocks.rpc.mockReset();
     mocks.removeGoalAttachmentObjectsForUser.mockReset();
     mocks.verifyAuth.mockResolvedValue({
       valid: true,
@@ -40,7 +40,7 @@ describe('account deletion owner binding', () => {
       isAnonymous: false,
     });
     mocks.deleteUser.mockResolvedValue({ error: null });
-    mocks.deleteOwnedData.mockResolvedValue({ data: { deleted: true }, error: null });
+    mocks.rpc.mockResolvedValue({ data: { deleted: true }, error: null });
     mocks.removeGoalAttachmentObjectsForUser.mockResolvedValue({ error: null });
   });
 
@@ -53,7 +53,7 @@ describe('account deletion owner binding', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.deleteOwnedData).toHaveBeenCalledWith('delete_owned_data', {
+    expect(mocks.rpc).toHaveBeenCalledWith('delete_owned_data', {
       p_user_id: 'owner-1',
       p_session_id: null,
     });

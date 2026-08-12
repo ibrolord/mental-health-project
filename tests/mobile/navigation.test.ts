@@ -7,6 +7,10 @@ const rootLayout = readFileSync(
   resolve(process.cwd(), 'mobile/app/_layout.tsx'),
   'utf8'
 );
+const accountabilityLayout = readFileSync(
+  resolve(process.cwd(), 'mobile/app/accountability/_layout.tsx'),
+  'utf8'
+);
 const backButton = readFileSync(
   resolve(process.cwd(), 'mobile/components/AppBackButton.tsx'),
   'utf8'
@@ -56,11 +60,21 @@ describe('mobile back navigation', () => {
       .map(({ source }) => source)
       .filter((source) => !source.startsWith('app/(tabs)/'))
       .map((source) => source.replace(/^app\//, '').replace(/\.tsx$/, ''));
+    const rootRoutes = stackRoutes.filter((route) => !route.startsWith('accountability/'));
+    const togetherRoutes = stackRoutes
+      .filter((route) => route.startsWith('accountability/'))
+      .map((route) => route.replace(/^accountability\//, ''));
 
     expect(rootLayout).toContain('headerLeft: () => <AppBackButton fallback={fallback} />');
-    for (const route of stackRoutes) {
+    for (const route of rootRoutes) {
       expect(rootLayout, `${route} must use the shared Back header`).toContain(
         `<Stack.Screen name="${route}" options={stackScreenOptions(`
+      );
+    }
+    expect(accountabilityLayout).toContain('headerLeft: () => <AppBackButton fallback={fallback} />');
+    for (const route of togetherRoutes) {
+      expect(accountabilityLayout, `accountability/${route} must use the shared Back header`).toContain(
+        `<Stack.Screen name="${route}" options={togetherScreenOptions(`
       );
     }
   });
