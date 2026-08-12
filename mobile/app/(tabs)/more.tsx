@@ -1,354 +1,199 @@
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { useState, type ComponentProps } from 'react';
 import { useRouter } from 'expo-router';
+import { AppScreen, InlineStatus, ListRow, PageHeader, SectionHeader } from '@/components/AppUI';
+import { useAuth } from '@/lib/auth-context';
 import {
-  AppScreen,
-  PageHeader,
-  appUiStyles,
-} from '@/components/AppUI';
-import { Colors } from '@/lib/constants';
+  createDashboardPreferenceWriter,
+  dashboardPreferences,
+} from '@/lib/dashboard-preferences';
+import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
 
-type FeatherName = ComponentProps<typeof Feather>['name'];
-type Route =
-  | '/goals'
-  | '/habits'
-  | '/plans'
-  | '/planner'
-  | '/focus'
-  | '/ground'
-  | '/meditate'
-  | '/yoga'
-  | '/mind-games'
-  | '/journal'
-  | '/reflect'
-  | '/saved'
-  | '/affirmations'
-  | '/library'
-  | '/partner'
-  | '/resources'
-  | '/research'
-  | '/voice'
-  | '/support'
-  | '/settings';
+const MEMBER_REFERRAL_URL = 'https://mhtoolkit.vercel.app/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share';
 
-const GROUPS: {
-  title: string;
-  description: string;
-  icon: FeatherName;
-  items: {
-    label: string;
-    description: string;
-    icon: FeatherName;
-    route: Route;
-  }[];
-}[] = [
-  {
-    title: 'Plan and progress',
-    description: 'Goals, routines, and focused action',
-    icon: 'trending-up',
-    items: [
-      {
-        label: 'Goals',
-        description: 'Priorities and next steps',
-        icon: 'check-circle',
-        route: '/goals',
-      },
-      {
-        label: 'Habits and routines',
-        description: 'Cues, streaks, and rewards',
-        icon: 'repeat',
-        route: '/habits',
-      },
-      {
-        label: 'My plans',
-        description: 'Activity, safety, and staying well',
-        icon: 'clipboard',
-        route: '/plans',
-      },
-      {
-        label: 'Focus mode',
-        description: 'Time blocks with real breaks',
-        icon: 'clock',
-        route: '/focus',
-      },
-    ],
-  },
-  {
-    title: 'Calm and reflect',
-    description: 'Grounding, movement, and private reflection',
-    icon: 'sun',
-    items: [
-      {
-        label: 'Ground me now',
-        description: 'Immediate guided grounding',
-        icon: 'compass',
-        route: '/ground',
-      },
-      {
-        label: 'Meditation',
-        description: 'Breathing and guided practices',
-        icon: 'wind',
-        route: '/meditate',
-      },
-      {
-        label: 'Yoga',
-        description: 'Gentle chair and floor movement',
-        icon: 'activity',
-        route: '/yoga',
-      },
-      {
-        label: 'Mind games',
-        description: 'Six offline attention exercises',
-        icon: 'grid',
-        route: '/mind-games',
-      },
-      {
-        label: 'Guided reflection',
-        description: 'Structured private prompts',
-        icon: 'book-open',
-        route: '/reflect',
-      },
-      {
-        label: 'Private journal',
-        description: 'Freeform and guided notes',
-        icon: 'edit-3',
-        route: '/journal',
-      },
-      {
-        label: 'Affirmations',
-        description: 'Random affirmations and sourced quotes',
-        icon: 'sun',
-        route: '/affirmations',
-      },
-    ],
-  },
-  {
-    title: 'Learn and connect',
-    description: 'Guidance, people, and trusted support',
-    icon: 'compass',
-    items: [
-      {
-        label: 'Library',
-        description: 'Books, talks, and real stories',
-        icon: 'book-open',
-        route: '/library',
-      },
-      {
-        label: 'Saved',
-        description: 'Resources and important markers',
-        icon: 'bookmark',
-        route: '/saved',
-      },
-      {
-        label: 'Accountability',
-        description: 'Share counts and celebrate progress',
-        icon: 'users',
-        route: '/partner',
-      },
-      {
-        label: 'Find support',
-        description: 'Country directories and communities',
-        icon: 'life-buoy',
-        route: '/resources',
-      },
-      {
-        label: 'Research',
-        description: 'Evidence and limitations',
-        icon: 'file-text',
-        route: '/research',
-      },
-      {
-        label: 'Voice support',
-        description: 'Talk with the AI companion',
-        icon: 'mic',
-        route: '/voice',
-      },
-      {
-        label: 'Support and FAQ',
-        description: 'Contact, bug reports, and answers',
-        icon: 'help-circle',
-        route: '/support',
-      },
-      {
-        label: 'Settings',
-        description: 'Account, privacy, export, and deletion',
-        icon: 'settings',
-        route: '/settings',
-      },
-    ],
-  },
-];
-
-export default function MoreScreen() {
+export default function YouScreen() {
   const router = useRouter();
-  const [openGroup, setOpenGroup] = useState<string | null>('Calm and reflect');
+  const { isAuthenticated, isAnonymous, sessionId, user } = useAuth();
+  const ownerValue = isAuthenticated ? user?.id : sessionId;
+  const ownerKey = ownerValue
+    ? `${isAuthenticated ? 'user_id' : 'session_id'}:${ownerValue}`
+    : null;
+  const ownerKeyRef = useRef(ownerKey);
+  ownerKeyRef.current = ownerKey;
+  const [lowEnergyMode, setLowEnergyMode] = useState(false);
+  const [preferenceOwnerKey, setPreferenceOwnerKey] = useState<string | null>(null);
+  const [preferenceError, setPreferenceError] = useState('');
+  const [shareStatus, setShareStatus] = useState('');
+  const preferenceWriterRef = useRef(
+    createDashboardPreferenceWriter(dashboardPreferences)
+  );
+
+  useEffect(() => {
+    let active = true;
+    setLowEnergyMode(false);
+    setPreferenceOwnerKey(null);
+    setPreferenceError('');
+    preferenceWriterRef.current.invalidate();
+    if (!ownerKey) return () => { active = false; };
+    void dashboardPreferences.readLowEnergyMode(ownerKey)
+      .then((enabled) => {
+        if (!active) return;
+        preferenceWriterRef.current.hydrate(ownerKey, enabled);
+        setLowEnergyMode(enabled);
+        setPreferenceOwnerKey(ownerKey);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPreferenceOwnerKey(ownerKey);
+        setPreferenceError('Could not load this preference.');
+      });
+    return () => { active = false; };
+  }, [ownerKey]);
+
+  const updateLowEnergyMode = async (enabled: boolean) => {
+    if (!ownerKey || preferenceOwnerKey !== ownerKey) return;
+    const expectedOwnerKey = ownerKey;
+    setLowEnergyMode(enabled);
+    setPreferenceError('');
+    const result = await preferenceWriterRef.current.writeLatest(expectedOwnerKey, enabled);
+    if (!result.current || ownerKeyRef.current !== expectedOwnerKey) return;
+    setLowEnergyMode(result.persisted);
+    if (result.error) {
+      setPreferenceError('Could not save this preference.');
+    }
+  };
+
+  const shareToolkit = async () => {
+    setShareStatus('');
+    try {
+      await Share.share({
+        message: `A private toolkit for check-ins, grounding, goals, and reflection. ${MEMBER_REFERRAL_URL}`,
+      });
+    } catch {
+      setShareStatus('Sharing is unavailable right now.');
+    }
+  };
 
   return (
     <AppScreen>
       <PageHeader
-        eyebrow="MHtoolkit"
-        title="Find the right tool."
-        description="Open a section, choose one next step, and leave the rest for later."
-        icon="grid"
+        eyebrow="Your space"
+        title="You"
+        description="Privacy, people, support, and preferences."
       />
-      {GROUPS.map((group) => (
-        <View key={group.title} style={styles.group}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ expanded: openGroup === group.title }}
-            accessibilityLabel={`${group.title}, ${group.items.length} tools`}
-            accessibilityHint={
-              openGroup === group.title
-                ? 'Collapses this group'
-                : 'Expands this group'
-            }
-            onPress={() => {
-              setOpenGroup((current) =>
-                current === group.title ? null : group.title
-              );
-            }}
-            style={({ pressed }) => [
-              styles.groupHeader,
-              pressed && styles.pressed,
-            ]}
-          >
-            <View style={styles.groupIcon}>
-              <Feather name={group.icon} size={19} color={Colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.groupTitle}>{group.title}</Text>
-              <Text style={styles.groupDescription}>{group.description}</Text>
-            </View>
-            <View style={styles.groupCount}>
-              <Text style={styles.groupCountText}>{group.items.length}</Text>
-            </View>
-            <Feather
-              name={openGroup === group.title ? 'chevron-up' : 'chevron-down'}
-              size={19}
-              color={Colors.sage}
-            />
-          </Pressable>
-          {openGroup === group.title ? (
-            <View style={styles.groupItems}>
-              {group.items.map((item, index) => (
-                <Pressable
-                  key={item.route}
-                  accessibilityRole="button"
-                  onPress={() => router.push(item.route)}
-                  style={({ pressed }) => [
-                    styles.row,
-                    index === group.items.length - 1 && styles.lastRow,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <View style={styles.icon}>
-                    <Feather name={item.icon} size={19} color={Colors.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.title}>{item.label}</Text>
-                    <Text style={appUiStyles.muted}>{item.description}</Text>
-                  </View>
-                  <Feather name="chevron-right" size={19} color={Colors.sage} />
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
+
+      {isAnonymous ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sign in or create an account"
+          onPress={() => router.push('/auth/login')}
+          style={({ pressed }) => [styles.accountCard, pressed && styles.pressed]}
+        >
+          <View style={styles.accountIcon}>
+            <Feather name="user" size={21} color={Colors.primary} />
+          </View>
+          <View style={styles.accountCopy}>
+            <Text style={styles.accountTitle}>Keep your progress with you</Text>
+            <Text style={styles.accountDescription}>Sign in or create an account.</Text>
+          </View>
+          <Feather name="arrow-right" size={20} color={Colors.primary} />
+        </Pressable>
+      ) : null}
+
+      <SectionHeader title="Your account" />
+      <View style={styles.list}>
+        <ListRow title="Settings and privacy" description="Account, reminders, export, and deletion" icon="settings" onPress={() => router.push('/settings')} />
+        <ListRow title="Accountability" description="Choose what a partner can see" icon="users" onPress={() => router.push('/partner')} />
+        <ListRow title="Support and FAQ" description="Contact us, report a bug, or find an answer" icon="help-circle" onPress={() => router.push('/support')} />
+      </View>
+
+      <SectionHeader title="Preferences" />
+      <View style={styles.preferenceRow}>
+        <View style={styles.preferenceCopy}>
+          <Text style={styles.preferenceTitle}>Low-energy Today view</Text>
+          <Text style={styles.preferenceDescription}>Keep the home screen focused on one gentle step.</Text>
         </View>
-      ))}
+        <Switch
+          accessibilityLabel="Low-energy Today view"
+          value={lowEnergyMode}
+          disabled={!ownerKey || preferenceOwnerKey !== ownerKey}
+          onValueChange={(enabled) => void updateLowEnergyMode(enabled)}
+          trackColor={{ false: Colors.border, true: Colors.primaryLight }}
+          thumbColor={lowEnergyMode ? Colors.primary : Colors.card}
+        />
+      </View>
+      {preferenceError ? <InlineStatus tone="error" message={preferenceError} /> : null}
+
+      <SectionHeader title="Help and evidence" />
+      <View style={styles.list}>
+        <ListRow title="Find support" description="Country directories and trusted communities" icon="life-buoy" onPress={() => router.push('/resources')} />
+        <ListRow title="Research" description="Evidence, sources, and limitations" icon="file-text" onPress={() => router.push('/research')} />
+        <ListRow title="Share MHtoolkit" description="Send the public app link without personal data" icon="share-2" onPress={() => void shareToolkit()} />
+      </View>
+      {shareStatus ? <InlineStatus tone="error" message={shareStatus} /> : null}
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open urgent support"
+        onPress={() => router.push('/resources')}
+        style={({ pressed }) => [styles.supportRow, pressed && styles.pressed]}
+      >
+        <Feather name="life-buoy" size={19} color={Colors.accent} />
+        <Text style={styles.supportText}>Need help now? Open support options.</Text>
+        <Feather name="chevron-right" size={19} color={Colors.accent} />
+      </Pressable>
     </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  group: {
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 16,
+  accountCard: {
+    minHeight: 92,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primaryLight,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  accountIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.card,
-    marginBottom: 12,
-    shadowColor: '#163a32',
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  groupHeader: {
-    minHeight: 82,
+  accountCopy: { flex: 1, minWidth: 0 },
+  accountTitle: { color: Colors.text, ...Typography.cardTitle },
+  accountDescription: { color: Colors.textSecondary, ...Typography.bodySmall, marginTop: Spacing.xxs },
+  list: { marginBottom: Spacing.xl },
+  preferenceRow: {
+    minHeight: 76,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  groupIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  groupTitle: {
-    color: Colors.text,
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: '700',
-  },
-  groupDescription: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  groupCount: {
-    minWidth: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  groupCountText: {
-    color: Colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  groupItems: {
+    gap: Spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.xl,
   },
-  row: {
-    minHeight: 68,
+  preferenceCopy: { flex: 1, minWidth: 0 },
+  preferenceTitle: { color: Colors.text, ...Typography.cardTitle },
+  preferenceDescription: { color: Colors.textSecondary, ...Typography.bodySmall, marginTop: Spacing.xxs },
+  supportRow: {
+    minHeight: 60,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    borderColor: Colors.border,
+    paddingVertical: Spacing.sm,
   },
-  lastRow: { borderBottomWidth: 0 },
-  icon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    color: Colors.text,
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  pressed: { opacity: 0.72 },
+  supportText: { flex: 1, color: Colors.text, ...Typography.bodySmall, fontWeight: '700' },
+  pressed: { opacity: 0.78 },
 });

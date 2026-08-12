@@ -13,7 +13,7 @@ import {
 const migration = readFileSync(
   resolve(
     process.cwd(),
-    'supabase/migrations/20260808193529_add_weekly_owner_summary.sql'
+    'supabase/migrations/20260809004018_add_weekly_owner_summary.sql'
   ),
   'utf8'
 );

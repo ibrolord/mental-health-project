@@ -11,7 +11,7 @@ const lifecycleVerifier = read('scripts/verify-live-data-lifecycle.mjs');
 const tracker = read('mobile/app/(tabs)/tracker.tsx');
 const today = read('mobile/app/(tabs)/index.tsx');
 const migration = read(
-  'supabase/migrations/20260809021500_bind_check_in_to_expected_owner.sql'
+  'supabase/migrations/20260809014441_bind_check_in_to_expected_owner.sql'
 );
 
 describe('iOS check-in owner binding', () => {
@@ -65,7 +65,10 @@ describe('iOS check-in owner binding', () => {
     expect(today).toContain('moodOwnerKey === ownerKey ? todayMood : null');
     expect(today).toContain('moodOwnerKey === ownerKey ? weekMoods : []');
     expect(today).toContain(
-      'weeklyOwnerId === user?.id ? weeklySummary : null'
+      "moodOwnerKey === ownerKey ? affirmation : ''"
+    );
+    expect(today).toContain(
+      'productOwnerId === user?.id ? resumeProgress : null'
     );
     expect(today).toContain(
       'productOwnerId === user?.id ? savedItem : null'

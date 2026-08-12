@@ -13,8 +13,14 @@ export const MOBILE_ROOT = path.resolve(SCRIPT_DIR, '..');
 export const REPO_ROOT = path.resolve(MOBILE_ROOT, '..');
 export const CHECKLIST_PATH = path.join(MOBILE_ROOT, 'qa', 'ios-release-checklist.json');
 export const RUNS_ROOT = path.join(MOBILE_ROOT, 'qa', 'runs');
-export const EXPECTED_INVENTORY = Object.freeze({ routes: 28, routeChecks: 543, workflows: 102, total: 645 });
-export const EXPECTED_CHECKLIST_SHA256 = '83570838e888e71d95b34be64283e787270f1db5110b71c0bc748c0d7cc09ae5';
+export const EXPECTED_INVENTORY = Object.freeze({ routes: 28, routeChecks: 575, workflows: 102, total: 677 });
+export const EXPECTED_CHECKLIST_SHA256 = '329205c5985a1a258c250352bc211d39ee1adc5cb541a9438011db667ece62ed';
+const REQUIRED_ROUTE_CONTROLS = Object.freeze({
+  'ai-chat': ['individual-context-toggles', 'local-safety-region', 'local-safety-country'],
+  assessment: ['about-collapse', 'safety-region', 'country-support', 'safety-plan'],
+  goals: ['open-details', 'reminder', 'add-milestone', 'milestone-due-date', 'edit-milestone-due-date', 'clear-milestone-due-date', 'add-file', 'discard-unsaved'],
+  voice: ['start-live', 'interrupt-ai', 'local-safety-spoken', 'safety-country'],
+});
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, 'utf8'));
@@ -177,6 +183,11 @@ export function validateChecklist(checklist, mobileRoot = MOBILE_ROOT) {
     }
     for (const role of route.identityRequirements ?? []) {
       if (!checklist.identityRoles.includes(role)) errors.push(`Route ${route.id} has unknown identity role ${role}.`);
+    }
+    for (const control of REQUIRED_ROUTE_CONTROLS[route.id] ?? []) {
+      if (!route.controls.includes(control)) {
+        errors.push(`Route ${route.id} must retain reviewed control ${control}.`);
+      }
     }
   }
 

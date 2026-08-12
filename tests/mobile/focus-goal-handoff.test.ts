@@ -19,7 +19,7 @@ describe('mobile goal-to-focus handoff', () => {
     const focus = readFileSync(resolve('mobile/app/focus.tsx'), 'utf8');
 
     expect(goals).toContain("pathname: '/focus'");
-    expect(goals).toContain("params: { source: 'goals', goalId: g.id }");
+    expect(goals).toContain("params: { source: 'goals', goalId }");
     expect(goals).not.toContain("task: g.content");
     expect(focus).toContain(".eq('id', goalId)");
     expect(focus).toContain(".eq('user_id', ownerId)");
@@ -30,7 +30,7 @@ describe('mobile goal-to-focus handoff', () => {
     expect(focus).toContain(
       'if (prefilledFromGoals) setPrefilledFromGoals(false);'
     );
-    expect(goals).toContain("g.status === 'pending' ? (");
+    expect(goals).toContain("selectedGoal?.status === 'pending' ? () => {");
     expect(focus).not.toContain('void start(); // goal handoff');
   });
 });

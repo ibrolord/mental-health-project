@@ -1,25 +1,35 @@
 import { Tabs } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { Colors } from '@/lib/constants';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Colors, Radius } from '@/lib/constants';
 
 export default function TabLayout() {
   return (
-    <Tabs
-      screenOptions={{
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: Colors.card }}
+      edges={['top', 'left', 'right']}
+    >
+      <Tabs
+        screenOptions={{
+        headerShown: false,
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.textSecondary,
+        tabBarActiveBackgroundColor: 'transparent',
         tabBarHideOnKeyboard: true,
+        tabBarAllowFontScaling: true,
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: '700',
           marginTop: 1,
         },
         tabBarIconStyle: { marginTop: 2 },
+        tabBarItemStyle: {
+          borderRadius: Radius.md,
+          marginHorizontal: 2,
+        },
         tabBarStyle: {
           backgroundColor: Colors.card,
           borderTopColor: Colors.border,
-          height: 82,
-          paddingBottom: 22,
           paddingTop: 7,
         },
         headerStyle: { backgroundColor: Colors.card },
@@ -29,8 +39,8 @@ export default function TabLayout() {
           fontSize: 18,
           fontWeight: '700',
         },
-      }}
-    >
+        }}
+      >
       <Tabs.Screen
         name="index"
         options={{
@@ -52,7 +62,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="chat"
         options={{
-          title: 'AI Chat',
+          title: 'Talk',
           tabBarIcon: ({ color, size }) => (
             <Feather name="message-circle" size={size} color={color} />
           ),
@@ -61,21 +71,22 @@ export default function TabLayout() {
       <Tabs.Screen
         name="assessments"
         options={{
-          title: 'Assess',
+          title: 'Tools',
           tabBarIcon: ({ color, size }) => (
-            <Feather name="clipboard" size={size} color={color} />
+            <Feather name="briefcase" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="more"
         options={{
-          title: 'More',
+          title: 'You',
           tabBarIcon: ({ color, size }) => (
-            <Feather name="grid" size={size} color={color} />
+            <Feather name="user" size={size} color={color} />
           ),
         }}
       />
-    </Tabs>
+      </Tabs>
+    </SafeAreaView>
   );
 }

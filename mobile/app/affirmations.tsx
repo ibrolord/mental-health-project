@@ -234,7 +234,7 @@ export default function AffirmationsScreen() {
           style={{ flex: 1 }}
         />
         <AppButton
-          label="Personalize with AI"
+          label="Create one with AI"
           icon="message-circle"
           variant="secondary"
           loading={generating}
@@ -244,8 +244,8 @@ export default function AffirmationsScreen() {
       </View>
       <AppCard quiet style={{ marginTop: 14 }}>
         <Text style={appUiStyles.muted}>
-          AI personalization sends recent mood, assessment, and goal context
-          only after you consent.
+          With your consent, AI receives recent mood notes, assessment scores,
+          and goal text to write an affirmation.
         </Text>
       </AppCard>
     </AppScreen>

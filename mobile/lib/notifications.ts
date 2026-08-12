@@ -143,6 +143,18 @@ export const scheduleMoodReminders = async () => {
     throw error;
   }
 };
+export const scheduleDueDateReminders = async () => {
+  try {
+    const scheduled = await getService().scheduleDueDateReminders();
+    if (scheduled.length > 0) {
+      void recordOperationalEvent('notification_scheduling_succeeded');
+    }
+    return scheduled;
+  } catch (error) {
+    void recordOperationalEvent('notification_scheduling_failed');
+    throw error;
+  }
+};
 export const setRemindersEnabled = async (enabled: boolean) => {
   try {
     const result = await getService().setRemindersEnabled(enabled);
@@ -162,6 +174,7 @@ export const setRemindersEnabled = async (enabled: boolean) => {
     throw error;
   }
 };
+export const clearAllReminders = () => getService().clearAllReminders();
 export const areRemindersEnabled = () => getService().areRemindersEnabled();
 export const setReminderTimes = (times: number[]) =>
   getService().setReminderTimes(times);
@@ -183,4 +196,10 @@ export const sendTestNotification = async () => {
 
 // Rebuild local reminders after a user changes a goal, plan, or library state.
 // It is a no-op until the user has enabled reminders on this device.
-export const refreshReminders = scheduleMoodReminders;
+export const refreshReminders = async () => {
+  const [daily, dueDates] = await Promise.all([
+    scheduleMoodReminders(),
+    scheduleDueDateReminders(),
+  ]);
+  return [...daily, ...dueDates];
+};

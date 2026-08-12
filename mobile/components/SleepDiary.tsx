@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { format } from 'date-fns';
 import { Feather } from '@expo/vector-icons';
-import { AppButton, AppCard, AppInput, SectionHeader, appUiStyles } from '@/components/AppUI';
+import {
+  AppButton,
+  AppCard,
+  AppInput,
+  DisclosureCard,
+  SectionHeader,
+  appUiStyles,
+} from '@/components/AppUI';
 import { useAuth } from '@/lib/auth-context';
 import { Colors } from '@/lib/constants';
 import {
@@ -39,6 +46,7 @@ export function SleepDiary() {
   const { user } = useAuth();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [draft, setDraft] = useState(newDraft);
+  const [sectionOpen, setSectionOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -61,6 +69,7 @@ export function SleepDiary() {
     ownerRef.current = ownerId;
     setEntries([]);
     setDraft(newDraft());
+    setSectionOpen(false);
     setOpen(false);
     setSaving(false);
     setError('');
@@ -152,9 +161,26 @@ export function SleepDiary() {
   ]);
 
   return (
-    <View>
-      <SectionHeader title="Sleep diary" description="Record what happened. No score or diagnosis." action={<AppButton label={open ? 'Close' : 'Add'} variant="quiet" onPress={() => setOpen((value) => !value)} />} />
-      {open ? <AppCard>
+    <DisclosureCard
+      title="Sleep diary"
+      description={entries.length > 0 ? `${entries.length} recent ${entries.length === 1 ? 'entry' : 'entries'}` : 'Optional sleep context'}
+      icon="moon"
+      expanded={sectionOpen}
+      onToggle={() => setSectionOpen((value) => !value)}
+    >
+      <SectionHeader
+        title={open ? 'Add a sleep entry' : 'Recent sleep'}
+        description="Record what happened without scoring it."
+        action={
+          <AppButton
+            label={open ? 'Close' : 'Add'}
+            icon={open ? 'x' : 'plus'}
+            variant="quiet"
+            onPress={() => setOpen((value) => !value)}
+          />
+        }
+      />
+      {open ? <AppCard tone="outline">
         <AppInput label="Wake date" helper="YYYY-MM-DD" value={draft.entryDate} onChangeText={(entryDate) => setDraft({ ...draft, entryDate })} />
         <AppInput label="Went to bed" helper="YYYY-MM-DD HH:mm (optional)" value={draft.wentToBedAt} onChangeText={(wentToBedAt) => setDraft({ ...draft, wentToBedAt })} />
         <AppInput label="Tried to sleep" helper="YYYY-MM-DD HH:mm (optional)" value={draft.triedToSleepAt} onChangeText={(triedToSleepAt) => setDraft({ ...draft, triedToSleepAt })} />
@@ -170,8 +196,8 @@ export function SleepDiary() {
         <AppButton label="Save entry" loading={saving} onPress={() => void save()} />
       </AppCard> : null}
       {error ? <Text style={appUiStyles.error}>{error}</Text> : null}
-      {entries.length === 0 ? <AppCard quiet><Text style={appUiStyles.muted}>No sleep entries yet.</Text></AppCard> : entries.map((entry) => (
-        <AppCard key={entry.id} quiet>
+      {entries.length === 0 ? <Text style={appUiStyles.muted}>No sleep entries yet.</Text> : entries.map((entry) => (
+        <AppCard key={entry.id} tone="outline">
           <View style={styles.entryRow}>
             <View style={styles.flex}>
               <Text style={styles.entryTitle}>{entry.entry_date}</Text>
@@ -183,7 +209,7 @@ export function SleepDiary() {
           </View>
         </AppCard>
       ))}
-    </View>
+    </DisclosureCard>
   );
 }
 

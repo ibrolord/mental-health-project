@@ -10,7 +10,7 @@ const exportRoute = readFileSync(
 const lifecycleMigration = readFileSync(
   resolve(
     process.cwd(),
-    'supabase/migrations/20260808234500_add_privacy_safe_operational_events.sql'
+    'supabase/migrations/20260811081540_expand_goal_details.sql'
   ),
   'utf8'
 );

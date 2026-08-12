@@ -12,6 +12,7 @@ const implementations = [
 describe.each(implementations)('%s goal deduplication', (_name, goals) => {
   const baseGoal = {
     id: 'goal-1',
+    date: '2026-08-10',
     content: '  Take   a short walk  ',
     framework: 'simple',
     priority: null,
@@ -34,6 +35,16 @@ describe.each(implementations)('%s goal deduplication', (_name, goals) => {
         priority: 'A',
       })
     ).not.toBe(goals.goalIdentityKey(baseGoal));
+  });
+
+  it('keeps identical goals from different dates separate', () => {
+    const previousDay = { ...baseGoal, id: 'goal-previous', date: '2026-08-09' };
+
+    expect(goals.goalIdentityKey(previousDay)).not.toBe(goals.goalIdentityKey(baseGoal));
+    expect(goals.collapseDuplicateGoals([previousDay, baseGoal]).goals).toEqual([
+      previousDay,
+      baseGoal,
+    ]);
   });
 
   it('collapses accidental duplicates while retaining every backing row id', () => {

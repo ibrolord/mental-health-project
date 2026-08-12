@@ -1,7 +1,7 @@
 # Physical iOS QA Runbook
 
 This runbook closes the hardware-only release gates in `QA_PROTOCOL.md`. It
-does not replace the 645-row artifact-bound run.
+does not replace the 677-row artifact-bound run.
 
 ## 1. Prepare both devices
 

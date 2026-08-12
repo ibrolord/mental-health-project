@@ -12,6 +12,8 @@ export const USER_DATA_REGISTRY = {
   moods: { owner: 'user-or-session', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
   assessments: { owner: 'user-or-session', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
   goals: { owner: 'user-or-session', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
+  goal_milestones: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  goal_attachments: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
   habits: { owner: 'user-or-session', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
   habit_logs: { owner: 'relationship', export: true, delete: true, partner: 'aggregate-only', ai: 'never' },
   journal_entries: { owner: 'user', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },

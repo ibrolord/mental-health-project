@@ -1,4 +1,3 @@
-import { format } from 'date-fns';
 import { SOURCED_QUOTE_FALLBACKS } from './affirmations';
 import { loadAffirmationCatalog } from './affirmations-client';
 import {
@@ -25,7 +24,7 @@ export async function loadSmartReminderPlan(
   const { data: sessionData } = await supabase.auth.getSession();
   const user = sessionData.session?.user;
   const now = new Date();
-  if (!user || (user as { is_anonymous?: boolean }).is_anonymous) {
+  if (!user) {
     return buildSmartReminderPlan({
       now,
       reminderTimes,
@@ -36,19 +35,19 @@ export async function loadSmartReminderPlan(
     });
   }
 
-  const today = format(now, 'yyyy-MM-dd');
   const affirmationsPromise = loadAffirmationCatalog()
     .then(({ records }) => records)
     .catch(() => SOURCED_QUOTE_FALLBACKS);
   const [goalsResult, plansResult, libraryResult, affirmations] = await Promise.all([
     supabase
       .from('goals')
-      .select('content, created_at')
+      .select('content, created_at, due_at, reminder_at')
       .eq('user_id', user.id)
-      .eq('date', today)
       .eq('status', 'pending')
-      .order('created_at', { ascending: true })
-      .limit(1),
+      .not('reminder_at', 'is', null)
+      .gt('reminder_at', now.toISOString())
+      .order('reminder_at', { ascending: true })
+      .limit(MAX_DUE_DATE_REMINDERS),
     supabase
       .from('life_plan_items')
       .select('id, title, next_step, target_date')

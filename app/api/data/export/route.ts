@@ -5,6 +5,7 @@ import {
   privacyPlatformFromRequest,
   recordServerPrivacyEvent,
 } from '@/lib/privacy-events/server';
+import { GOAL_ATTACHMENT_BUCKET } from '@/lib/goals/details';
 
 type QueryResult = {
   data: unknown[] | null;
@@ -16,6 +17,72 @@ function requireQuery(name: string, result: QueryResult): unknown[] {
     throw new Error(`${name} export failed: ${result.error.message}`);
   }
   return result.data ?? [];
+}
+
+type GoalAttachmentExportRow = Record<string, unknown> & {
+  storage_path: string;
+};
+
+const ATTACHMENT_PAGE_SIZE = 1000;
+
+async function loadGoalAttachmentRows(userId: string): Promise<QueryResult> {
+  const rows: unknown[] = [];
+  for (let from = 0; ; from += ATTACHMENT_PAGE_SIZE) {
+    const { data, error } = await supabaseAdmin
+      .from('goal_attachments')
+      .select('*')
+      .eq('user_id', userId)
+      .order('storage_path', { ascending: true })
+      .range(from, from + ATTACHMENT_PAGE_SIZE - 1);
+    if (error) return { data: null, error };
+    rows.push(...(data ?? []));
+    if ((data ?? []).length < ATTACHMENT_PAGE_SIZE) break;
+  }
+  return { data: rows, error: null };
+}
+
+function streamExportWithAttachments(
+  payload: Record<string, unknown>,
+  rows: GoalAttachmentExportRow[]
+): NextResponse {
+  const encoder = new TextEncoder();
+  const payloadJson = JSON.stringify(payload);
+  const prefix = `${payloadJson.slice(0, -1)},"goal_attachments":[`;
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        controller.enqueue(encoder.encode(prefix));
+        for (const [index, row] of rows.entries()) {
+          const { data, error } = await supabaseAdmin.storage
+            .from(GOAL_ATTACHMENT_BUCKET)
+            .download(row.storage_path);
+          if (error || !data) {
+            throw new Error(
+              `goal attachment export failed for ${row.storage_path}: ${error?.message ?? 'file missing'}`
+            );
+          }
+          const exportedRow = {
+            ...row,
+            content_encoding: 'base64',
+            content_base64: Buffer.from(await data.arrayBuffer()).toString('base64'),
+          };
+          controller.enqueue(
+            encoder.encode(`${index === 0 ? '' : ','}${JSON.stringify(exportedRow)}`)
+          );
+        }
+        controller.enqueue(encoder.encode(']}'));
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
+  return new NextResponse(stream, {
+    headers: {
+      ...corsHeaders(),
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+  });
 }
 
 export async function OPTIONS() {
@@ -60,6 +127,8 @@ export async function POST(request: NextRequest) {
       moodsResult,
       assessmentsResult,
       goalsResult,
+      goalMilestonesResult,
+      goalAttachmentsResult,
       habitsResult,
       journalEntriesResult,
       chatHistoryResult,
@@ -90,6 +159,12 @@ export async function POST(request: NextRequest) {
       supabaseAdmin.from('moods').select('*').eq(ownerColumn, ownerValue),
       supabaseAdmin.from('assessments').select('*').eq(ownerColumn, ownerValue),
       supabaseAdmin.from('goals').select('*').eq(ownerColumn, ownerValue),
+      auth.userId
+        ? supabaseAdmin.from('goal_milestones').select('*').eq('user_id', auth.userId)
+        : Promise.resolve({ data: [], error: null }),
+      auth.userId
+        ? loadGoalAttachmentRows(auth.userId)
+        : Promise.resolve({ data: [], error: null }),
       supabaseAdmin.from('habits').select('*').eq(ownerColumn, ownerValue),
       auth.userId
         ? supabaseAdmin
@@ -252,8 +327,11 @@ export async function POST(request: NextRequest) {
         }
       : null;
 
-    return NextResponse.json(
-      {
+    const goalAttachments = (
+      requireQuery('goal attachments', goalAttachmentsResult) as GoalAttachmentExportRow[]
+    );
+
+    const exportPayload = {
         exported_at: new Date().toISOString(),
         user_type: account?.is_anonymous
           ? 'anonymous'
@@ -265,6 +343,7 @@ export async function POST(request: NextRequest) {
         moods: requireQuery('moods', moodsResult),
         assessments: requireQuery('assessments', assessmentsResult),
         goals: requireQuery('goals', goalsResult),
+        goal_milestones: requireQuery('goal milestones', goalMilestonesResult),
         habits,
         habit_logs: requireQuery('habit logs', habitLogsResult),
         journal_entries: requireQuery('journal entries', journalEntriesResult),
@@ -326,9 +405,8 @@ export async function POST(request: NextRequest) {
           'legacy anonymous session',
           legacySessionResult
         ),
-      },
-      { headers: corsHeaders() }
-    );
+      };
+    return streamExportWithAttachments(exportPayload, goalAttachments);
   } catch (error) {
     console.error(
       'Data export API error:',

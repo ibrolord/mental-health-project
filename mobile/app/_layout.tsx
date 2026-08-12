@@ -101,7 +101,10 @@ export default function RootLayout() {
         // permission; the opt-in prompt is triggered from Settings.
         (async () => {
           try {
-            await notificationsHelper.scheduleMoodReminders();
+            await Promise.all([
+              notificationsHelper.scheduleMoodReminders(),
+              notificationsHelper.scheduleDueDateReminders(),
+            ]);
           } catch (e) {
             console.warn('Notification schedule sync failed:', e);
           }
@@ -163,7 +166,7 @@ export default function RootLayout() {
           <Stack.Screen name="auth/login" options={stackScreenOptions('Sign In', '/settings', true)} />
           <Stack.Screen name="auth/signup" options={stackScreenOptions('Sign Up', '/settings', true)} />
           <Stack.Screen name="assessments/[type]" options={stackScreenOptions('Assessment', '/(tabs)/assessments')} />
-          <Stack.Screen name="goals" options={stackScreenOptions('Life Organizer')} />
+          <Stack.Screen name="goals" options={stackScreenOptions('Goals')} />
           <Stack.Screen name="habits" options={stackScreenOptions('Habit Tracker')} />
           <Stack.Screen name="journal" options={stackScreenOptions('Private Journal')} />
           <Stack.Screen name="reflect" options={stackScreenOptions('Guided Reflection')} />
@@ -173,7 +176,7 @@ export default function RootLayout() {
           <Stack.Screen name="ground" options={stackScreenOptions('Grounding')} />
           <Stack.Screen name="meditate" options={stackScreenOptions('Meditation')} />
           <Stack.Screen name="yoga" options={stackScreenOptions('Yoga')} />
-          <Stack.Screen name="mind-games" options={stackScreenOptions('Mind Games')} />
+          <Stack.Screen name="mind-games" options={stackScreenOptions('Attention Games')} />
           <Stack.Screen name="planner" options={stackScreenOptions('Life Planner')} />
           <Stack.Screen name="plans" options={stackScreenOptions('My Plans')} />
           <Stack.Screen name="focus" options={stackScreenOptions('Focus Mode')} />
@@ -182,7 +185,7 @@ export default function RootLayout() {
           <Stack.Screen name="research" options={stackScreenOptions('Research')} />
           <Stack.Screen name="support" options={stackScreenOptions('Support')} />
           <Stack.Screen name="settings" options={stackScreenOptions('Settings')} />
-          <Stack.Screen name="voice" options={stackScreenOptions('Voice Support')} />
+          <Stack.Screen name="voice" options={stackScreenOptions('AI Voice')} />
         </Stack>
       </AuthProvider>
     </ErrorBoundary>

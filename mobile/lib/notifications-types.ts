@@ -36,6 +36,7 @@ export type NotificationsModuleLike = {
 
 export type NotificationsHelperLike = {
   scheduleMoodReminders: () => Promise<void>;
+  scheduleDueDateReminders: () => Promise<void>;
 };
 
 export type NotificationsBundle = {

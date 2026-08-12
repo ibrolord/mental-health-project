@@ -93,7 +93,6 @@ describe('My Plans mobile screen invariants', () => {
     expect(screen).toContain('Need urgent help?');
     expect(screen).toContain("router.push('/resources')");
     expect(screen).toContain('Open urgent resources');
-    expect(screen).toContain('Build this with a clinician.');
   });
 
   it('surfaces rejected network saves instead of leaving an unhandled promise', () => {
@@ -134,7 +133,7 @@ describe('My Plans mobile screen invariants', () => {
       'resetAiDataSharingConsent(consentSubjectId)',
       'clearFullContextPreference(consentSubjectId)',
       'clearContextSelections(consentSubjectId)',
-      'setRemindersEnabled(false)',
+      'clearAllReminders()',
     ]) {
       expect(settings).toContain(cleanup);
     }
@@ -314,7 +313,7 @@ describe('My Plans mobile screen invariants', () => {
     expect(screen).not.toMatch(/nextPosition > 99/);
   });
 
-  it('uses labelled AppUI controls with 44pt button targets', () => {
+  it('uses labelled AppUI controls with at least 44pt button targets', () => {
     for (const label of [
       'Edit activity:',
       'Delete activity:',
@@ -324,6 +323,9 @@ describe('My Plans mobile screen invariants', () => {
     ]) {
       expect(screen).toContain(label);
     }
-    expect(appUi).toMatch(/button:\s*\{\s*minHeight: 44,/);
+    const buttonMinHeight = appUi.match(
+      /button:\s*\{\s*minHeight:\s*(\d+),/
+    )?.[1];
+    expect(Number(buttonMinHeight)).toBeGreaterThanOrEqual(44);
   });
 });

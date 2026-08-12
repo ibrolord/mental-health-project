@@ -18,7 +18,7 @@ import type { MoodEmoji } from '@/lib/types';
 import { saveCheckInWithAttribution } from '@/lib/acquisition';
 import { getLocalCheckInFields } from '@/lib/check-in';
 import { collectMoodTags, filterMoodEntriesByTag } from '@/lib/mood-filter';
-import { getMoodLabel, MOOD_CHOICES } from '@/components/MoodPicker';
+import { getMoodLabel, MoodPicker } from '@/components/MoodPicker';
 import {
   addCustomMoodEmotion,
   composeMoodTags,
@@ -39,6 +39,7 @@ import {
   AppScreen,
   ChoiceChip,
   EmptyState,
+  InlineStatus,
   PageHeader,
   SectionHeader,
   appUiStyles,
@@ -516,21 +517,18 @@ export default function TrackerScreen() {
   return (
     <AppScreen>
       <PageHeader
-        eyebrow="NOTICE THE PATTERN"
+        eyebrow="A moment to notice"
         title="Mood"
-        description="Check in, add context if it helps, and look back without judgment."
+        description="Name what is here. Add context only if it helps."
       />
 
       {saveStatus ? (
-        <Text
-          accessibilityRole={saveStatus.type === 'error' ? 'alert' : 'text'}
-          style={[
-            s.saveStatus,
-            saveStatus.type === 'error' && s.saveStatusError,
-          ]}
-        >
-          {saveStatus.message}
-        </Text>
+        <InlineStatus
+          tone={saveStatus.type}
+          message={saveStatus.type === 'success' && saveStatus.message === 'Check-in saved.'
+            ? 'Saved. That is enough for now.'
+            : saveStatus.message}
+        />
       ) : null}
 
       {draftLoadError ? (
@@ -576,7 +574,7 @@ export default function TrackerScreen() {
         <AppCard style={s.checkInCard}>
           <SectionHeader
             title="How are you right now?"
-            description="Choose the closest fit. It saves right away."
+            description="Tap the closest feeling."
           />
           {draftRestored ? (
             <View
@@ -595,36 +593,11 @@ export default function TrackerScreen() {
               </Pressable>
             </View>
           ) : null}
-          <View
-            accessibilityRole="radiogroup"
-            accessibilityLabel="Choose how you feel"
-            style={s.moodRow}
-          >
-            {MOOD_CHOICES.map((choice) => {
-              const selected = visibleNewMood === choice.emoji;
-              return (
-                <Pressable
-                  key={choice.emoji}
-                  accessibilityRole="radio"
-                  accessibilityLabel={`${choice.label} mood`}
-                  accessibilityState={{ selected, disabled: saving || !editorReady }}
-                  disabled={saving || !editorReady}
-                  onPress={() => selectMood(choice.emoji)}
-                  style={({ pressed }) => [
-                    s.moodChoice,
-                    selected && { backgroundColor: choice.tint },
-                    selected && s.moodChoiceSelected,
-                    pressed && !saving && editorReady && s.pressed,
-                  ]}
-                >
-                  <Text style={s.moodEmoji}>{choice.emoji}</Text>
-                  <Text style={[s.moodLabel, selected && s.moodLabelSelected]}>
-                    {choice.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <MoodPicker
+            value={visibleNewMood}
+            onChange={selectMood}
+            disabled={saving || !editorReady}
+          />
 
           {visibleNewMood ? (
             <>
@@ -789,7 +762,7 @@ export default function TrackerScreen() {
           style={({ pressed }) => [s.historyHeader, pressed && s.pressed]}
         >
           <View style={s.historyHeaderCopy}>
-            <Text style={s.historyTitle}>Recent check-ins</Text>
+            <Text style={s.historyTitle}>Mood history</Text>
             <Text style={s.historyDescription}>
               {visibleFilterTag ? `Showing entries tagged ${visibleFilterTag}` : 'This month'}
             </Text>
@@ -929,30 +902,6 @@ const s = StyleSheet.create({
   },
   draftNoticeText: { flex: 1, color: Colors.text, fontSize: 13, fontWeight: '600' },
   discardDraft: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
-  moodRow: { flexDirection: 'row', gap: 5, marginBottom: 12 },
-  moodChoice: {
-    minWidth: 0,
-    minHeight: 80,
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'transparent',
-    borderRadius: 14,
-    paddingHorizontal: 2,
-    paddingVertical: 8,
-  },
-  moodChoiceSelected: { borderColor: Colors.primary },
-  moodEmoji: { fontSize: 27, lineHeight: 34 },
-  moodLabel: {
-    color: Colors.textSecondary,
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginTop: 3,
-  },
-  moodLabelSelected: { color: Colors.text, fontWeight: '800' },
   disclosure: {
     minHeight: 48,
     marginBottom: 13,

@@ -388,7 +388,7 @@ describe('campaign attribution taxonomy', () => {
         'utf8'
       ),
       readFileSync(
-        resolve(process.cwd(), 'mobile/app/(tabs)/index.tsx'),
+        resolve(process.cwd(), 'mobile/app/(tabs)/more.tsx'),
         'utf8'
       ),
     ];

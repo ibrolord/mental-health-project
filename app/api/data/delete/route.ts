@@ -5,6 +5,7 @@ import {
   privacyPlatformFromRequest,
   recordServerPrivacyEvent,
 } from '@/lib/privacy-events/server';
+import { removeGoalAttachmentObjectsForUser } from '@/lib/goals/attachment-cleanup';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
@@ -71,6 +72,21 @@ export async function POST(request: NextRequest) {
         { error: 'Data could not be deleted. Please try again or contact support.' },
         { status: 500, headers: corsHeaders() }
       );
+    }
+
+    if (auth.userId) {
+      const attachmentCleanup = await removeGoalAttachmentObjectsForUser(auth.userId);
+      if (attachmentCleanup.error) {
+        console.error('Goal attachment cleanup failed:', attachmentCleanup.error);
+        return NextResponse.json(
+          {
+            deleted: true,
+            cleanupPending: true,
+            error: 'Your records were deleted, but attached file cleanup is still pending. Please retry.',
+          },
+          { status: 500, headers: corsHeaders() }
+        );
+      }
     }
 
     return NextResponse.json({ deleted: true }, { headers: corsHeaders() });

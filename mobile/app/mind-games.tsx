@@ -618,9 +618,9 @@ export default function MindGamesScreen() {
   return (
     <AppScreen>
       <PageHeader
-        eyebrow="Offline mind games"
+        eyebrow="Offline attention games"
         title="Give attention one clear job."
-        description="Six short activities for grounding and cognitive practice. Scores stay on this screen."
+        description="Six short activities for focus and grounding. Results stay on this screen."
         icon="grid"
       />
 

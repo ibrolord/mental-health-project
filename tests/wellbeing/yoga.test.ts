@@ -151,7 +151,9 @@ describe('guided yoga integration boundaries', () => {
     expect(page).toContain("require('@/assets/yoga/supported-savasana.jpg')");
     expect(page).toContain('accessibilityLabel={step.imageAlt ?? pose.imageAlt}');
     expect(page).toContain('renderStepVisual');
-    expect(page).toContain('Stop for pain, dizziness, numbness, or breathing difficulty.');
+    expect(page).toContain(
+      'Stop if you feel pain, dizziness, numbness, or trouble breathing.'
+    );
     expect(page).toContain("options={['off', 'rain', 'ocean']}");
     const guidedPractice = source('mobile/components/GuidedPractice.tsx');
     expect(guidedPractice).toContain('AccessibilityInfo.announceForAccessibility');
@@ -180,7 +182,7 @@ describe('guided yoga integration boundaries', () => {
 
   it('adds yoga to navigation and optional go-to actions without making it a default', () => {
     expect(source('lib/navigation.ts')).toContain("href: '/yoga'");
-    expect(source('mobile/app/(tabs)/more.tsx')).toContain("route: '/yoga'");
+    expect(source('mobile/app/(tabs)/assessments.tsx')).toContain("route: '/yoga'");
     expect(source('mobile/app/_layout.tsx')).toContain('name="yoga"');
     expect(source('lib/wellbeing/go-to-actions.ts')).toContain("{ id: 'yoga', label: 'Yoga'");
     expect(source('lib/wellbeing/go-to-actions.ts')).not.toContain("{ toolId: 'yoga', cue: '' }");

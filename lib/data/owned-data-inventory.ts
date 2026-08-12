@@ -59,6 +59,8 @@ export const OWNED_DATA_SOURCES: readonly OwnedDataSource[] = [
   ownedByUser('user_book_favorites'),
   ownedByUser('chat_history'),
   ownedByUser('habits'),
+  ownedByUser('goal_attachments'),
+  ownedByUser('goal_milestones'),
   ownedByUser('goals'),
   ownedByUser('assessments'),
   ownedByUser('moods'),

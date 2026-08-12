@@ -196,7 +196,7 @@ export default function SavedScreen() {
             <View style={styles.section}>
               <SectionHeader
                 title="Important in your journal"
-                description="Titles and private writing stay in Journal."
+                description="Saved shows the title, date, and important marker. Your writing stays in Journal."
               />
               {collection.importantJournal.map((item) => (
                 <Pressable
@@ -227,8 +227,7 @@ export default function SavedScreen() {
               <Text style={styles.privacyTitle}>Private records stay put</Text>
             </View>
             <Text style={appUiStyles.muted}>
-              Saved reads existing Library and Journal state. It does not copy journal
-              content into another table.
+              Saved links back to Library and Journal without copying your private writing.
             </Text>
           </AppCard>
         </>

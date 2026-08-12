@@ -37,6 +37,35 @@ CREATE TABLE auth.users (
   is_anonymous BOOLEAN NOT NULL DEFAULT FALSE
 );
 
+-- Model the small part of Supabase Storage used by repo migrations. The real
+-- local Supabase stack supplies these objects; this standalone Postgres harness
+-- must provide them so migrations and their owner-folder policies are tested.
+CREATE SCHEMA IF NOT EXISTS storage;
+CREATE TABLE storage.buckets (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  public BOOLEAN NOT NULL DEFAULT FALSE,
+  file_size_limit BIGINT,
+  allowed_mime_types TEXT[]
+);
+CREATE TABLE storage.objects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  bucket_id TEXT NOT NULL REFERENCES storage.buckets(id) ON DELETE CASCADE,
+  name TEXT NOT NULL
+);
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+CREATE OR REPLACE FUNCTION storage.foldername(name TEXT)
+RETURNS TEXT[]
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN name = '' THEN ARRAY[]::TEXT[]
+    ELSE string_to_array(name, '/')
+  END
+$$;
+
 -- The stock PostgreSQL image does not ship Supabase's pg_cron extension.
 -- Emulate only the scheduling call so the rest of that migration must still
 -- apply successfully and can participate in the privacy verification.
@@ -66,6 +95,8 @@ $$;
 
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT USAGE ON SCHEMA auth TO anon, authenticated;
+GRANT USAGE ON SCHEMA storage TO authenticated;
+GRANT SELECT, INSERT, DELETE ON storage.objects TO authenticated;
 SQL
 
 echo "== applying repo migrations in order =="

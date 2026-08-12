@@ -17,6 +17,7 @@ export type NotificationPlatform = 'android' | 'ios';
 export const NOTIFICATIONS_KEY = 'mood_reminders_enabled';
 export const REMINDER_TIMES_KEY = 'reminder_times';
 export const MOOD_REMINDER_IDS_KEY = 'mood_reminder_notification_ids';
+export const DUE_DATE_REMINDER_IDS_KEY = 'due_date_reminder_notification_ids';
 export const DEFAULT_REMINDER_TIMES = [9, 14, 20] as const;
 export const MOOD_TRACKER_NOTIFICATION_ROUTE = '/(tabs)/tracker';
 
@@ -127,6 +128,7 @@ export function createNotificationService(
 ) {
   let handlerConfigured = false;
   let reminderSyncInFlight: Promise<string[]> | null = null;
+  let dueDateSyncInFlight: Promise<string[]> | null = null;
   let reminderMutationTail: Promise<void> = Promise.resolve();
 
   function enqueueReminderMutation<T>(operation: () => Promise<T>): Promise<T> {
@@ -178,14 +180,17 @@ export function createNotificationService(
     return notificationPermissionAllowsDelivery(permission, Notifications);
   }
 
-  async function cancelMoodReminders(): Promise<void> {
+  async function cancelStoredReminders(
+    storageKey: string,
+    failureMessage: string
+  ): Promise<void> {
     configureHandler();
     const ids = parseStoredNotificationIds(
-      await storage.getItem(MOOD_REMINDER_IDS_KEY)
+      await storage.getItem(storageKey)
     );
 
     if (ids.length === 0) {
-      await storage.removeItem(MOOD_REMINDER_IDS_KEY);
+      await storage.removeItem(storageKey);
       return;
     }
 
@@ -195,11 +200,25 @@ export function createNotificationService(
     const failedIds = ids.filter((_, index) => results[index].status === 'rejected');
 
     if (failedIds.length > 0) {
-      await storage.setItem(MOOD_REMINDER_IDS_KEY, JSON.stringify(failedIds));
-      throw new Error('One or more local reminders could not be removed.');
+      await storage.setItem(storageKey, JSON.stringify(failedIds));
+      throw new Error(failureMessage);
     }
 
-    await storage.removeItem(MOOD_REMINDER_IDS_KEY);
+    await storage.removeItem(storageKey);
+  }
+
+  async function cancelMoodReminders(): Promise<void> {
+    return cancelStoredReminders(
+      MOOD_REMINDER_IDS_KEY,
+      'One or more daily reminders could not be removed.'
+    );
+  }
+
+  async function cancelDueDateReminders(): Promise<void> {
+    return cancelStoredReminders(
+      DUE_DATE_REMINDER_IDS_KEY,
+      'One or more due-date reminders could not be removed.'
+    );
   }
 
   async function scheduleMoodRemindersInternal(): Promise<string[]> {
@@ -226,7 +245,6 @@ export function createNotificationService(
     await ensureAndroidChannel();
     const scheduledIds: string[] = [];
     const dailyContent = reminderContentForTimes(times, reminderPlan.daily);
-    const dueDates = validDueDateReminders(reminderPlan.dueDates);
 
     try {
       for (const [index, hour] of times.entries()) {
@@ -247,6 +265,44 @@ export function createNotificationService(
         scheduledIds.push(await Notifications.scheduleNotificationAsync(request));
       }
 
+    } catch (error) {
+      const cleanup = await Promise.allSettled(
+        scheduledIds.map((id) => Notifications.cancelScheduledNotificationAsync(id))
+      );
+      const unclearedIds = scheduledIds.filter(
+        (_, index) => cleanup[index].status === 'rejected'
+      );
+      if (unclearedIds.length > 0) {
+        await storage.setItem(MOOD_REMINDER_IDS_KEY, JSON.stringify(unclearedIds));
+      }
+      throw error;
+    }
+
+    await storage.setItem(MOOD_REMINDER_IDS_KEY, JSON.stringify(scheduledIds));
+    return scheduledIds;
+  }
+
+  async function scheduleDueDateRemindersInternal(): Promise<string[]> {
+    configureHandler();
+    await cancelDueDateReminders();
+    if (!(await hasPermission())) return [];
+
+    const times = parseStoredReminderTimes(
+      await storage.getItem(REMINDER_TIMES_KEY)
+    );
+    let reminderPlan: ReminderSchedulePlan;
+    try {
+      reminderPlan = await contentProvider(times);
+    } catch (error) {
+      console.warn('Could not load due-date reminder content:', error);
+      reminderPlan = { daily: [], dueDates: [] };
+    }
+
+    await ensureAndroidChannel();
+    const scheduledIds: string[] = [];
+    const dueDates = validDueDateReminders(reminderPlan.dueDates);
+
+    try {
       for (const dueDate of dueDates) {
         const request: NotificationRequestInput = {
           content: {
@@ -270,12 +326,16 @@ export function createNotificationService(
         (_, index) => cleanup[index].status === 'rejected'
       );
       if (unclearedIds.length > 0) {
-        await storage.setItem(MOOD_REMINDER_IDS_KEY, JSON.stringify(unclearedIds));
+        await storage.setItem(DUE_DATE_REMINDER_IDS_KEY, JSON.stringify(unclearedIds));
       }
       throw error;
     }
 
-    await storage.setItem(MOOD_REMINDER_IDS_KEY, JSON.stringify(scheduledIds));
+    if (scheduledIds.length > 0) {
+      await storage.setItem(DUE_DATE_REMINDER_IDS_KEY, JSON.stringify(scheduledIds));
+    } else {
+      await storage.removeItem(DUE_DATE_REMINDER_IDS_KEY);
+    }
     return scheduledIds;
   }
 
@@ -288,6 +348,18 @@ export function createNotificationService(
       return await sync;
     } finally {
       if (reminderSyncInFlight === sync) reminderSyncInFlight = null;
+    }
+  }
+
+  async function scheduleDueDateReminders(): Promise<string[]> {
+    if (dueDateSyncInFlight) return dueDateSyncInFlight;
+
+    const sync = enqueueReminderMutation(scheduleDueDateRemindersInternal);
+    dueDateSyncInFlight = sync;
+    try {
+      return await sync;
+    } finally {
+      if (dueDateSyncInFlight === sync) dueDateSyncInFlight = null;
     }
   }
 
@@ -317,6 +389,18 @@ export function createNotificationService(
         await storage.setItem(NOTIFICATIONS_KEY, 'false');
         throw error;
       }
+    });
+  }
+
+  async function clearAllReminders(): Promise<void> {
+    return enqueueReminderMutation(async () => {
+      const [dailyResult, dueDateResult] = await Promise.allSettled([
+        cancelMoodReminders(),
+        cancelDueDateReminders(),
+      ]);
+      if (dailyResult.status === 'rejected') throw dailyResult.reason;
+      if (dueDateResult.status === 'rejected') throw dueDateResult.reason;
+      await storage.setItem(NOTIFICATIONS_KEY, 'false');
     });
   }
 
@@ -364,7 +448,9 @@ export function createNotificationService(
   return {
     requestPermissions,
     scheduleMoodReminders,
+    scheduleDueDateReminders,
     setRemindersEnabled,
+    clearAllReminders,
     areRemindersEnabled,
     setReminderTimes,
     getReminderTimes,

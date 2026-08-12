@@ -13,12 +13,12 @@ export type PartnerScopes = {
 };
 
 export const DEFAULT_SCOPES: PartnerScopes = {
-  share_goals: true,
-  share_habits: true,
-  share_checkins: true,
+  share_goals: false,
+  share_habits: false,
+  share_checkins: false,
   share_mood_trend: false,
-  share_streaks: true,
-  allow_celebrations: true,
+  share_streaks: false,
+  allow_celebrations: false,
   share_journal_activity: false,
   share_assessment_activity: false,
   share_planner_progress: false,
@@ -58,7 +58,7 @@ export const SCOPE_COPY: Record<
   },
   share_assessment_activity: {
     label: 'Assessment activity',
-    description: 'Screeners completed this week, not scores.',
+    description: 'Questionnaires completed this week, not scores.',
   },
   share_planner_progress: {
     label: 'Life planner',

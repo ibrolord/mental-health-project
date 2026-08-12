@@ -8,7 +8,12 @@ describe('smart local reminder content', () => {
     const plan = buildSmartReminderPlan({
       now: NOW,
       reminderTimes: [9, 14, 20],
-      goals: [{ content: 'Send the application', created_at: NOW.toISOString() }],
+      goals: [{
+        content: 'Send the application',
+        created_at: NOW.toISOString(),
+        due_at: new Date(2026, 7, 7, 18).toISOString(),
+        reminder_at: new Date(2026, 7, 7, 9).toISOString(),
+      }],
       lifePlans: [
         {
           id: 'plan-1',
@@ -55,7 +60,7 @@ describe('smart local reminder content', () => {
     expect(plan.dueDates).toEqual([
       expect.objectContaining({
         title: 'Due today',
-        body: 'A goal is due. Open MHtoolkit when you are ready.',
+        body: 'A goal reminder is ready. Open MHtoolkit when you are ready.',
         screen: '/goals',
         date: new Date(2026, 7, 7, 9),
       }),
@@ -73,11 +78,16 @@ describe('smart local reminder content', () => {
     expect(serialized).not.toContain('Atomic Habits');
   });
 
-  it('uses only future device times for a due-today notification', () => {
+  it('uses the explicit future reminder time instead of a generic daily hour', () => {
     const plan = buildSmartReminderPlan({
       now: NOW,
       reminderTimes: [7, 14],
-      goals: [{ content: 'Review notes', created_at: NOW.toISOString() }],
+      goals: [{
+        content: 'Review notes',
+        created_at: NOW.toISOString(),
+        due_at: new Date(2026, 7, 7, 18).toISOString(),
+        reminder_at: new Date(2026, 7, 7, 14).toISOString(),
+      }],
       lifePlans: [],
       libraryStates: [],
       affirmations: [],
@@ -86,5 +96,23 @@ describe('smart local reminder content', () => {
     expect(plan.dueDates).toEqual([
       expect.objectContaining({ date: new Date(2026, 7, 7, 14) }),
     ]);
+  });
+
+  it('does not invent a due reminder for a goal without one', () => {
+    const plan = buildSmartReminderPlan({
+      now: NOW,
+      reminderTimes: [9, 14],
+      goals: [{
+        content: 'Unscheduled goal',
+        created_at: NOW.toISOString(),
+        due_at: null,
+        reminder_at: null,
+      }],
+      lifePlans: [],
+      libraryStates: [],
+      affirmations: [],
+    });
+
+    expect(plan.dueDates).toEqual([]);
   });
 });

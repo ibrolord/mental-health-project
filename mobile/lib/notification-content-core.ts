@@ -16,6 +16,8 @@ import type {
 export type TodayGoal = {
   content: string;
   created_at: string;
+  due_at: string | null;
+  reminder_at: string | null;
 };
 
 export type LifePlanItem = {
@@ -177,6 +179,30 @@ function dueReminder(
   };
 }
 
+function goalReminder(
+  goal: TodayGoal,
+  now: Date,
+  today: string
+): DueDateReminder | null {
+  if (!goal.due_at || !goal.reminder_at) return null;
+  const dueDate = new Date(goal.due_at);
+  const reminderDate = new Date(goal.reminder_at);
+  if (
+    Number.isNaN(dueDate.getTime()) ||
+    Number.isNaN(reminderDate.getTime()) ||
+    reminderDate.getTime() <= now.getTime() ||
+    reminderDate.getTime() > dueDate.getTime()
+  ) {
+    return null;
+  }
+  return {
+    title: dueDateLabel(dueDate, today),
+    body: 'A goal reminder is ready. Open MHtoolkit when you are ready.',
+    screen: '/goals',
+    date: reminderDate,
+  };
+}
+
 export function buildSmartReminderPlan({
   now,
   reminderTimes,
@@ -187,15 +213,12 @@ export function buildSmartReminderPlan({
 }: SmartReminderPlanInput): ReminderSchedulePlan {
   const today = format(now, 'yyyy-MM-dd');
   const dueDates: DueDateReminder[] = [];
-  const firstGoal = goals[0];
-  if (firstGoal) {
-    const reminder = dueReminder(
-      today,
-      reminderTimes,
-      now,
-      today,
-      '/goals'
-    );
+  const scheduledGoals = [...goals].sort((a, b) =>
+    (a.reminder_at ?? '').localeCompare(b.reminder_at ?? '')
+  );
+  for (const goal of scheduledGoals) {
+    if (dueDates.length >= MAX_DUE_DATE_REMINDERS) break;
+    const reminder = goalReminder(goal, now, today);
     if (reminder) dueDates.push(reminder);
   }
 

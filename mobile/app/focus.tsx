@@ -384,7 +384,7 @@ export default function FocusScreen() {
   return (
     <AppScreen>
       <PageHeader
-        eyebrow="Lock-in mode"
+        eyebrow="Focus mode"
         title="One outcome. One block."
         description="Set a bounded task, focus, then take the break you planned."
         icon="target"
@@ -528,9 +528,10 @@ export default function FocusScreen() {
             <Text style={styles.presetsLabel}>Quick setup</Text>
             <View style={styles.presets}>
               {[
-                ['15 / 3', '15', '3'],
-                ['25 / 5', '25', '5'],
-                ['50 / 10', '50', '10'],
+                ['5 / 1 min', '5', '1'],
+                ['15 / 3 min', '15', '3'],
+                ['25 / 5 min', '25', '5'],
+                ['50 / 10 min', '50', '10'],
               ].map(([label, focus, rest]) => (
                 <ChoiceChip
                   key={label}

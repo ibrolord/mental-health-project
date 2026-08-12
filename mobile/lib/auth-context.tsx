@@ -44,7 +44,7 @@ import { offlineSafetyPlanCache } from './offline-safety-plan-cache';
 import { clearFullContextPreference } from './full-context-preference';
 import { clearGoToActions } from './go-to-actions-storage';
 import { clearContextSelections } from './chat-context-preference';
-import { areRemindersEnabled, setRemindersEnabled } from './notifications';
+import { areRemindersEnabled, clearAllReminders } from './notifications';
 import { Colors } from './constants';
 import {
   clearReflectionDraft,
@@ -255,7 +255,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 clearFullContextPreference(`user_id:${previousOwnerId}`),
                 clearGoToActions(`user_id:${previousOwnerId}`),
                 clearContextSelections(`user_id:${previousOwnerId}`),
-                setRemindersEnabled(false),
+                clearAllReminders(),
                 offlineSafetyPlanCache.clear(previousOwnerId),
                 clearReflectionDraft(previousOwnerId),
                 appleHealthPreference.clear(previousOwnerId),
@@ -518,7 +518,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           clearFullContextPreference(ownerKey),
           clearGoToActions(ownerKey),
           clearContextSelections(ownerKey),
-          setRemindersEnabled(false),
+          clearAllReminders(),
           offlineSafetyPlanCache.clear(user.id),
           clearReflectionDraft(user.id),
           appleHealthPreference.clear(user.id),
@@ -553,7 +553,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             clearFullContextPreference(ownerKey),
             clearGoToActions(ownerKey),
             clearContextSelections(ownerKey),
-            setRemindersEnabled(false),
+            clearAllReminders(),
             offlineSafetyPlanCache.clear(expectedAnonymousUserId),
             clearReflectionDraft(expectedAnonymousUserId),
             appleHealthPreference.clear(expectedAnonymousUserId),
@@ -601,7 +601,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           clearFullContextPreference(deletedOwnerKey),
           clearGoToActions(deletedOwnerKey),
           clearContextSelections(deletedOwnerKey),
-          setRemindersEnabled(false),
+          clearAllReminders(),
           offlineSafetyPlanCache.clear(deletedOwnerId),
           clearReflectionDraft(deletedOwnerId),
           appleHealthPreference.clear(deletedOwnerId),

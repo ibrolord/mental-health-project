@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Switch, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
 import { useDataContext } from '@/lib/hooks/use-data-context';
@@ -13,6 +13,7 @@ import {
   getReminderTimes,
   setReminderTimes,
   sendTestNotification,
+  clearAllReminders,
 } from '@/lib/notifications';
 import { hasAiDataSharingConsent, resetAiDataSharingConsent, PRIVACY_POLICY_URL } from '@/lib/ai-consent';
 import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
@@ -27,6 +28,7 @@ import { clearReflectionDraft } from '@/lib/reflection-draft-storage';
 import { supabase } from '@/lib/supabase';
 import { AppleHealthSettingsCard } from '@/components/AppleHealthSettingsCard';
 import { appleHealthPreference } from '@/lib/apple-health-preference';
+import { AppCard, AppScreen, PageHeader } from '@/components/AppUI';
 
 const HOUR_OPTIONS = [
   { label: '7 AM', value: 7 },
@@ -209,12 +211,12 @@ export default function SettingsScreen() {
     const expectedOwnerId = user?.id;
     if (!query || !expectedOwnerId) return;
     Alert.alert(
-      'Delete All Data?',
-      'This will permanently delete all your check-ins, assessments, goals, habits, chat history, favorites, AI reports, and acquisition attribution. This cannot be undone.',
+      'Delete profile data?',
+      'This permanently deletes data saved in this profile, including attached files. It does not delete a sign-in account. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete Everything',
+          text: 'Delete profile data',
           style: 'destructive',
           onPress: async () => {
             setLoading(true);
@@ -232,7 +234,7 @@ export default function SettingsScreen() {
                 clearFullContextPreference(consentSubjectId),
                 clearContextSelections(consentSubjectId),
                 clearGoToActions(consentSubjectId),
-                setRemindersEnabled(false),
+                clearAllReminders(),
                 offlineSafetyPlanCache.clear(expectedOwnerId),
                 clearReflectionDraft(expectedOwnerId),
                 appleHealthPreference.clear(expectedOwnerId),
@@ -318,9 +320,15 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content}>
+    <AppScreen>
+      <PageHeader
+        eyebrow="Your app"
+        title="Settings"
+        description="Manage your account, reminders, privacy and support."
+        icon="settings"
+      />
       {/* Account */}
-      <View style={s.card}>
+      <AppCard>
         <Text style={s.cardTitle}>Account</Text>
         {accountUpgradePending ? (
           <>
@@ -354,9 +362,9 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </>
         )}
-      </View>
+      </AppCard>
 
-      <View style={s.card}>
+      <AppCard>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <Text style={s.cardTitle}>Daily Reminders</Text>
           <Switch
@@ -412,25 +420,27 @@ export default function SettingsScreen() {
             {reminderStatus}
           </Text>
         ) : null}
-      </View>
+      </AppCard>
 
       <AppleHealthSettingsCard ownerId={user?.id ?? null} />
 
       {/* Export */}
-      <View style={s.card}>
-        <Text style={s.cardTitle}>Export Your Data</Text>
-        <Text style={s.bodyText}>Download all your mental health data in JSON format.</Text>
+      <AppCard>
+        <Text style={s.cardTitle}>Export your data</Text>
+        <Text style={s.bodyText}>Download a copy of your MHtoolkit data as a JSON file.</Text>
         <TouchableOpacity style={s.btnOutline} onPress={handleExport} disabled={loading}>
           <Text style={s.btnOutlineText}>{loading ? 'Exporting...' : 'Export Data (JSON)'}</Text>
         </TouchableOpacity>
-      </View>
+      </AppCard>
 
       {/* Privacy */}
-      <View style={s.card}>
+      <AppCard>
         <Text style={s.cardTitle}>Privacy & Data Protection</Text>
         <Text style={s.privacyItem}>All data is encrypted at rest</Text>
         <Text style={s.privacyItem}>We never sell your data or share it for advertising</Text>
-        <Text style={s.privacyItem}>AI features ask before sending chat text, voice audio/transcripts, or optional mood and goal context to Google Gemini, Anthropic Claude, or OpenAI through MHtoolkit</Text>
+        <Text style={s.privacyItem}>After you consent, chat sends messages and chosen context to Google Gemini, Anthropic Claude, or OpenAI through MHtoolkit</Text>
+        <Text style={s.privacyItem}>Voice sends audio and transcripts to OpenAI or Gemini; AI affirmations can use recent mood, assessment, and goal data</Text>
+        <Text style={s.privacyItem}>Apple Health sharing asks every time</Text>
         <Text style={s.privacyItem}>Anonymous usage requires no personal info</Text>
         <Text style={s.privacyItem}>Export or delete your data anytime</Text>
         <Text style={[s.privacyItem, { marginTop: 6 }]}>
@@ -449,13 +459,13 @@ export default function SettingsScreen() {
         >
           <Text style={s.btnOutlineText}>View Privacy Policy</Text>
         </TouchableOpacity>
-      </View>
+      </AppCard>
 
       <VisitBriefBuilder key={`visit-brief-${user?.id ?? 'signed-out'}-${dataGeneration}`} ownerId={user?.id ?? null} />
       <PrivacyActivity key={`privacy-activity-${user?.id ?? 'signed-out'}-${dataGeneration}`} ownerId={user?.id ?? null} />
 
       {/* Support */}
-      <View style={s.card}>
+      <AppCard>
         <Text style={s.cardTitle}>Support & Feedback</Text>
         <Text style={s.bodyText}>
           Questions, feedback, or an app issue? Contact the MHtoolkit developer directly.
@@ -477,14 +487,14 @@ export default function SettingsScreen() {
         >
           <Text style={s.btnOutlineText}>View Support & Crisis Resources</Text>
         </TouchableOpacity>
-      </View>
+      </AppCard>
 
-      {/* Danger Zone */}
-      <View style={[s.card, { backgroundColor: Colors.dangerLight, borderWidth: 1, borderColor: '#fecaca' }]}>
-        <Text style={[s.cardTitle, { color: Colors.danger }]}>Danger Zone</Text>
-        <Text style={[s.bodyText, { color: '#991b1b' }]}>Permanently delete all your data. This cannot be undone.</Text>
+      {/* Data deletion */}
+      <AppCard style={{ backgroundColor: Colors.dangerLight, borderColor: '#e6b8ae' }}>
+        <Text style={[s.cardTitle, { color: Colors.danger }]}>Data deletion</Text>
+        <Text style={[s.bodyText, { color: '#991b1b' }]}>Delete the data saved in this profile. This cannot be undone.</Text>
         <TouchableOpacity style={s.dangerBtn} onPress={handleDeleteAll} disabled={loading}>
-          <Text style={s.dangerBtnText}>Delete All Data</Text>
+          <Text style={s.dangerBtnText}>Delete saved data</Text>
         </TouchableOpacity>
         {!isAnonymous && (
           <>
@@ -496,22 +506,19 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </>
         )}
-      </View>
+      </AppCard>
 
       {/* Disclaimer */}
-      <View style={[s.card, { backgroundColor: '#eff6ff' }]}>
+      <AppCard tone="outline">
         <Text style={{ fontSize: 13, color: Colors.textSecondary, lineHeight: 20, textAlign: 'center' }}>
           This app is a self-help tool, not a replacement for professional therapy. If you are in immediate danger, contact local emergency services. Crisis resources are available on the MHtoolkit support page.
         </Text>
-      </View>
-    </ScrollView>
+      </AppCard>
+    </AppScreen>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 16, paddingBottom: 40 },
-  card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, marginBottom: 14, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 10 },
   bodyText: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20 },
   supportEmail: { fontSize: 14, color: Colors.primary, fontWeight: '600', marginTop: 10 },

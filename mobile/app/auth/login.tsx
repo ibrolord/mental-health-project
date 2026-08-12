@@ -254,7 +254,7 @@ export default function LoginScreen() {
           <Text style={s.link}>New to MHtoolkit? Create an account</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.linkButton} onPress={returnToApp}>
-          <Text style={s.link}>Continue anonymously</Text>
+          <Text style={s.link}>Continue without an account</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

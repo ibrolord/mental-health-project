@@ -49,18 +49,25 @@ describe('mobile dashboard preferences', () => {
     ).resolves.toBe(false);
   });
 
-  it('keeps the toggle disabled until the matching owner is hydrated', () => {
+  it('keeps Today and its preference control gated to the hydrated owner', () => {
     const dashboard = readFileSync(
       resolve('mobile/app/(tabs)/index.tsx'),
       'utf8'
     );
+    const you = readFileSync(
+      resolve('mobile/app/(tabs)/more.tsx'),
+      'utf8'
+    );
 
-    expect(dashboard).toContain(
-      'disabled={!ownerKey || lowEnergyOwnerKey !== ownerKey}'
+    expect(you).toContain(
+      'disabled={!ownerKey || preferenceOwnerKey !== ownerKey}'
     );
-    expect(dashboard).toContain(
-      'if (!ownerKey || lowEnergyOwnerKey !== ownerKey) return;'
-    );
+    expect(you).toContain('createDashboardPreferenceWriter(dashboardPreferences)');
+    expect(you).toContain('ownerKeyRef.current !== expectedOwnerKey');
+    expect(you).toContain('{isAnonymous ? (');
+    expect(you).not.toContain('{!isAuthenticated ? (');
+    expect(dashboard).toContain('if (ownerKey && lowEnergyOwnerKey !== ownerKey)');
+    expect(dashboard).toContain('setLowEnergyLoadAttempt((attempt) => attempt + 1)');
   });
 
   it('coalesces queued preference changes to the latest value', async () => {

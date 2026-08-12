@@ -43,7 +43,7 @@ export const GROUNDING_AUDIO_SOURCES = [
 export const GROUNDING_PATHS: Record<GroundingNeed, GroundingPath> = {
   panic: {
     id: 'panic',
-    label: 'Panic or a racing body',
+    label: 'My body feels panicky or on edge',
     prompt: 'My body feels alarmed, shaky, breathless, or very fast.',
     technique: 'Orient, press, and breathe comfortably',
     why: 'This starts with external safety cues and physical support before asking you to change your breath.',
@@ -76,7 +76,7 @@ export const GROUNDING_PATHS: Record<GroundingNeed, GroundingPath> = {
   },
   detached: {
     id: 'detached',
-    label: 'Detached, numb, or unreal',
+    label: 'I feel distant or numb',
     prompt: 'I feel far away, blank, numb, or disconnected from the room.',
     technique: 'Temperature, texture, and movement',
     why: 'Clear, present-time sensory input can help reconnect attention with the current environment.',
@@ -109,7 +109,7 @@ export const GROUNDING_PATHS: Record<GroundingNeed, GroundingPath> = {
   },
   flashback: {
     id: 'flashback',
-    label: 'A flashback or triggered memory',
+    label: 'A memory feels present',
     prompt: 'A memory feels present, vivid, or as if it is happening again.',
     technique: 'Eyes-open present-time orientation',
     why: 'This keeps attention on concrete differences between the memory and the room you are in now.',
@@ -142,7 +142,7 @@ export const GROUNDING_PATHS: Record<GroundingNeed, GroundingPath> = {
   },
   overwhelmed: {
     id: 'overwhelmed',
-    label: 'Overwhelmed by too much',
+    label: 'Too much is coming at me',
     prompt: 'Everything feels urgent and I cannot decide what to do first.',
     technique: 'Shrink the field',
     why: 'Reducing the number of inputs can make one safe next action easier to identify.',
@@ -175,7 +175,7 @@ export const GROUNDING_PATHS: Record<GroundingNeed, GroundingPath> = {
   },
   spiraling: {
     id: 'spiraling',
-    label: 'Thoughts are spiraling',
+    label: 'My thoughts won’t slow down',
     prompt: 'My mind keeps repeating a fear, argument, or worst-case outcome.',
     technique: '5–4–3–2–1 sensory grounding',
     why: 'A structured sensory scan gives attention a concrete job in the present.',

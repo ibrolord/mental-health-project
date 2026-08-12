@@ -1,5 +1,6 @@
 export interface GoalIdentity {
   id: string;
+  date: string;
   content: string;
   framework: string;
   priority: string | null;
@@ -28,9 +29,10 @@ function normalizeContent(content: string): string {
 }
 
 export function goalIdentityKey(
-  goal: Pick<GoalIdentity, 'content' | 'framework' | 'priority' | 'eisenhower_quadrant'>
+  goal: Pick<GoalIdentity, 'date' | 'content' | 'framework' | 'priority' | 'eisenhower_quadrant'>
 ): string {
   return [
+    goal.date,
     goal.framework,
     goal.priority ?? '',
     goal.eisenhower_quadrant ?? '',

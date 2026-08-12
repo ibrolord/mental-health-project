@@ -75,7 +75,7 @@ describe('anonymous account upgrade journey', () => {
       'removeCurrentDevicePushSubscription(expectedAnonymousUserId)'
     );
     expect(mobileAuth).toContain('areRemindersEnabled()');
-    expect(mobileAuth).toContain('setRemindersEnabled(false)');
+    expect(mobileAuth).toContain('clearAllReminders()');
     expect(webLogin).toContain('Keep data and create an account');
     expect(webLogin).toContain('Delete data and sign in');
     expect(mobileLogin).toContain('Keep Data and Create Account');

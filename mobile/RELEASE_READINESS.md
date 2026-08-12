@@ -108,7 +108,7 @@ Build 42 artifact:
   entitlement. The app still requests read types only and never writes samples.
 - [x] Native Release simulator build links HealthKit 14.0.2 and Nitro 0.36.5
   successfully with the legacy React Native architecture.
-- [ ] The 645-row QA checklist is completed against the exact TestFlight build.
+- [ ] The 677-row QA checklist is completed against the exact TestFlight build.
 - [ ] Physical iPhone permission, partial-denial, revocation, data-state,
   per-request AI consent, network minimization, owner-isolation, older-iOS,
   VoiceOver, and Dynamic Type checks pass.
