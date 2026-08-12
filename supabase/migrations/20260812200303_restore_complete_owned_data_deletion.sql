@@ -1,5 +1,6 @@
 -- Restore the complete deletion contract after the accountability migration
 -- extended this function without preserving newer owned-data domains.
+-- The filename matches the timestamp recorded by the production deployment.
 CREATE OR REPLACE FUNCTION public.delete_owned_data(
   p_user_id UUID,
   p_session_id TEXT

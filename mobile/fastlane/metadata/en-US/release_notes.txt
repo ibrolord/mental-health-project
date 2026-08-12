@@ -1,6 +1,8 @@
 What's new in 1.0.3:
 
-- Added optional, read-only Apple Health context for sleep, steps, exercise minutes, workouts, mindful sessions, and State of Mind.
-- Added collapsible 7-day and 30-day Apple Health summaries beside mood check-ins.
-- Added an optional AI reflection from aggregate Apple Health context. Raw samples stay on-device, the aggregate is previewed, and every request requires Share once.
-- Improved privacy controls and HealthKit permission handling across supported iOS versions.
+- A calmer, clearer iPhone experience with redesigned Today, Mood, Talk, Tools, and You areas.
+- Together makes accountability easier to find, with private invitations, shared commitments, check-ins, streaks, celebrations, and clear sharing controls.
+- Mood check-ins are faster and more expressive, with emoji choices, feeling labels, helpful next steps, and recent patterns.
+- Goals now support milestones, due dates, notes, reminders, and attachments.
+- Optional, read-only Apple Health summaries can add sleep, movement, workout, mindfulness, and State of Mind context. Raw samples stay on your device.
+- Improved navigation, accessibility, privacy controls, notifications, and reliability throughout the app.

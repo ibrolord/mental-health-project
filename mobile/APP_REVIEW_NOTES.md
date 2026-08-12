@@ -5,7 +5,7 @@ Last updated: August 9, 2026
 ## Build Under Review
 
 - Version: 1.0.3
-- iOS build: assigned by EAS Build
+- iOS build: 49
 - Bundle ID: `com.mhtoolkit.app`
 - Support URL: https://mhtoolkit.vercel.app/support
 - Support email: bolajiag10@gmail.com
