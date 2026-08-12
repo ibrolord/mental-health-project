@@ -41,5 +41,8 @@ describe('Together identity mark', () => {
     expect(source).toContain('Do it together');
     expect(source).toContain("router.push('/accountability')");
     expect(source).toContain('name="leaf"');
+    expect(source.indexOf('ACCOUNTABILITY PARTNER')).toBeLessThan(
+      source.indexOf('<MoodPicker')
+    );
   });
 });

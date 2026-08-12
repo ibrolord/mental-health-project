@@ -344,6 +344,45 @@ export default function DashboardScreen() {
       </Text>
       {visibleAffirmationBy ? <Text style={s.attribution}>— {visibleAffirmationBy}</Text> : null}
 
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={
+          isAuthenticated
+            ? 'Open Together accountability partner'
+            : 'Set up Together accountability partner'
+        }
+        accessibilityHint="Share a commitment and check in with someone you trust"
+        onPress={() => router.push('/accountability')}
+        style={({ pressed }) => [
+          s.togetherCard,
+          visibleLowEnergyMode && s.togetherCardCompact,
+          pressed && s.pressed,
+        ]}
+      >
+        <View style={s.togetherLeaf}>
+          <MaterialCommunityIcons
+            accessible={false}
+            name="leaf"
+            size={24}
+            color={Colors.primary}
+          />
+        </View>
+        <View style={s.togetherCopy}>
+          <Text style={s.togetherEyebrow}>ACCOUNTABILITY PARTNER</Text>
+          <Text style={s.togetherTitle}>Do it together</Text>
+          {!visibleLowEnergyMode ? (
+            <Text style={s.togetherDescription}>
+              {isAuthenticated
+                ? 'Share one commitment, check in, and celebrate progress.'
+                : 'Invite someone you trust and share only what you choose.'}
+            </Text>
+          ) : null}
+        </View>
+        <View style={s.togetherArrow}>
+          <Feather name="arrow-right" size={20} color={Colors.primary} />
+        </View>
+      </Pressable>
+
       {viewPreferenceError ? (
         <InlineStatus
           tone="error"
@@ -398,41 +437,6 @@ export default function DashboardScreen() {
           </Pressable>
         </View>
       </View>
-
-      {!visibleLowEnergyMode ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            isAuthenticated
-              ? 'Open Together accountability partner'
-              : 'Set up Together accountability partner'
-          }
-          accessibilityHint="Share a commitment and check in with someone you trust"
-          onPress={() => router.push('/accountability')}
-          style={({ pressed }) => [s.togetherCard, pressed && s.pressed]}
-        >
-          <View style={s.togetherLeaf}>
-            <MaterialCommunityIcons
-              accessible={false}
-              name="leaf"
-              size={24}
-              color={Colors.primary}
-            />
-          </View>
-          <View style={s.togetherCopy}>
-            <Text style={s.togetherEyebrow}>ACCOUNTABILITY PARTNER</Text>
-            <Text style={s.togetherTitle}>Do it together</Text>
-            <Text style={s.togetherDescription}>
-              {isAuthenticated
-                ? 'Share one commitment, check in, and celebrate progress.'
-                : 'Invite someone you trust and share only what you choose.'}
-            </Text>
-          </View>
-          <View style={s.togetherArrow}>
-            <Feather name="arrow-right" size={20} color={Colors.primary} />
-          </View>
-        </Pressable>
-      ) : null}
 
       <Text style={s.sectionLabel}>YOUR DAY</Text>
       <View style={s.dayList}>
@@ -556,8 +560,10 @@ const s = StyleSheet.create({
     borderRadius: Radius.lg,
     backgroundColor: '#e9f1e8',
     padding: Spacing.lg,
-    marginBottom: Spacing.xl,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.md,
   },
+  togetherCardCompact: { minHeight: 96 },
   togetherLeaf: {
     width: 48,
     height: 48,
