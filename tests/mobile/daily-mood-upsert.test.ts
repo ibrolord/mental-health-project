@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const nonDestructiveRollout = readFileSync(
   resolve(
     process.cwd(),
-    'supabase/migrations/20260810145654_install_non_destructive_daily_mood_patch.sql'
+    'supabase/migrations/20260810150010_install_non_destructive_daily_mood_patch.sql'
   ),
   'utf8'
 );

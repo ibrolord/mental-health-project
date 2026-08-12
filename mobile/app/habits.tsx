@@ -516,7 +516,7 @@ export default function HabitsScreen() {
         <View style={styles.stats}>
           <Stat label="Momentum level" value={momentum.level} />
           <Stat label="Completed today" value={`${completedToday}/${habits.length}`} />
-          <Stat label="Total XP" value={momentum.xp} />
+          <Stat label="Momentum points" value={momentum.xp} />
         </View>
         <View style={styles.levelTrack}>
           <View
@@ -524,6 +524,9 @@ export default function HabitsScreen() {
           />
         </View>
       </AppCard>
+      <Text style={styles.momentumHelper}>
+        Points are based on completions and streaks.
+      </Text>
 
       <View style={styles.topActions}>
         <AppButton
@@ -882,6 +885,7 @@ export default function HabitsScreen() {
                           accessibilityRole="checkbox"
                           accessibilityState={{ checked: selected }}
                           accessibilityLabel={`${label} ${selected ? 'selected' : 'not selected'}`}
+                          hitSlop={5}
                           onPress={() => {
                             const nextDays = selected
                               ? habit.accountability_days.filter(
@@ -965,6 +969,14 @@ export default function HabitsScreen() {
 
 const styles = StyleSheet.create({
   momentumCard: { backgroundColor: Colors.primaryLight },
+  momentumHelper: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: -4,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
   stats: { flexDirection: 'row', gap: 12 },
   levelTrack: {
     height: 7,
@@ -1100,7 +1112,7 @@ const styles = StyleSheet.create({
   dayText: { color: Colors.primary, fontSize: 11, fontWeight: '700' },
   dayTextSelected: { color: '#fffef8' },
   shareStreak: {
-    minHeight: 42,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

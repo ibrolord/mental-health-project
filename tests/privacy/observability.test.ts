@@ -20,7 +20,7 @@ const read = (path: string) =>
   readFileSync(resolve(process.cwd(), path), 'utf8');
 
 const migration = read(
-  'supabase/migrations/20260808234500_add_privacy_safe_operational_events.sql'
+  'supabase/migrations/20260809010838_add_privacy_safe_operational_events.sql'
 );
 
 describe('privacy-safe operational observability', () => {

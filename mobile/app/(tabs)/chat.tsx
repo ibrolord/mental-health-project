@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import {
   Alert,
+  AccessibilityInfo,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -18,7 +19,6 @@ import { formatISO, subDays } from 'date-fns';
 import {
   AI_CONTEXT_OPTIONS,
   createEmptyAiContextSelections,
-  createFullAiContextSelections,
   hasSelectedAiContext,
   selectUserContext,
   summarizeUserContext,
@@ -39,17 +39,18 @@ import {
 import { appleHealthPreference } from '@/lib/apple-health-preference';
 import { loadAppleHealthSnapshot } from '@/lib/apple-health';
 import { apiRequest } from '@/lib/api';
+import { LocalSafetyActions } from '@/components/LocalSafetyActions';
 import { Colors } from '@/lib/constants';
-import {
-  hasFullContextPreference,
-  saveFullContextPreference,
-} from '@/lib/full-context-preference';
 import {
   readContextSelections,
   storeContextSelections,
 } from '@/lib/chat-context-preference';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { UNIFIED_LIBRARY } from '@/lib/library/content';
+import {
+  hasExplicitUrgentSafetyLanguage,
+  LOCAL_SAFETY_MESSAGE,
+} from '@/lib/local-safety';
 import { RequestTimeoutError } from '@/lib/request';
 import { supabase } from '@/lib/supabase';
 
@@ -79,9 +80,9 @@ const CONTEXT_ORDER: AiContextSelectionKey[] = [
 ];
 const QUICK_PROMPTS = [
   'I feel anxious',
-  'Help me reframe a negative thought',
+  'Help me reframe a hard thought',
   'I need one small plan',
-  'I need to talk',
+  'Help me plan what to say',
 ];
 const APPLE_HEALTH_AI_ENABLED =
   process.env.EXPO_PUBLIC_HEALTH_AI_ENABLED === 'true';
@@ -111,6 +112,7 @@ export default function ChatScreen() {
   >('idle');
   const [contextExpanded, setContextExpanded] = useState(false);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
+  const [localSafetyOpen, setLocalSafetyOpen] = useState(false);
   const [contextError, setContextError] = useState('');
   const [healthSummaryEnabled, setHealthSummaryEnabled] = useState(false);
   const [healthSummary, setHealthSummary] = useState<AppleHealthAiSummary | null>(
@@ -123,9 +125,18 @@ export default function ChatScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const requestRef = useRef(false);
   const saveRef = useRef(false);
+  const activeSaveOperationRef = useRef(0);
+  const messageGenerationRef = useRef(0);
+  const selectionsRef = useRef(selections);
+  const contextSelectionGenerationRef = useRef(0);
+  const contextSelectionPersistenceRef = useRef<Promise<void>>(Promise.resolve());
+  const contextSelectionRequestRef = useRef(new Map<AiContextSelectionKey, number>());
+  const consentRequestRef = useRef<Promise<boolean> | null>(null);
+  const activeRequestGenerationRef = useRef<number | null>(null);
   const healthEntryHandledRef = useRef<string | null>(null);
   const ownerRef = useRef(ownerKey);
   ownerRef.current = ownerKey;
+  selectionsRef.current = selections;
   const healthEntryRequested =
     health === '1' || (Array.isArray(health) && health.includes('1'));
 
@@ -153,6 +164,11 @@ export default function ChatScreen() {
   }, [loading]);
 
   useEffect(() => {
+    messageGenerationRef.current += 1;
+    activeSaveOperationRef.current += 1;
+    contextSelectionGenerationRef.current += 1;
+    contextSelectionRequestRef.current.clear();
+    consentRequestRef.current = null;
     setMessages([]);
     setInput('');
     setLoading(false);
@@ -162,23 +178,39 @@ export default function ChatScreen() {
     setUserContext(null);
     setContextStatus('idle');
     setContextExpanded(false);
+    setLocalSafetyOpen(false);
     setContextError('');
     setHealthSummaryEnabled(false);
     setHealthSummary(null);
     setHealthStatus('idle');
     setHealthError('');
     requestRef.current = false;
+    activeRequestGenerationRef.current = null;
     saveRef.current = false;
 
     if (!ownerKey || authLoading) return;
     let active = true;
+    const hydrationGeneration = contextSelectionGenerationRef.current;
     void Promise.all([
       readContextSelections(ownerKey),
-      hasFullContextPreference(ownerKey),
       hasAiDataSharingConsent(ownerKey),
-    ]).then(([saved, full, consented]) => {
-      if (!active || ownerRef.current !== ownerKey || !consented) return;
-      setSelections(full ? createFullAiContextSelections() : saved);
+    ]).then(([saved, consented]) => {
+      if (
+        !active
+        || ownerRef.current !== ownerKey
+        || contextSelectionGenerationRef.current !== hydrationGeneration
+        || !consented
+      ) return;
+      selectionsRef.current = saved;
+      setSelections(saved);
+    }).catch(() => {
+      if (
+        active
+        && ownerRef.current === ownerKey
+        && contextSelectionGenerationRef.current === hydrationGeneration
+      ) {
+        setContextError('Could not load your context choices.');
+      }
     });
     return () => {
       active = false;
@@ -487,26 +519,48 @@ export default function ChatScreen() {
     enabled: boolean
   ) => {
     if (!ownerKey) return;
-    if (enabled && !(await ensureAiDataSharingConsent(ownerKey))) return;
-    const next = { ...selections, [key]: enabled };
+    const expectedOwner = ownerKey;
+    const requestGeneration = (contextSelectionRequestRef.current.get(key) ?? 0) + 1;
+    contextSelectionRequestRef.current.set(key, requestGeneration);
+    if (enabled) {
+      const consentRequest = consentRequestRef.current
+        ?? ensureAiDataSharingConsent(expectedOwner);
+      consentRequestRef.current = consentRequest;
+      const consented = await consentRequest.finally(() => {
+        if (consentRequestRef.current === consentRequest) {
+          consentRequestRef.current = null;
+        }
+      });
+      if (!consented) return;
+    }
+    if (contextSelectionRequestRef.current.get(key) !== requestGeneration) return;
+    if (ownerRef.current !== expectedOwner) return;
+    const next = { ...selectionsRef.current, [key]: enabled };
+    selectionsRef.current = next;
     setSelections(next);
-    await Promise.all([
-      storeContextSelections(ownerKey, next),
-      saveFullContextPreference(ownerKey, false),
-    ]);
-  };
-
-  const setFullContext = async (enabled: boolean) => {
-    if (!ownerKey) return;
-    if (enabled && !(await ensureAiDataSharingConsent(ownerKey))) return;
-    const next = enabled
-      ? createFullAiContextSelections()
-      : createEmptyAiContextSelections();
-    setSelections(next);
-    await Promise.all([
-      storeContextSelections(ownerKey, next),
-      saveFullContextPreference(ownerKey, enabled),
-    ]);
+    setContextError('');
+    const generation = contextSelectionGenerationRef.current + 1;
+    contextSelectionGenerationRef.current = generation;
+    const persistence = contextSelectionPersistenceRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        if (
+          ownerRef.current !== expectedOwner
+          || contextSelectionGenerationRef.current !== generation
+        ) return;
+        await storeContextSelections(expectedOwner, selectionsRef.current);
+      });
+    contextSelectionPersistenceRef.current = persistence;
+    try {
+      await persistence;
+    } catch {
+      if (
+        ownerRef.current === expectedOwner
+        && contextSelectionGenerationRef.current === generation
+      ) {
+        setContextError('Could not save your context choices.');
+      }
+    }
   };
 
   const setAppleHealthContext = useCallback(async (enabled: boolean) => {
@@ -564,8 +618,21 @@ export default function ChatScreen() {
 
   const send = async (text: string) => {
     const trimmed = text.trim();
+    if (!trimmed) return;
+    if (hasExplicitUrgentSafetyLanguage(trimmed)) {
+      messageGenerationRef.current += 1;
+      setMessages((current) => [
+        ...current,
+        { role: 'user', content: trimmed },
+        { role: 'assistant', content: LOCAL_SAFETY_MESSAGE },
+      ]);
+      setInput('');
+      setSaveState('idle');
+      setLocalSafetyOpen(true);
+      AccessibilityInfo.announceForAccessibility(LOCAL_SAFETY_MESSAGE);
+      return;
+    }
     if (
-      !trimmed ||
       loading ||
       requestRef.current ||
       saveRef.current ||
@@ -574,25 +641,40 @@ export default function ChatScreen() {
     ) {
       return;
     }
+    const requestGeneration = messageGenerationRef.current + 1;
+    messageGenerationRef.current = requestGeneration;
+    activeRequestGenerationRef.current = requestGeneration;
     requestRef.current = true;
+    const releaseRequest = () => {
+      if (activeRequestGenerationRef.current !== requestGeneration) return false;
+      activeRequestGenerationRef.current = null;
+      requestRef.current = false;
+      return true;
+    };
     try {
       if (!ownerKey || !(await ensureAiDataSharingConsent(ownerKey))) {
-        requestRef.current = false;
+        releaseRequest();
         return;
       }
       if (
         healthSummaryEnabled &&
         (!healthSummary || !(await confirmAppleHealthAiShare(healthSummary)))
       ) {
-        requestRef.current = false;
+        releaseRequest();
+        return;
+      }
+      if (messageGenerationRef.current !== requestGeneration) {
+        releaseRequest();
         return;
       }
     } catch {
-      requestRef.current = false;
-      Alert.alert(
-        'Could not confirm sharing',
-        'Nothing was sent. Please try again.'
-      );
+      releaseRequest();
+      if (messageGenerationRef.current === requestGeneration) {
+        Alert.alert(
+          'Could not confirm sharing',
+          'Nothing was sent. Please try again.'
+        );
+      }
       return;
     }
     const newMessage: Message = { role: 'user', content: trimmed };
@@ -617,29 +699,32 @@ export default function ChatScreen() {
       if (typeof response.response !== 'string' || !response.response.trim()) {
         throw new Error('AI response was empty');
       }
-      setMessages([
-        ...nextMessages,
-        {
-          role: 'assistant',
-          content: response.response.trim(),
-          responseId: response.responseId,
-          reportToken: response.reportToken,
-        },
-      ]);
+      if (messageGenerationRef.current === requestGeneration) {
+        setMessages([
+          ...nextMessages,
+          {
+            role: 'assistant',
+            content: response.response.trim(),
+            responseId: response.responseId,
+            reportToken: response.reportToken,
+          },
+        ]);
+      }
     } catch (reason) {
-      setMessages([
-        ...nextMessages,
-        {
-          role: 'assistant',
-          content:
-            reason instanceof RequestTimeoutError
-              ? 'The response took too long. Check your connection and try again.'
-              : 'The AI service could not respond. Please try again shortly.',
-        },
-      ]);
+      if (messageGenerationRef.current === requestGeneration) {
+        setMessages([
+          ...nextMessages,
+          {
+            role: 'assistant',
+            content:
+              reason instanceof RequestTimeoutError
+                ? 'The response took too long. Check your connection and try again.'
+                : 'The AI service could not respond. Please try again shortly.',
+          },
+        ]);
+      }
     } finally {
-      requestRef.current = false;
-      setLoading(false);
+      if (releaseRequest()) setLoading(false);
     }
   };
 
@@ -653,18 +738,32 @@ export default function ChatScreen() {
       return;
     }
     saveRef.current = true;
+    const saveOperation = activeSaveOperationRef.current + 1;
+    activeSaveOperationRef.current = saveOperation;
+    const saveGeneration = messageGenerationRef.current;
+    const saveOwner = ownerKey;
     setSaveState('saving');
     try {
       const { error } = await supabase
         .from('chat_history')
         .insert({ ...context, messages, saved: true } as never);
       if (error) throw error;
-      setSaveState('saved');
+      if (activeSaveOperationRef.current === saveOperation) {
+        setSaveState(
+          messageGenerationRef.current === saveGeneration && ownerRef.current === saveOwner
+            ? 'saved'
+            : 'idle'
+        );
+      }
     } catch {
-      setSaveState('idle');
-      Alert.alert('Not saved', 'Try saving this conversation again.');
+      if (activeSaveOperationRef.current === saveOperation) {
+        setSaveState('idle');
+        Alert.alert('Not saved', 'Try saving this conversation again.');
+      }
     } finally {
-      saveRef.current = false;
+      if (activeSaveOperationRef.current === saveOperation) {
+        saveRef.current = false;
+      }
     }
   };
 
@@ -707,7 +806,6 @@ export default function ChatScreen() {
     ]);
   };
 
-  const allContext = CONTEXT_ORDER.every((key) => selections[key]);
   const contextSummary =
     contextStatus === 'ready' ? summarizeUserContext(userContext ?? undefined) : [];
   if (healthStatus === 'ready') contextSummary.push('Apple Health summary');
@@ -716,7 +814,8 @@ export default function ChatScreen() {
     saveState === 'saving' ||
     (hasSelectedAiContext(selections) && contextStatus !== 'ready') ||
     (healthSummaryEnabled && healthStatus !== 'ready');
-  const sendDisabled = !input.trim() || interactionDisabled;
+  const urgentInput = hasExplicitUrgentSafetyLanguage(input.trim());
+  const sendDisabled = !input.trim() || (!urgentInput && interactionDisabled);
 
   return (
     <KeyboardAvoidingView
@@ -725,43 +824,69 @@ export default function ChatScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
       <View style={styles.topBar}>
+        <View style={styles.topUtilityRow}>
+          <Text style={styles.topEyebrow}>AI SUPPORT</Text>
+          <View style={styles.topActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Choose app context for this chat"
+              accessibilityValue={{ text: contextSummary.length > 0 ? `${contextSummary.length} sources selected` : 'No app context selected' }}
+              accessibilityState={{ expanded: contextExpanded }}
+              onPress={() => setContextExpanded((current) => !current)}
+              style={styles.headerAction}
+            >
+              <Feather name="lock" size={17} color={Colors.primary} />
+              <Text style={styles.headerActionText}>
+                {contextSummary.length > 0 ? `${contextSummary.length} on` : 'Context'}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open voice support"
+              onPress={() => router.push('/voice')}
+              style={styles.headerAction}
+            >
+              <Feather name="mic" size={17} color={Colors.primary} />
+              <Text style={styles.headerActionText}>Voice</Text>
+            </Pressable>
+          </View>
+        </View>
+        <Text style={styles.topTitle}>Talk it through.</Text>
+      </View>
+
+      <View style={styles.supportBar}>
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.push('/voice')}
-          style={styles.topAction}
-        >
-          <Feather name="mic" size={17} color={Colors.primary} />
-          <Text style={styles.topActionText}>Voice</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
+          accessibilityLabel="Ground me now"
           onPress={() => router.push('/ground')}
-          style={styles.topAction}
+          style={({ pressed }) => [styles.supportAction, pressed && styles.pressed]}
         >
-          <Feather name="compass" size={17} color={Colors.primary} />
-          <Text style={styles.topActionText}>Ground</Text>
+          <Feather name="compass" size={15} color={Colors.primary} />
+          <Text style={styles.supportActionText}>Ground now</Text>
         </Pressable>
+        <View style={styles.supportDivider} />
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Find urgent and local support"
           onPress={() => router.push('/resources')}
-          style={styles.topAction}
+          style={({ pressed }) => [styles.supportAction, pressed && styles.pressed]}
         >
-          <Feather name="life-buoy" size={17} color={Colors.primary} />
-          <Text style={styles.topActionText}>Find help</Text>
+          <Feather name="life-buoy" size={15} color={Colors.primary} />
+          <Text style={styles.supportActionText}>Find support</Text>
         </Pressable>
       </View>
 
-      <View style={styles.contextPanel}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded: contextExpanded }}
-          onPress={() => setContextExpanded((current) => !current)}
-          style={styles.contextHeader}
-        >
+      {localSafetyOpen ? (
+        <LocalSafetyActions onDismiss={() => setLocalSafetyOpen(false)} />
+      ) : null}
+
+      {contextExpanded ? (
+        <View style={styles.contextPanel}>
+          <View style={styles.contextHeader}>
           <View style={styles.contextTitleRow}>
             <Feather name="lock" size={16} color={Colors.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.contextTitle}>Context for this chat</Text>
+              <Text style={styles.contextTitle}>What this chat can use</Text>
               <Text style={styles.contextStatus}>
                 {contextStatus === 'loading'
                   ? 'Loading selected context'
@@ -769,39 +894,24 @@ export default function ChatScreen() {
                     ? contextError
                     : contextSummary.length > 0
                       ? contextSummary.join(' · ')
-                      : 'Off by default'}
+                      : 'No app context selected'}
               </Text>
             </View>
           </View>
-          <Feather
-            name={contextExpanded ? 'chevron-up' : 'chevron-down'}
-            size={18}
-            color={Colors.primary}
-          />
-        </Pressable>
-
-        {contextExpanded ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close context choices"
+              onPress={() => setContextExpanded(false)}
+              style={styles.contextClose}
+            >
+              <Feather name="x" size={18} color={Colors.primary} />
+            </Pressable>
+          </View>
           <ScrollView
             style={styles.contextOptions}
             contentContainerStyle={{ paddingBottom: 4 }}
             nestedScrollEnabled
           >
-            <View style={styles.fullContextRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.contextOptionTitle}>
-                  Use all my app context
-                </Text>
-                <Text style={styles.contextOptionDescription}>
-                  You can still turn individual items off. Apple Health stays separate.
-                </Text>
-              </View>
-              <Switch
-                value={allContext}
-                onValueChange={(next) => void setFullContext(next)}
-                trackColor={{ false: Colors.border, true: Colors.sage }}
-                thumbColor="#fffef8"
-              />
-            </View>
             {Platform.OS === 'ios' && APPLE_HEALTH_AI_ENABLED ? (
               <View style={styles.contextOption}>
                 <View style={{ flex: 1 }}>
@@ -858,30 +968,31 @@ export default function ChatScreen() {
                 </View>
               );
             })}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: disclosureOpen }}
+              onPress={() => setDisclosureOpen((current) => !current)}
+              style={({ pressed }) => [
+                styles.disclosure,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Feather name="info" size={15} color={Colors.textSecondary} />
+              <Text style={styles.disclosureText}>About AI support and privacy</Text>
+              <Feather
+                name={disclosureOpen ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={Colors.textSecondary}
+              />
+            </Pressable>
+            {disclosureOpen ? (
+              <Text style={styles.disclosureDetail}>
+                Messages and selected context are sent through MHtoolkit to Gemini,
+                Claude, or OpenAI.
+              </Text>
+            ) : null}
           </ScrollView>
-        ) : null}
-      </View>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded: disclosureOpen }}
-        onPress={() => setDisclosureOpen((current) => !current)}
-        style={styles.disclosure}
-      >
-        <Text style={styles.disclosureText}>
-          AI guidance can be wrong. You control the context.
-        </Text>
-        <Feather
-          name={disclosureOpen ? 'x' : 'info'}
-          size={16}
-          color={Colors.textSecondary}
-        />
-      </Pressable>
-      {disclosureOpen ? (
-        <Text style={styles.disclosureDetail}>
-          Messages and selected context are processed by an AI provider through
-          MHtoolkit. Do not use chat for emergencies or medical decisions.
-        </Text>
+        </View>
       ) : null}
 
       <ScrollView
@@ -892,12 +1003,10 @@ export default function ChatScreen() {
       >
         {messages.length === 0 ? (
           <View style={styles.empty}>
-            <View style={styles.aiMark}>
-              <Feather name="message-circle" size={23} color={Colors.primary} />
-            </View>
+            <Text style={styles.emptyEyebrow}>AI-GUIDED CONVERSATION</Text>
             <Text style={styles.emptyTitle}>What is on your mind?</Text>
             <Text style={styles.emptyText}>
-              Talk it through or ask for one practical next step.
+              Start anywhere. You can ask for one practical next step.
             </Text>
             <View style={styles.prompts}>
               {QUICK_PROMPTS.map((prompt) => (
@@ -1005,12 +1114,13 @@ export default function ChatScreen() {
 
       <View style={styles.inputRow}>
         <TextInput
+          accessibilityLabel="Message to MHtoolkit AI"
           style={styles.input}
           value={input}
           onChangeText={setInput}
           multiline
           maxLength={8_000}
-          placeholder="Message MHtoolkit"
+          placeholder="Message MHtoolkit AI"
           placeholderTextColor={Colors.textSecondary}
         />
         <Pressable
@@ -1023,6 +1133,9 @@ export default function ChatScreen() {
           <Feather name="arrow-up" size={20} color="#fffef8" />
         </Pressable>
       </View>
+      <Text style={styles.aiLimit}>
+        AI can make mistakes. For urgent help, use Find support.
+      </Text>
     </KeyboardAvoidingView>
   );
 }
@@ -1034,36 +1147,83 @@ const UNIFIED_LIBRARY_BY_ID = Object.fromEntries(
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   topBar: {
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: Colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    minHeight: 78,
+    backgroundColor: Colors.background,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
-  topAction: {
-    minWidth: 0,
+  topUtilityRow: {
+    minHeight: 40,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  topEyebrow: {
+    color: Colors.accent,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+    letterSpacing: 1.3,
+  },
+  topTitle: {
+    color: Colors.text,
+    fontFamily: 'Georgia',
+    fontSize: 25,
+    lineHeight: 30,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+    marginTop: 2,
+  },
+  topActions: { flexDirection: 'row', gap: 6 },
+  headerAction: {
     minHeight: 44,
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    borderRadius: 14,
-    paddingHorizontal: 8,
+    borderRadius: 999,
+    paddingHorizontal: 10,
     backgroundColor: Colors.primaryLight,
   },
-  topActionText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
-  contextPanel: {
-    backgroundColor: Colors.card,
-    borderWidth: 1,
+  headerActionText: { color: Colors.primary, fontSize: 11, fontWeight: '700' },
+  supportBar: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
-    borderRadius: 14,
-    marginHorizontal: 12,
-    marginTop: 10,
+    backgroundColor: Colors.background,
+    paddingHorizontal: 16,
+  },
+  supportAction: {
+    flex: 1,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  supportActionText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
+  supportDivider: { width: StyleSheet.hairlineWidth, height: 22, backgroundColor: Colors.borderStrong },
+  aiLimit: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    paddingHorizontal: 20,
+    paddingTop: 5,
+    paddingBottom: 8,
+    backgroundColor: Colors.card,
+  },
+  contextPanel: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surfaceMuted,
+    marginHorizontal: 16,
+    marginTop: 6,
     overflow: 'hidden',
   },
   contextHeader: {
@@ -1073,23 +1233,21 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 14,
   },
+  contextClose: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   contextTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 },
   contextTitle: { color: Colors.text, fontSize: 13, fontWeight: '700' },
   contextStatus: {
     color: Colors.textSecondary,
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 16,
     marginTop: 2,
   },
   contextOptions: { maxHeight: 330, borderTopWidth: 1, borderTopColor: Colors.border },
-  fullContextRow: {
-    minHeight: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    backgroundColor: Colors.primaryLight,
-  },
   contextOption: {
     minHeight: 68,
     flexDirection: 'row',
@@ -1099,78 +1257,74 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
-  contextOptionTitle: { color: Colors.text, fontSize: 12, fontWeight: '700' },
+  contextOptionTitle: { color: Colors.text, fontSize: 13, fontWeight: '700' },
   contextOptionDescription: {
     color: Colors.textSecondary,
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 16,
     marginTop: 2,
   },
   disclosure: {
-    minHeight: 38,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 13,
-    marginHorizontal: 12,
-    marginTop: 8,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,254,248,0.62)',
+    paddingHorizontal: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
   },
-  disclosureText: { flex: 1, color: Colors.textSecondary, fontSize: 11 },
+  disclosureText: { flex: 1, color: Colors.textSecondary, fontSize: 11, fontWeight: '600' },
   disclosureDetail: {
     color: Colors.textSecondary,
     fontSize: 11,
     lineHeight: 16,
-    backgroundColor: 'rgba(255,254,248,0.62)',
-    marginHorizontal: 12,
-    paddingHorizontal: 13,
-    paddingBottom: 11,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
   },
+  pressed: { opacity: 0.76 },
   messages: { flex: 1 },
-  messagesContent: { flexGrow: 1, padding: 15, paddingTop: 10, paddingBottom: 8 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 24 },
-  aiMark: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.primaryLight,
+  messagesContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8 },
+  empty: { flex: 1, alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingBottom: 18 },
+  emptyEyebrow: {
+    color: Colors.accent,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.3,
   },
   emptyTitle: {
     color: Colors.text,
-    fontSize: 23,
-    lineHeight: 28,
+    fontFamily: 'Georgia',
+    fontSize: 25,
+    lineHeight: 31,
     fontWeight: '700',
-    marginTop: 14,
+    marginTop: 10,
   },
   emptyText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    textAlign: 'center',
+    textAlign: 'left',
     marginTop: 5,
   },
   prompts: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: 8,
-    marginTop: 18,
+    marginTop: 14,
   },
   prompt: {
-    width: '48%',
-    minHeight: 48,
+    width: '100%',
+    minHeight: 44,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.card,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
-  promptText: { color: Colors.text, fontSize: 12, lineHeight: 17, textAlign: 'center' },
+  promptText: { color: Colors.text, fontSize: 13, textAlign: 'left' },
   messageRow: { marginBottom: 11, alignItems: 'flex-start' },
   userRow: { alignItems: 'flex-end' },
   bubble: { maxWidth: '84%', borderRadius: 16, padding: 13 },
@@ -1185,14 +1339,14 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 5,
   },
   messageText: { color: Colors.text, fontSize: 14, lineHeight: 21 },
-  report: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 3 },
+  report: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 6 },
   reportText: {
     color: Colors.textSecondary,
-    fontSize: 10,
+    fontSize: 12,
     textDecorationLine: 'underline',
   },
   saveButton: {
-    minHeight: 35,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1206,7 +1360,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    padding: 11,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
   input: {
     flex: 1,

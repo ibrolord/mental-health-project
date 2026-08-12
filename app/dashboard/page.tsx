@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ArrowRight, Leaf } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MoodEmoji } from '@/lib/supabase/types';
 import { supabase } from '@/lib/supabase/client';
@@ -387,6 +388,44 @@ export default function DashboardPage() {
             )}
           </section>}
         </div>
+
+        {!lowEnergyMode ? (
+          <section
+            aria-labelledby="together-heading"
+            className="relative overflow-hidden rounded-3xl border border-emerald-900/15 bg-[linear-gradient(115deg,#e7f0e5_0%,#f5f1e5_72%)] p-6"
+          >
+            <div className="pointer-events-none absolute -right-12 -top-16 h-40 w-40 rounded-full border border-emerald-900/10 bg-white/35" />
+            <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-white/80 text-emerald-950 shadow-sm">
+                <Leaf aria-hidden="true" className="h-7 w-7" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">
+                  Accountability partner
+                </p>
+                <h2
+                  id="together-heading"
+                  className="mt-1 font-display text-3xl font-medium tracking-[-0.02em] text-foreground"
+                >
+                  Do it together
+                </h2>
+                <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+                  {isAuthenticated
+                    ? 'Share one commitment, check in, and celebrate progress.'
+                    : 'Invite someone you trust and share only what you choose.'}
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={() => router.push('/accountability')}
+                className="w-full gap-2 sm:w-auto"
+              >
+                {isAuthenticated ? 'Open Together' : 'Set up Together'}
+                <ArrowRight aria-hidden="true" className="h-4 w-4" />
+              </Button>
+            </div>
+          </section>
+        ) : null}
 
         {visibleWeeklySummary && !lowEnergyMode ? (
           <WeeklyInsight summary={visibleWeeklySummary} />

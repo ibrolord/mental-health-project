@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, View, Text, ScrollView, TouchableOpacity, StyleSheet, Share } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
-import { Colors } from '@/lib/constants';
+import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
 import { format, subDays } from 'date-fns';
 import type { MoodEmoji } from '@/lib/types';
 import { saveCheckInWithAttribution } from '@/lib/acquisition';
@@ -15,14 +23,8 @@ import {
 } from '@/lib/check-in';
 import { chooseRandomAffirmation } from '@/lib/affirmations';
 import { loadAffirmationCatalog } from '@/lib/affirmations-client';
-import { GoToActions } from '@/components/GoToActions';
 import { getMoodLabel, MoodGlyph, MoodPicker } from '@/components/MoodPicker';
-import { WeeklyInsight } from '@/components/weekly-insight';
-import {
-  loadWeeklyOwnerSummary,
-  type WeeklyOwnerSummary,
-  type WeeklySummaryRpc,
-} from '@/lib/weekly-insights';
+import { AppScreen, InlineStatus, ListRow } from '@/components/AppUI';
 import { UNIFIED_LIBRARY } from '@/lib/library/content';
 import {
   composeSavedCollection,
@@ -35,9 +37,6 @@ import {
   createDashboardPreferenceWriter,
   dashboardPreferences,
 } from '@/lib/dashboard-preferences';
-
-const CHALLENGE_SHARE_URL =
-  'https://mhtoolkit.vercel.app/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -59,13 +58,11 @@ export default function DashboardScreen() {
     type: 'success' | 'error';
     message: string;
   } | null>(null);
-  const [weeklySummary, setWeeklySummary] =
-    useState<WeeklyOwnerSummary | null>(null);
+  const [patternsOpen, setPatternsOpen] = useState(false);
   const [resumeProgress, setResumeProgress] =
     useState<PracticeProgressRow | null>(null);
   const [savedItem, setSavedItem] = useState<SavedLibraryViewItem | null>(null);
   const [moodOwnerKey, setMoodOwnerKey] = useState<string | null>(null);
-  const [weeklyOwnerId, setWeeklyOwnerId] = useState<string | null>(null);
   const [productOwnerId, setProductOwnerId] = useState<string | null>(null);
   const [moodRefreshKey, setMoodRefreshKey] = useState(0);
   const focusedMoodOwnerRef = useRef<string | null>(null);
@@ -80,6 +77,7 @@ export default function DashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!ownerKey) return;
+      setLowEnergyLoadAttempt((attempt) => attempt + 1);
       if (focusedMoodOwnerRef.current === ownerKey) {
         setMoodRefreshKey((key) => key + 1);
       } else {
@@ -165,33 +163,6 @@ export default function DashboardScreen() {
       active = false;
     };
   }, [moodRefreshKey, ownerKey, queryColumn, queryValue]);
-
-  useEffect(() => {
-    const ownerId = user?.id ?? null;
-    setWeeklyOwnerId(null);
-    setWeeklySummary(null);
-    if (!ownerId) return;
-
-    let active = true;
-    const rpc: WeeklySummaryRpc = async (args) => {
-      const result = await supabase.rpc('weekly_owner_summary', args);
-      return { data: result.data, error: result.error };
-    };
-    void loadWeeklyOwnerSummary(rpc)
-      .then((summary) => {
-        if (active && user?.id === ownerId) {
-          setWeeklySummary(summary);
-          setWeeklyOwnerId(ownerId);
-        }
-      })
-      .catch(() => {
-        if (active && user?.id === ownerId) setWeeklySummary(null);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [user?.id]);
 
   useEffect(() => {
     const ownerId = user?.id ?? null;
@@ -281,371 +252,357 @@ export default function DashboardScreen() {
     }
   };
 
-  const lowEnergyActions = [
-    { label: 'Ground me', icon: 'compass' as const, route: '/ground' as const },
-    { label: 'One small step', icon: 'repeat' as const, route: '/habits' as const },
-    { label: 'Write a note', icon: 'edit-3' as const, route: '/journal' as const },
-  ];
   const visibleTodayMood = moodOwnerKey === ownerKey ? todayMood : null;
   const visibleWeekMoods = moodOwnerKey === ownerKey ? weekMoods : [];
   const visibleAffirmation = moodOwnerKey === ownerKey ? affirmation : '';
   const visibleAffirmationBy = moodOwnerKey === ownerKey ? affirmationBy : '';
-  const visibleWeeklySummary = weeklyOwnerId === user?.id ? weeklySummary : null;
   const visibleResumeProgress = productOwnerId === user?.id ? resumeProgress : null;
   const visibleSavedItem = productOwnerId === user?.id ? savedItem : null;
   const visibleLowEnergyMode = lowEnergyOwnerKey === ownerKey && lowEnergyMode;
-  const challengeDays = new Set(
+  const checkInDays = new Set(
     visibleWeekMoods.map((entry) => format(new Date(entry.created_at), 'yyyy-MM-dd'))
   ).size;
 
-  const shareChallenge = async () => {
-    try {
-      await Share.share({
-        message:
-          `I found a private 30-second check-in with no signup required. ` +
-          `Try it for seven days: ${CHALLENGE_SHARE_URL}`,
-      });
-    } catch (error) {
-      console.warn('Unable to share challenge:', error);
-    }
-  };
-
-  const toggleLowEnergyMode = () => {
-    if (!ownerKey || lowEnergyOwnerKey !== ownerKey) return;
-    const next = !visibleLowEnergyMode;
-    setLowEnergyMode(next);
-    setLowEnergyOwnerKey(ownerKey);
-    setViewPreferenceError(false);
-    const expectedOwnerKey = ownerKey;
-    void preferenceWriterRef.current
-      .writeLatest(expectedOwnerKey, next)
-      .then((result) => {
-        if (
-          !result.current ||
-          ownerKeyRef.current !== expectedOwnerKey ||
-          !result.error
-        ) {
-          return;
+  const nextStep =
+    visibleLowEnergyMode || visibleTodayMood === '😞' || visibleTodayMood === '😢'
+      ? {
+          eyebrow: 'FOR RIGHT NOW',
+          title: 'Steady myself',
+          description: 'A 90-second grounding practice to help you reconnect with the present.',
+          label: 'Start 90-second practice',
+          icon: 'wind' as const,
+          route: '/ground' as const,
         }
-        console.warn('Unable to save the dashboard view preference:', result.error);
-        setLowEnergyMode(result.persisted);
-        setViewPreferenceError(true);
-      });
-  };
+      : visibleTodayMood === '😄' || visibleTodayMood === '🙂'
+        ? {
+            eyebrow: 'BUILD ON THIS MOMENT',
+            title: 'Choose one meaningful step',
+            description: 'Use the energy you have without filling the whole day.',
+            label: 'Open my goals',
+            icon: 'flag' as const,
+            route: '/goals' as const,
+          }
+        : {
+            eyebrow: 'FOR RIGHT NOW',
+            title: 'Take one small step',
+            description: 'Choose something realistic enough to begin today.',
+            label: 'Choose a next step',
+            icon: 'arrow-right' as const,
+            route: '/habits' as const,
+          };
 
   if (ownerKey && lowEnergyOwnerKey !== ownerKey) {
     return (
-      <ScrollView style={s.container} contentContainerStyle={s.content}>
-        <View style={s.headerRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.eyebrow}>TODAY</Text>
-            <Text style={s.title}>How are you today?</Text>
-            <Text style={s.subtitle}>Start with one small step.</Text>
-          </View>
+      <AppScreen>
+        <View style={s.brandRow}>
+          <Text style={s.brand}>MHtoolkit</Text>
         </View>
-        <View style={[s.card, s.preferenceLoadingCard]}>
+        <View style={s.preferenceLoadingCard}>
           {lowEnergyLoadError ? (
             <>
               <Text accessibilityRole="alert" style={s.preferenceError}>
                 Your saved dashboard view could not be loaded.
               </Text>
-              <TouchableOpacity
+              <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Retry loading dashboard view"
                 onPress={() => setLowEnergyLoadAttempt((attempt) => attempt + 1)}
                 style={s.preferenceRetry}
               >
                 <Text style={s.preferenceRetryText}>Retry</Text>
-              </TouchableOpacity>
+              </Pressable>
             </>
           ) : (
             <ActivityIndicator accessibilityLabel="Loading dashboard view" color={Colors.primary} />
           )}
         </View>
-      </ScrollView>
+      </AppScreen>
     );
   }
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <View style={s.headerRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.eyebrow}>{visibleLowEnergyMode ? 'ONE STEP' : 'TODAY'}</Text>
-          <Text style={s.title}>{visibleLowEnergyMode ? 'Keep it simple' : 'How are you today?'}</Text>
-          <Text style={s.subtitle}>
-            {visibleLowEnergyMode ? 'Choose one thing. You can stop there.' : 'Start with a quick, private check-in.'}
-          </Text>
-        </View>
-        <TouchableOpacity
+    <AppScreen>
+      <View style={s.brandRow}>
+        <Text style={s.brand}>MHtoolkit</Text>
+        <Pressable
           accessibilityRole="button"
-          accessibilityState={{ selected: visibleLowEnergyMode }}
-          accessibilityLabel={visibleLowEnergyMode ? 'Show full dashboard' : 'Use low-energy view'}
-          style={s.energyToggle}
-          onPress={toggleLowEnergyMode}
-          disabled={!ownerKey || lowEnergyOwnerKey !== ownerKey}
+          accessibilityLabel="Get urgent and local support"
+          onPress={() => router.push('/resources')}
+          style={({ pressed }) => [s.supportAction, pressed && s.pressed]}
         >
-          <Feather name={visibleLowEnergyMode ? 'sun' : 'battery'} size={17} color={Colors.primary} />
-          <Text style={s.energyToggleText}>{visibleLowEnergyMode ? 'Full view' : 'Low energy'}</Text>
-        </TouchableOpacity>
+          <Feather name="life-buoy" size={19} color={Colors.accent} />
+          <Text style={s.supportText}>Get support</Text>
+        </Pressable>
       </View>
-      {viewPreferenceError ? (
-        <Text accessibilityRole="alert" style={s.preferenceError}>
-          That view change was not saved. Your previous view was restored.
-        </Text>
-      ) : null}
 
-      {/* Mood Check-in */}
-      <View style={[s.card, s.checkInCard]}>
-        <View style={s.cardHeadingRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.cardTitle}>Name the feeling</Text>
-            <Text style={s.cardSubtitle}>No score. Just a moment to notice.</Text>
-          </View>
-          {visibleTodayMood ? (
-            <View style={s.todayMood}>
-              <MoodGlyph mood={visibleTodayMood} size={25} />
-            </View>
+      <Text style={s.date}>{format(new Date(), 'MMMM d, yyyy').toUpperCase()}</Text>
+      <Text accessibilityRole="header" style={s.title}>
+        {visibleLowEnergyMode ? 'You only need one small step.' : 'You’re doing enough for today.'}
+      </Text>
+      <Text style={s.subtitle}>
+        {visibleAffirmation || 'Start with what you can notice and control.'}
+      </Text>
+      {visibleAffirmationBy ? <Text style={s.attribution}>— {visibleAffirmationBy}</Text> : null}
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={
+          isAuthenticated
+            ? 'Open Together accountability partner'
+            : 'Set up Together accountability partner'
+        }
+        accessibilityHint="Share a commitment and check in with someone you trust"
+        onPress={() => router.push('/accountability')}
+        style={({ pressed }) => [
+          s.togetherCard,
+          visibleLowEnergyMode && s.togetherCardCompact,
+          pressed && s.pressed,
+        ]}
+      >
+        <View style={s.togetherLeaf}>
+          <MaterialCommunityIcons
+            accessible={false}
+            name="leaf"
+            size={24}
+            color={Colors.primary}
+          />
+        </View>
+        <View style={s.togetherCopy}>
+          <Text style={s.togetherEyebrow}>ACCOUNTABILITY PARTNER</Text>
+          <Text style={s.togetherTitle}>Do it together</Text>
+          {!visibleLowEnergyMode ? (
+            <Text style={s.togetherDescription}>
+              {isAuthenticated
+                ? 'Share one commitment, check in, and celebrate progress.'
+                : 'Invite someone you trust and share only what you choose.'}
+            </Text>
           ) : null}
         </View>
+        <View style={s.togetherArrow}>
+          <Feather name="arrow-right" size={20} color={Colors.primary} />
+        </View>
+      </Pressable>
+
+      {viewPreferenceError ? (
+        <InlineStatus
+          tone="error"
+          message="Your saved view could not be restored. This simpler view is still available."
+        />
+      ) : null}
+
+      <View style={s.moodSection}>
         <MoodPicker
           value={visibleTodayMood}
           onChange={(mood) => void saveMood(mood)}
           disabled={savingMood || !canSaveMood}
         />
         {moodStatus ? (
-          <View style={s.moodStatusRow}>
-            <Text
-              accessibilityRole={moodStatus.type === 'error' ? 'alert' : 'text'}
-              style={[
-                s.moodStatus,
-                moodStatus.type === 'error' && s.moodStatusError,
-              ]}
-            >
-              {moodStatus.message}
-            </Text>
-            {moodStatus.type === 'success' ? (
-              <TouchableOpacity
+          <InlineStatus
+            tone={moodStatus.type}
+            message={moodStatus.type === 'success' ? 'Saved. That is enough for now.' : moodStatus.message}
+            action={moodStatus.type === 'success' ? (
+              <Pressable
                 accessibilityRole="button"
                 onPress={() => router.push('/(tabs)/tracker')}
                 style={s.addDetailsButton}
               >
-                <Text style={s.addDetailsButtonText}>Add details</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
+                <Text style={s.addDetailsButtonText}>Add context</Text>
+              </Pressable>
+            ) : undefined}
+          />
         ) : null}
       </View>
 
-      {/* Week Overview */}
-      {!visibleLowEnergyMode ? <View style={[s.card, s.weekCard]}>
-        <View style={s.cardHeadingRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.cardTitle}>Last 7 days</Text>
-            <Text style={s.cardSubtitle}>Your recent check-ins</Text>
-          </View>
-          <Feather name="calendar" size={18} color={Colors.sage} />
-        </View>
-        <View style={s.weekRow}>
-          {Array.from({ length: 7 }).map((_, i) => {
-            const date = subDays(new Date(), 6 - i);
-            const dayMood = getLatestCheckInForDate(visibleWeekMoods, date);
-            return (
-              <View
-                key={i}
-                accessible
-                accessibilityLabel={`${format(date, 'EEEE')}, ${
-                  dayMood
-                    ? `${getMoodLabel(dayMood.emoji as MoodEmoji)} mood`
-                    : 'no check-in'
-                }`}
-                style={s.weekDay}
-              >
-                <View style={[s.weekMarker, dayMood && s.weekMarkerActive]}>
-                  {dayMood ? (
-                    <MoodGlyph mood={dayMood.emoji as MoodEmoji} size={20} />
-                  ) : (
-                    <Text style={s.weekEmoji}>–</Text>
-                  )}
-                </View>
-                <Text style={s.weekLabel}>{format(date, 'EEE')}</Text>
-              </View>
-            );
-          })}
-        </View>
-      </View> : null}
-
-      {visibleWeeklySummary && !visibleLowEnergyMode ? (
-        <WeeklyInsight summary={visibleWeeklySummary} />
-      ) : null}
-
-      {!visibleLowEnergyMode && (visibleResumeProgress || visibleSavedItem) ? (
-        <View style={s.continueGrid} accessibilityLabel="Continue and saved">
-          {visibleResumeProgress ? (
-            <TouchableOpacity
-              accessibilityRole="button"
-              style={s.continueCard}
-              onPress={() => router.push(visibleResumeProgress.route)}
-            >
-              <Text style={s.continueEyebrow}>CONTINUE</Text>
-              <Text style={s.continueTitle}>Resume meditation</Text>
-              <Text style={s.continueCopy}>Return to your paused practice.</Text>
-            </TouchableOpacity>
-          ) : null}
-          {visibleSavedItem ? (
-            <TouchableOpacity
-              accessibilityRole="button"
-              style={s.continueCard}
-              onPress={() => router.push('/saved')}
-            >
-              <Text style={s.continueEyebrow}>SAVED FOR LATER</Text>
-              <Text style={s.continueTitle}>{visibleSavedItem.title}</Text>
-              <Text style={s.continueCopy}>Open your saved space.</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      ) : null}
-
-      {visibleTodayMood && !visibleLowEnergyMode ? (
-        <View style={s.challengeCard}>
-          <Text style={s.challengeEyebrow}>7-DAY PRIVATE CHECK-IN</Text>
-          <Text style={s.challengeTitle}>{Math.min(challengeDays, 7)} of 7 check-in days</Text>
-          <View
-            style={s.challengeProgress}
-            accessibilityLabel={`${Math.min(challengeDays, 7)} of 7 days complete`}
-          >
-            {Array.from({ length: 7 }).map((_, index) => (
-              <View
-                key={index}
-                style={[s.challengeBar, index < challengeDays && s.challengeBarDone]}
-              />
-            ))}
-          </View>
-          <Text style={s.challengeCopy}>A missed day does not reset your progress.</Text>
-          <TouchableOpacity
-            style={s.shareBtn}
-            onPress={shareChallenge}
-            accessibilityRole="button"
-            accessibilityLabel="Invite someone to try the 7-day private check-in"
-          >
-            <Text style={s.shareBtnText}>Invite someone</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {/* Affirmation */}
-      {visibleAffirmation && !visibleLowEnergyMode ? (
-        <View style={[s.card, { backgroundColor: Colors.primaryLight }]}>
-          <Feather
-            name={visibleAffirmationBy ? 'message-circle' : 'sun'}
-            size={21}
-            color={Colors.primary}
-            style={{ alignSelf: 'center', marginBottom: 12 }}
+      <View style={s.nextStepCard}>
+        <View pointerEvents="none" style={s.nextStepArtwork}>
+          <Image
+            accessible={false}
+            source={require('../../assets/today-botanical.png')}
+            resizeMode="cover"
+            style={StyleSheet.absoluteFillObject}
           />
-          <Text style={s.affirmationText}>{visibleAffirmation}</Text>
-          <Text style={s.affirmationLabel}>
-            {visibleAffirmationBy || 'Daily affirmation'}
-          </Text>
         </View>
-      ) : null}
+        <View style={s.nextStepContent}>
+          <Text style={s.nextStepEyebrow}>{nextStep.eyebrow}</Text>
+          <Text accessibilityRole="header" style={s.nextStepTitle}>{nextStep.title}</Text>
+          <Text style={s.nextStepCopy}>{nextStep.description}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={nextStep.label}
+            onPress={() => router.push(nextStep.route)}
+            style={({ pressed }) => [s.nextStepButton, pressed && s.pressed]}
+          >
+            <Feather name={nextStep.icon} size={18} color={Colors.card} />
+            <Text style={s.nextStepButtonText}>{nextStep.label}</Text>
+          </Pressable>
+        </View>
+      </View>
 
-      {visibleLowEnergyMode ? (
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Choose one</Text>
-          <View style={s.actionsGrid}>
-            {lowEnergyActions.map((action) => (
-              <TouchableOpacity
-                key={action.route}
-                style={s.actionBtn}
-                onPress={() => router.push(action.route)}
-              >
-                <Feather name={action.icon} size={18} color={Colors.primary} />
-                <Text style={s.actionLabel}>{action.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      ) : (
-        <GoToActions
-          key={ownerKey ?? 'pending'}
-          ownerKey={ownerKey}
-          onNavigate={(route) => router.push(route)}
+      <Text style={s.sectionLabel}>YOUR DAY</Text>
+      <View style={s.dayList}>
+        <ListRow
+          icon={visibleResumeProgress ? 'play-circle' : 'sun'}
+          title={visibleResumeProgress ? 'Resume your practice' : 'Morning reset'}
+          description={visibleResumeProgress ? 'Continue where you paused' : 'A gentle routine · 10 min'}
+          onPress={() => router.push(visibleResumeProgress?.route ?? '/plans')}
         />
-      )}
-    </ScrollView>
+        <ListRow
+          icon={visibleSavedItem ? 'bookmark' : 'flag'}
+          title={visibleSavedItem?.title ?? 'Choose today’s priority'}
+          description={visibleSavedItem ? 'Saved for later' : 'Goal · one next step'}
+          onPress={() => router.push(visibleSavedItem ? '/saved' : '/goals')}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: patternsOpen }}
+          onPress={() => setPatternsOpen((current) => !current)}
+          style={({ pressed }) => [s.patternsRow, pressed && s.pressed]}
+        >
+          <View style={s.patternsIcon}>
+            <Feather name="trending-up" size={19} color={Colors.primary} />
+          </View>
+          <View style={s.patternsCopy}>
+            <Text style={s.patternsTitle}>Patterns</Text>
+            <Text style={s.patternsDescription}>
+              {checkInDays > 0 ? `${checkInDays} check-in ${checkInDays === 1 ? 'day' : 'days'} this week` : 'See how things shift over time'}
+            </Text>
+          </View>
+          <Feather name={patternsOpen ? 'chevron-up' : 'chevron-down'} size={19} color={Colors.primary} />
+        </Pressable>
+        {patternsOpen ? (
+          <View style={s.weekRow}>
+            {Array.from({ length: 7 }).map((_, i) => {
+              const date = subDays(new Date(), 6 - i);
+              const dayMood = getLatestCheckInForDate(visibleWeekMoods, date);
+              return (
+                <View
+                  key={format(date, 'yyyy-MM-dd')}
+                  accessible
+                  accessibilityLabel={`${format(date, 'EEEE')}, ${dayMood ? `${getMoodLabel(dayMood.emoji as MoodEmoji)} mood` : 'no check-in'}`}
+                  style={s.weekDay}
+                >
+                  <View style={[s.weekMarker, dayMood && s.weekMarkerActive]}>
+                    {dayMood ? <MoodGlyph mood={dayMood.emoji as MoodEmoji} size={20} /> : <Text style={s.weekEmpty}>–</Text>}
+                  </View>
+                  <Text style={s.weekLabel}>{format(date, 'EEE')}</Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+      </View>
+    </AppScreen>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 18, paddingBottom: 42 },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 22 },
-  eyebrow: { color: Colors.accent, fontSize: 11, lineHeight: 14, fontWeight: '800', letterSpacing: 1.7, marginBottom: 6 },
-  title: { fontSize: 30, lineHeight: 35, fontWeight: '700', letterSpacing: -0.6, color: Colors.text, marginBottom: 5 },
-  subtitle: { fontSize: 15, lineHeight: 21, color: Colors.textSecondary },
-  energyToggle: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: Colors.border, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: Colors.card },
-  energyToggleText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
-  card: { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: 18, padding: 17, marginBottom: 13, shadowColor: '#163a32', shadowOpacity: 0.055, shadowRadius: 14, shadowOffset: { width: 0, height: 7 }, elevation: 2 },
-  checkInCard: { paddingBottom: 15 },
-  cardHeadingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 14 },
-  cardTitle: { fontSize: 19, lineHeight: 24, fontWeight: '700', color: Colors.text },
-  cardSubtitle: { fontSize: 13, lineHeight: 18, color: Colors.textSecondary, marginTop: 3 },
-  todayMood: { minWidth: 31, minHeight: 31, alignItems: 'center', justifyContent: 'center' },
-  moodStatusRow: {
+  brandRow: {
     minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 5,
+    marginBottom: Spacing.sm,
   },
-  moodStatus: { flex: 1, color: Colors.primary, fontSize: 13 },
-  moodStatusError: { color: '#b42318' },
+  brand: { color: Colors.text, fontFamily: 'Georgia', fontSize: 22, fontWeight: '700' },
+  supportAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  supportText: { color: Colors.text, ...Typography.label },
+  date: { color: Colors.accent, ...Typography.eyebrow, marginBottom: Spacing.xs },
+  title: { color: Colors.text, ...Typography.display, fontSize: 27, lineHeight: 33, marginBottom: Spacing.xs, maxWidth: 600 },
+  subtitle: { color: Colors.textSecondary, ...Typography.body, fontSize: 14, lineHeight: 20 },
+  attribution: { color: Colors.textSecondary, ...Typography.caption, marginTop: Spacing.xs },
+  moodSection: { marginTop: Spacing.sm, marginBottom: Spacing.md },
+  sectionLabel: { color: Colors.text, ...Typography.eyebrow, marginBottom: Spacing.sm },
   addDetailsButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   addDetailsButtonText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
-  preferenceLoadingCard: { minHeight: 92, alignItems: 'center', justifyContent: 'center' },
+  preferenceLoadingCard: { minHeight: 160, alignItems: 'center', justifyContent: 'center' },
   preferenceError: { color: '#b42318', fontSize: 13, lineHeight: 18, marginBottom: 10 },
   preferenceRetry: { minHeight: 42, justifyContent: 'center', paddingHorizontal: 12 },
   preferenceRetryText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
-  weekCard: { paddingBottom: 15 },
+  nextStepCard: {
+    minHeight: 188,
+    overflow: 'hidden',
+    borderRadius: Radius.lg,
+    backgroundColor: '#f3efe3',
+    marginBottom: Spacing.xl,
+  },
+  nextStepArtwork: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  nextStepContent: {
+    minHeight: 188,
+    padding: Spacing.md,
+    justifyContent: 'center',
+  },
+  nextStepEyebrow: { color: Colors.text, ...Typography.eyebrow, marginBottom: Spacing.sm },
+  nextStepTitle: { color: Colors.text, ...Typography.display, fontSize: 25, lineHeight: 29, maxWidth: '70%' },
+  nextStepCopy: { color: Colors.textSecondary, ...Typography.bodySmall, lineHeight: 18, maxWidth: '66%', marginTop: Spacing.xs },
+  nextStepButton: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  nextStepButtonText: { color: Colors.card, ...Typography.label },
+  togetherCard: {
+    minHeight: 104,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    borderWidth: 1,
+    borderColor: '#c7d7c8',
+    borderRadius: Radius.lg,
+    backgroundColor: '#e9f1e8',
+    padding: Spacing.md,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  togetherCardCompact: { minHeight: 88 },
+  togetherLeaf: {
+    width: 44,
+    height: 44,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: Colors.card,
+  },
+  togetherCopy: { flex: 1 },
+  togetherEyebrow: { color: Colors.accent, ...Typography.eyebrow, marginBottom: Spacing.xxs },
+  togetherTitle: { color: Colors.text, ...Typography.cardTitle },
+  togetherDescription: { color: Colors.textSecondary, ...Typography.bodySmall, lineHeight: 18, marginTop: Spacing.xxs },
+  togetherArrow: {
+    width: 32,
+    height: 44,
+    flexShrink: 0,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  dayList: { marginBottom: Spacing.xl },
+  patternsRow: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
+  patternsIcon: { width: 42, alignItems: 'center', justifyContent: 'center' },
+  patternsCopy: { flex: 1 },
+  patternsTitle: { color: Colors.text, ...Typography.cardTitle },
+  patternsDescription: { color: Colors.textSecondary, ...Typography.bodySmall, marginTop: Spacing.xxs },
   weekRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   weekDay: { flex: 1, alignItems: 'center' },
   weekMarker: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' },
   weekMarkerActive: { backgroundColor: Colors.primaryLight },
-  weekEmoji: { color: Colors.textSecondary, fontSize: 17, lineHeight: 22 },
+  weekEmpty: { color: Colors.textSecondary, fontSize: 17 },
   weekLabel: { fontSize: 11, color: Colors.textSecondary, marginTop: 4 },
-  challengeCard: { backgroundColor: '#edf4ea', borderWidth: 1, borderColor: '#bfd0c4', borderRadius: 16, padding: 20, marginBottom: 16 },
-  challengeEyebrow: { color: '#a84c34', fontSize: 11, fontWeight: '700', letterSpacing: 1.4 },
-  challengeTitle: { color: '#173d34', fontSize: 20, fontWeight: '700', marginTop: 8 },
-  challengeProgress: { flexDirection: 'row', gap: 6, marginTop: 16 },
-  challengeBar: { flex: 1, height: 8, borderRadius: 8, backgroundColor: '#cbd8ce' },
-  challengeBarDone: { backgroundColor: '#c65f3d' },
-  challengeCopy: { color: '#587169', fontSize: 13, marginTop: 12 },
-  continueGrid: { gap: 10, marginBottom: 16 },
-  continueCard: {
-    backgroundColor: Colors.card,
-    borderColor: Colors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-  },
-  continueEyebrow: {
-    color: Colors.accent,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.3,
-  },
-  continueTitle: {
-    color: Colors.text,
-    fontSize: 17,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  continueCopy: { color: Colors.textSecondary, fontSize: 13, marginTop: 3 },
-  shareBtn: { alignSelf: 'flex-start', borderWidth: 1, borderColor: '#9db4a6', backgroundColor: '#fff', borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16, marginTop: 16 },
-  shareBtnText: { color: '#24483e', fontSize: 14, fontWeight: '600' },
-  affirmationText: { fontSize: 18, fontStyle: 'italic', color: Colors.text, textAlign: 'center', marginBottom: 8 },
-  affirmationLabel: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center' },
-  actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, width: '48%' as any },
-  actionLabel: { fontSize: 14, color: Colors.text, fontWeight: '500' },
+  pressed: { opacity: 0.76 },
 });

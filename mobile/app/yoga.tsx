@@ -98,7 +98,7 @@ export default function YogaScreen() {
               <Text style={styles.safetyTitle}>Move within an easy range</Text>
             </View>
             <Text style={appUiStyles.muted}>
-              Wellbeing support, not treatment. Stop for pain, dizziness, numbness, or breathing difficulty. {selected.safetyNote}
+              Move gently. Stop if you feel pain, dizziness, numbness, or trouble breathing. {selected.safetyNote}
             </Text>
           </AppCard>
 

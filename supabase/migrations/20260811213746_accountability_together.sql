@@ -1024,3 +1024,4 @@ GRANT EXECUTE ON FUNCTION public.create_accountability_invite(TEXT),
   public.update_accountability_scope(UUID, BOOLEAN, BOOLEAN, BOOLEAN) TO authenticated;
 REVOKE ALL ON FUNCTION public.delete_owned_data(UUID, TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_owned_data(UUID, TEXT) TO service_role;
+;

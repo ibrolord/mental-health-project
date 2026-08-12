@@ -48,7 +48,7 @@ const PLAN_TYPES: {
 }[] = [
   { id: 'dream', label: 'Dream', icon: 'cloud' },
   { id: 'motivation', label: 'Motivation', icon: 'zap' },
-  { id: 'fear', label: 'Fear to plan for', icon: 'shield' },
+  { id: 'fear', label: 'Concern to plan for', icon: 'shield' },
   { id: 'milestone', label: 'Milestone', icon: 'flag' },
 ];
 
@@ -245,11 +245,11 @@ export default function PlannerScreen() {
       <PageHeader
         eyebrow="Life planner"
         title="Give the future a next step."
-        description="Hold dreams, motivations, fears, and milestones without turning them into one overwhelming list."
+        description="Hold dreams, motivations, concerns, and milestones without turning them into one overwhelming list."
         icon="map"
         action={
           <AppButton
-            label={editorOpen ? 'Close' : 'Add'}
+            label={editorOpen ? 'Close' : 'Add plan item'}
             icon={editorOpen ? 'x' : 'plus'}
             variant="quiet"
             onPress={() => {
@@ -360,7 +360,7 @@ export default function PlannerScreen() {
           title={`No ${filter} plan items`}
           description={
             filter === 'active'
-              ? 'Add one dream, motivation, fear, or milestone when you are ready.'
+              ? 'Add one dream, motivation, concern, or milestone when you are ready.'
               : 'Items will appear here when their status changes.'
           }
           action={

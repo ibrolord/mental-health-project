@@ -6,7 +6,7 @@ IPA_PATH=""
 EXPECTED_BUILD=""
 RUN_ISOLATED_DOCTOR=1
 SOURCE_ONLY=0
-MIC_PERMISSION="MHtoolkit uses the microphone only during a live voice session so the AI can hear and respond to you."
+MIC_PERMISSION="MHtoolkit uses the microphone only for live voice or tap-to-talk sessions you start. Audio is sent to OpenAI or Gemini to transcribe and respond."
 CAMERA_PERMISSION="MHtoolkit's live voice sessions are audio-only. The bundled WebRTC library references camera APIs, but MHtoolkit never requests, captures, or transmits camera data."
 HEALTH_READ_PERMISSION="MHtoolkit reads the Apple Health categories you choose to show personal summaries. Raw samples stay on your device. A derived summary is sent to an AI provider only when you preview it and choose Share once."
 HEALTH_UPDATE_PERMISSION="MHtoolkit does not add or change Apple Health data. Apple requires this description because the app links HealthKit for optional read-only summaries."
@@ -21,6 +21,7 @@ Usage: npm run review:ios -- --ipa /path/to/app.ipa --build-number 42 [--skip-is
 
 Runs the App Review pre-submit checks that caught prior MHtoolkit issues:
 - TypeScript compile
+- local/production Supabase migration parity
 - Expo Doctor in a mobile-only temp checkout
 - EAS production env variable presence
 - live Google/Apple provider and redirect readiness
@@ -153,6 +154,12 @@ if npx tsc --noEmit; then
   pass "TypeScript compile"
 else
   fail "TypeScript compile"
+fi
+
+if (cd "$ROOT_DIR/.." && npm run verify:supabase-migrations); then
+  pass "Supabase migrations match production"
+else
+  fail "Supabase migration history differs from production"
 fi
 
 GENERATED_CONFIG="$(mktemp -t mhtoolkit-expo-config)"

@@ -1,5 +1,6 @@
-import { useId, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useId, type ComponentProps, type ReactNode } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   InputAccessoryView,
   Keyboard,
@@ -10,13 +11,14 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '@/lib/constants';
+import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
 
 type FeatherName = ComponentProps<typeof Feather>['name'];
 
@@ -64,12 +66,15 @@ export function PageHeader({
   icon?: FeatherName;
   action?: ReactNode;
 }) {
+  const { fontScale } = useWindowDimensions();
+  const usesStackedHeader = fontScale >= 1.35;
+
   return (
     <View style={styles.header}>
-      <View style={styles.headerTop}>
-        <View style={styles.headerCopy}>
+      <View style={[styles.headerTop, usesStackedHeader && styles.headerTopStacked]}>
+        <View style={[styles.headerCopy, usesStackedHeader && styles.headerCopyStacked]}>
           {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-          <Text style={styles.title}>{title}</Text>
+          <Text accessibilityRole="header" style={styles.title}>{title}</Text>
         </View>
         {icon ? (
           <View style={styles.headerIcon}>
@@ -87,13 +92,74 @@ export function AppCard({
   children,
   style,
   quiet = false,
+  tone = 'default',
 }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   quiet?: boolean;
+  tone?: 'default' | 'tinted' | 'outline';
 }) {
   return (
-    <View style={[styles.card, quiet && styles.quietCard, style]}>{children}</View>
+    <View
+      style={[
+        styles.card,
+        quiet && styles.quietCard,
+        tone === 'tinted' && styles.tintedCard,
+        tone === 'outline' && styles.outlineCard,
+        style,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+export function DisclosureCard({
+  title,
+  description,
+  icon,
+  expanded,
+  onToggle,
+  children,
+}: {
+  title: string;
+  description?: string;
+  icon?: FeatherName;
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <AppCard quiet style={styles.disclosureCard}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ expanded }}
+        onPress={onToggle}
+        style={({ pressed }) => [
+          styles.disclosureHeader,
+          pressed && styles.pressed,
+        ]}
+      >
+        {icon ? (
+          <View style={styles.disclosureIcon}>
+            <Feather name={icon} size={17} color={Colors.primary} />
+          </View>
+        ) : null}
+        <View style={styles.disclosureCopy}>
+          <Text style={styles.disclosureTitle}>{title}</Text>
+          {description ? (
+            <Text style={styles.disclosureDescription}>{description}</Text>
+          ) : null}
+        </View>
+        <Feather
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={19}
+          color={Colors.textSecondary}
+        />
+      </Pressable>
+      {expanded ? <View style={styles.disclosureBody}>{children}</View> : null}
+    </AppCard>
   );
 }
 
@@ -109,11 +175,115 @@ export function SectionHeader({
   return (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionCopy}>
-        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text accessibilityRole="header" style={styles.sectionTitle}>{title}</Text>
         {description ? (
           <Text style={styles.sectionDescription}>{description}</Text>
         ) : null}
       </View>
+      {action}
+    </View>
+  );
+}
+
+export function SupportAction({ onPress, label = 'Support' }: { onPress: () => void; label?: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Open urgent and local support"
+      onPress={onPress}
+      style={({ pressed }) => [styles.supportAction, pressed && styles.pressed]}
+    >
+      <Feather name="life-buoy" size={17} color={Colors.accent} />
+      <Text style={styles.supportActionText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+export function ListRow({
+  title,
+  description,
+  icon,
+  onPress,
+  trailing,
+  destructive = false,
+}: {
+  title: string;
+  description?: string;
+  icon?: FeatherName;
+  onPress?: () => void;
+  trailing?: ReactNode;
+  destructive?: boolean;
+}) {
+  const content = (
+    <>
+      {icon ? (
+        <View style={[styles.rowIcon, destructive && styles.rowIconDanger]}>
+          <Feather
+            name={icon}
+            size={19}
+            color={destructive ? Colors.danger : Colors.primary}
+          />
+        </View>
+      ) : null}
+      <View style={styles.rowCopy}>
+        <Text style={[styles.rowTitle, destructive && styles.rowTitleDanger]}>
+          {title}
+        </Text>
+        {description ? <Text style={styles.rowDescription}>{description}</Text> : null}
+      </View>
+      {trailing ?? (onPress ? (
+        <Feather name="chevron-right" size={19} color={Colors.textSecondary} />
+      ) : null)}
+    </>
+  );
+
+  if (!onPress) return <View style={styles.listRow}>{content}</View>;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityHint={description}
+      onPress={onPress}
+      style={({ pressed }) => [styles.listRow, pressed && styles.pressed]}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
+export function InlineStatus({
+  message,
+  tone = 'success',
+  action,
+}: {
+  message: string;
+  tone?: 'success' | 'error' | 'info';
+  action?: ReactNode;
+}) {
+  const icon = tone === 'error' ? 'alert-circle' : tone === 'success' ? 'check-circle' : 'info';
+
+  useEffect(() => {
+    AccessibilityInfo.announceForAccessibility(message);
+  }, [message]);
+
+  return (
+    <View
+      accessibilityRole={tone === 'error' ? 'alert' : 'text'}
+      style={[
+        styles.inlineStatus,
+        tone === 'error' && styles.inlineStatusError,
+        tone === 'info' && styles.inlineStatusInfo,
+      ]}
+    >
+      <Feather
+        name={icon}
+        size={17}
+        color={tone === 'error' ? Colors.danger : Colors.primary}
+      />
+      <Text style={[styles.inlineStatusText, tone === 'error' && styles.inlineStatusTextError]}>
+        {message}
+      </Text>
       {action}
     </View>
   );
@@ -321,9 +491,10 @@ export const appUiStyles = StyleSheet.create({
   body: { color: Colors.text, fontSize: 15, lineHeight: 22 },
   label: {
     color: Colors.textSecondary,
-    fontSize: 11,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '700',
-    letterSpacing: 1.1,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   error: { color: Colors.danger, fontSize: 13, lineHeight: 19 },
@@ -334,8 +505,13 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
   screen: { flex: 1, backgroundColor: Colors.background },
   scrollContent: { flexGrow: 1 },
-  content: { flex: 1, padding: 18, paddingBottom: 42 },
-  header: { marginBottom: 22 },
+  content: {
+    flex: 1,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: 44,
+  },
+  header: { marginBottom: Spacing.lg },
   headerTop: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -343,37 +519,35 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  headerTopStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
   headerCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 220, minWidth: 0 },
-  headerAction: { flexShrink: 0 },
+  headerCopyStacked: { flexBasis: 'auto', width: '100%' },
+  headerAction: { alignSelf: 'flex-start', flexShrink: 0 },
   eyebrow: {
     color: Colors.accent,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.7,
+    ...Typography.eyebrow,
     textTransform: 'uppercase',
-    marginBottom: 7,
+    marginBottom: Spacing.xs,
   },
   title: {
     color: Colors.text,
-    fontSize: 31,
-    lineHeight: 36,
-    fontWeight: '700',
-    letterSpacing: -0.7,
+    ...Typography.display,
   },
   description: {
     color: Colors.textSecondary,
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 10,
+    ...Typography.body,
+    lineHeight: 21,
+    marginTop: Spacing.xxs,
     maxWidth: 620,
   },
   headerIcon: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: Radius.xl,
     backgroundColor: Colors.primaryLight,
-    borderWidth: 1,
-    borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -381,17 +555,29 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: 16,
-    padding: 17,
-    marginBottom: 12,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
     shadowColor: '#163a32',
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 2,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
   },
   quietCard: {
-    backgroundColor: 'rgba(255,254,248,0.66)',
+    backgroundColor: Colors.surfaceMuted,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  tintedCard: {
+    backgroundColor: Colors.primaryLight,
+    borderColor: '#bfd0c4',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  outlineCard: {
+    backgroundColor: 'transparent',
+    borderColor: Colors.borderStrong,
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -400,26 +586,75 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
-    marginTop: 14,
-    marginBottom: 11,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   sectionCopy: { flex: 1 },
   sectionTitle: {
     color: Colors.text,
-    fontSize: 20,
-    lineHeight: 25,
-    fontWeight: '700',
-    letterSpacing: -0.25,
+    ...Typography.sectionTitle,
   },
   sectionDescription: {
     color: Colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
+    ...Typography.bodySmall,
     marginTop: 4,
   },
-  button: {
+  supportAction: {
     minHeight: 44,
-    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.accentLight,
+    paddingHorizontal: 12,
+  },
+  supportActionText: { color: Colors.accent, fontSize: 12, fontWeight: '700' },
+  listRow: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
+  rowIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowIconDanger: { backgroundColor: Colors.dangerLight },
+  rowCopy: { flex: 1, minWidth: 0 },
+  rowTitle: { color: Colors.text, ...Typography.cardTitle },
+  rowTitleDanger: { color: Colors.danger },
+  rowDescription: {
+    color: Colors.textSecondary,
+    ...Typography.bodySmall,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  inlineStatus: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.successLight,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  inlineStatusError: { backgroundColor: Colors.dangerLight },
+  inlineStatusInfo: { backgroundColor: Colors.primaryLight },
+  inlineStatusText: { flex: 1, color: Colors.text, ...Typography.bodySmall },
+  inlineStatusTextError: { color: Colors.danger },
+  button: {
+    minHeight: 48,
+    borderRadius: Radius.md,
     paddingHorizontal: 17,
     paddingVertical: 10,
     flexDirection: 'row',
@@ -434,7 +669,7 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     backgroundColor: Colors.card,
-    borderColor: Colors.border,
+    borderColor: Colors.borderStrong,
   },
   quietButton: {
     backgroundColor: Colors.primaryLight,
@@ -450,9 +685,9 @@ const styles = StyleSheet.create({
   chip: {
     minHeight: 44,
     minWidth: 44,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.borderStrong,
     backgroundColor: Colors.card,
     paddingHorizontal: 13,
     paddingVertical: 7,
@@ -474,10 +709,10 @@ const styles = StyleSheet.create({
     marginBottom: 7,
   },
   input: {
-    minHeight: 47,
-    borderRadius: 12,
+    minHeight: 48,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.borderStrong,
     backgroundColor: '#fffef8',
     color: Colors.text,
     paddingHorizontal: 13,
@@ -487,7 +722,7 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 112, textAlignVertical: 'top' },
   helper: {
     color: Colors.textSecondary,
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
     marginTop: 5,
   },
@@ -520,7 +755,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  statLabel: { color: Colors.textSecondary, fontSize: 11, marginTop: 3 },
+  statLabel: { color: Colors.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 3 },
   empty: { alignItems: 'center', paddingVertical: 28 },
   emptyIcon: {
     width: 48,
@@ -545,4 +780,38 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   emptyAction: { marginTop: 16 },
+  disclosureCard: { paddingVertical: 0, overflow: 'hidden' },
+  disclosureHeader: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  disclosureIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disclosureCopy: { flex: 1, minWidth: 0 },
+  disclosureTitle: {
+    color: Colors.text,
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '700',
+  },
+  disclosureDescription: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  disclosureBody: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
+  },
 });

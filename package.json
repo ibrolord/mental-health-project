@@ -13,6 +13,7 @@
     "verify:data-lifecycle": "node scripts/verify-live-data-lifecycle.mjs",
     "verify:ai-live": "vite-node scripts/verify-ai-live.ts",
     "verify:partner-rls": "bash scripts/verify-partner-rls.sh",
+    "verify:supabase-migrations": "node scripts/verify-supabase-migrations.mjs",
     "verify:auth-partner-live": "node scripts/verify-live-auth-partner.mjs",
     "verify:social-auth": "node scripts/verify-social-auth-readiness.mjs",
     "verify:resource-links": "node scripts/verify-resource-links.mjs",

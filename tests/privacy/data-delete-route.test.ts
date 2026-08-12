@@ -5,6 +5,7 @@ import { POST } from '../../app/api/data/delete/route';
 const mocks = vi.hoisted(() => ({
   privacyPlatformFromRequest: vi.fn(),
   recordServerPrivacyEvent: vi.fn(),
+  removeGoalAttachmentObjectsForUser: vi.fn(),
   rpc: vi.fn(),
   verifyAuth: vi.fn(),
 }));
@@ -25,6 +26,10 @@ vi.mock('@/lib/privacy-events/server', () => ({
   recordServerPrivacyEvent: mocks.recordServerPrivacyEvent,
 }));
 
+vi.mock('@/lib/goals/attachment-cleanup', () => ({
+  removeGoalAttachmentObjectsForUser: mocks.removeGoalAttachmentObjectsForUser,
+}));
+
 describe('transactional data deletion route', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -37,6 +42,8 @@ describe('transactional data deletion route', () => {
     mocks.privacyPlatformFromRequest.mockReturnValue('ios');
     mocks.recordServerPrivacyEvent.mockReset();
     mocks.recordServerPrivacyEvent.mockResolvedValue(undefined);
+    mocks.removeGoalAttachmentObjectsForUser.mockReset();
+    mocks.removeGoalAttachmentObjectsForUser.mockResolvedValue({ error: null });
     mocks.rpc.mockReset();
     mocks.rpc.mockResolvedValue({ data: { deleted: true }, error: null });
     vi.spyOn(console, 'error').mockImplementation(() => {});

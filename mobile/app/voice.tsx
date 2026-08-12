@@ -7,6 +7,7 @@ import * as Speech from 'expo-speech';
 import {
   Alert,
   Animated,
+  AccessibilityInfo,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,11 +15,17 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LocalSafetyActions } from '@/components/LocalSafetyActions';
 import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import { apiRequest } from '@/lib/api';
 import { Colors } from '@/lib/constants';
 import { fetchWithTimeout } from '@/lib/request';
 import { classifyRealtimeEvent, parseRealtimeEvent } from '@/lib/realtime-events';
+import {
+  hasExplicitUrgentSafetyLanguage,
+  LOCAL_SAFETY_MESSAGE,
+} from '@/lib/local-safety';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -174,6 +181,7 @@ export default function VoiceSupportScreen() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [sessionLimitSeconds, setSessionLimitSeconds] = useState(4 * 60);
   const [privacyOpen, setPrivacyOpen] = useState(true);
+  const [localSafetyOpen, setLocalSafetyOpen] = useState(false);
 
   const peerRef = useRef<RealtimePeerConnection | null>(null);
   const channelRef = useRef<RealtimeDataChannel | null>(null);
@@ -447,6 +455,32 @@ export default function VoiceSupportScreen() {
     await cancellation;
   }
 
+  async function openLocalSafetySupport() {
+    setLocalSafetyOpen(true);
+    const realtimeCancellation = cancelPendingRealtimeSession();
+    disposeRealtimeSession();
+    fallbackTurnAbortRef.current?.abort();
+    fallbackTurnAbortRef.current = null;
+
+    const recording = recordingRef.current;
+    if (!recording) {
+      await realtimeCancellation;
+      return;
+    }
+    recordingRef.current = null;
+    if (fallbackRecordingTimerRef.current) {
+      clearTimeout(fallbackRecordingTimerRef.current);
+      fallbackRecordingTimerRef.current = null;
+    }
+    const uri = recording.getURI();
+    await recording.stopAndUnloadAsync().catch(() => {});
+    if (uri) {
+      await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+    }
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+    await realtimeCancellation;
+  }
+
   function setMicrophoneEnabled(enabled: boolean) {
     streamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = enabled;
@@ -634,8 +668,75 @@ export default function VoiceSupportScreen() {
     }
   }
 
+  async function speakLocalSafetyMessage() {
+    const playbackGeneration = speechPlaybackGenerationRef.current + 1;
+    speechPlaybackGenerationRef.current = playbackGeneration;
+    try {
+      setStatus('speaking');
+      setMicrophoneEnabled(false);
+      await stopActiveSpeech();
+      if (playbackGeneration !== speechPlaybackGenerationRef.current) return;
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        playThroughEarpieceAndroid: false,
+      });
+      const deviceVoice = await getBestDeviceSpeechVoice().catch(() => undefined);
+      if (playbackGeneration !== speechPlaybackGenerationRef.current) return;
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const finish = (failure?: Error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          if (speechCompletionRef.current === cancel) {
+            speechCompletionRef.current = null;
+          }
+          if (failure) reject(failure);
+          else resolve();
+        };
+        const cancel = () => finish();
+        const timeout = setTimeout(() => {
+          void Speech.stop();
+          finish(new Error('Safety message playback timed out'));
+        }, MAX_SPEECH_PLAYBACK_MS);
+        speechCompletionRef.current = cancel;
+        try {
+          Speech.speak(LOCAL_SAFETY_MESSAGE, {
+            language: 'en-US',
+            rate: 0.92,
+            voice: deviceVoice?.identifier,
+            onDone: () => finish(),
+            onStopped: () => finish(),
+            onError: () => finish(new Error('Safety message playback failed')),
+          });
+        } catch {
+          finish(new Error('Safety message playback failed'));
+        }
+      });
+    } finally {
+      if (
+        playbackGeneration === speechPlaybackGenerationRef.current
+        && !speechInterruptInFlightRef.current
+      ) {
+        setStatus('idle');
+      }
+    }
+  }
+
   async function approveRealtimeTurn(transcriptText: string, generation: number) {
     if (generation !== sessionGenerationRef.current || !peerRef.current) return;
+    if (hasExplicitUrgentSafetyLanguage(transcriptText)) {
+      addMessage({ role: 'assistant', content: LOCAL_SAFETY_MESSAGE });
+      setAiResponse(LOCAL_SAFETY_MESSAGE);
+      setError('');
+      setLocalSafetyOpen(true);
+      disposeRealtimeSession();
+      setMode('fallback');
+      AccessibilityInfo.announceForAccessibility(LOCAL_SAFETY_MESSAGE);
+      await speakLocalSafetyMessage().catch(() => setStatus('idle'));
+      return;
+    }
     realtimeTurnAbortRef.current?.abort();
     const turnAbort = new AbortController();
     realtimeTurnAbortRef.current = turnAbort;
@@ -654,11 +755,14 @@ export default function VoiceSupportScreen() {
       if (!turnIsCurrent()) return;
 
       if (safety.action === 'crisis') {
-        const response = safety.response?.trim();
-        if (!response) throw new Error('Missing safety response');
-        addMessage({ role: 'assistant', content: response });
-        setAiResponse(response);
-        await speakText(response, true);
+        addMessage({ role: 'assistant', content: LOCAL_SAFETY_MESSAGE });
+        setAiResponse(LOCAL_SAFETY_MESSAGE);
+        setError('');
+        setLocalSafetyOpen(true);
+        disposeRealtimeSession();
+        setMode('fallback');
+        AccessibilityInfo.announceForAccessibility(LOCAL_SAFETY_MESSAGE);
+        await speakLocalSafetyMessage().catch(() => setStatus('idle'));
         return;
       }
 
@@ -1135,6 +1239,20 @@ export default function VoiceSupportScreen() {
       ].slice(-12);
       messagesRef.current = nextMessages;
       setMessages(nextMessages);
+      if (hasExplicitUrgentSafetyLanguage(userText)) {
+        const safetyMessages: Message[] = [
+          ...nextMessages,
+          { role: 'assistant', content: LOCAL_SAFETY_MESSAGE },
+        ];
+        messagesRef.current = safetyMessages;
+        setMessages(safetyMessages);
+        setAiResponse(LOCAL_SAFETY_MESSAGE);
+        setError('');
+        setLocalSafetyOpen(true);
+        AccessibilityInfo.announceForAccessibility(LOCAL_SAFETY_MESSAGE);
+        await speakLocalSafetyMessage();
+        return;
+      }
       const chatHeaders = await getAuthHeaders();
       if (!turnIsCurrent()) return;
       const chatResponse = await fetchWithTimeout(`${API_URL}/api/chat`, {
@@ -1246,14 +1364,25 @@ export default function VoiceSupportScreen() {
       : status === 'speaking'
         ? Colors.success
         : status === 'idle'
-          ? '#d8d1c0'
-          : Colors.orange;
+        ? '#d8d1c0'
+        : Colors.orange;
+  const sessionControlsPinned = realtimeActive || mode === 'fallback';
+  const sessionControlsVisible = sessionControlsPinned && !localSafetyOpen;
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+      <ScrollView
+        style={styles.scroller}
+        contentContainerStyle={[
+          styles.content,
+          sessionControlsVisible && styles.contentWithPinnedControls,
+        ]}
+      >
       <View style={styles.hero}>
-        <Text style={styles.eyebrow}>VOICE SUPPORT</Text>
+        <Text style={styles.eyebrow}>AI VOICE</Text>
         <Text style={styles.title}>Talk it through.</Text>
-        <Text style={styles.subtitle}>Speak freely. Pause when you need to.</Text>
+        <Text style={styles.subtitle}>
+          Talk with MHtoolkit AI. Pause or stop at any time.
+        </Text>
       </View>
 
       <View style={styles.stage}>
@@ -1293,6 +1422,10 @@ export default function VoiceSupportScreen() {
         </View>
       ) : null}
 
+      {localSafetyOpen ? (
+        <LocalSafetyActions onDismiss={() => setLocalSafetyOpen(false)} />
+      ) : null}
+
       {messages.length > 0 ? (
         <View style={styles.conversation}>
           <Text style={styles.conversationTitle}>This session</Text>
@@ -1320,90 +1453,8 @@ export default function VoiceSupportScreen() {
         </View>
       ) : null}
 
-      <View style={styles.controls}>
-        {realtimeActive ? (
-          <>
-            {status === 'speaking' ? (
-              <TouchableOpacity
-                accessibilityLabel="Interrupt AI and start talking"
-                accessibilityRole="button"
-                style={styles.primaryButton}
-                onPress={() => void interruptSpeechAndListen()}
-              >
-                <Feather name="mic" size={19} color="#fff" />
-                <Text style={styles.primaryButtonText}>Interrupt &amp; talk</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                accessibilityRole="button"
-                style={styles.secondaryButton}
-                onPress={toggleMute}
-              >
-                <Feather name={muted ? 'mic' : 'mic-off'} size={19} color={Colors.primary} />
-                <Text style={styles.secondaryButtonText}>
-                  {muted ? 'Resume mic' : 'Pause mic'}
-                </Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              accessibilityRole="button"
-              style={styles.endButton}
-              onPress={() => void endRealtimeSession()}
-            >
-              <Feather name="square" size={18} color="#fff" />
-              <Text style={styles.endButtonText}>End</Text>
-            </TouchableOpacity>
-          </>
-        ) : mode === 'fallback' ? (
-          <>
-            {status === 'speaking' ? (
-              <TouchableOpacity
-                accessibilityLabel="Interrupt AI and start talking"
-                accessibilityRole="button"
-                style={styles.primaryButton}
-                onPress={() => void interruptSpeechAndListen()}
-              >
-                <Feather name="mic" size={19} color="#fff" />
-                <Text style={styles.primaryButtonText}>Interrupt &amp; talk</Text>
-              </TouchableOpacity>
-            ) : status === 'listening' ? (
-              <TouchableOpacity
-                accessibilityRole="button"
-                style={styles.primaryButton}
-                onPress={() => void stopFallbackRecording()}
-              >
-                <Feather name="send" size={19} color="#fff" />
-                <Text style={styles.primaryButtonText}>Finish turn</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityState={{ disabled: status !== 'idle' }}
-                style={[
-                  styles.primaryButton,
-                  status !== 'idle' && styles.disabledButton,
-                ]}
-                disabled={status !== 'idle'}
-                onPress={() => void startFallbackRecording()}
-              >
-                <Feather name="mic" size={19} color="#fff" />
-                <Text style={styles.primaryButtonText}>Start talking</Text>
-              </TouchableOpacity>
-            )}
-            {status === 'idle' && REALTIME_VOICE_ENABLED ? (
-              <TouchableOpacity
-                accessibilityRole="button"
-                style={styles.textButton}
-                onPress={() => {
-                  setMode('realtime');
-                  void connectRealtime();
-                }}
-              >
-                <Text style={styles.textButtonText}>Try live voice</Text>
-              </TouchableOpacity>
-            ) : null}
-          </>
-        ) : (
+      {!sessionControlsPinned && !localSafetyOpen ? (
+        <View style={styles.controls}>
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityState={{ disabled: status !== 'idle' }}
@@ -1417,16 +1468,16 @@ export default function VoiceSupportScreen() {
             <Feather name="headphones" size={19} color="#fff" />
             <Text style={styles.primaryButtonText}>Start live conversation</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      ) : null}
 
       {privacyOpen ? (
         <View style={styles.disclosure}>
           <View style={styles.disclosureCopy}>
             <Feather name="lock" size={15} color="#675b47" />
             <Text style={styles.disclosureText}>
-              Live voice uses OpenAI. Tap-to-talk uses Gemini, with OpenAI as a
-              fallback.
+              Live voice sends audio to OpenAI. Tap-to-talk sends your recording
+              to Gemini; OpenAI is the backup.
             </Text>
           </View>
           <TouchableOpacity
@@ -1454,22 +1505,112 @@ export default function VoiceSupportScreen() {
         <TouchableOpacity
           accessibilityRole="button"
           style={styles.supportLink}
-          onPress={() => Alert.alert(
-            'Need urgent help?',
-            'If you may act on thoughts of harming yourself or someone else, contact local emergency services now. In the U.S. or Canada, call or text 988.'
-          )}
+          onPress={() => void openLocalSafetySupport()}
         >
           <Feather name="life-buoy" size={15} color={Colors.textSecondary} />
           <Text style={styles.supportLinkText}>Urgent support</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+
+      {sessionControlsVisible ? (
+        <View style={styles.pinnedControls}>
+          <View style={[styles.controls, styles.controlsPinned]}>
+            {realtimeActive ? (
+              <>
+                {status === 'speaking' ? (
+                  <TouchableOpacity
+                    accessibilityLabel="Interrupt AI and start talking"
+                    accessibilityRole="button"
+                    style={styles.primaryButton}
+                    onPress={() => void interruptSpeechAndListen()}
+                  >
+                    <Feather name="mic" size={19} color="#fff" />
+                    <Text style={styles.primaryButtonText}>Interrupt &amp; talk</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.secondaryButton}
+                    onPress={toggleMute}
+                  >
+                    <Feather name={muted ? 'mic' : 'mic-off'} size={19} color={Colors.primary} />
+                    <Text style={styles.secondaryButtonText}>
+                      {muted ? 'Resume mic' : 'Pause mic'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  style={styles.endButton}
+                  onPress={() => void endRealtimeSession()}
+                >
+                  <Feather name="square" size={18} color="#fff" />
+                  <Text style={styles.endButtonText}>End</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                {status === 'speaking' ? (
+                  <TouchableOpacity
+                    accessibilityLabel="Interrupt AI and start talking"
+                    accessibilityRole="button"
+                    style={styles.primaryButton}
+                    onPress={() => void interruptSpeechAndListen()}
+                  >
+                    <Feather name="mic" size={19} color="#fff" />
+                    <Text style={styles.primaryButtonText}>Interrupt &amp; talk</Text>
+                  </TouchableOpacity>
+                ) : status === 'listening' ? (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.primaryButton}
+                    onPress={() => void stopFallbackRecording()}
+                  >
+                    <Feather name="send" size={19} color="#fff" />
+                    <Text style={styles.primaryButtonText}>Finish turn</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: status !== 'idle' }}
+                    style={[
+                      styles.primaryButton,
+                      status !== 'idle' && styles.disabledButton,
+                    ]}
+                    disabled={status !== 'idle'}
+                    onPress={() => void startFallbackRecording()}
+                  >
+                    <Feather name="mic" size={19} color="#fff" />
+                    <Text style={styles.primaryButtonText}>Start recording</Text>
+                  </TouchableOpacity>
+                )}
+                {status === 'idle' && REALTIME_VOICE_ENABLED ? (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.textButton}
+                    onPress={() => {
+                      setMode('realtime');
+                      void connectRealtime();
+                    }}
+                  >
+                    <Text style={styles.textButtonText}>Try live voice</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            )}
+          </View>
+        </View>
+      ) : null}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  scroller: { flex: 1 },
   content: { padding: 20, paddingBottom: 48 },
+  contentWithPinnedControls: { paddingBottom: 20 },
   hero: { paddingTop: 8, paddingHorizontal: 4 },
   eyebrow: {
     color: Colors.primary,
@@ -1601,6 +1742,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
+  },
+  controlsPinned: { marginTop: 0 },
+  pinnedControls: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    backgroundColor: Colors.card,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
   },
   primaryButton: {
     minHeight: 52,

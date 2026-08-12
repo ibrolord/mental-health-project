@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { Colors } from '@/lib/constants';
 import { useDataContext } from '@/lib/hooks/use-data-context';
@@ -65,6 +66,7 @@ export default function JournalScreen() {
   const [draft, setDraft] = useState<JournalDraft>(emptyJournalDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(true);
+  const [promptIdeasOpen, setPromptIdeasOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -117,6 +119,7 @@ export default function JournalScreen() {
     setDraftOwnerId(null);
     setEditingId(null);
     setEditorOpen(Boolean(context.user_id));
+    setPromptIdeasOpen(false);
     setSearch('');
     setFilter('all');
     setError('');
@@ -279,7 +282,35 @@ export default function JournalScreen() {
   const resetEditor = () => {
     setDraft(emptyJournalDraft());
     setEditingId(null);
+    setPromptIdeasOpen(false);
     setError('');
+  };
+
+  const closeEditor = () => {
+    const hasUnsavedWork = Boolean(
+      editingId ||
+        draft.title.trim() ||
+        draft.content.trim() ||
+        draft.tags.trim() ||
+        draft.prompt.trim() ||
+        draft.isFavorite
+    );
+    const close = () => {
+      resetEditor();
+      setEditorOpen(false);
+    };
+    if (!hasUnsavedWork) {
+      close();
+      return;
+    }
+    Alert.alert(
+      'Discard this draft?',
+      'Your unsaved changes will be lost.',
+      [
+        { text: 'Keep writing', style: 'cancel' },
+        { text: 'Discard draft', style: 'destructive', onPress: close },
+      ]
+    );
   };
 
   const saveEntry = async () => {
@@ -430,9 +461,11 @@ export default function JournalScreen() {
       </View>
 
       <View style={s.privacyBox}>
-        <Text style={s.privacyIcon}>🔒</Text>
+        <Feather name="lock" size={17} color={Colors.primary} />
         <Text style={s.privacyText}>
-          Private by default. You choose when AI uses your journal.
+          Partners can see only the journal activity count you choose to share,
+          never your text. AI receives up to three recent entries only when you
+          turn on Journal entries for a chat.
         </Text>
       </View>
 
@@ -463,13 +496,12 @@ export default function JournalScreen() {
               </Text>
             </View>
             <TouchableOpacity
-              onPress={() => {
-                resetEditor();
-                setEditorOpen(false);
-              }}
+              accessibilityRole="button"
+              onPress={closeEditor}
               accessibilityLabel="Close journal editor"
+              style={s.closeButton}
             >
-              <Text style={s.closeButton}>×</Text>
+              <Feather name="x" size={20} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -490,6 +522,51 @@ export default function JournalScreen() {
             placeholder="A title, or we will use your first line"
             placeholderTextColor={Colors.textSecondary}
           />
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityState={{ expanded: promptIdeasOpen }}
+            onPress={() => setPromptIdeasOpen((current) => !current)}
+            style={s.promptDisclosure}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={s.promptDisclosureTitle}>Need a starting point?</Text>
+              <Text style={s.promptDisclosureText}>Choose a short guided prompt</Text>
+            </View>
+            <Feather
+              name={promptIdeasOpen ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={Colors.primary}
+            />
+          </TouchableOpacity>
+          {promptIdeasOpen ? (
+            <View style={s.promptIdeas}>
+              {JOURNAL_PROMPTS.map((prompt) => (
+                <TouchableOpacity
+                  key={prompt.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use journal prompt: ${prompt.title}`}
+                  style={s.promptChoice}
+                  onPress={() => {
+                    setDraft((current) => ({
+                      ...current,
+                      prompt: prompt.prompt,
+                      entryKind:
+                        current.entryKind === 'book_note' ||
+                        current.entryKind === 'video_note' ||
+                        current.entryKind === 'story_note'
+                          ? current.entryKind
+                          : 'guided',
+                    }));
+                    setPromptIdeasOpen(false);
+                  }}
+                >
+                  <Text style={s.promptChoiceTitle}>{prompt.title}</Text>
+                  <Text style={s.promptChoiceText}>{prompt.prompt}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
 
           <View style={s.labelRow}>
             <Text style={s.label}>Your notes</Text>
@@ -514,6 +591,15 @@ export default function JournalScreen() {
               <View style={s.keyboardToolbar}>
                 <TouchableOpacity
                   accessibilityRole="button"
+                  accessibilityLabel="Save journal entry"
+                  disabled={saving || storyPersistenceUnavailable}
+                  onPress={() => void saveEntry()}
+                  style={s.keyboardSave}
+                >
+                  <Text style={s.keyboardSaveText}>{saving ? 'Saving...' : 'Save'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityRole="button"
                   accessibilityLabel="Dismiss journal keyboard"
                   onPress={Keyboard.dismiss}
                   style={s.keyboardDone}
@@ -533,29 +619,6 @@ export default function JournalScreen() {
             placeholder="work, rest, boundaries"
             placeholderTextColor={Colors.textSecondary}
           />
-
-          <Text style={[s.label, { marginBottom: 8 }]}>Need a starting point?</Text>
-          {JOURNAL_PROMPTS.map((prompt) => (
-            <TouchableOpacity
-              key={prompt.id}
-              style={s.promptChoice}
-              onPress={() =>
-                setDraft((current) => ({
-                  ...current,
-                  prompt: prompt.prompt,
-                  entryKind:
-                    current.entryKind === 'book_note' ||
-                    current.entryKind === 'video_note' ||
-                    current.entryKind === 'story_note'
-                      ? current.entryKind
-                      : 'guided',
-                }))
-              }
-            >
-              <Text style={s.promptChoiceTitle}>{prompt.title}</Text>
-              <Text style={s.promptChoiceText}>{prompt.prompt}</Text>
-            </TouchableOpacity>
-          ))}
 
           <TouchableOpacity
             style={[s.favoriteButton, draft.isFavorite && s.favoriteButtonActive]}
@@ -625,6 +688,8 @@ export default function JournalScreen() {
           ).map(([value, label]) => (
             <TouchableOpacity
               key={value}
+              accessibilityRole="button"
+              accessibilityState={{ selected: filter === value }}
               style={[s.filterButton, filter === value && s.filterButtonActive]}
               onPress={() => setFilter(value)}
             >
@@ -726,18 +791,22 @@ const s = StyleSheet.create({
     padding: 14,
     marginTop: 14,
   },
-  privacyIcon: { fontSize: 16 },
   privacyText: { flex: 1, color: '#064e3b', fontSize: 12, lineHeight: 18 },
   actionRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14 },
   primaryButton: {
     borderRadius: 10,
     backgroundColor: '#173f38',
     paddingHorizontal: 16,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 11,
   },
   primaryButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   keyboardToolbar: {
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: '#f4f1e8',
     borderTopColor: '#cbd8d2',
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -746,6 +815,8 @@ const s = StyleSheet.create({
   },
   keyboardDone: { paddingHorizontal: 10, paddingVertical: 6 },
   keyboardDoneText: { color: '#173f38', fontSize: 16, fontWeight: '700' },
+  keyboardSave: { minHeight: 40, minWidth: 68, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: Colors.primary },
+  keyboardSaveText: { color: '#fffef8', fontSize: 14, fontWeight: '700' },
   editor: {
     backgroundColor: '#fff',
     borderRadius: 18,
@@ -757,7 +828,7 @@ const s = StyleSheet.create({
   editorHeader: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   sectionKicker: { color: '#287264', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   editorTitle: { color: Colors.text, fontSize: 20, lineHeight: 26, fontWeight: '700', marginTop: 4 },
-  closeButton: { color: Colors.textSecondary, fontSize: 28, lineHeight: 28 },
+  closeButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   promptBox: { borderRadius: 12, backgroundColor: '#fffbeb', padding: 13, marginTop: 16 },
   promptLabel: { color: '#92400e', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
   promptText: { color: '#78350f', fontSize: 13, lineHeight: 20, marginTop: 6 },
@@ -767,7 +838,7 @@ const s = StyleSheet.create({
   input: {
     color: Colors.text,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.borderStrong,
     borderRadius: 10,
     backgroundColor: '#f8fafc',
     padding: 12,
@@ -776,7 +847,7 @@ const s = StyleSheet.create({
   textArea: {
     color: Colors.text,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.borderStrong,
     borderRadius: 10,
     backgroundColor: '#f8fafc',
     padding: 12,
@@ -785,12 +856,17 @@ const s = StyleSheet.create({
     lineHeight: 23,
   },
   promptChoice: {
+    minHeight: 44,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: 11,
     padding: 12,
     marginBottom: 8,
   },
+  promptDisclosure: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, marginTop: 14, paddingVertical: 8 },
+  promptDisclosureTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' },
+  promptDisclosureText: { color: Colors.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 2 },
+  promptIdeas: { marginTop: 10 },
   promptChoiceTitle: { color: Colors.text, fontSize: 13, fontWeight: '700' },
   promptChoiceText: { color: Colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 3 },
   favoriteButton: {
@@ -840,6 +916,8 @@ const s = StyleSheet.create({
     marginBottom: 10,
   },
   filterButton: {
+    minHeight: 44,
+    justifyContent: 'center',
     backgroundColor: '#f1f5f9',
     borderRadius: 20,
     paddingHorizontal: 13,

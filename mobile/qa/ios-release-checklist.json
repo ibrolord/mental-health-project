@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-08-11.1",
+  "checklistVersion": "2026-08-12.2",
   "platform": "ios",
-  "expectedInventory": { "routes": 33, "routeChecks": 637, "workflows": 110, "total": 747 },
+  "expectedInventory": { "routes": 33, "routeChecks": 670, "workflows": 110, "total": 780 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -123,7 +123,7 @@
       "source": "app/(tabs)/index.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "share-challenge", "low-energy-mode", "weekly-insight", "weekly-reflection", "resume-practice", "saved-space", "grounding", "focus", "habits", "go-to-customize", "go-to-select-limit", "go-to-cue", "go-to-reorder", "go-to-save-relaunch", "go-to-storage-failure"]
+      "controls": ["mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "share-challenge", "low-energy-mode", "weekly-insight", "weekly-reflection", "resume-practice", "saved-space", "open-together", "grounding", "focus", "habits", "go-to-customize", "go-to-select-limit", "go-to-cue", "go-to-reorder", "go-to-save-relaunch", "go-to-storage-failure"]
     },
     {
       "id": "mood-tracker",
@@ -139,7 +139,7 @@
       "source": "app/(tabs)/chat.tsx",
       "kind": "tab",
       "identityRequirements": ["email-owner"],
-      "controls": ["voice", "grounding", "resources", "context-collapse", "full-context", "individual-context-toggles", "health-summary-toggle", "health-share-preview", "health-share-once", "health-share-cancel", "prompt-chips", "report-response", "save-response", "message-input", "send", "send-double-tap", "consent-accept", "consent-decline"]
+      "controls": ["voice", "grounding", "resources", "context-collapse", "individual-context-toggles", "health-summary-toggle", "health-share-preview", "health-share-once", "health-share-cancel", "prompt-chips", "report-response", "save-response", "message-input", "send", "send-double-tap", "consent-accept", "consent-decline", "local-safety-region", "local-safety-call", "local-safety-text", "local-safety-country"]
     },
     {
       "id": "assessments-list",
@@ -179,7 +179,7 @@
       "source": "app/assessments/[type].tsx",
       "kind": "stack",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["header-back", "inline-back", "source", "begin", "answer-options", "question-back", "question-next", "save-result", "continue-without-saving", "call-988", "text-988"]
+      "controls": ["header-back", "source", "begin", "about-collapse", "answer-options", "question-back", "question-next", "save-result", "continue-without-saving", "safety-region", "call-988", "text-988", "country-support", "safety-plan"]
     },
     {
       "id": "affirmations",
@@ -203,7 +203,7 @@
       "source": "app/goals.tsx",
       "kind": "stack",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["framework-tabs", "add-main", "add-section", "keyboard-submit", "double-submit", "toggle-complete", "delete", "library-prefill"]
+      "controls": ["framework-tabs", "add-main", "add-section", "keyboard-submit", "double-submit", "toggle-complete", "delete", "library-prefill", "open-details", "due-date", "clear-due-date", "reminder", "notes", "add-milestone", "milestone-due-date", "edit-milestone-due-date", "clear-milestone-due-date", "toggle-milestone", "delete-milestone", "add-file", "open-file", "delete-file", "save-details", "discard-unsaved"]
     },
     {
       "id": "grounding",
@@ -379,7 +379,7 @@
       "source": "app/voice.tsx",
       "kind": "stack",
       "identityRequirements": ["email-owner"],
-      "controls": ["consent-accept", "consent-decline", "mic-permission-allow", "mic-permission-deny", "start-recording", "stop-recording", "transcription", "ai-response", "play-audio", "stop-audio", "retry"]
+      "controls": ["consent-accept", "consent-decline", "mic-permission-allow", "mic-permission-deny", "start-live", "pause-mic", "resume-mic", "interrupt-ai", "end-live", "start-recording", "stop-recording", "transcription", "ai-response", "play-audio", "stop-audio", "retry", "local-safety-spoken", "safety-region", "safety-call", "safety-text", "safety-country"]
     }
   ],
   "workflows": [

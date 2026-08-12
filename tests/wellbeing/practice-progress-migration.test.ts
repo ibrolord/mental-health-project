@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { MEDITATION_PRACTICES } from '../../lib/meditation';
 
 const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
-const migrationName = '20260808233054_add_practice_progress.sql';
+const migrationName = '20260809010827_add_practice_progress.sql';
 const migration = readFileSync(resolve(migrationsDirectory, migrationName), 'utf8');
 
 describe('owner-only practice progress migration', () => {

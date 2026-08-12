@@ -14,12 +14,13 @@ import {
   createSingleFlight,
   goalIdentityKey,
 } from '@/lib/goals/deduplication';
+import { GoalDetailPanel, type GoalDetailRecord } from '@/components/goals/goal-detail-panel';
+import { GOAL_ATTACHMENT_BUCKET } from '@/lib/goals/details';
 
 type Framework = 'simple' | 'eisenhower' | 'ivy_lee' | '1-3-5' | 'abcde';
 
-interface Goal {
-  id: string;
-  content: string;
+interface Goal extends GoalDetailRecord {
+  date: string;
   status: 'pending' | 'completed' | 'cancelled';
   framework: Framework;
   priority: string | null;
@@ -60,6 +61,7 @@ export default function GoalsPage() {
   const [quadrantInputs, setQuadrantInputs] = useState<Record<string, string>>({});
   const [priorityInputs, setPriorityInputs] = useState<Record<string, string>>({});
   const [librarySourceTitle, setLibrarySourceTitle] = useState('');
+  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const appliedLibraryActionRef = useRef(false);
   const goalIdsByKeyRef = useRef(new Map<string, string[]>());
   const runGoalInsertRef = useRef(createSingleFlight());
@@ -77,7 +79,7 @@ export default function GoalsPage() {
       .from('goals')
       .select('*')
       .eq(query.column, query.value)
-      .eq('date', format(new Date(), 'yyyy-MM-dd'))
+      .or(`status.eq.pending,and(status.eq.completed,date.eq.${format(new Date(), 'yyyy-MM-dd')})`)
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -126,6 +128,7 @@ export default function GoalsPage() {
     const date = format(new Date(), 'yyyy-MM-dd');
     const identity = {
       id: 'pending',
+      date,
       content: normalizedContent,
       framework,
       priority: priority || null,
@@ -198,13 +201,43 @@ export default function GoalsPage() {
     if (!goal) return;
     const identityKey = goalIdentityKey(goal);
     const ids = goalIdsByKeyRef.current.get(identityKey) ?? [id];
+    if (context.user_id) {
+      const { data: attachmentRows, error: attachmentError } = await supabase
+        .from('goal_attachments')
+        .select('storage_path')
+        .eq('user_id', context.user_id)
+        .in('goal_id', ids);
+      if (attachmentError) {
+        setGoalError('Could not verify this goal’s files before deleting it.');
+        return;
+      }
+      const paths = (attachmentRows ?? []).map((row) => row.storage_path);
+      const { error } = await supabase.from('goals').delete().in('id', ids).eq(query.column, query.value);
+      if (error) {
+        setGoalError('Could not delete that goal. Please try again.');
+        return;
+      }
+      goalIdsByKeyRef.current.delete(identityKey);
+      setGoals((current) => current.filter((goal) => !ids.includes(goal.id)));
+      setSelectedGoal((current) => current && ids.includes(current.id) ? null : current);
+      if (paths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from(GOAL_ATTACHMENT_BUCKET)
+          .remove(paths);
+        if (storageError) {
+          setGoalError('The goal was deleted, but attached file cleanup is still pending.');
+        }
+      }
+      return;
+    }
     const { error } = await supabase.from('goals').delete().in('id', ids).eq(query.column, query.value);
     if (error) {
       setGoalError('Could not delete that goal. Please try again.');
       return;
     }
     goalIdsByKeyRef.current.delete(identityKey);
-    setGoals((current) => current.filter(g => g.id !== id));
+    setGoals((current) => current.filter((goal) => !ids.includes(goal.id)));
+    setSelectedGoal((current) => current && ids.includes(current.id) ? null : current);
   };
 
   const saveReflection = async () => {
@@ -232,8 +265,8 @@ export default function GoalsPage() {
     <div key={g.id} className={`flex items-center gap-3 p-3 bg-card rounded-lg border shadow-sm group transition-all hover:shadow-md ${g.status === 'completed' ? 'opacity-60' : ''}`}>
       {showNumber !== undefined && <span className={`text-xl font-bold w-6 ${g.status === 'completed' ? 'text-green-500' : 'text-slate-300'}`}>{showNumber}</span>}
       <input type="checkbox" checked={g.status === 'completed'} onChange={() => toggleGoal(g.id, g.status)} className="w-5 h-5 rounded cursor-pointer accent-blue-500" />
-      <span className={`flex-1 ${g.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>{g.content}</span>
-      <button onClick={() => deleteGoal(g.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-xl transition-opacity">×</button>
+      <button type="button" onClick={() => setSelectedGoal(g)} className={`min-w-0 flex-1 text-left ${g.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>{g.content}</button>
+      <button type="button" onClick={() => setSelectedGoal(g)} aria-label={`Open details for ${g.content}`} className="rounded-full px-2 py-1 text-lg leading-none text-muted-foreground hover:bg-secondary hover:text-foreground">•••</button>
     </div>
   );
 
@@ -385,9 +418,9 @@ export default function GoalsPage() {
               <div key={g.id} className={`flex items-center gap-3 p-3 bg-card rounded-lg border shadow-sm group transition-all hover:shadow-md ${g.status === 'completed' ? 'opacity-60' : ''} ${i === 0 && g.status !== 'completed' ? 'ring-2 ring-indigo-400 ring-offset-2' : ''}`}>
                 <span className={`text-xl font-bold w-6 ${g.status === 'completed' ? 'text-green-500' : 'text-indigo-400'}`}>{i + 1}</span>
                 <input type="checkbox" checked={g.status === 'completed'} onChange={() => toggleGoal(g.id, g.status)} className="w-5 h-5 rounded cursor-pointer accent-indigo-500" />
-                <span className={`flex-1 ${g.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>{g.content}</span>
+                <button type="button" onClick={() => setSelectedGoal(g)} className={`min-w-0 flex-1 text-left ${g.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>{g.content}</button>
                 {i === 0 && g.status !== 'completed' && <span className="bg-indigo-500 text-white text-xs px-2 py-1 rounded-full font-medium">FOCUS HERE</span>}
-                <button onClick={() => deleteGoal(g.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-xl transition-opacity">×</button>
+                <button type="button" onClick={() => setSelectedGoal(g)} aria-label={`Open details for ${g.content}`} className="rounded-full px-2 py-1 text-lg leading-none text-muted-foreground hover:bg-secondary hover:text-foreground">•••</button>
               </div>
             ))}
           </div>
@@ -442,6 +475,7 @@ export default function GoalsPage() {
   if (loading) return <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" /></main>;
 
   return (
+    <>
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4">
       <div className="max-w-5xl mx-auto">
         <div className="mb-8"><h1 className="text-4xl font-bold text-foreground mb-2">✅ Life Organizer</h1><p className="text-muted-foreground">Plan your day with intention</p></div>
@@ -487,12 +521,25 @@ export default function GoalsPage() {
           </CardContent>
         </Card>
 
-        {goals.length > 0 && <div className="mb-6"><div className="flex justify-between text-sm mb-2"><span className="font-medium">Today's Progress</span><span>{completed}/{goals.length}</span></div><div className="h-3 bg-secondary rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all" style={{ width: `${(completed / goals.length) * 100}%` }} /></div></div>}
+        {goals.length > 0 && <div className="mb-6"><div className="flex justify-between text-sm mb-2"><span className="font-medium">Active progress</span><span>{completed}/{goals.length}</span></div><div className="h-3 bg-secondary rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all" style={{ width: `${(completed / goals.length) * 100}%` }} /></div></div>}
 
-        <Card className="mb-6"><CardHeader><CardTitle>📅 Today's Goals ({format(new Date(), 'MMMM dd, yyyy')})</CardTitle></CardHeader><CardContent>{goalError && <p role="alert" className="mb-3 text-sm text-red-600">{goalError}</p>}{render()}</CardContent></Card>
+        <Card className="mb-6"><CardHeader><CardTitle>📅 Active Goals ({format(new Date(), 'MMMM dd, yyyy')})</CardTitle><CardDescription>Unfinished goals stay here until you complete or remove them.</CardDescription></CardHeader><CardContent>{goalError && <p role="alert" className="mb-3 text-sm text-red-600">{goalError}</p>}{render()}</CardContent></Card>
 
         <Card><CardHeader><CardTitle>🌙 Evening Reflection</CardTitle><CardDescription>Take a moment to reflect on your day</CardDescription></CardHeader><CardContent>{!showReflection ? <Button variant="outline" onClick={() => setShowReflection(true)}>✏️ Add Reflection</Button> : <div className="space-y-4"><Textarea placeholder="What went well today? What did you learn? What would you do differently?" value={reflection} onChange={e => setReflection(e.target.value)} rows={4} /><div className="flex gap-2"><Button onClick={saveReflection}>💾 Save</Button><Button variant="outline" onClick={() => setShowReflection(false)}>Cancel</Button></div></div>}</CardContent></Card>
       </div>
     </main>
+    {selectedGoal && context.user_id ? (
+      <GoalDetailPanel
+        goal={selectedGoal}
+        userId={context.user_id}
+        onClose={() => setSelectedGoal(null)}
+        onDelete={() => deleteGoal(selectedGoal.id)}
+        onUpdated={(updated) => {
+          setGoals((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+          setSelectedGoal((current) => current?.id === updated.id ? { ...current, ...updated } : current);
+        }}
+      />
+    ) : null}
+    </>
   );
 }

@@ -581,19 +581,89 @@ export default function LibraryScreen() {
         description="Open the full guide, keep private notes, and turn useful ideas into action."
         icon="book-open"
       />
+      <View style={styles.libraryDestinations}>
+        <Pressable
+          accessibilityRole="tab"
+          accessibilityLabel={`${UNIFIED_LIBRARY.length} library resources`}
+          accessibilityState={{ selected: libraryView === 'resources' }}
+          onPress={() => setLibraryView('resources')}
+          style={({ pressed }) => [
+            styles.libraryDestination,
+            libraryView === 'resources' && styles.libraryDestinationSelected,
+            pressed && styles.pressed,
+          ]}
+        >
+          <View
+            style={[
+              styles.libraryDestinationIcon,
+              libraryView === 'resources' && styles.libraryDestinationIconSelected,
+            ]}
+          >
+            <Feather
+              name="book-open"
+              size={18}
+              color={libraryView === 'resources' ? '#fffef8' : Colors.primary}
+            />
+          </View>
+          <Text
+            style={[
+              styles.libraryDestinationTitle,
+              libraryView === 'resources' && styles.libraryDestinationTextSelected,
+            ]}
+          >
+            Resources
+          </Text>
+          <Text
+            style={[
+              styles.libraryDestinationDescription,
+              libraryView === 'resources' && styles.libraryDestinationTextSelected,
+            ]}
+          >
+            {UNIFIED_LIBRARY.length} guides, talks, and stories
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="tab"
+          accessibilityLabel={`${BOOK_PRACTICE_TEMPLATES.length} practice templates`}
+          accessibilityState={{ selected: libraryView === 'templates' }}
+          onPress={() => setLibraryView('templates')}
+          style={({ pressed }) => [
+            styles.libraryDestination,
+            libraryView === 'templates' && styles.libraryDestinationSelected,
+            pressed && styles.pressed,
+          ]}
+        >
+          <View
+            style={[
+              styles.libraryDestinationIcon,
+              libraryView === 'templates' && styles.libraryDestinationIconSelected,
+            ]}
+          >
+            <Feather
+              name="clipboard"
+              size={18}
+              color={libraryView === 'templates' ? '#fffef8' : Colors.primary}
+            />
+          </View>
+          <Text
+            style={[
+              styles.libraryDestinationTitle,
+              libraryView === 'templates' && styles.libraryDestinationTextSelected,
+            ]}
+          >
+            Templates
+          </Text>
+          <Text
+            style={[
+              styles.libraryDestinationDescription,
+              libraryView === 'templates' && styles.libraryDestinationTextSelected,
+            ]}
+          >
+            {BOOK_PRACTICE_TEMPLATES.length} ready-to-use tools
+          </Text>
+        </Pressable>
+      </View>
       <AppCard>
-        <View style={styles.viewSwitch}>
-          <ChoiceChip
-            label="Resources"
-            selected={libraryView === 'resources'}
-            onPress={() => setLibraryView('resources')}
-          />
-          <ChoiceChip
-            label="Practice templates"
-            selected={libraryView === 'templates'}
-            onPress={() => setLibraryView('templates')}
-          />
-        </View>
         <AppInput
           value={search}
           onChangeText={setSearch}
@@ -801,7 +871,43 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
-  viewSwitch: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 12 },
+  libraryDestinations: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  libraryDestination: {
+    flex: 1,
+    minHeight: 126,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 17,
+    backgroundColor: Colors.card,
+    padding: 14,
+  },
+  libraryDestinationSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary,
+  },
+  libraryDestinationIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primaryLight,
+  },
+  libraryDestinationIconSelected: { backgroundColor: 'rgba(255,254,248,0.16)' },
+  libraryDestinationTitle: {
+    color: Colors.text,
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '800',
+    marginTop: 10,
+  },
+  libraryDestinationDescription: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  libraryDestinationTextSelected: { color: '#fffef8' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   topicDisclosure: {
     minHeight: 44,
@@ -999,4 +1105,5 @@ const styles = StyleSheet.create({
   },
   topic: { flex: 1, color: Colors.textSecondary, fontSize: 10 },
   statuses: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  pressed: { opacity: 0.76 },
 });

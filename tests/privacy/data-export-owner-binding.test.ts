@@ -56,6 +56,8 @@ function emptyQuery(table: string) {
       record.filter = { method: 'in', column, value };
       return query;
     }),
+    order: vi.fn(() => query),
+    range: vi.fn(() => query),
   };
   return query;
 }

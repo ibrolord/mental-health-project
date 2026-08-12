@@ -98,11 +98,12 @@ describe('My Go-To Actions integration boundaries', () => {
     expect(storage).not.toMatch(/supabase|apiRequest|fetch\(/);
   });
 
-  it('preserves fixed low-energy actions on web and mobile', () => {
-    expect([
-      source('app/dashboard/page.tsx'),
-      source('mobile/app/(tabs)/index.tsx'),
-    ].every((file) => file.includes("{ label: 'One small step'") && file.includes("{ label: 'Write a note'"))).toBe(true);
+  it('keeps the native low-energy experience to one adaptive next action', () => {
+    const dashboard = source('mobile/app/(tabs)/index.tsx');
+    expect(dashboard).toContain("title: 'Steady myself'");
+    expect(dashboard).toContain("route: '/ground'");
+    expect(dashboard).toContain('visibleLowEnergyMode ||');
+    expect(dashboard).not.toContain("{ label: 'One small step'");
   });
 
   it('clears the preference during browser and native local-data cleanup', () => {
@@ -114,9 +115,10 @@ describe('My Go-To Actions integration boundaries', () => {
     ].every((file) => file.includes('clearGoToActions'))).toBe(true);
   });
 
-  it('remounts preferences when ownership changes and labels native cue inputs', () => {
+  it('isolates preferences when ownership changes and labels native cue inputs', () => {
     expect(source('app/dashboard/page.tsx')).toContain("key={moodOwnerKey ?? 'pending'}");
-    expect(source('mobile/app/(tabs)/index.tsx')).toContain("key={ownerKey ?? 'pending'}");
+    expect(source('mobile/app/(tabs)/index.tsx')).toContain('lowEnergyOwnerKey === ownerKey');
+    expect(source('mobile/app/(tabs)/more.tsx')).toContain('preferenceOwnerKey !== ownerKey');
     expect(source('mobile/components/GoToActions.tsx')).toContain('accessibilityLabel={`When I notice for ${tool.label}, optional`}');
   });
 

@@ -1,52 +1,36 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import type { ComponentProps } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Colors } from '@/lib/constants';
 import type { MoodEmoji } from '@/lib/types';
-
-type MoodIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 export const MOOD_CHOICES: {
   emoji: MoodEmoji;
   label: string;
   tint: string;
-  color: string;
-  icon: MoodIconName;
 }[] = [
   {
     emoji: '\u{1F604}',
     label: 'Great',
     tint: '#e4f3e8',
-    color: '#2f7b55',
-    icon: 'emoticon-excited-outline',
   },
   {
     emoji: '\u{1F642}',
     label: 'Good',
     tint: '#edf3df',
-    color: '#668442',
-    icon: 'emoticon-happy-outline',
   },
   {
     emoji: '\u{1F610}',
     label: 'Okay',
     tint: '#f5efda',
-    color: '#9b762b',
-    icon: 'emoticon-neutral-outline',
   },
   {
     emoji: '\u{1F61E}',
     label: 'Low',
     tint: '#f8e9df',
-    color: '#ad6d41',
-    icon: 'emoticon-sad-outline',
   },
   {
     emoji: '\u{1F622}',
     label: 'Very low',
     tint: '#f7e4e2',
-    color: '#a44d53',
-    icon: 'emoticon-cry-outline',
   },
 ];
 
@@ -58,12 +42,13 @@ export function MoodGlyph({ mood, size = 28 }: { mood: MoodEmoji; size?: number 
   const choice = MOOD_CHOICES.find((item) => item.emoji === mood) ?? MOOD_CHOICES[2];
 
   return (
-    <MaterialCommunityIcons
-      name={choice.icon}
-      size={size}
-      color={choice.color}
+    <Text
       accessible={false}
-    />
+      allowFontScaling={false}
+      style={{ fontSize: size, lineHeight: Math.ceil(size * 1.25) }}
+    >
+      {choice.emoji}
+    </Text>
   );
 }
 
@@ -76,11 +61,14 @@ export function MoodPicker({
   onChange: (mood: MoodEmoji) => void;
   disabled?: boolean;
 }) {
+  const { fontScale } = useWindowDimensions();
+  const usesWrappedLayout = fontScale >= 1.35;
+
   return (
     <View
       accessibilityRole="radiogroup"
       accessibilityLabel="Choose how you feel"
-      style={styles.row}
+      style={[styles.row, usesWrappedLayout && styles.rowWrapped]}
     >
       {MOOD_CHOICES.map((choice) => {
         const selected = value === choice.emoji;
@@ -94,7 +82,8 @@ export function MoodPicker({
             onPress={() => onChange(choice.emoji)}
             style={({ pressed }) => [
               styles.choice,
-              { backgroundColor: selected ? choice.tint : Colors.background },
+              usesWrappedLayout && styles.choiceWrapped,
+              { backgroundColor: selected ? choice.tint : 'transparent' },
               selected && styles.choiceSelected,
               disabled && styles.disabled,
               pressed && !disabled && styles.pressed,
@@ -116,27 +105,36 @@ export function MoodPicker({
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    gap: 5,
+    gap: 2,
+    borderRadius: 28,
+    backgroundColor: Colors.surfaceMuted,
+    padding: 4,
+  },
+  rowWrapped: {
+    flexWrap: 'wrap',
+    borderRadius: 20,
   },
   choice: {
     minWidth: 0,
-    minHeight: 74,
+    minHeight: 64,
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'transparent',
-    borderRadius: 14,
+    borderRadius: 24,
     paddingHorizontal: 2,
     paddingVertical: 8,
   },
+  choiceWrapped: {
+    flexBasis: '30%',
+    flexGrow: 1,
+    minHeight: 72,
+  },
   choiceSelected: {
     borderColor: Colors.primary,
-    shadowColor: Colors.primary,
-    shadowOpacity: 0.09,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 1,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   glyph: {
     height: 32,
@@ -148,8 +146,8 @@ const styles = StyleSheet.create({
   },
   label: {
     color: Colors.textSecondary,
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 12,
+    lineHeight: 15,
     fontWeight: '600',
     textAlign: 'center',
     marginTop: 4,

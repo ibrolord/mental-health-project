@@ -597,7 +597,8 @@ export default function ReflectScreen() {
           <Text style={styles.noteTitle}>Private by default</Text>
         </View>
         <Text style={appUiStyles.muted}>
-          Drafts are encrypted on this device. Nothing is sent to AI automatically.
+          Your draft is encrypted on this device. AI does not receive it unless
+          you choose to share it.
         </Text>
       </AppCard>
 

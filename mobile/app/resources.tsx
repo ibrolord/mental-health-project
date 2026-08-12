@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
 import {
   Alert,
   Linking,
@@ -63,9 +64,12 @@ const RESOURCES: Record<Category, ResourceLink[]> = {
   practical: COMMUNITY_HELP,
 };
 
-function openUrl(url: string) {
+function openUrl(url: string, fallback?: string) {
   void Linking.openURL(url).catch(() =>
-    Alert.alert('Unable to open link', 'Try again when you are online.')
+    Alert.alert(
+      'Unable to open this action',
+      fallback ?? 'Try again when you are online.'
+    )
   );
 }
 
@@ -73,6 +77,7 @@ function ResourceCard({ resource }: { resource: ResourceLink }) {
   return (
     <Pressable
       accessibilityRole="link"
+      accessibilityLabel={`Open ${resource.name}`}
       onPress={() => openUrl(resource.url)}
       style={({ pressed }) => [
         styles.resourceCard,
@@ -110,19 +115,41 @@ function CrisisCard({ line }: { line: CrisisLine }) {
       {line.phone ? <Text style={styles.phone}>{line.phone}</Text> : null}
       <Text style={styles.crisisHours}>{line.hours}</Text>
       <Text style={styles.crisisDescription}>{line.description}</Text>
+      {line.callInstructions ? (
+        <Text style={styles.callInstructions}>{line.callInstructions}</Text>
+      ) : null}
       <View style={styles.crisisActions}>
-        {line.phone ? (
+        {line.callUri ? (
           <AppButton
             label="Call"
+            accessibilityLabel={`Call ${line.name}`}
             icon="phone"
             variant="secondary"
             onPress={() =>
-              openUrl(`tel:${line.phone?.replace(/[^\d+]/g, '') ?? ''}`)
+              openUrl(
+                line.callUri!,
+                `Open your phone app and call ${line.phone ?? line.name}.`
+              )
+            }
+          />
+        ) : null}
+        {line.textUri ? (
+          <AppButton
+            label="Text"
+            accessibilityLabel={`Text ${line.name}`}
+            icon="message-square"
+            variant="secondary"
+            onPress={() =>
+              openUrl(
+                line.textUri!,
+                `Open your messages app and text ${line.phone ?? line.name}.`
+              )
             }
           />
         ) : null}
         <AppButton
-          label="Open service"
+          label="Open website"
+          accessibilityLabel={`Open ${line.name} website`}
           icon="external-link"
           variant="secondary"
           onPress={() => openUrl(line.url)}
@@ -133,8 +160,23 @@ function CrisisCard({ line }: { line: CrisisLine }) {
 }
 
 export default function ResourcesScreen() {
+  const params = useLocalSearchParams<{
+    category?: string | string[];
+  }>();
   const [category, setCategory] = useState<Category>('crisis');
   const [search, setSearch] = useState('');
+  const requestedCategory = Array.isArray(params.category)
+    ? params.category[0]
+    : params.category;
+
+  useEffect(() => {
+    if (
+      requestedCategory
+      && CATEGORIES.some(({ id }) => id === requestedCategory)
+    ) {
+      setCategory(requestedCategory as Category);
+    }
+  }, [requestedCategory]);
   const visible = useMemo(() => {
     const query = search.trim().toLowerCase();
     const source =
@@ -158,6 +200,32 @@ export default function ResourcesScreen() {
         description="Official directories, peer groups, moderated communities, and country-specific help."
         icon="life-buoy"
       />
+
+      {category === 'crisis' ? (
+        <>
+          <SectionHeader
+            title="Help now"
+            description="If you or someone else may be in immediate danger, contact local emergency services."
+          />
+          {visible.length === 0 ? (
+            <EmptyState
+              icon="search"
+              title="No matching crisis services"
+              description="Clear the search to see all available services."
+              action={<AppButton label="Clear search" onPress={() => setSearch('')} />}
+            />
+          ) : (
+            (visible as CrisisLine[]).map((line) => (
+              <CrisisCard key={`${line.region}:${line.name}:${line.url}`} line={line} />
+            ))
+          )}
+        </>
+      ) : null}
+
+      <SectionHeader
+        title="Explore support"
+        description="Search by place, service, or type of help"
+      />
       <AppCard>
         <AppInput
           value={search}
@@ -177,33 +245,32 @@ export default function ResourcesScreen() {
         </View>
       </AppCard>
 
-      <SectionHeader
-        title={CATEGORIES.find(({ id }) => id === category)?.label ?? 'Support'}
-        description={
-          category === 'crisis'
-            ? 'Hours differ by service. If someone is in immediate danger, contact local emergency services.'
-            : category === 'communities'
+      {category !== 'crisis' ? (
+        <SectionHeader
+          title={CATEGORIES.find(({ id }) => id === category)?.label ?? 'Support'}
+          description={
+            category === 'communities'
               ? 'Check moderation, age limits, and privacy rules before posting.'
               : undefined
-        }
-      />
+          }
+        />
+      ) : null}
 
-      {visible.length === 0 ? (
+      {category !== 'crisis' && visible.length === 0 ? (
         <EmptyState
           icon="search"
           title="No matching resources"
           description="Try a country name or clear your search."
           action={<AppButton label="Clear search" onPress={() => setSearch('')} />}
         />
-      ) : category === 'crisis' ? (
-        (visible as CrisisLine[]).map((line) => (
-          <CrisisCard key={line.url} line={line} />
-        ))
-      ) : (
+      ) : category !== 'crisis' ? (
         (visible as ResourceLink[]).map((resource) => (
-          <ResourceCard key={resource.url} resource={resource} />
+          <ResourceCard
+            key={`${resource.region}:${resource.name}:${resource.url}`}
+            resource={resource}
+          />
         ))
-      )}
+      ) : null}
 
       <AppCard quiet style={{ marginTop: 14 }}>
         <Text style={appUiStyles.muted}>{RESOURCES_DISCLAIMER}</Text>
@@ -302,6 +369,13 @@ const styles = StyleSheet.create({
     color: '#e1ece7',
     fontSize: 13,
     lineHeight: 19,
+    marginTop: 9,
+  },
+  callInstructions: {
+    color: '#fffef8',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '700',
     marginTop: 9,
   },
   crisisActions: {

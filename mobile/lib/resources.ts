@@ -102,8 +102,12 @@ export type CrisisLine = {
   region: Region;
   /** Short, calm description. No urgency language beyond what is factual. */
   description: string;
-  /** Displayed dial string, omitted for web-only services. */
+  /** Human-readable number. Never derive a URI from this display value. */
   phone?: string;
+  /** Explicit actions verified from the service's official source. */
+  callUri?: `tel:${string}`;
+  textUri?: `sms:${string}`;
+  callInstructions?: string;
   /**
    * Stated plainly because it is NOT uniform. Befrienders Kenya is weekday
    * office hours, not 24/7, and telling someone in crisis otherwise is worse
@@ -112,6 +116,7 @@ export type CrisisLine = {
    */
   hours: string;
   url: string;
+  verifiedAt: string;
 };
 
 export type ResourceLink = {
@@ -135,21 +140,28 @@ export type ResourceLink = {
  */
 export const CRISIS_LINES: CrisisLine[] = [
   {
-    name: '988 Suicide & Crisis Lifeline',
-    region: 'US & Canada',
+    name: '9-8-8 Suicide Crisis Helpline',
+    region: 'Canada',
     description:
-      'Free and confidential support for anyone in distress. Call or text 988 from the United States or Canada.',
-    phone: '988',
+      'Canada-wide suicide crisis support in English and French. Call or text any time.',
+    phone: '9-8-8',
+    callUri: 'tel:988',
+    textUri: 'sms:988',
     hours: '24/7',
-    url: 'https://988lifeline.org',
+    url: 'https://988.ca',
+    verifiedAt: '2026-08-11',
   },
   {
-    name: 'Talk Suicide Canada',
-    region: 'Canada',
-    description: 'Bilingual crisis support across Canada, by phone.',
-    phone: '1-833-456-4566',
+    name: '988 Suicide & Crisis Lifeline',
+    region: 'US',
+    description:
+      'Free and confidential crisis support across the United States and its territories. Call or text any time.',
+    phone: '988',
+    callUri: 'tel:988',
+    textUri: 'sms:988',
     hours: '24/7',
-    url: 'https://talksuicide.ca',
+    url: 'https://988lifeline.org/get-help/',
+    verifiedAt: '2026-08-11',
   },
   {
     name: 'Suicide Crisis Helpline (SADAG)',
@@ -157,8 +169,10 @@ export const CRISIS_LINES: CrisisLine[] = [
     description:
       'Run by the South African Depression and Anxiety Group, the country’s largest mental health non-profit. Toll free.',
     phone: '0800 567 567',
+    callUri: 'tel:0800567567',
     hours: '24/7',
     url: 'https://www.sadag.org',
+    verifiedAt: '2026-07-27',
   },
   {
     name: 'Befrienders Kenya',
@@ -166,8 +180,11 @@ export const CRISIS_LINES: CrisisLine[] = [
     description:
       'Emotional support by phone, SMS, or WhatsApp. Free and confidential.',
     phone: '+254 722 178 177',
+    callUri: 'tel:+254722178177',
+    textUri: 'sms:+254722178177',
     hours: 'Mon to Fri, 9am to 5pm',
     url: 'https://befrienderske.org',
+    verifiedAt: '2026-07-27',
   },
   {
     name: 'The Trevor Project',
@@ -175,8 +192,10 @@ export const CRISIS_LINES: CrisisLine[] = [
     description:
       'Crisis support for LGBTQ+ young people, by phone, chat, or text.',
     phone: '1-866-488-7386',
+    callUri: 'tel:+18664887386',
     hours: '24/7',
     url: 'https://www.thetrevorproject.org/get-help/',
+    verifiedAt: '2026-07-27',
   },
   {
     name: 'Veterans Crisis Line',
@@ -184,8 +203,12 @@ export const CRISIS_LINES: CrisisLine[] = [
     description:
       'Confidential support for veterans, service members, and their families. Dial 988, then press 1.',
     phone: '988, then 1',
+    callUri: 'tel:988',
+    textUri: 'sms:838255',
+    callInstructions: 'After the call connects, press 1.',
     hours: '24/7',
     url: 'https://www.veteranscrisisline.net',
+    verifiedAt: '2026-08-11',
   },
 ];
 

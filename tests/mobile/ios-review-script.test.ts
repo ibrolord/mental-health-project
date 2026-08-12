@@ -37,6 +37,14 @@ describe('iOS review artifact checks', () => {
     expect(reviewScript).toContain('mhtoolkit://auth/callback');
   });
 
+  it('blocks release when production database migrations are missing', () => {
+    expect(reviewScript).toContain('npm run verify:supabase-migrations');
+    expect(reviewScript).toContain('Supabase migrations match production');
+    expect(reviewScript).toContain(
+      'Supabase migration history differs from production'
+    );
+  });
+
   it('requires the WebRTC camera API disclosure in source and the signed IPA', () => {
     expect(reviewScript).toContain('CAMERA_PERMISSION=');
     expect(reviewScript).toContain('NSCameraUsageDescription');

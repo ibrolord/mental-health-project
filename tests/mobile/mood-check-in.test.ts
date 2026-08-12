@@ -132,7 +132,13 @@ describe('mobile tracker mood parity contract', () => {
   );
 
   it('uses literal emoji choices and keeps optional details collapsed', () => {
-    expect(trackerSource).toContain('<Text style={s.moodEmoji}>{choice.emoji}</Text>');
+    expect(trackerSource).toContain('<MoodPicker');
+    expect(
+      readFileSync(
+        fileURLToPath(new URL('../../mobile/components/MoodPicker.tsx', import.meta.url)),
+        'utf8'
+      )
+    ).toContain('{choice.emoji}');
     expect(trackerSource).toContain("'Add details'");
     expect(trackerSource).toContain("'Hide details'");
     expect(trackerSource).toContain('accessibilityState={{ expanded: detailsOpen }}');

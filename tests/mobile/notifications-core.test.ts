@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_REMINDER_TIMES,
+  DUE_DATE_REMINDER_IDS_KEY,
   MOOD_REMINDER_IDS_KEY,
   MOOD_TRACKER_NOTIFICATION_ROUTE,
   NOTIFICATIONS_KEY,
@@ -152,9 +153,9 @@ describe('native local notifications', () => {
     ]);
   });
 
-  it('cycles daily content and keeps target-date reminders one-time', async () => {
+  it('keeps one-time due-date reminders independent from daily reminders', async () => {
     const Notifications = createNotifications();
-    const { storage } = createStorage({
+    const { storage, values } = createStorage({
       [REMINDER_TIMES_KEY]: '[9,14]',
     });
     const dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -177,7 +178,7 @@ describe('native local notifications', () => {
     await expect(service.setRemindersEnabled(true)).resolves.toBe(true);
 
     expect(contentProvider).toHaveBeenCalledWith([9, 14]);
-    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(3);
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(2);
     expect(Notifications.scheduleNotificationAsync).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -192,6 +193,9 @@ describe('native local notifications', () => {
         trigger: expect.objectContaining({ type: 'daily', hour: 14 }),
       })
     );
+    await expect(service.scheduleDueDateReminders()).resolves.toEqual([
+      'notification-3',
+    ]);
     expect(Notifications.scheduleNotificationAsync).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
@@ -199,6 +203,36 @@ describe('native local notifications', () => {
         trigger: expect.objectContaining({ type: 'date', date: dueDate }),
       })
     );
+    expect(JSON.parse(values.get(DUE_DATE_REMINDER_IDS_KEY)!)).toEqual([
+      'notification-3',
+    ]);
+  });
+
+  it('schedules a due-date reminder without enabling daily reminders', async () => {
+    const Notifications = createNotifications();
+    const { storage, values } = createStorage();
+    const dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const service = createNotificationService(
+      Notifications,
+      storage,
+      'ios',
+      async () => ({
+        daily: [],
+        dueDates: [
+          { title: 'Goal due', body: 'Open your goal.', screen: '/goals', date: dueDate },
+        ],
+      })
+    );
+
+    await expect(service.scheduleDueDateReminders()).resolves.toEqual([
+      'notification-1',
+    ]);
+
+    expect(values.has(NOTIFICATIONS_KEY)).toBe(false);
+    expect(values.has(MOOD_REMINDER_IDS_KEY)).toBe(false);
+    expect(JSON.parse(values.get(DUE_DATE_REMINDER_IDS_KEY)!)).toEqual([
+      'notification-1',
+    ]);
   });
 
   it('uses a safe fallback when no personalized daily content is available', () => {
@@ -397,11 +431,74 @@ describe('native local notifications', () => {
     const service = createNotificationService(Notifications, storage, 'ios');
 
     await expect(service.setRemindersEnabled(false)).rejects.toThrow(
-      'local reminders could not be removed'
+      'daily reminders could not be removed'
     );
 
     expect(values.get(NOTIFICATIONS_KEY)).toBe('true');
     expect(JSON.parse(values.get(MOOD_REMINDER_IDS_KEY)!)).toEqual(['retry-me']);
+  });
+
+  it('clears daily and due-date notifications at an owner boundary', async () => {
+    const Notifications = createNotifications();
+    const { storage, values } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [MOOD_REMINDER_IDS_KEY]: '["daily"]',
+      [DUE_DATE_REMINDER_IDS_KEY]: '["due-date"]',
+    });
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(service.clearAllReminders()).resolves.toBeUndefined();
+
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('daily');
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('due-date');
+    expect(values.has(MOOD_REMINDER_IDS_KEY)).toBe(false);
+    expect(values.has(DUE_DATE_REMINDER_IDS_KEY)).toBe(false);
+    expect(values.get(NOTIFICATIONS_KEY)).toBe('false');
+  });
+
+  it('retains an uncancelled due-date ID so owner cleanup can be retried', async () => {
+    const Notifications = createNotifications();
+    vi.mocked(Notifications.cancelScheduledNotificationAsync)
+      .mockResolvedValueOnce()
+      .mockRejectedValueOnce(new Error('native cancellation failed'));
+    const { storage, values } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [MOOD_REMINDER_IDS_KEY]: '["daily"]',
+      [DUE_DATE_REMINDER_IDS_KEY]: '["retry-due-date"]',
+    });
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(service.clearAllReminders()).rejects.toThrow(
+      'due-date reminders could not be removed'
+    );
+
+    expect(values.has(MOOD_REMINDER_IDS_KEY)).toBe(false);
+    expect(JSON.parse(values.get(DUE_DATE_REMINDER_IDS_KEY)!)).toEqual([
+      'retry-due-date',
+    ]);
+    expect(values.get(NOTIFICATIONS_KEY)).toBe('true');
+  });
+
+  it('still attempts due-date cleanup when daily cancellation fails', async () => {
+    const Notifications = createNotifications();
+    vi.mocked(Notifications.cancelScheduledNotificationAsync)
+      .mockRejectedValueOnce(new Error('daily cancellation failed'))
+      .mockResolvedValueOnce();
+    const { storage, values } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [MOOD_REMINDER_IDS_KEY]: '["retry-daily"]',
+      [DUE_DATE_REMINDER_IDS_KEY]: '["due-date"]',
+    });
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(service.clearAllReminders()).rejects.toThrow(
+      'daily reminders could not be removed'
+    );
+
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('due-date');
+    expect(JSON.parse(values.get(MOOD_REMINDER_IDS_KEY)!)).toEqual(['retry-daily']);
+    expect(values.has(DUE_DATE_REMINDER_IDS_KEY)).toBe(false);
+    expect(values.get(NOTIFICATIONS_KEY)).toBe('true');
   });
 
   it('creates a short test notification that opens the mood tracker', async () => {

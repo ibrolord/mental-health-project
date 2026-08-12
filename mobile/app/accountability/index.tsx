@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { Alert, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '@/lib/constants';
+import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
 import { useAuth } from '@/lib/auth-context';
 import { accountabilityClient } from '@/lib/accountability/runtime';
 import type { AccountabilityConnection, AccountabilityNudge, ScopeControl, SharedCommitment } from '@/lib/accountability/types';
@@ -15,6 +15,8 @@ type ListMode = 'mine' | 'theirs';
 
 export default function TogetherScreen() {
   const router = useRouter();
+  const { fontScale } = useWindowDimensions();
+  const stacksPrimaryActions = fontScale >= 1.35;
   const { isAnonymous } = useAuth();
   const [mode, setMode] = useState<ListMode>('mine');
   const [connections, setConnections] = useState<AccountabilityConnection[]>([]);
@@ -22,7 +24,8 @@ export default function TogetherScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [scope, setScope] = useState<ScopeControl | null>(null);
+  const [scopes, setScopes] = useState<Record<string, ScopeControl>>({});
+  const [selectedConnectionId, setSelectedConnectionId] = useState('');
   const [savingScope, setSavingScope] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [receivedNudges, setReceivedNudges] = useState<AccountabilityNudge[]>([]);
@@ -44,13 +47,19 @@ export default function TogetherScreen() {
       );
       setConnections(nextConnections);
       setCommitments(lists.flat());
-      const [nextScope, nextNudges, nextStoredInvite] = await Promise.all([
-        active[0] ? accountabilityClient.getScopeControl({ connectionId: active[0].id }) : Promise.resolve(null),
-        active[0] ? accountabilityClient.listNudges({ connectionId: active[0].id }) : Promise.resolve([]),
+      const [scopeEntries, nudgeLists, nextStoredInvite] = await Promise.all([
+        Promise.all(active.map(async (connection) => [
+          connection.id,
+          await accountabilityClient.getScopeControl({ connectionId: connection.id }),
+        ] as const)),
+        Promise.all(active.map((connection) => accountabilityClient.listNudges({ connectionId: connection.id }))),
         loadAccountabilityInvite(),
       ]);
-      setScope(nextScope);
-      setReceivedNudges(nextNudges);
+      setScopes(Object.fromEntries(scopeEntries));
+      setSelectedConnectionId((current) => active.some((connection) => connection.id === current)
+        ? current
+        : active[0]?.id ?? '');
+      setReceivedNudges(nudgeLists.flat());
       setStoredInvite(nextStoredInvite);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Together could not be loaded.');
@@ -89,15 +98,17 @@ export default function TogetherScreen() {
   };
 
   const updateScope = async (patch: Partial<Omit<ScopeControl, 'connectionId'>>) => {
-    if (!scope || savingScope) return;
+    const scope = scopes[selectedConnectionId];
+    if (!scope || !selectedConnectionId || savingScope) return;
     const previous = scope;
     const next = { ...scope, ...patch };
-    setScope(next);
+    setScopes((current) => ({ ...current, [selectedConnectionId]: next }));
     setSavingScope(true);
     try {
-      setScope(await accountabilityClient.updateScopeControl(next));
+      const saved = await accountabilityClient.updateScopeControl(next);
+      setScopes((current) => ({ ...current, [selectedConnectionId]: saved }));
     } catch (scopeError) {
-      setScope(previous);
+      setScopes((current) => ({ ...current, [selectedConnectionId]: previous }));
       Alert.alert('Sharing not updated', scopeError instanceof Error ? scopeError.message : 'Please try again.');
     } finally {
       setSavingScope(false);
@@ -107,13 +118,38 @@ export default function TogetherScreen() {
   if (isAnonymous) {
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
-        <ScreenState
-          kind="empty"
-          title="Sign in to use Together"
-          message="Together connects two verified accounts. Your private MHtoolkit data is never included."
-          actionLabel="Sign in"
-          onAction={() => router.push('/auth/login')}
-        />
+        <ScrollView contentContainerStyle={styles.anonymousContent} showsVerticalScrollIndicator={false}>
+          <View accessibilityLabel="Together leaf" accessibilityRole="image" style={styles.anonymousLeaf}>
+            <MaterialCommunityIcons color={Colors.primary} name="leaf" size={32} />
+          </View>
+          <Text style={styles.eyebrow}>TOGETHER</Text>
+          <Text accessibilityRole="header" style={styles.anonymousTitle}>A little easier with someone beside you.</Text>
+          <Text style={styles.anonymousDescription}>Choose one commitment, check in, and celebrate the effort.</Text>
+
+          <View style={styles.benefitCard}>
+            <View style={styles.benefitRow}>
+              <MaterialCommunityIcons color={Colors.primary} name="check-circle-outline" size={21} />
+              <Text style={styles.benefitText}>Share a small commitment</Text>
+            </View>
+            <View style={styles.benefitRow}>
+              <MaterialCommunityIcons color={Colors.primary} name="hand-heart-outline" size={21} />
+              <Text style={styles.benefitText}>Send gentle support</Text>
+            </View>
+            <View style={styles.benefitRow}>
+              <MaterialCommunityIcons color={Colors.primary} name="shield-lock-outline" size={21} />
+              <Text style={styles.benefitText}>You control what is shared</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={styles.signInButton}
+            onPress={() => router.push({ pathname: '/auth/login', params: { returnTo: '/accountability' } })}
+          >
+            <Text style={styles.primaryButtonText}>Sign in or create account</Text>
+          </TouchableOpacity>
+          <Text style={styles.privateNote}>Your mood, journal, assessments, and AI chats stay private.</Text>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -126,8 +162,14 @@ export default function TogetherScreen() {
     return <SafeAreaView style={styles.safe} edges={['bottom']}><ScreenState kind="error" title="Together is unavailable" message={error} actionLabel="Try again" onAction={() => void load()} /></SafeAreaView>;
   }
 
-  const visible = commitments.filter((commitment) => mode === 'mine' ? commitment.isMine : !commitment.isMine);
   const activeConnections = connections.filter((connection) => connection.status === 'active');
+  const selectedConnection = activeConnections.find((connection) => connection.id === selectedConnectionId) ?? null;
+  const scope = selectedConnectionId ? scopes[selectedConnectionId] ?? null : null;
+  const visibleNudges = receivedNudges.filter((nudge) => !selectedConnectionId || nudge.connectionId === selectedConnectionId);
+  const visible = commitments.filter((commitment) =>
+    (!selectedConnectionId || commitment.connectionId === selectedConnectionId) &&
+    (mode === 'mine' ? commitment.isMine : !commitment.isMine)
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -135,27 +177,60 @@ export default function TogetherScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
       >
-        <View accessibilityLabel="Together leaf" accessibilityRole="image" style={styles.leafMark}>
-          <MaterialCommunityIcons color={Colors.primary} name="leaf" size={30} />
+        <View style={styles.heroRow}>
+          <View accessibilityLabel="Together leaf" accessibilityRole="image" style={styles.leafMark}>
+            <MaterialCommunityIcons color={Colors.primary} name="leaf" size={27} />
+          </View>
+          <View style={styles.heroCopy}>
+            <Text style={styles.eyebrow}>TOGETHER</Text>
+            <Text accessibilityRole="header" style={styles.heroTitle}>Keep showing up, together.</Text>
+            <Text style={styles.heroDescription}>One shared commitment at a time.</Text>
+          </View>
         </View>
-        <Text style={styles.intro}>Only commitments you explicitly share appear here. Moods, assessments, chats, goals, and reflections stay private.</Text>
-        <View style={styles.actionRow}>
-          <TouchableOpacity accessibilityRole="button" accessibilityHint="Creates an invite for an accountability partner" style={styles.secondaryButton} onPress={() => router.push('/accountability/invite')}>
-            <Text style={styles.secondaryButtonText}>Invite</Text>
-          </TouchableOpacity>
-          <TouchableOpacity accessibilityRole="button" accessibilityHint="Join with a code from your partner" style={styles.secondaryButton} onPress={() => router.push('/accountability/join')}>
-            <Text style={styles.secondaryButtonText}>Join</Text>
+        <View style={styles.privacyNote}>
+          <MaterialCommunityIcons color={Colors.primary} name="lock-outline" size={17} />
+          <Text style={styles.privacyNoteText}>Only what you choose for Together is shared.</Text>
+        </View>
+        <View style={[styles.actionRow, stacksPrimaryActions && styles.actionRowStacked]}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityHint={activeConnections.length > 0 ? 'Shares a new commitment with an active partner' : 'Creates an invite for an accountability partner'}
+            style={styles.primaryButton}
+            onPress={() => router.push(activeConnections.length > 0 ? '/accountability/create' : '/accountability/invite')}
+          >
+            <Text style={styles.primaryButtonText}>{activeConnections.length > 0 ? 'Add commitment' : 'Invite someone'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityHint="Shares a new commitment with an active partner"
-            disabled={activeConnections.length === 0}
-            style={[styles.primaryButton, activeConnections.length === 0 && styles.disabled]}
-            onPress={() => router.push('/accountability/create')}
+            accessibilityHint="Join with a code from your partner"
+            style={styles.secondaryButton}
+            onPress={() => router.push('/accountability/join')}
           >
-            <Text style={styles.primaryButtonText}>Share</Text>
+            <Text style={styles.secondaryButtonText}>Enter code</Text>
           </TouchableOpacity>
         </View>
+
+        {activeConnections.length > 1 ? (
+          <View style={styles.partnerPicker} accessibilityRole="tablist">
+            <Text style={styles.partnerPickerLabel}>Partner</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.partnerPickerOptions}>
+              {activeConnections.map((connection) => {
+                const selected = connection.id === selectedConnectionId;
+                return (
+                  <TouchableOpacity
+                    key={connection.id}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected }}
+                    style={[styles.partnerChip, selected && styles.partnerChipSelected]}
+                    onPress={() => setSelectedConnectionId(connection.id)}
+                  >
+                    <Text style={[styles.partnerChipText, selected && styles.partnerChipTextSelected]}>{connection.partnerName}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
 
         {connections.length > 0 || scope ? (
           <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded: manageOpen }} style={styles.manageButton} onPress={() => setManageOpen((value) => !value)}>
@@ -193,7 +268,7 @@ export default function TogetherScreen() {
 
         {manageOpen && scope ? (
           <View style={styles.scopeCard}>
-            <Text style={styles.sectionTitle}>What my partner can see</Text>
+            <Text style={styles.sectionTitle}>What {selectedConnection?.partnerName ?? 'my partner'} can see</Text>
             <Text style={styles.scopeIntro}>These controls apply only to Together commitments.</Text>
             <View style={styles.scopeRow}>
               <Text style={styles.scopeLabel}>Commitment titles</Text>
@@ -207,13 +282,20 @@ export default function TogetherScreen() {
               <Text style={styles.scopeLabel}>Notes I mark as shared</Text>
               <Switch accessibilityLabel="Allow explicitly shared Together notes" disabled={savingScope} value={scope.sharesNotes} onValueChange={(value) => void updateScope({ sharesNotes: value })} trackColor={{ false: Colors.border, true: Colors.primary }} />
             </View>
+            <TouchableOpacity accessibilityRole="button" style={styles.activitySharingLink} onPress={() => router.push('/partner')}>
+              <View style={styles.activitySharingCopy}>
+                <Text style={styles.activitySharingTitle}>Activity sharing</Text>
+                <Text style={styles.activitySharingDescription}>Review any optional app activity counts shared with a partner.</Text>
+              </View>
+              <MaterialCommunityIcons color={Colors.primary} name="chevron-right" size={22} />
+            </TouchableOpacity>
           </View>
         ) : null}
 
-        {receivedNudges.length > 0 ? (
+        {visibleNudges.length > 0 ? (
           <View style={styles.supportCard}>
             <Text style={styles.sectionTitle}>Support from your partner</Text>
-            {receivedNudges.slice(0, 3).map((nudge) => <Text key={nudge.id} style={styles.supportText}>{nudge.kind === 'celebrate_progress' ? 'They celebrated your progress.' : nudge.kind === 'gentle_reminder' ? 'They sent a gentle reminder.' : 'They sent encouragement.'}</Text>)}
+            {visibleNudges.slice(0, 3).map((nudge) => <Text key={nudge.id} style={styles.supportText}>{nudge.kind === 'celebrate_progress' ? 'They celebrated your progress.' : nudge.kind === 'gentle_reminder' ? 'They sent a gentle reminder.' : 'They sent encouragement.'}</Text>)}
           </View>
         ) : null}
 
@@ -226,7 +308,7 @@ export default function TogetherScreen() {
               style={[styles.segmentButton, mode === item && styles.segmentActive]}
               onPress={() => setMode(item)}
             >
-              <Text style={[styles.segmentText, mode === item && styles.segmentTextActive]}>{item === 'mine' ? 'Mine' : 'Theirs'}</Text>
+              <Text style={[styles.segmentText, mode === item && styles.segmentTextActive]}>{item === 'mine' ? 'Shared by me' : 'Shared with me'}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -253,15 +335,37 @@ export default function TogetherScreen() {
 
 const styles = StyleSheet.create({
   safe: { backgroundColor: Colors.background, flex: 1 },
-  content: { padding: 16, paddingBottom: 40 },
-  leafMark: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: Colors.primaryLight, borderRadius: 16, height: 56, justifyContent: 'center', marginBottom: 14, width: 56 },
-  intro: { backgroundColor: Colors.primaryLight, borderRadius: 12, color: Colors.textSecondary, fontSize: 14, lineHeight: 21, padding: 14 },
-  actionRow: { flexDirection: 'row', gap: 10, marginVertical: 16 },
-  primaryButton: { alignItems: 'center', backgroundColor: Colors.primary, borderRadius: 12, flex: 1, paddingVertical: 13 },
+  content: { padding: Spacing.md, paddingBottom: 40 },
+  anonymousContent: { flexGrow: 1, padding: Spacing.lg, paddingTop: 44, paddingBottom: 40 },
+  anonymousLeaf: { alignItems: 'center', backgroundColor: Colors.primaryLight, borderRadius: 30, height: 60, justifyContent: 'center', marginBottom: Spacing.lg, width: 60 },
+  eyebrow: { color: Colors.accent, ...Typography.eyebrow, marginBottom: Spacing.xs },
+  anonymousTitle: { color: Colors.text, ...Typography.display, fontSize: 30, lineHeight: 36, maxWidth: 520 },
+  anonymousDescription: { color: Colors.textSecondary, fontSize: 16, lineHeight: 23, marginTop: Spacing.sm, maxWidth: 500 },
+  benefitCard: { backgroundColor: Colors.card, borderColor: Colors.border, borderRadius: Radius.lg, borderWidth: 1, gap: Spacing.md, marginTop: Spacing.xl, padding: Spacing.lg },
+  benefitRow: { alignItems: 'center', flexDirection: 'row', gap: Spacing.sm, minHeight: 32 },
+  benefitText: { color: Colors.text, flex: 1, fontSize: 15, fontWeight: '600' },
+  signInButton: { alignItems: 'center', backgroundColor: Colors.primary, borderRadius: Radius.md, justifyContent: 'center', marginTop: Spacing.lg, minHeight: 50, paddingHorizontal: Spacing.lg },
+  privateNote: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: Spacing.sm, textAlign: 'center' },
+  heroRow: { alignItems: 'center', flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
+  heroCopy: { flex: 1, minWidth: 0 },
+  leafMark: { alignItems: 'center', backgroundColor: Colors.primaryLight, borderRadius: 24, height: 48, justifyContent: 'center', width: 48 },
+  heroTitle: { color: Colors.text, ...Typography.sectionTitle, fontSize: 23, lineHeight: 28 },
+  heroDescription: { color: Colors.textSecondary, fontSize: 13, marginTop: 2 },
+  privacyNote: { alignItems: 'center', backgroundColor: Colors.primaryLight, borderRadius: Radius.md, flexDirection: 'row', gap: Spacing.xs, minHeight: 44, paddingHorizontal: Spacing.sm },
+  privacyNoteText: { color: Colors.textSecondary, flex: 1, fontSize: 12, lineHeight: 17 },
+  actionRow: { flexDirection: 'row', gap: 10, marginVertical: 14 },
+  actionRowStacked: { flexDirection: 'column' },
+  primaryButton: { alignItems: 'center', backgroundColor: Colors.primary, borderRadius: Radius.md, flex: 1.5, justifyContent: 'center', minHeight: 48, paddingHorizontal: Spacing.sm },
   primaryButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  secondaryButton: { alignItems: 'center', backgroundColor: Colors.card, borderColor: Colors.border, borderRadius: 12, borderWidth: 1, flex: 1, paddingVertical: 13 },
+  secondaryButton: { alignItems: 'center', backgroundColor: Colors.card, borderColor: Colors.border, borderRadius: Radius.md, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 48, paddingHorizontal: Spacing.sm },
   secondaryButtonText: { color: Colors.primary, fontSize: 15, fontWeight: '700' },
-  disabled: { opacity: 0.45 },
+  partnerPicker: { marginBottom: Spacing.md },
+  partnerPickerLabel: { color: Colors.textSecondary, fontSize: 12, fontWeight: '700', marginBottom: Spacing.xs },
+  partnerPickerOptions: { gap: Spacing.xs, paddingRight: Spacing.md },
+  partnerChip: { alignItems: 'center', backgroundColor: Colors.card, borderColor: Colors.borderStrong, borderRadius: Radius.pill, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: Spacing.md },
+  partnerChipSelected: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  partnerChipText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
+  partnerChipTextSelected: { color: Colors.card },
   connectionSection: { marginBottom: 18 },
   sectionTitle: { color: Colors.text, fontSize: 17, fontWeight: '700', marginBottom: 10 },
   connectionRow: { alignItems: 'center', backgroundColor: Colors.card, borderRadius: 12, flexDirection: 'row', marginBottom: 8, padding: 13 },
@@ -281,6 +385,10 @@ const styles = StyleSheet.create({
   scopeIntro: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17, marginBottom: 4, marginTop: -4 },
   scopeRow: { alignItems: 'center', borderTopColor: Colors.border, borderTopWidth: 1, flexDirection: 'row', minHeight: 48 },
   scopeLabel: { color: Colors.text, flex: 1, fontSize: 14, paddingRight: 12 },
+  activitySharingLink: { alignItems: 'center', borderTopColor: Colors.border, borderTopWidth: 1, flexDirection: 'row', gap: Spacing.sm, minHeight: 60, paddingTop: Spacing.xs },
+  activitySharingCopy: { flex: 1, minWidth: 0 },
+  activitySharingTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' },
+  activitySharingDescription: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 2 },
   manageButton: { alignItems: 'center', backgroundColor: Colors.card, borderColor: Colors.border, borderRadius: 12, borderWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16, minHeight: 48, paddingHorizontal: 14 },
   manageButtonText: { color: Colors.text, fontSize: 14, fontWeight: '700' },
   supportCard: { backgroundColor: Colors.successLight, borderRadius: 12, marginBottom: 16, padding: 14 },

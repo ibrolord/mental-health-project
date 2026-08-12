@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   body: { borderTopWidth: 1, borderTopColor: Colors.border, padding: 20, paddingTop: 16 },
   bodyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   helper: { fontSize: 13, color: Colors.textSecondary },
-  refresh: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 6 },
+  refresh: { minWidth: 44, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8 },
   refreshText: { fontSize: 13, fontWeight: '600', color: Colors.primary },
   messageRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
   error: { marginTop: 14, color: Colors.danger, fontSize: 14 },

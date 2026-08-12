@@ -1,5 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
+import { useState, useEffect, useRef, useCallback, type ComponentProps } from 'react';
+import {
+  AccessibilityInfo,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
@@ -15,10 +25,15 @@ import {
   nextGoalCompletionStatus,
 } from '@/lib/goals/deduplication';
 import { refreshReminders } from '@/lib/notifications';
+import { GoalDetailModal, type GoalDetailRecord } from '@/components/GoalDetailModal';
+import { GOAL_ATTACHMENT_BUCKET } from '@/lib/goals/details';
+import { enqueueGoalAttachmentCleanup } from '@/lib/goals/attachment-cleanup';
+import { AppCard, PageHeader } from '@/components/AppUI';
 
-interface Goal {
-  id: string;
-  content: string;
+type FeatherName = ComponentProps<typeof Feather>['name'];
+
+interface Goal extends GoalDetailRecord {
+  date: string;
   status: 'pending' | 'completed' | 'cancelled';
   framework: FrameworkType;
   priority: string | null;
@@ -26,25 +41,25 @@ interface Goal {
   completed_at: string | null;
 }
 
-const FRAMEWORKS: { id: FrameworkType; label: string; icon: string }[] = [
-  { id: 'simple', label: 'Simple', icon: '📝' },
-  { id: 'eisenhower', label: 'Eisenhower', icon: '📊' },
-  { id: 'ivy_lee', label: 'Ivy Lee', icon: '📋' },
-  { id: '1-3-5', label: '1-3-5', icon: '🎯' },
-  { id: 'abcde', label: 'ABCDE', icon: '🔤' },
+const FRAMEWORKS: { id: FrameworkType; label: string; icon: FeatherName }[] = [
+  { id: 'simple', label: 'Simple', icon: 'list' },
+  { id: 'eisenhower', label: 'Eisenhower', icon: 'grid' },
+  { id: 'ivy_lee', label: 'Ivy Lee', icon: 'align-left' },
+  { id: '1-3-5', label: '1-3-5', icon: 'layers' },
+  { id: 'abcde', label: 'ABCDE', icon: 'filter' },
 ];
 
 const EISENHOWER_QUADRANTS = [
-  { id: 'urgent-important', label: 'Do First', color: '#fef2f2', icon: '🔥' },
-  { id: 'not-urgent-important', label: 'Schedule', color: '#eff6ff', icon: '📅' },
-  { id: 'urgent-not-important', label: 'Delegate', color: '#fefce8', icon: '👋' },
-  { id: 'not-urgent-not-important', label: 'Eliminate', color: '#f8fafc', icon: '🗑️' },
+  { id: 'urgent-important', label: 'Do first', color: '#fff0ed', icon: 'zap' as FeatherName },
+  { id: 'not-urgent-important', label: 'Schedule', color: '#edf4ea', icon: 'calendar' as FeatherName },
+  { id: 'urgent-not-important', label: 'Delegate', color: '#f7f3df', icon: 'users' as FeatherName },
+  { id: 'not-urgent-not-important', label: 'Let go', color: '#f8f6ee', icon: 'trash-2' as FeatherName },
 ];
 
 const PRIORITIES_135 = [
-  { id: 'big', label: '1 Big Thing', limit: 1, icon: '🎯' },
-  { id: 'medium', label: '3 Medium Tasks', limit: 3, icon: '📋' },
-  { id: 'small', label: '5 Small Tasks', limit: 5, icon: '✅' },
+  { id: 'big', label: '1 big thing', limit: 1, icon: 'target' as FeatherName },
+  { id: 'medium', label: '3 medium tasks', limit: 3, icon: 'layers' as FeatherName },
+  { id: 'small', label: '5 small tasks', limit: 5, icon: 'list' as FeatherName },
 ];
 
 function firstParam(value: string | string[] | undefined): string {
@@ -59,7 +74,9 @@ export default function GoalsScreen() {
     bookTitle?: string | string[];
   }>();
   const { context, query } = useDataContext();
+  const ownerKey = query ? `${query.column}:${query.value}` : 'no-owner';
   const [framework, setFramework] = useState<FrameworkType>('simple');
+  const [frameworkPickerOpen, setFrameworkPickerOpen] = useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -70,6 +87,7 @@ export default function GoalsScreen() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [librarySourceTitle, setLibrarySourceTitle] = useState('');
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const [goalStatusChange, setGoalStatusChange] = useState<{
     id: string;
     from: 'pending' | 'completed';
@@ -79,6 +97,7 @@ export default function GoalsScreen() {
   const appliedLibraryActionRef = useRef('');
   const goalIdsByKeyRef = useRef(new Map<string, string[]>());
   const runGoalInsertRef = useRef(createSingleFlight());
+  const ownerGenerationRef = useRef(0);
 
   const updateInput = useCallback((value: string) => {
     inputRef.current = value;
@@ -102,7 +121,9 @@ export default function GoalsScreen() {
 
   const loadGoals = useCallback(async () => {
     setGoalStatusChange(null);
+    const generation = ownerGenerationRef.current;
     if (!query) {
+      setSelectedGoal(null);
       setGoals([]);
       goalIdsByKeyRef.current = new Map();
       setLoading(false);
@@ -114,8 +135,10 @@ export default function GoalsScreen() {
       .from('goals')
       .select('*')
       .eq(query.column, query.value)
-      .eq('date', format(new Date(), 'yyyy-MM-dd'))
+      .or(`status.eq.pending,and(status.eq.completed,date.eq.${format(new Date(), 'yyyy-MM-dd')})`)
       .order('created_at', { ascending: true });
+
+    if (generation !== ownerGenerationRef.current) return;
 
     if (error) {
       setGoalError('Could not load your goals. Please try again.');
@@ -128,8 +151,29 @@ export default function GoalsScreen() {
   }, [query]);
 
   useEffect(() => {
+    ownerGenerationRef.current += 1;
+    setSelectedGoal(null);
+    setGoals([]);
+    setGoalError(null);
+    setGoalStatusChange(null);
+    goalIdsByKeyRef.current = new Map();
+    setLoading(ownerKey !== 'no-owner');
+  }, [ownerKey]);
+
+  useEffect(() => {
     void loadGoals();
   }, [loadGoals]);
+
+  useEffect(() => {
+    if (goalError) AccessibilityInfo.announceForAccessibility(goalError);
+  }, [goalError]);
+
+  useEffect(() => {
+    if (!goalStatusChange) return;
+    AccessibilityInfo.announceForAccessibility(
+      `${goalCompletionFeedback(goalStatusChange.to)} Undo is available.`
+    );
+  }, [goalStatusChange]);
 
   useEffect(() => {
     if (firstParam(params.source) !== 'library') {
@@ -160,6 +204,7 @@ export default function GoalsScreen() {
     const date = format(new Date(), 'yyyy-MM-dd');
     const identity = {
       id: 'pending',
+      date,
       content: normalizedContent,
       framework,
       priority: priority || null,
@@ -274,25 +319,58 @@ export default function GoalsScreen() {
   };
 
   const deleteGoal = async (id: string) => {
-    if (!query) return;
+    if (!query) return false;
     const goal = goals.find((item) => item.id === id);
-    if (!goal) return;
+    if (!goal) return false;
     const identityKey = goalIdentityKey(goal);
     const ids = goalIdsByKeyRef.current.get(identityKey) ?? [id];
+    if (context.user_id) {
+      const { data: attachmentRows, error: attachmentError } = await supabase
+        .from('goal_attachments')
+        .select('storage_path')
+        .eq('user_id', context.user_id)
+        .in('goal_id', ids);
+      if (attachmentError) {
+        setGoalError('Could not verify this goal’s files before deleting it.');
+        return false;
+      }
+      const paths = (attachmentRows ?? []).map((row) => row.storage_path);
+      const { error } = await supabase.from('goals').delete().in('id', ids).eq(query.column, query.value);
+      if (error) {
+        setGoalError('Could not delete that goal. Please try again.');
+        return false;
+      }
+      goalIdsByKeyRef.current.delete(identityKey);
+      setGoals((current) => current.filter((goal) => !ids.includes(goal.id)));
+      setSelectedGoal((current) => current && ids.includes(current.id) ? null : current);
+      refreshReminderContent();
+      if (paths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from(GOAL_ATTACHMENT_BUCKET)
+          .remove(paths);
+        if (storageError) {
+          await enqueueGoalAttachmentCleanup(context.user_id, paths);
+          setGoalError('The goal was deleted, but attached file cleanup is still pending.');
+        }
+      }
+      return true;
+    }
     const { error } = await supabase.from('goals').delete().in('id', ids).eq(query.column, query.value);
     if (error) {
       setGoalError('Could not delete that goal. Please try again.');
-      return;
+      return false;
     }
     goalIdsByKeyRef.current.delete(identityKey);
-    setGoals((current) => current.filter((g) => g.id !== id));
+    setGoals((current) => current.filter((goal) => !ids.includes(goal.id)));
+    setSelectedGoal((current) => current && ids.includes(current.id) ? null : current);
     refreshReminderContent();
+    return true;
   };
 
   const completed = goals.filter((g) => g.status === 'completed').length;
   const frameworkGoals = goals.filter((g) => g.framework === framework);
 
-  if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
+  if (loading) return <View style={s.centered}><ActivityIndicator accessibilityLabel="Loading goals" size="large" color={Colors.primary} /></View>;
 
   const renderGoalItem = (g: Goal, num?: number) => (
     <View key={g.id} style={[s.goalRow, g.status === 'completed' && { opacity: 0.5 }]}>
@@ -301,35 +379,19 @@ export default function GoalsScreen() {
         accessibilityRole="checkbox"
         accessibilityLabel={`${g.status === 'completed' ? 'Mark pending' : 'Mark complete'}: ${g.content}`}
         accessibilityState={{ checked: g.status === 'completed', disabled: Boolean(statusUpdatingId) || g.status === 'cancelled' }}
+        hitSlop={10}
         style={[s.checkbox, g.status === 'completed' && s.checkboxDone]}
         onPress={() => void toggleGoal(g.id)}
         disabled={Boolean(statusUpdatingId) || g.status === 'cancelled'}
       >
-        {g.status === 'completed' && <Text style={s.checkmark}>✓</Text>}
+        {g.status === 'completed' ? <Feather name="check" size={14} color="#fffef8" /> : null}
       </TouchableOpacity>
-      <Text style={[s.goalText, g.status === 'completed' && s.goalTextDone]}>{g.content}</Text>
-      {g.status === 'pending' ? (
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel={`Focus on ${g.content}`}
-          style={s.focusBtn}
-          onPress={() =>
-            router.push({
-              pathname: '/focus',
-              params: { source: 'goals', goalId: g.id },
-            })
-          }
-        >
-          <Text style={s.focusBtnText}>Focus</Text>
-        </TouchableOpacity>
-      ) : null}
-      <TouchableOpacity
-        accessibilityRole="button"
-        accessibilityLabel={`Delete ${g.content}`}
-        onPress={() => deleteGoal(g.id)}
-      >
-        <Text style={s.deleteBtn}>×</Text>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Open details for ${g.content}`} onPress={() => setSelectedGoal(g)} style={s.goalTextButton}>
+        <Text style={[s.goalText, g.status === 'completed' && s.goalTextDone]}>{g.content}</Text>
+        {g.due_at ? <Text style={s.goalDue}>Due {format(new Date(g.due_at), 'MMM d · h:mm a')}</Text> : null}
+        <Text style={s.goalHint}>Milestones, notes, reminders, and files</Text>
       </TouchableOpacity>
+      <Feather accessible={false} name="chevron-right" size={18} color={Colors.textSecondary} />
     </View>
   );
 
@@ -360,7 +422,14 @@ export default function GoalsScreen() {
   );
 
   return (
+    <View style={s.container}>
     <ScrollView style={s.container} contentContainerStyle={s.content}>
+      <PageHeader
+        eyebrow="Plan and progress"
+        title="Goals"
+        description="Make the next step small enough to start."
+        icon="check-circle"
+      />
       {librarySourceTitle ? (
         <View style={s.libraryDraft}>
           <Text style={s.libraryDraftLabel}>FROM {librarySourceTitle.toUpperCase()}</Text>
@@ -369,38 +438,65 @@ export default function GoalsScreen() {
         </View>
       ) : null}
 
-      {/* Framework Picker */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-        {FRAMEWORKS.map((fw) => (
+      {goals.length >= 5 ? (
+        <View style={s.viewPicker}>
           <TouchableOpacity
-            key={fw.id}
-            style={[s.fwBtn, framework === fw.id && s.fwBtnActive]}
-            onPress={() => setFramework(fw.id)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: frameworkPickerOpen }}
+            accessibilityLabel="Change goal view"
+            onPress={() => setFrameworkPickerOpen((current) => !current)}
+            style={s.viewPickerHeader}
           >
-            <Text style={s.fwBtnText}>{fw.icon} {fw.label}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.pickerLabel}>VIEW</Text>
+              <Text style={s.viewPickerValue}>{FRAMEWORKS.find((item) => item.id === framework)?.label}</Text>
+            </View>
+            <Feather name={frameworkPickerOpen ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.primary} />
           </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Progress */}
-      {goals.length > 0 && (
-        <View style={s.progressRow}>
-          <Text style={s.progressLabel}>{"Today's Progress"}</Text>
-          <Text style={s.progressLabel}>{completed}/{goals.length}</Text>
+          {frameworkPickerOpen ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.frameworkChoices}>
+              {FRAMEWORKS.map((fw) => (
+                <TouchableOpacity
+                  key={fw.id}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: framework === fw.id }}
+                  accessibilityLabel={`${fw.label} goal view`}
+                  style={[s.fwBtn, framework === fw.id && s.fwBtnActive]}
+                  onPress={() => { setFramework(fw.id); setFrameworkPickerOpen(false); }}
+                >
+                  <Feather name={fw.icon} size={15} color={framework === fw.id ? '#fffef8' : Colors.primary} />
+                  <Text style={[s.fwBtnText, framework === fw.id && s.fwBtnTextActive]}>{fw.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : null}
         </View>
-      )}
-      {goals.length > 0 && (
-        <View style={s.progressBar}>
-          <View style={[s.progressFill, { width: `${goals.length > 0 ? (completed / goals.length) * 100 : 0}%` }]} />
-        </View>
+      ) : null}
+
+      {goals.length > 0 && completed > 0 && (
+        <AppCard quiet style={s.progressCard}>
+          <View style={s.progressRow}>
+            <Text style={s.progressTitle}>Moved forward today</Text>
+            <Text style={s.progressCount}>{completed}</Text>
+          </View>
+          <Text style={s.progressNote}>Small completed steps still count.</Text>
+        </AppCard>
       )}
 
-      {/* Goals by Framework */}
-      <View style={s.card}>
-        <Text style={s.cardTitle}>{"📅 Today's Goals"} ({format(new Date(), 'MMM dd')})</Text>
-        {goalError ? <Text style={s.errorText}>{goalError}</Text> : null}
+      <AppCard style={s.card}>
+        <View style={s.cardHeading}>
+          <View>
+            <Text style={s.cardTitle}>Active goals</Text>
+            <Text style={s.cardDate}>{format(new Date(), 'EEEE, MMM d')}</Text>
+            <Text style={s.cardHint}>Tap a goal for milestones, reminders and files.</Text>
+          </View>
+          <View style={s.frameworkBadge}>
+            <Text style={s.frameworkBadgeText}>{FRAMEWORKS.find((item) => item.id === framework)?.label}</Text>
+          </View>
+        </View>
+        {goalError ? <Text accessibilityRole="alert" style={s.errorText}>{goalError}</Text> : null}
         {goalStatusChange ? (
-          <View accessibilityLiveRegion="polite" style={s.undoBanner}>
+          <View style={s.undoBanner}>
             <Text style={s.undoText}>{goalCompletionFeedback(goalStatusChange.to)}</Text>
             <TouchableOpacity
               accessibilityRole="button"
@@ -425,7 +521,10 @@ export default function GoalsScreen() {
           const list = goals.filter((g) => g.eisenhower_quadrant === q.id);
           return (
             <View key={q.id} style={[s.section, { backgroundColor: q.color }]}>
-              <Text style={s.sectionTitle}>{q.icon} {q.label}</Text>
+              <View style={s.sectionHeading}>
+                <Feather name={q.icon} size={16} color={Colors.primary} />
+                <Text style={s.sectionTitle}>{q.label}</Text>
+              </View>
               {activeSection === q.id ? (
                 <View style={s.inputRow}>
                   <TextInput ref={inputControlRef} style={s.input} placeholder="Add task..." value={input} onChangeText={updateInput} onEndEditing={(event) => updateInput(event.nativeEvent.text)} onSubmitEditing={(event) => { updateInput(event.nativeEvent.text); void addGoal(event.nativeEvent.text, undefined, q.id); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
@@ -457,7 +556,10 @@ export default function GoalsScreen() {
           return (
             <View key={p.id} style={s.section}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={s.sectionTitle}>{p.icon} {p.label}</Text>
+                <View style={s.sectionHeading}>
+                  <Feather name={p.icon} size={16} color={Colors.primary} />
+                  <Text style={s.sectionTitle}>{p.label}</Text>
+                </View>
                 <Text style={s.sectionCount}>{list.length}/{p.limit}</Text>
               </View>
               {!atLimit && activeSection === p.id ? (
@@ -480,7 +582,7 @@ export default function GoalsScreen() {
         })}
 
         {framework === 'abcde' && ['A', 'B', 'C', 'D', 'E'].map((p) => {
-          const labels: Record<string, string> = { A: '🚨 A — Must Do', B: '⚠️ B — Should Do', C: '💡 C — Nice to Do', D: '🤝 D — Delegate', E: '🗑️ E — Eliminate' };
+          const labels: Record<string, string> = { A: 'A — Must do', B: 'B — Should do', C: 'C — Nice to do', D: 'D — Delegate', E: 'E — Let go' };
           const list = frameworkGoals.filter((g) => g.priority === p);
           return (
             <View key={p} style={s.section}>
@@ -501,30 +603,67 @@ export default function GoalsScreen() {
             </View>
           );
         })}
-      </View>
+      </AppCard>
     </ScrollView>
+    <GoalDetailModal
+      key={`${ownerKey}:${selectedGoal?.id ?? 'closed-goal-details'}`}
+      visible={Boolean(selectedGoal)}
+      goal={selectedGoal}
+      userId={context.user_id ?? null}
+      onClose={() => setSelectedGoal(null)}
+      onDelete={() => deleteGoal(selectedGoal?.id ?? '')}
+      onStartFocus={selectedGoal?.status === 'pending' ? () => {
+        const goalId = selectedGoal.id;
+        setSelectedGoal(null);
+        router.push({
+          pathname: '/focus',
+          params: { source: 'goals', goalId },
+        });
+      } : undefined}
+      onUpdated={(updated) => {
+        setGoals((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+        setSelectedGoal((current) => current?.id === updated.id ? { ...current, ...updated } : current);
+        refreshReminderContent();
+      }}
+    />
+    </View>
   );
 }
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 16, paddingBottom: 40 },
+  content: { padding: 16, paddingBottom: 44 },
   libraryDraft: { backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', borderRadius: 14, padding: 14, marginBottom: 14 },
   libraryDraftLabel: { color: '#047857', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
   libraryDraftText: { color: '#064e3b', fontSize: 14, lineHeight: 20, fontWeight: '600', marginTop: 5 },
   libraryDraftHint: { color: '#065f46', fontSize: 11, lineHeight: 17, marginTop: 5 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 16 },
-  fwBtn: { borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16, marginRight: 8, backgroundColor: Colors.card },
+  card: { padding: 18 },
+  cardHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 },
+  cardTitle: { fontSize: 20, lineHeight: 25, fontWeight: '700', color: Colors.text },
+  cardDate: { color: Colors.textSecondary, fontSize: 12, marginTop: 3 },
+  cardHint: { color: Colors.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 5, maxWidth: 230 },
+  frameworkBadge: { borderRadius: 999, backgroundColor: Colors.primaryLight, paddingHorizontal: 10, paddingVertical: 6 },
+  frameworkBadgeText: { color: Colors.primary, fontSize: 11, fontWeight: '700' },
+  pickerLabel: { color: Colors.textSecondary, fontSize: 10, lineHeight: 14, fontWeight: '800', letterSpacing: 1.2, marginBottom: 8 },
+  viewPicker: { marginBottom: 16 },
+  viewPickerHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, paddingVertical: 8 },
+  viewPickerValue: { color: Colors.text, fontSize: 15, fontWeight: '700' },
+  frameworkChoices: { paddingTop: 10 },
+  fwBtn: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: Colors.border, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 14, marginRight: 8, backgroundColor: Colors.card },
   fwBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  fwBtnText: { fontSize: 13, fontWeight: '500', color: Colors.text },
-  progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  progressLabel: { fontSize: 13, fontWeight: '500', color: Colors.textSecondary },
-  progressBar: { height: 10, backgroundColor: Colors.border, borderRadius: 5, marginBottom: 16, overflow: 'hidden' },
+  fwBtnText: { fontSize: 13, fontWeight: '600', color: Colors.text },
+  fwBtnTextActive: { color: '#fffef8' },
+  progressCard: { marginBottom: 14 },
+  progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  progressTitle: { fontSize: 15, lineHeight: 20, fontWeight: '700', color: Colors.text },
+  progressCount: { fontSize: 13, fontWeight: '700', color: Colors.success },
+  progressBar: { height: 8, backgroundColor: Colors.border, borderRadius: 4, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: Colors.success, borderRadius: 5 },
-  section: { backgroundColor: Colors.background, borderRadius: 12, padding: 14, marginBottom: 12 },
-  sectionTitle: { fontSize: 15, fontWeight: '600', color: Colors.text, marginBottom: 8 },
+  progressNote: { color: Colors.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 8 },
+  section: { backgroundColor: Colors.surfaceMuted, borderRadius: 14, padding: 14, marginBottom: 12 },
+  sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.text },
   sectionCount: { fontSize: 13, color: Colors.textSecondary },
   inputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   input: { flex: 1, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 10, fontSize: 14, color: Colors.text },
@@ -533,16 +672,16 @@ const s = StyleSheet.create({
   addSmallBtnText: { color: '#fff', fontSize: 20, fontWeight: '600' },
   addLink: { color: Colors.primary, fontSize: 14, fontWeight: '500', marginBottom: 8 },
   limitMsg: { color: Colors.success, fontSize: 13, marginBottom: 8 },
-  goalRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  goalRow: { flexDirection: 'row', alignItems: 'center', gap: 9, minHeight: 72, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   goalNum: { fontSize: 16, fontWeight: '700', color: Colors.textSecondary, width: 20 },
   checkbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
   checkboxDone: { backgroundColor: Colors.success, borderColor: Colors.success },
-  checkmark: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  goalText: { flex: 1, fontSize: 15, color: Colors.text },
+  goalTextButton: { flex: 1, minWidth: 0, paddingVertical: 4 },
+  goalText: { fontSize: 15, lineHeight: 20, color: Colors.text, fontWeight: '600' },
+  goalDue: { color: Colors.textSecondary, fontSize: 11, marginTop: 3 },
+  goalHint: { color: Colors.textSecondary, fontSize: 10, marginTop: 4 },
   goalTextDone: { textDecorationLine: 'line-through', color: Colors.textSecondary },
-  focusBtn: { minHeight: 36, justifyContent: 'center', borderRadius: 9, backgroundColor: Colors.primaryLight, paddingHorizontal: 10 },
-  focusBtnText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
-  deleteBtn: { fontSize: 22, color: Colors.danger, paddingHorizontal: 8 },
+  focusBtn: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: Colors.primaryLight },
   empty: { textAlign: 'center', color: Colors.textSecondary, paddingVertical: 16 },
   errorText: { color: Colors.danger, fontSize: 13, marginBottom: 10 },
   undoBanner: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 11, backgroundColor: Colors.successLight, paddingHorizontal: 12, marginBottom: 12 },

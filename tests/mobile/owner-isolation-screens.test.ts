@@ -24,7 +24,6 @@ describe('iOS owner-isolated wellbeing screens', () => {
     expect(tracker).toContain('setNewEmotions([])');
     expect(tracker).toContain('setCustomEmotions([])');
     expect(tracker).toContain('ownerKeyRef.current !== expectedOwnerKey');
-    expect(tracker).toContain('Choose the closest fit. It saves right away.');
   });
 
   it('does not expose a previous owner library note while a deep link loads', () => {

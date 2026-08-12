@@ -369,8 +369,7 @@ export default function MeditateScreen() {
               <Text style={styles.noteTitle}>Use what feels steady</Text>
             </View>
             <Text style={appUiStyles.muted}>
-              Stop or switch exercises if a practice increases distress. Meditation
-              is a skill option, not a treatment requirement.
+              Stop or switch if an exercise feels worse. Meditation is optional.
             </Text>
           </AppCard>
         </>

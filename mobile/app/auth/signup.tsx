@@ -300,7 +300,7 @@ export default function SignupScreen() {
           <Text style={s.link}>Already have an account? Sign in</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.linkButton} onPress={returnToApp}>
-          <Text style={s.link}>Continue anonymously</Text>
+          <Text style={s.link}>Continue without an account</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   Alert,
@@ -335,10 +335,7 @@ function SegmentControl({
               size={15}
               color={active ? '#fffef8' : Colors.primary}
             />
-            <Text
-              numberOfLines={1}
-              style={[styles.segmentText, active && styles.segmentTextSelected]}
-            >
+            <Text style={[styles.segmentText, active && styles.segmentTextSelected]}>
               {segment.label}
             </Text>
           </Pressable>
@@ -411,6 +408,7 @@ function PlanItemList<T extends { id: string; label: string; details: string; po
 
 export default function PlansScreen() {
   const router = useRouter();
+  const { view } = useLocalSearchParams<{ view?: string | string[] }>();
   const { context, authLoading } = useDataContext();
   const [segment, setSegment] = useState<Segment>('activity');
   const [activities, setActivities] = useState<ActivityPlan[]>([]);
@@ -457,6 +455,11 @@ export default function PlansScreen() {
   const saveRef = useRef(false);
   const pendingMutationErrorRef = useRef('');
   ownerRef.current = context.user_id;
+
+  useEffect(() => {
+    const requestedView = Array.isArray(view) ? view[0] : view;
+    if (requestedView === 'safety') setSegment('safety');
+  }, [view]);
 
   useEffect(() => {
     const previousOwner = previousOwnerRef.current;
@@ -1511,7 +1514,7 @@ export default function PlansScreen() {
 
           <SectionHeader
             title={safety?.plan.title ?? 'My safety plan'}
-            description="Build this with a clinician. Keep signs, steps, and contacts here."
+            description="If you can, make this with a qualified professional or someone you trust. Keep signs, steps, and contacts here."
             action={
               <AppButton
                 label={safetyEditor ? 'Close' : safetyAtLimit ? 'Full' : 'Add'}
@@ -1699,7 +1702,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   segmentSelected: { backgroundColor: Colors.primary },
-  segmentText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
+  segmentText: { flexShrink: 1, color: Colors.primary, fontSize: 12, lineHeight: 16, fontWeight: '700', textAlign: 'center' },
   segmentTextSelected: { color: '#fffef8' },
   pressed: { opacity: 0.76 },
   message: { marginBottom: 12 },

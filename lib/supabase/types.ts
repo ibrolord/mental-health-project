@@ -242,6 +242,9 @@ export interface Database {
           dedupe_key: string | null;
           tags: string[];
           reflection: string | null;
+          notes: string | null;
+          due_at: string | null;
+          reminder_at: string | null;
           date: string;
           completed_at: string | null;
           created_at: string;
@@ -259,6 +262,9 @@ export interface Database {
           dedupe_key?: string | null;
           tags?: string[];
           reflection?: string | null;
+          notes?: string | null;
+          due_at?: string | null;
+          reminder_at?: string | null;
           date?: string;
           completed_at?: string | null;
           created_at?: string;
@@ -276,10 +282,80 @@ export interface Database {
           dedupe_key?: string | null;
           tags?: string[];
           reflection?: string | null;
+          notes?: string | null;
+          due_at?: string | null;
+          reminder_at?: string | null;
           date?: string;
           completed_at?: string | null;
           created_at?: string;
           updated_at?: string;
+        };
+      };
+      goal_milestones: {
+        Row: {
+          id: string;
+          goal_id: string;
+          user_id: string;
+          content: string;
+          position: number;
+          due_at: string | null;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          goal_id: string;
+          user_id: string;
+          content: string;
+          position?: number;
+          due_at?: string | null;
+          completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          goal_id?: string;
+          user_id?: string;
+          content?: string;
+          position?: number;
+          due_at?: string | null;
+          completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      goal_attachments: {
+        Row: {
+          id: string;
+          goal_id: string;
+          user_id: string;
+          storage_path: string;
+          file_name: string;
+          mime_type: string;
+          size_bytes: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          goal_id: string;
+          user_id: string;
+          storage_path: string;
+          file_name: string;
+          mime_type: string;
+          size_bytes: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          goal_id?: string;
+          user_id?: string;
+          storage_path?: string;
+          file_name?: string;
+          mime_type?: string;
+          size_bytes?: number;
+          created_at?: string;
         };
       };
       habits: {

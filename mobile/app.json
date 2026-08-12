@@ -19,7 +19,7 @@
       "usesAppleSignIn": true,
       "bundleIdentifier": "com.mhtoolkit.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "MHtoolkit uses the microphone only during a live voice session so the AI can hear and respond to you.",
+        "NSMicrophoneUsageDescription": "MHtoolkit uses the microphone only for live voice or tap-to-talk sessions you start. Audio is sent to OpenAI or Gemini to transcribe and respond.",
         "NSCameraUsageDescription": "MHtoolkit's live voice sessions are audio-only. The bundled WebRTC library references camera APIs, but MHtoolkit never requests, captures, or transmits camera data.",
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
@@ -57,10 +57,10 @@
         "android.permission.POST_NOTIFICATIONS"
       ],
       "blockedPermissions": [
-      "android.permission.READ_EXTERNAL_STORAGE",
-      "android.permission.WRITE_EXTERNAL_STORAGE",
-      "android.permission.SYSTEM_ALERT_WINDOW",
-      "android.permission.CAMERA"
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.CAMERA"
       ]
     },
     "plugins": [
@@ -85,19 +85,20 @@
       [
         "expo-av",
         {
-          "microphonePermission": "MHtoolkit uses the microphone only during a live voice session so the AI can hear and respond to you."
+          "microphonePermission": "MHtoolkit uses the microphone only for live voice or tap-to-talk sessions you start. Audio is sent to OpenAI or Gemini to transcribe and respond."
         }
       ],
       "./plugins/audio-only-webrtc",
       [
         "@config-plugins/react-native-webrtc",
         {
-          "microphonePermission": "MHtoolkit uses the microphone only during a live voice session so the AI can hear and respond to you."
+          "microphonePermission": "MHtoolkit uses the microphone only for live voice or tap-to-talk sessions you start. Audio is sent to OpenAI or Gemini to transcribe and respond."
         }
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

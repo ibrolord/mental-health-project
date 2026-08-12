@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ASSESSMENTS,
@@ -10,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { Colors } from '@/lib/constants';
 import { goBackOrReplace } from '@/lib/navigation';
+import { LocalSafetyActions } from '@/components/LocalSafetyActions';
 
 type AssessmentResult = ReturnType<Assessment['interpret']> & {
   score: number;
@@ -28,14 +30,7 @@ function SafetySupport() {
         If you may act on these thoughts or cannot stay safe, call your local emergency number now
         or go to the nearest emergency department. In the U.S. or Canada, call or text 988.
       </Text>
-      <View style={s.crisisActions}>
-        <TouchableOpacity style={s.crisisPrimary} onPress={() => Linking.openURL('tel:988')}>
-          <Text style={s.crisisPrimaryText}>Call 988</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.crisisSecondary} onPress={() => Linking.openURL('sms:988')}>
-          <Text style={s.crisisSecondaryText}>Text 988</Text>
-        </TouchableOpacity>
-      </View>
+      <LocalSafetyActions />
     </View>
   );
 }
@@ -53,6 +48,7 @@ export default function AssessmentTakeScreen() {
   const [result, setResult] = useState<AssessmentResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [introInfoOpen, setIntroInfoOpen] = useState(false);
 
   if (!assessment) {
     return (
@@ -126,13 +122,6 @@ export default function AssessmentTakeScreen() {
   if (!started) {
     return (
       <ScrollView style={s.container} contentContainerStyle={s.content}>
-        <TouchableOpacity
-          onPress={() => goBackOrReplace(router, '/(tabs)/assessments')}
-          style={s.backLink}
-        >
-          <Text style={s.backLinkText}>Back to assessments</Text>
-        </TouchableOpacity>
-
         <View style={s.card}>
           <Text style={s.eyebrow}>{assessment.measureType}</Text>
           <Text style={s.introTitle}>{assessment.name}</Text>
@@ -156,24 +145,42 @@ export default function AssessmentTakeScreen() {
           <Text style={s.sectionTitle}>Use the same frame for every answer</Text>
           <Text style={s.instructions}>{assessment.instructions}</Text>
 
-          <View style={s.disclaimerBox}>
-            <Text style={s.disclaimerTitle}>Before you begin</Text>
-            <Text style={s.disclaimerText}>
-              This tool cannot diagnose a condition, identify the cause of symptoms, or recommend
-              treatment. A qualified professional considers your history, functioning, physical
-              health, medications, and context. You choose whether to save the result. Seek a
-              doctor&apos;s advice in addition to using this app and before making medical decisions.
-            </Text>
-          </View>
-
-          <Text style={s.scoreMeaning}>{assessment.scoreMeaning}</Text>
-          <TouchableOpacity onPress={() => Linking.openURL(assessment.citationUrl)}>
-            <Text style={s.sourceLink}>Read the published source</Text>
-          </TouchableOpacity>
+          <Text style={s.introBoundary}>
+            This questionnaire can point to a pattern. It cannot diagnose a condition.
+          </Text>
 
           <TouchableOpacity style={s.btn} onPress={() => setStarted(true)}>
-            <Text style={s.btnText}>Begin</Text>
+            <Text style={s.btnText}>Begin assessment</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityState={{ expanded: introInfoOpen }}
+            onPress={() => setIntroInfoOpen((current) => !current)}
+            style={s.introDisclosure}
+          >
+            <Text style={s.introDisclosureText}>About this questionnaire</Text>
+            <Feather
+              name={introInfoOpen ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={Colors.primary}
+            />
+          </TouchableOpacity>
+
+          {introInfoOpen ? (
+            <View style={s.disclaimerBox}>
+              <Text style={s.disclaimerTitle}>Before you begin</Text>
+              <Text style={s.disclaimerText}>
+                A qualified professional considers your history, daily functioning, physical
+                health, medications and context. You choose whether to save the result. Seek a
+                doctor&apos;s advice before making medical decisions.
+              </Text>
+              <Text style={s.scoreMeaning}>{assessment.scoreMeaning}</Text>
+              <TouchableOpacity onPress={() => Linking.openURL(assessment.citationUrl)}>
+                <Text style={s.sourceLink}>Read the published source</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     );
@@ -311,8 +318,6 @@ const s = StyleSheet.create({
   content: { padding: 16, paddingBottom: 40 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
   errorText: { fontSize: 20, fontWeight: '600', color: Colors.text, marginBottom: 16 },
-  backLink: { marginBottom: 16 },
-  backLinkText: { color: '#173f38', fontSize: 15, fontWeight: '600' },
   card: {
     backgroundColor: Colors.card,
     borderRadius: 24,
@@ -356,11 +361,14 @@ const s = StyleSheet.create({
     borderLeftColor: '#b45309',
     padding: 14,
     borderRadius: 10,
-    marginTop: 22,
+    marginTop: 4,
   },
   disclaimerTitle: { fontSize: 15, fontWeight: '700', color: '#78350f', marginBottom: 6 },
   disclaimerText: { fontSize: 13, color: '#78350f', lineHeight: 19 },
-  scoreMeaning: { color: Colors.textSecondary, fontSize: 13, lineHeight: 20, marginTop: 20 },
+  introBoundary: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 13 },
+  introDisclosure: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  introDisclosureText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
+  scoreMeaning: { color: Colors.textSecondary, fontSize: 13, lineHeight: 20, marginTop: 14 },
   sourceLink: { fontSize: 13, color: '#287264', fontWeight: '600', marginTop: 10 },
   progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   progressText: { fontSize: 13, color: Colors.textSecondary },
@@ -414,11 +422,6 @@ const s = StyleSheet.create({
   crisisTitle: { fontSize: 16, fontWeight: '700', color: '#7f1d1d', marginBottom: 8 },
   crisisText: { fontSize: 14, color: '#7f1d1d', lineHeight: 20 },
   crisisStrong: { fontSize: 14, color: '#7f1d1d', lineHeight: 20, fontWeight: '600', marginTop: 8 },
-  crisisActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  crisisPrimary: { backgroundColor: '#991b1b', borderRadius: 9, paddingVertical: 10, paddingHorizontal: 18 },
-  crisisPrimaryText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  crisisSecondary: { borderWidth: 1, borderColor: '#991b1b', borderRadius: 9, paddingVertical: 10, paddingHorizontal: 18 },
-  crisisSecondaryText: { color: '#991b1b', fontSize: 14, fontWeight: '700' },
   suggestionsBox: { backgroundColor: '#eff6ff', padding: 16, borderRadius: 12, marginTop: 22 },
   functioningBox: {
     backgroundColor: '#ecfdf5',
