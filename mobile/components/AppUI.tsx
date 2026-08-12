@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
@@ -65,10 +66,13 @@ export function PageHeader({
   icon?: FeatherName;
   action?: ReactNode;
 }) {
+  const { fontScale } = useWindowDimensions();
+  const usesStackedHeader = fontScale >= 1.35;
+
   return (
     <View style={styles.header}>
-      <View style={styles.headerTop}>
-        <View style={styles.headerCopy}>
+      <View style={[styles.headerTop, usesStackedHeader && styles.headerTopStacked]}>
+        <View style={[styles.headerCopy, usesStackedHeader && styles.headerCopyStacked]}>
           {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
           <Text accessibilityRole="header" style={styles.title}>{title}</Text>
         </View>
@@ -178,6 +182,20 @@ export function SectionHeader({
       </View>
       {action}
     </View>
+  );
+}
+
+export function SupportAction({ onPress, label = 'Support' }: { onPress: () => void; label?: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Open urgent and local support"
+      onPress={onPress}
+      style={({ pressed }) => [styles.supportAction, pressed && styles.pressed]}
+    >
+      <Feather name="life-buoy" size={17} color={Colors.accent} />
+      <Text style={styles.supportActionText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -489,11 +507,11 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1 },
   content: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
     paddingBottom: 44,
   },
-  header: { marginBottom: Spacing.xl },
+  header: { marginBottom: Spacing.lg },
   headerTop: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -501,8 +519,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  headerTopStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
   headerCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 220, minWidth: 0 },
-  headerAction: { flexShrink: 0 },
+  headerCopyStacked: { flexBasis: 'auto', width: '100%' },
+  headerAction: { alignSelf: 'flex-start', flexShrink: 0 },
   eyebrow: {
     color: Colors.accent,
     ...Typography.eyebrow,
@@ -516,7 +539,8 @@ const styles = StyleSheet.create({
   description: {
     color: Colors.textSecondary,
     ...Typography.body,
-    marginTop: Spacing.xs,
+    lineHeight: 21,
+    marginTop: Spacing.xxs,
     maxWidth: 620,
   },
   headerIcon: {
@@ -532,7 +556,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: Radius.lg,
-    padding: 18,
+    padding: Spacing.md,
     marginBottom: Spacing.sm,
     shadowColor: '#163a32',
     shadowOpacity: 0,
@@ -562,7 +586,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
-    marginTop: Spacing.md,
+    marginTop: Spacing.sm,
     marginBottom: Spacing.sm,
   },
   sectionCopy: { flex: 1 },
@@ -575,8 +599,19 @@ const styles = StyleSheet.create({
     ...Typography.bodySmall,
     marginTop: 4,
   },
+  supportAction: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.accentLight,
+    paddingHorizontal: 12,
+  },
+  supportActionText: { color: Colors.accent, fontSize: 12, fontWeight: '700' },
   listRow: {
-    minHeight: 72,
+    minHeight: 68,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
@@ -599,7 +634,8 @@ const styles = StyleSheet.create({
   rowDescription: {
     color: Colors.textSecondary,
     ...Typography.bodySmall,
-    marginTop: Spacing.xxs,
+    lineHeight: 18,
+    marginTop: 2,
   },
   inlineStatus: {
     minHeight: 48,
@@ -746,7 +782,7 @@ const styles = StyleSheet.create({
   emptyAction: { marginTop: 16 },
   disclosureCard: { paddingVertical: 0, overflow: 'hidden' },
   disclosureHeader: {
-    minHeight: 68,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,

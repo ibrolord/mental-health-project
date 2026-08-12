@@ -80,9 +80,9 @@ const CONTEXT_ORDER: AiContextSelectionKey[] = [
 ];
 const QUICK_PROMPTS = [
   'I feel anxious',
-  'Help me reframe a negative thought',
+  'Help me reframe a hard thought',
   'I need one small plan',
-  'I need to talk',
+  'Help me plan what to say',
 ];
 const APPLE_HEALTH_AI_ENABLED =
   process.env.EXPO_PUBLIC_HEALTH_AI_ENABLED === 'true';
@@ -830,6 +830,7 @@ export default function ChatScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Choose app context for this chat"
+              accessibilityValue={{ text: contextSummary.length > 0 ? `${contextSummary.length} sources selected` : 'No app context selected' }}
               accessibilityState={{ expanded: contextExpanded }}
               onPress={() => setContextExpanded((current) => !current)}
               style={styles.headerAction}
@@ -1002,7 +1003,7 @@ export default function ChatScreen() {
       >
         {messages.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyEyebrow}>A PRIVATE CONVERSATION</Text>
+            <Text style={styles.emptyEyebrow}>AI-GUIDED CONVERSATION</Text>
             <Text style={styles.emptyTitle}>What is on your mind?</Text>
             <Text style={styles.emptyText}>
               Start anywhere. You can ask for one practical next step.
@@ -1113,6 +1114,7 @@ export default function ChatScreen() {
 
       <View style={styles.inputRow}>
         <TextInput
+          accessibilityLabel="Message to MHtoolkit AI"
           style={styles.input}
           value={input}
           onChangeText={setInput}
@@ -1145,14 +1147,14 @@ const UNIFIED_LIBRARY_BY_ID = Object.fromEntries(
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   topBar: {
-    minHeight: 96,
+    minHeight: 78,
     backgroundColor: Colors.background,
     paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   topUtilityRow: {
-    minHeight: 44,
+    minHeight: 40,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
@@ -1169,11 +1171,11 @@ const styles = StyleSheet.create({
   topTitle: {
     color: Colors.text,
     fontFamily: 'Georgia',
-    fontSize: 29,
-    lineHeight: 35,
+    fontSize: 25,
+    lineHeight: 30,
     fontWeight: '700',
     letterSpacing: -0.5,
-    marginTop: 4,
+    marginTop: 2,
   },
   topActions: { flexDirection: 'row', gap: 6 },
   headerAction: {
@@ -1282,7 +1284,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.76 },
   messages: { flex: 1 },
   messagesContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8 },
-  empty: { flex: 1, alignItems: 'flex-start', justifyContent: 'center', paddingVertical: 28 },
+  empty: { flex: 1, alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingBottom: 18 },
   emptyEyebrow: {
     color: Colors.accent,
     fontSize: 11,
@@ -1292,7 +1294,8 @@ const styles = StyleSheet.create({
   emptyTitle: {
     color: Colors.text,
     fontFamily: 'Georgia',
-    fontSize: 28,
+    fontSize: 25,
+    lineHeight: 31,
     fontWeight: '700',
     marginTop: 10,
   },
@@ -1308,16 +1311,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
     gap: 8,
-    marginTop: 18,
+    marginTop: 14,
   },
   prompt: {
     width: '100%',
-    minHeight: 48,
+    minHeight: 44,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.card,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     justifyContent: 'center',
     alignItems: 'flex-start',
   },

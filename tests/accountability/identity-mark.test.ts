@@ -20,6 +20,7 @@ describe('Together identity mark', () => {
     expect(source).toContain('name="leaf"');
     expect(source).toContain('accessibilityLabel="Together leaf"');
     expect(source).toContain('style={styles.leafMark}');
+    expect(source).toContain("params: { returnTo: '/accountability' }");
   });
 
   it('keeps Together prominent on the web dashboard and onboarding', () => {

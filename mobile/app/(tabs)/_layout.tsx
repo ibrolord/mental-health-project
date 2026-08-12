@@ -1,9 +1,13 @@
 import { Tabs } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Radius } from '@/lib/constants';
 
 export default function TabLayout() {
+  const { fontScale } = useWindowDimensions();
+  const hidesTabLabels = fontScale >= 1.35;
+
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: Colors.card }}
@@ -14,23 +18,25 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.textSecondary,
-        tabBarActiveBackgroundColor: 'transparent',
+        tabBarActiveBackgroundColor: Colors.primaryLight,
         tabBarHideOnKeyboard: true,
         tabBarAllowFontScaling: true,
+        tabBarShowLabel: !hidesTabLabels,
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '700',
-          marginTop: 1,
+          marginTop: 0,
         },
         tabBarIconStyle: { marginTop: 2 },
         tabBarItemStyle: {
           borderRadius: Radius.md,
-          marginHorizontal: 2,
+          marginHorizontal: 3,
+          marginVertical: 5,
         },
         tabBarStyle: {
           backgroundColor: Colors.card,
           borderTopColor: Colors.border,
-          paddingTop: 7,
+          paddingTop: 2,
         },
         headerStyle: { backgroundColor: Colors.card },
         headerTintColor: Colors.text,

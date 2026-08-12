@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Feather from '@expo/vector-icons/Feather';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   Alert,
@@ -42,6 +42,7 @@ import {
   InlineStatus,
   PageHeader,
   SectionHeader,
+  SupportAction,
   appUiStyles,
 } from '@/components/AppUI';
 import {
@@ -62,6 +63,7 @@ interface MoodEntry {
 }
 
 export default function TrackerScreen() {
+  const router = useRouter();
   const { query, user } = useDataContext();
   const [moods, setMoods] = useState<MoodEntry[]>([]);
   const [showAdd, setShowAdd] = useState(false);
@@ -520,6 +522,7 @@ export default function TrackerScreen() {
         eyebrow="A moment to notice"
         title="Mood"
         description="Name what is here. Add context only if it helps."
+        action={<SupportAction onPress={() => router.push('/resources')} />}
       />
 
       {saveStatus ? (

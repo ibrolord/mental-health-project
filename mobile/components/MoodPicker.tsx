@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Colors } from '@/lib/constants';
 import type { MoodEmoji } from '@/lib/types';
 
@@ -44,7 +44,7 @@ export function MoodGlyph({ mood, size = 28 }: { mood: MoodEmoji; size?: number 
   return (
     <Text
       accessible={false}
-      maxFontSizeMultiplier={1.2}
+      allowFontScaling={false}
       style={{ fontSize: size, lineHeight: Math.ceil(size * 1.25) }}
     >
       {choice.emoji}
@@ -61,11 +61,14 @@ export function MoodPicker({
   onChange: (mood: MoodEmoji) => void;
   disabled?: boolean;
 }) {
+  const { fontScale } = useWindowDimensions();
+  const usesWrappedLayout = fontScale >= 1.35;
+
   return (
     <View
       accessibilityRole="radiogroup"
       accessibilityLabel="Choose how you feel"
-      style={styles.row}
+      style={[styles.row, usesWrappedLayout && styles.rowWrapped]}
     >
       {MOOD_CHOICES.map((choice) => {
         const selected = value === choice.emoji;
@@ -79,6 +82,7 @@ export function MoodPicker({
             onPress={() => onChange(choice.emoji)}
             style={({ pressed }) => [
               styles.choice,
+              usesWrappedLayout && styles.choiceWrapped,
               { backgroundColor: selected ? choice.tint : 'transparent' },
               selected && styles.choiceSelected,
               disabled && styles.disabled,
@@ -106,6 +110,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceMuted,
     padding: 4,
   },
+  rowWrapped: {
+    flexWrap: 'wrap',
+    borderRadius: 20,
+  },
   choice: {
     minWidth: 0,
     minHeight: 64,
@@ -117,6 +125,11 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     paddingHorizontal: 2,
     paddingVertical: 8,
+  },
+  choiceWrapped: {
+    flexBasis: '30%',
+    flexGrow: 1,
+    minHeight: 72,
   },
   choiceSelected: {
     borderColor: Colors.primary,

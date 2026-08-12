@@ -1,9 +1,9 @@
 export const Colors = {
   primary: '#163a32',
   primaryLight: '#edf4ea',
-  background: '#f3f0e4',
+  background: '#f6f2e7',
   card: '#fffef8',
-  surfaceMuted: '#f8f6ee',
+  surfaceMuted: '#faf8f1',
   text: '#163a32',
   textSecondary: '#4d655d',
   border: '#aebfb4',
@@ -12,7 +12,7 @@ export const Colors = {
   dangerLight: '#fff0ed',
   success: '#2f765c',
   successLight: '#edf7f1',
-  accent: '#c65f3d',
+  accent: '#a94d33',
   accentLight: '#fbede7',
   sage: '#84ac95',
   orange: '#c65f3d',
@@ -32,9 +32,9 @@ export const Spacing = {
 
 export const Radius = {
   sm: 10,
-  md: 14,
-  lg: 18,
-  xl: 24,
+  md: 16,
+  lg: 20,
+  xl: 26,
   pill: 999,
 } as const;
 
@@ -46,21 +46,20 @@ export const Typography = {
   },
   display: {
     fontFamily: 'Georgia',
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '700' as const,
-    letterSpacing: -0.6,
+    letterSpacing: -0.45,
   },
   sectionTitle: {
     fontFamily: 'Georgia',
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700' as const,
-    letterSpacing: -0.35,
+    letterSpacing: -0.25,
   },
   cardTitle: {
-    fontFamily: 'Georgia',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700' as const,
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   body: {
     fontSize: 15,

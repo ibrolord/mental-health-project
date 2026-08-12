@@ -8,6 +8,7 @@ import {
   ListRow,
   PageHeader,
   SectionHeader,
+  SupportAction,
 } from '@/components/AppUI';
 import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
 
@@ -79,14 +80,15 @@ const GROUPS: {
 
 export default function ToolsScreen() {
   const router = useRouter();
-  const [openGroup, setOpenGroup] = useState(GROUPS[0].title);
+  const [openGroup, setOpenGroup] = useState('');
 
   return (
     <AppScreen>
       <PageHeader
         eyebrow="Your toolkit"
-        title="Choose what fits."
-        description="Start with one practice. The rest can wait."
+        title="Tools"
+        description="Choose one thing that fits right now."
+        action={<SupportAction onPress={() => router.push('/resources')} />}
       />
 
       <Pressable
@@ -106,7 +108,7 @@ export default function ToolsScreen() {
         <Feather name="arrow-right" size={20} color={Colors.card} />
       </Pressable>
 
-      <SectionHeader title="Browse" description="Open one group at a time" />
+      <SectionHeader title="Browse" description="Three focused collections" />
       {GROUPS.map((group) => (
         <DisclosureCard
           key={group.title}
@@ -135,14 +137,14 @@ export default function ToolsScreen() {
 
 const styles = StyleSheet.create({
   featured: {
-    minHeight: 104,
+    minHeight: 88,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
     borderRadius: Radius.lg,
     backgroundColor: Colors.primary,
     padding: Spacing.md,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   featuredIcon: {
     width: 48,
