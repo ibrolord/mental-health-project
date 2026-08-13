@@ -116,4 +116,35 @@ describe('mobile Visit Brief', () => {
       expect(component).not.toContain(forbidden);
     }
   });
+
+  it('treats missing brief content as a single empty state, not repeated errors', () => {
+    const component = readFileSync(
+      new URL('../../mobile/components/VisitBriefBuilder.tsx', import.meta.url),
+      'utf8'
+    );
+
+    expect(component).toContain('Nothing to add yet');
+    expect(component).toContain('Options will appear after you save a plan');
+    expect(component).toContain('Could not load your options');
+    expect(component).toContain('Nothing has been added to your brief');
+    expect(component).toContain('Try again');
+    expect(component).toContain('Profile unavailable');
+    expect(component).toContain('VISIT_BRIEF_LOAD_TIMEOUT_MS');
+    expect(component).not.toContain('No saved content for this section.');
+  });
+
+  it('does not preload full Safety Plan content before explicit selection', () => {
+    const component = readFileSync(
+      new URL('../../mobile/components/VisitBriefBuilder.tsx', import.meta.url),
+      'utf8'
+    );
+    const catalogLoader = component.slice(
+      component.indexOf('async function loadCatalogEntry'),
+      component.indexOf('async function loadSection')
+    );
+
+    expect(catalogLoader).toContain("section === 'safetyPlan'");
+    expect(catalogLoader).toContain('hasSafetyPlan(ownerId)');
+    expect(catalogLoader).not.toContain('safety_plan_items');
+  });
 });

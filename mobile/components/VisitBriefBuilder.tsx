@@ -43,8 +43,60 @@ const SECTIONS: {
   { id: 'sleepDiary', label: 'Sleep diary', description: 'Complete factual entries' },
   { id: 'supportPreferences', label: 'Support preferences', description: 'How support works best' },
 ];
+const CATALOG_SECTIONS: VisitBriefSectionId[] = [
+  ...SECTIONS.map((section) => section.id),
+  'safetyPlan',
+];
+const VISIT_BRIEF_LOAD_TIMEOUT_MS = 8000;
 
 type SectionState = Partial<Record<VisitBriefSectionId, string>>;
+type CatalogEntry = {
+  section: VisitBriefSectionId;
+  available: boolean;
+  source?: VisitBriefSource[VisitBriefSectionId];
+};
+
+function withTimeout<T>(promise: Promise<T>, milliseconds: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('Visit Brief request timed out.')),
+      milliseconds
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+async function hasSafetyPlan(ownerId: string): Promise<boolean> {
+  const result = await supabase
+    .from('safety_plans')
+    .select('id')
+    .eq('user_id', ownerId)
+    .in('status', ['active', 'draft'])
+    .limit(1)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  return Boolean(result.data);
+}
+
+async function loadCatalogEntry(
+  section: VisitBriefSectionId,
+  ownerId: string
+): Promise<CatalogEntry> {
+  if (section === 'safetyPlan') {
+    return { section, available: await hasSafetyPlan(ownerId) };
+  }
+  const sectionSource = await loadSection(section, ownerId);
+  return { section, available: Boolean(sectionSource), source: sectionSource };
+}
 
 async function loadSection(
   section: VisitBriefSectionId,
@@ -134,8 +186,13 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
   const [open, setOpen] = useState(false);
   const [selection, setSelection] = useState<VisitBriefSelection>(createVisitBriefSelection);
   const [source, setSource] = useState<VisitBriefSource>({});
+  const [available, setAvailable] = useState<Set<VisitBriefSectionId>>(new Set());
   const [loading, setLoading] = useState<Set<VisitBriefSectionId>>(new Set());
   const [errors, setErrors] = useState<SectionState>({});
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogFailed, setCatalogFailed] = useState(false);
+  const [catalogError, setCatalogError] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [status, setStatus] = useState('');
   const ownerRef = useRef(ownerId);
 
@@ -144,10 +201,72 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
     setOpen(false);
     setSelection(createVisitBriefSelection());
     setSource({});
+    setAvailable(new Set());
     setLoading(new Set());
     setErrors({});
+    setCatalogLoading(false);
+    setCatalogFailed(false);
+    setCatalogError('');
+    setRefreshKey(0);
     setStatus('');
   }, [ownerId]);
+
+  useEffect(() => {
+    if (!open || !ownerId) return;
+
+    const requestedOwner = ownerId;
+    let active = true;
+    setCatalogLoading(true);
+    setCatalogFailed(false);
+    setCatalogError('');
+
+    void Promise.allSettled(
+      CATALOG_SECTIONS.map((section) =>
+        withTimeout(
+          loadCatalogEntry(section, requestedOwner),
+          VISIT_BRIEF_LOAD_TIMEOUT_MS
+        )
+      )
+    ).then((results) => {
+      if (!active || ownerRef.current !== requestedOwner) return;
+
+      let nextSource: VisitBriefSource = {};
+      const nextAvailable = new Set<VisitBriefSectionId>();
+      let failedCount = 0;
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          failedCount += 1;
+          continue;
+        }
+        const { section, available: sectionAvailable, source: sectionSource } = result.value;
+        if (sectionAvailable) nextAvailable.add(section);
+        if (sectionSource) nextSource = { ...nextSource, [section]: sectionSource };
+      }
+
+      setSource(nextSource);
+      setAvailable(nextAvailable);
+      setSelection((current) => {
+        const next = { ...current };
+        for (const section of Object.keys(next) as VisitBriefSectionId[]) {
+          if (!nextAvailable.has(section)) next[section] = false;
+        }
+        return next;
+      });
+      setErrors({});
+      const noAvailableContent = nextAvailable.size === 0;
+      setCatalogFailed(failedCount > 0 && noAvailableContent);
+      setCatalogError(
+        failedCount > 0 && !noAvailableContent
+          ? 'Some options could not be checked. Anything unavailable stays out.'
+          : ''
+      );
+      setCatalogLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [open, ownerId, refreshKey]);
 
   const brief = (() => {
     try {
@@ -175,20 +294,26 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
     }
 
     const requestedOwner = ownerId;
-    setSelection((current) => ({ ...current, [section]: true }));
     setLoading((current) => new Set(current).add(section));
     try {
-      const sectionSource = await loadSection(section, requestedOwner);
+      const sectionSource = await withTimeout(
+        loadSection(section, requestedOwner),
+        VISIT_BRIEF_LOAD_TIMEOUT_MS
+      );
       if (ownerRef.current !== requestedOwner) return;
       if (!sectionSource) {
-        setSelection((current) => ({ ...current, [section]: false }));
-        setErrors((current) => ({ ...current, [section]: 'No saved content for this section.' }));
+        setAvailable((current) => {
+          const next = new Set(current);
+          next.delete(section);
+          return next;
+        });
+        setCatalogError('That option is no longer available. Nothing was added.');
         return;
       }
       setSource((current) => ({ ...current, [section]: sectionSource }));
+      setSelection((current) => ({ ...current, [section]: true }));
     } catch {
       if (ownerRef.current !== requestedOwner) return;
-      setSelection((current) => ({ ...current, [section]: false }));
       setErrors((current) => ({ ...current, [section]: 'This section could not be loaded.' }));
     } finally {
       if (ownerRef.current === requestedOwner) {
@@ -269,6 +394,10 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
     </View>
   );
 
+  const availableSections = SECTIONS.filter((section) => available.has(section.id));
+  const hasSafetyPlan = available.has('safetyPlan');
+  const hasAvailableContent = availableSections.length > 0 || hasSafetyPlan;
+
   return (
     <View style={styles.card}>
       <Pressable
@@ -289,23 +418,76 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
 
       {open ? (
         <View style={styles.body}>
-          <Text style={styles.notice}>
-            Everything starts off. Journal, AI chat, assessments, and mood notes are never included.
-          </Text>
+          {!ownerId ? (
+            <View style={styles.catalogEmpty} accessibilityRole="alert">
+              <View style={styles.catalogEmptyIcon}>
+                <Feather name="user" size={20} color={Colors.primary} />
+              </View>
+              <Text style={styles.catalogEmptyTitle}>Profile unavailable</Text>
+              <Text style={styles.catalogEmptyText}>
+                Return after your profile finishes loading to prepare a Visit Brief.
+              </Text>
+            </View>
+          ) : catalogLoading ? (
+            <View style={styles.catalogLoading}>
+              <ActivityIndicator size="small" color={Colors.primary} />
+              <Text style={styles.catalogLoadingText}>Finding what is ready to share...</Text>
+            </View>
+          ) : catalogFailed ? (
+            <View style={styles.catalogEmpty} accessibilityRole="alert">
+              <View style={styles.catalogEmptyIcon}>
+                <Feather name="refresh-cw" size={20} color={Colors.primary} />
+              </View>
+              <Text style={styles.catalogEmptyTitle}>Could not load your options</Text>
+              <Text style={styles.catalogEmptyText}>
+                Nothing has been added to your brief. Check your connection and try again.
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Try loading Visit Brief options again"
+                onPress={() => setRefreshKey((current) => current + 1)}
+                style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.retryButtonText}>Try again</Text>
+              </Pressable>
+            </View>
+          ) : hasAvailableContent ? (
+            <>
+              <Text style={styles.notice}>
+                Nothing is included until you turn it on. Journal, AI chat, assessments, and mood notes stay out.
+              </Text>
 
-          {SECTIONS.map((section) =>
-            renderSwitch(section.id, section.label, section.description)
+              {availableSections.map((section) =>
+                renderSwitch(section.id, section.label, section.description)
+              )}
+
+              {hasSafetyPlan ? (
+                <>
+                  <Text style={styles.safetyLabel}>Extra-sensitive</Text>
+                  {renderSwitch(
+                    'safetyPlan',
+                    'Safety plan',
+                    'Include only when you explicitly turn this on.',
+                    true
+                  )}
+                </>
+              ) : null}
+            </>
+          ) : (
+            <View style={styles.catalogEmpty}>
+              <View style={styles.catalogEmptyIcon}>
+                <Feather name="file-plus" size={20} color={Colors.primary} />
+              </View>
+              <Text style={styles.catalogEmptyTitle}>Nothing to add yet</Text>
+              <Text style={styles.catalogEmptyText}>
+                Options will appear after you save a plan, sleep entry, or support preference.
+              </Text>
+            </View>
           )}
 
-          <Text style={styles.safetyLabel}>Extra-sensitive</Text>
-          {renderSwitch(
-            'safetyPlan',
-            'Safety plan',
-            'Include only when you explicitly turn this on.',
-            true
-          )}
+          {catalogError ? <Text style={styles.catalogError}>{catalogError}</Text> : null}
 
-          {brief.sectionCount > 0 ? (
+          {!catalogLoading && brief.sectionCount > 0 ? (
             <>
               <Text style={styles.previewLabel}>Exact preview</Text>
               <View style={styles.preview}>
@@ -320,9 +502,9 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
                 <Text style={styles.shareButtonText}>Share exact preview</Text>
               </Pressable>
             </>
-          ) : (
-            <Text style={styles.empty}>Turn on a section to build a brief.</Text>
-          )}
+          ) : hasAvailableContent && !catalogLoading ? (
+            <Text style={styles.empty}>Choose a section to build your brief.</Text>
+          ) : null}
           {status ? <Text style={styles.status}>{status}</Text> : null}
         </View>
       ) : null}
@@ -363,6 +545,53 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     padding: 13,
   },
+  catalogLoading: {
+    minHeight: 128,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  catalogLoadingText: { color: Colors.textSecondary, fontSize: 13 },
+  catalogEmpty: {
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 24,
+  },
+  catalogEmptyIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  catalogEmptyTitle: { color: Colors.text, fontSize: 16, fontWeight: '700' },
+  catalogEmptyText: {
+    marginTop: 6,
+    color: Colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  catalogError: {
+    marginTop: 12,
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  retryButton: {
+    minHeight: 44,
+    marginTop: 16,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retryButtonText: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
