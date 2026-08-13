@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { isValidatedPasswordRecovery } from '../../lib/auth/password-recovery';
+import { shouldDetectAuthSessionInUrl } from '../../lib/auth/url-session-detection';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 
@@ -40,6 +41,17 @@ describe('mobile password recovery contract', () => {
     expect(isValidatedPasswordRecovery('SIGNED_IN', existingSession)).toBe(false);
     expect(isValidatedPasswordRecovery('PASSWORD_RECOVERY', null)).toBe(false);
     expect(isValidatedPasswordRecovery('PASSWORD_RECOVERY', existingSession)).toBe(true);
+  });
+
+  it('keeps the persistent app client away from recovery callbacks', () => {
+    expect(shouldDetectAuthSessionInUrl('/auth/reset-password')).toBe(false);
+    expect(shouldDetectAuthSessionInUrl('/auth/reset-password/')).toBe(false);
+    expect(shouldDetectAuthSessionInUrl('/auth/callback')).toBe(true);
+    expect(shouldDetectAuthSessionInUrl(null)).toBe(false);
+
+    const persistentClient = read('lib/supabase/client.ts');
+    expect(persistentClient).toContain('shouldDetectAuthSessionInUrl');
+    expect(persistentClient).toContain('window.location.pathname');
   });
 
   it('clears the recovery browser session before showing completion', () => {
