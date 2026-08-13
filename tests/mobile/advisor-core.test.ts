@@ -4,6 +4,7 @@ import {
   createAdvisorContextSnapshot,
   createAdvisorRecommendation,
   type AdvisorContext,
+  type AdvisorHealthFeatures,
 } from '../../mobile/lib/advisor-core';
 import { buildAppleHealthSnapshot } from '../../mobile/lib/apple-health-core';
 
@@ -14,6 +15,37 @@ function context(overrides: Partial<AdvisorContext> = {}): AdvisorContext {
     goals: [],
     habits: [],
     health: null,
+    ...overrides,
+  };
+}
+
+function health(overrides: Partial<AdvisorHealthFeatures> = {}): AdvisorHealthFeatures {
+  return {
+    sleepMinutes: {
+      recentAverage: 420,
+      baselineAverage: 430,
+      recentCoverageDays: 5,
+      baselineCoverageDays: 14,
+    },
+    steps: {
+      recentAverage: 5000,
+      baselineAverage: 5200,
+      recentCoverageDays: 7,
+      baselineCoverageDays: 14,
+    },
+    recent: {
+      coverageDays: 7,
+      exerciseMinutes: 120,
+      mindfulMinutes: 0,
+      workoutCount: 3,
+    },
+    history: {
+      coverageDays: 30,
+      workoutCount: 12,
+      stateOfMindCount: 0,
+      moodOverlapDays: 0,
+      moodComparison: 'Keep checking in to compare mood with sleep, movement, and mindfulness.',
+    },
     ...overrides,
   };
 }
@@ -96,24 +128,95 @@ describe('mobile Advisor recommendation engine', () => {
   it('does not claim Health influenced a next step when it did not', () => {
     const result = createAdvisorRecommendation(
       context({
-        health: {
-          sleepMinutes: {
-            recentAverage: 420,
-            baselineAverage: 430,
-            recentCoverageDays: 5,
-            baselineCoverageDays: 14,
-          },
-          steps: {
-            recentAverage: 5000,
-            baselineAverage: 5200,
-            recentCoverageDays: 7,
-            baselineCoverageDays: 14,
-          },
-        },
+        goals: [{ id: 'goal-1', title: 'Finish application', dueAt: null }],
+        health: health(),
       })
     );
-    expect(result.id).toBe('check-in');
-    expect(result.sourceLabels).toEqual([]);
+    expect(result.id).toBe('goal:goal-1');
+    expect(result.sourceLabels).toEqual(['Goal']);
+  });
+
+  it('explains strong Health coverage with weak mood overlap without inferring a trend', () => {
+    const result = createAdvisorRecommendation(
+      context({
+        mood: { emoji: '🙂', localDate: '2026-08-13' },
+        health: health({
+          history: {
+            coverageDays: 30,
+            workoutCount: 31,
+            stateOfMindCount: 0,
+            moodOverlapDays: 1,
+            moodComparison: 'Mood and Apple Health overlap on 1 of the last 30 days.',
+          },
+        }),
+      })
+    );
+    expect(result).toMatchObject({
+      id: 'health-build-overlap',
+      route: '/(tabs)/tracker',
+      sourceLabels: ['Apple Health summary', 'Mood check-ins'],
+    });
+    expect(result.observation).toContain('30 of the last 30 days');
+    expect(result.observation).toContain('only 1 day');
+    expect(result.observation).toContain('not enough to identify a personal pattern');
+    expect(JSON.stringify(result)).not.toMatch(/diagnos|caused|should sleep|unhealthy/i);
+  });
+
+  it('honors an explicit Health reflection request even when today\'s mood is low', () => {
+    const result = createAdvisorRecommendation(
+      context({
+        intent: 'health-reflection',
+        mood: { emoji: '😞', localDate: '2026-08-13' },
+        health: health({
+          history: {
+            coverageDays: 30,
+            workoutCount: 31,
+            stateOfMindCount: 0,
+            moodOverlapDays: 1,
+            moodComparison: 'Mood and Apple Health overlap on 1 of the last 30 days.',
+          },
+        }),
+      })
+    );
+    expect(result.id).toBe('health-build-overlap');
+  });
+
+  it('describes a sufficiently sampled Health association without claiming causation', () => {
+    const result = createAdvisorRecommendation(
+      context({
+        mood: { emoji: '🙂', localDate: '2026-08-13' },
+        health: health({
+          history: {
+            coverageDays: 24,
+            workoutCount: 8,
+            stateOfMindCount: 0,
+            moodOverlapDays: 6,
+            moodComparison: 'Higher-mood check-in days averaged 8.0 hr sleep; lower-mood days averaged 6.0 hr sleep.',
+          },
+        }),
+      })
+    );
+    expect(result.id).toBe('health-pattern');
+    expect(result.observation).toContain('association in your records, not a cause');
+  });
+
+  it('does not claim a Health pattern when overlap lacks a balanced comparison', () => {
+    const result = createAdvisorRecommendation(
+      context({
+        health: health({
+          history: {
+            coverageDays: 30,
+            workoutCount: 12,
+            stateOfMindCount: 0,
+            moodOverlapDays: 7,
+            moodComparison: 'Mood and Apple Health overlap on 7 of the last 30 days.',
+          },
+        }),
+      })
+    );
+    expect(result.id).toBe('health-build-overlap');
+    expect(result.observation).toContain('not yet a balanced higher- and lower-mood comparison');
+    expect(result.observation).toContain('not enough to identify a personal pattern');
   });
 
   it('does not change an action based on lower Health averages', () => {
@@ -122,10 +225,10 @@ describe('mobile Advisor recommendation engine', () => {
     });
     const withHealth = context({
       goals: base.goals,
-      health: {
+      health: health({
         sleepMinutes: { recentAverage: 240, baselineAverage: 480, recentCoverageDays: 7, baselineCoverageDays: 14 },
         steps: { recentAverage: 1000, baselineAverage: 8000, recentCoverageDays: 7, baselineCoverageDays: 14 },
-      },
+      }),
     });
     expect(createAdvisorRecommendation(withHealth).action).toBe(
       createAdvisorRecommendation(base).action

@@ -145,9 +145,6 @@ export function AppleHealthInsights({
   ) return null;
 
   const coverage = overview?.thirtyDay.coverageDays ?? 0;
-  const aiReflectionEnabled =
-    process.env.EXPO_PUBLIC_HEALTH_AI_ENABLED === 'true';
-
   return (
     <AppCard style={s.card} quiet>
       <Pressable
@@ -230,24 +227,19 @@ export function AppleHealthInsights({
                 <Text style={s.patternNote}>A personal pattern, not a cause or diagnosis.</Text>
               </View>
 
-              {aiReflectionEnabled ? (
-                <AppButton
-                  label="Ask AI about this"
-                  accessibilityLabel="Ask AI to reflect on this Apple Health summary"
-                  icon="message-circle"
-                  variant="secondary"
-                  style={s.aiAction}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/chat',
-                      params: {
-                        health: '1',
-                        healthRequest: Date.now().toString(),
-                      },
-                    })
-                  }
-                />
-              ) : null}
+              <AppButton
+                label="Make sense of this"
+                accessibilityLabel="Ask Advisor to make sense of this Apple Health summary"
+                icon="compass"
+                variant="secondary"
+                style={s.aiAction}
+                onPress={() =>
+                  router.push({
+                    pathname: '/advisor',
+                    params: { health: '1', mood: '1' },
+                  })
+                }
+              />
 
               <Text style={s.windowLabel}>LAST 30 DAYS</Text>
               <View style={s.summaryRow}>

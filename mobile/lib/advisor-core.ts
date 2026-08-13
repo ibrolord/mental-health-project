@@ -1,4 +1,10 @@
-import type { AppleHealthSnapshot } from './apple-health-core';
+import {
+  countAppleHealthMoodOverlap,
+  createAppleHealthPattern,
+  summarizeAppleHealthWindow,
+  type AppleHealthSnapshot,
+  type MoodTimestamp,
+} from './apple-health-core';
 import { hasExplicitUrgentSafetyLanguage } from './local-safety';
 import type { MoodEmoji } from './types';
 
@@ -27,10 +33,24 @@ export type AdvisorHealthMetric = {
 export type AdvisorHealthFeatures = {
   sleepMinutes: AdvisorHealthMetric;
   steps: AdvisorHealthMetric;
+  recent: {
+    coverageDays: number;
+    exerciseMinutes: number;
+    mindfulMinutes: number;
+    workoutCount: number;
+  };
+  history: {
+    coverageDays: number;
+    workoutCount: number;
+    stateOfMindCount: number;
+    moodOverlapDays: number;
+    moodComparison: string;
+  };
 };
 
 export type AdvisorContext = {
   nowIso: string;
+  intent?: 'general' | 'health-reflection';
   mood: { emoji: MoodEmoji; localDate: string } | null;
   goals: readonly AdvisorGoal[];
   habits: readonly AdvisorHabit[];
@@ -87,11 +107,27 @@ function metric(
 }
 
 export function createAdvisorHealthFeatures(
-  snapshot: AppleHealthSnapshot
+  snapshot: AppleHealthSnapshot,
+  moods: readonly MoodTimestamp[] = []
 ): AdvisorHealthFeatures {
+  const recent = summarizeAppleHealthWindow(snapshot.days, 7);
+  const history = summarizeAppleHealthWindow(snapshot.days, 30);
   return {
     sleepMinutes: metric(snapshot, (day) => day.sleepMinutes),
     steps: metric(snapshot, (day) => day.steps),
+    recent: {
+      coverageDays: recent.coverageDays,
+      exerciseMinutes: recent.exerciseMinutes,
+      mindfulMinutes: recent.mindfulMinutes,
+      workoutCount: recent.workoutCount,
+    },
+    history: {
+      coverageDays: history.coverageDays,
+      workoutCount: history.workoutCount,
+      stateOfMindCount: history.stateOfMindCount,
+      moodOverlapDays: countAppleHealthMoodOverlap(snapshot.days, moods),
+      moodComparison: createAppleHealthPattern(snapshot.days, moods),
+    },
   };
 }
 
@@ -136,6 +172,52 @@ export function createAdvisorContextSnapshot(context: AdvisorContext): AdvisorCo
   return { ...context, goals, habits };
 }
 
+function createHealthRecommendation(
+  health: AdvisorHealthFeatures
+): AdvisorRecommendation {
+  const { history } = health;
+  const hasMoodComparison = history.moodComparison.startsWith(
+    'Higher-mood check-in days averaged'
+  );
+  if (!hasMoodComparison) {
+    const overlap =
+      history.moodOverlapDays === 0
+        ? 'no days overlap with mood check-ins'
+        : `only ${history.moodOverlapDays} ${history.moodOverlapDays === 1 ? 'day overlaps' : 'days overlap'} with mood check-ins`;
+    const comparisonGap =
+      history.moodOverlapDays >= 4
+        ? `${history.moodOverlapDays} days overlap with mood check-ins, but there is not yet a balanced higher- and lower-mood comparison for the same Health measure`
+        : overlap;
+    return {
+      id: 'health-build-overlap',
+      kind: 'standard',
+      observation:
+        history.coverageDays > 0
+          ? `Apple Health has data on ${history.coverageDays} of the last 30 days, but ${comparisonGap}. That is not enough to identify a personal pattern.`
+          : 'There is not enough recent Apple Health data to identify a personal pattern.',
+      action: 'Add one quick mood check-in each day for the next seven days, then review the overlap again.',
+      smallerAction: 'Add one mood check-in today. No note is required.',
+      route: '/(tabs)/tracker',
+      sourceLabels:
+        history.moodOverlapDays > 0
+          ? ['Apple Health summary', 'Mood check-ins']
+          : ['Apple Health summary'],
+      resourceLabel: 'Check in',
+    };
+  }
+
+  return {
+    id: 'health-pattern',
+    kind: 'standard',
+    observation: `${history.moodComparison} This is an association in your records, not a cause.`,
+    action: 'Keep one routine steady for seven days while continuing daily mood check-ins, then compare again.',
+    smallerAction: 'Choose one routine to keep steady today.',
+    route: '/(tabs)/tracker',
+    sourceLabels: ['Apple Health summary', 'Mood check-ins'],
+    resourceLabel: 'Review mood',
+  };
+}
+
 export function createAdvisorRecommendation(
   context: AdvisorContext
 ): AdvisorRecommendation {
@@ -171,6 +253,10 @@ export function createAdvisorRecommendation(
     ? `${MOOD_LABELS[context.mood.emoji]} on ${context.mood.localDate}`
     : '';
 
+  if (context.intent === 'health-reflection' && context.health) {
+    return createHealthRecommendation(context.health);
+  }
+
   if (lowMood && goal) {
     return {
       id: `low-goal:${goal.id}`,
@@ -195,6 +281,10 @@ export function createAdvisorRecommendation(
       sourceLabels: ['Mood check-in'],
       resourceLabel: 'Start grounding',
     };
+  }
+
+  if (context.health && !goal && !habit) {
+    return createHealthRecommendation(context.health);
   }
 
   if (goal && dueSoon(goal, safeNow)) {

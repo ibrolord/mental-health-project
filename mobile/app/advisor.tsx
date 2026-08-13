@@ -10,13 +10,14 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { format, subDays } from 'date-fns';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppButton, AppCard, AppScreen, InlineStatus, PageHeader, SupportAction } from '@/components/AppUI';
 import { LeafMark } from '@/components/LeafMark';
 import { getMoodLabel } from '@/components/MoodPicker';
 import { useAuth } from '@/lib/auth-context';
 import { appleHealthPreference } from '@/lib/apple-health-preference';
 import { loadAppleHealthSnapshot } from '@/lib/apple-health';
+import { formatHealthMinutes, type MoodTimestamp } from '@/lib/apple-health-core';
 import {
   createAdvisorHealthFeatures,
   createAdvisorContextSnapshot,
@@ -61,6 +62,10 @@ function formatAdvisorDueDate(value: string): string {
 
 export default function AdvisorScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ health?: string | string[]; mood?: string | string[] }>();
+  const healthRequested = (Array.isArray(params.health) ? params.health[0] : params.health) === '1';
+  const moodRequested =
+    healthRequested || (Array.isArray(params.mood) ? params.mood[0] : params.mood) === '1';
   const { user, sessionId, isAuthenticated, isAnonymous } = useAuth();
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
@@ -85,6 +90,7 @@ export default function AdvisorScreen() {
   const [useSmallerStep, setUseSmallerStep] = useState(false);
   const [advisorReminderSet, setAdvisorReminderSet] = useState(false);
   const [reminderBusy, setReminderBusy] = useState(false);
+  const [healthHandoffActive, setHealthHandoffActive] = useState(healthRequested);
 
   useEffect(() => () => {
     mountedRef.current = false;
@@ -96,7 +102,7 @@ export default function AdvisorScreen() {
     requestRef.current += 1;
     reminderRequestRef.current += 1;
     setPhase('choose');
-    setSources(INITIAL_SOURCES);
+    setSources({ ...INITIAL_SOURCES, health: healthRequested, mood: moodRequested });
     setPreviewSources(INITIAL_SOURCES);
     setContext(null);
     setMissing([]);
@@ -108,12 +114,13 @@ export default function AdvisorScreen() {
     setUseSmallerStep(false);
     setAdvisorReminderSet(false);
     setReminderBusy(false);
+    setHealthHandoffActive(healthRequested);
     void hasAdvisorReminder()
       .then((active) => {
         if (ownerRef.current === ownerKey) setAdvisorReminderSet(active);
       })
       .catch(() => undefined);
-  }, [ownerKey]);
+  }, [healthRequested, moodRequested, ownerKey]);
 
   const selectedCount = Object.values(sources).filter(Boolean).length;
   const activeAction = recommendation
@@ -148,6 +155,7 @@ export default function AdvisorScreen() {
     let goals: AdvisorGoal[] = [];
     let habits: AdvisorHabit[] = [];
     let health: AdvisorContext['health'] = null;
+    let moodTimestamps: MoodTimestamp[] = [];
 
     try {
       if (selectedSources.mood) {
@@ -158,18 +166,23 @@ export default function AdvisorScreen() {
             .from('moods')
             .select('emoji, local_date, created_at')
             .eq(queryColumn, queryValue)
-            .gte('created_at', subDays(new Date(), 7).toISOString())
+            .gte('created_at', subDays(new Date(), 30).toISOString())
             .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+            .limit(60);
           if (result.error) {
             nextMissing.push({ key: 'mood', message: 'Mood check-ins could not be loaded.' });
-          } else if (!result.data) {
+          } else if (!result.data?.length) {
             nextMissing.push({ key: 'mood', message: 'No recent mood check-in is available.' });
           } else {
+            moodTimestamps = result.data.map((entry) => ({
+              emoji: entry.emoji,
+              created_at: entry.created_at,
+              local_date: entry.local_date,
+            }));
+            const latestMood = result.data[0];
             mood = {
-              emoji: result.data.emoji as MoodEmoji,
-              localDate: result.data.local_date ?? result.data.created_at.slice(0, 10),
+              emoji: latestMood.emoji as MoodEmoji,
+              localDate: latestMood.local_date ?? latestMood.created_at.slice(0, 10),
             };
           }
         }
@@ -254,11 +267,8 @@ export default function AdvisorScreen() {
           } else if (enabled) {
             try {
               const snapshot = await loadAppleHealthSnapshot();
-              health = createAdvisorHealthFeatures(snapshot);
-              if (
-                health.sleepMinutes.recentCoverageDays === 0 &&
-                health.steps.recentCoverageDays === 0
-              ) {
+              health = createAdvisorHealthFeatures(snapshot, moodTimestamps);
+              if (health.recent.coverageDays === 0) {
                 health = null;
                 nextMissing.push({ key: 'health', message: 'No recent Health summary is available.' });
               }
@@ -272,6 +282,10 @@ export default function AdvisorScreen() {
       if (request !== requestRef.current || ownerRef.current !== expectedOwner) return;
       const nextContext = createAdvisorContextSnapshot({
         nowIso: new Date().toISOString(),
+        intent:
+          healthHandoffActive && selectedSources.health
+            ? 'health-reflection'
+            : 'general',
         mood,
         goals,
         habits,
@@ -404,6 +418,7 @@ export default function AdvisorScreen() {
     setError('');
     setShowWhy(false);
     setUseSmallerStep(false);
+    setHealthHandoffActive(false);
   };
 
   return (
@@ -477,7 +492,7 @@ export default function AdvisorScreen() {
               <ContextLine
                 icon="heart"
                 label="Apple Health summary"
-                value={`Sleep: ${context.health.sleepMinutes.recentAverage === null ? 'unavailable' : `${Math.round(context.health.sleepMinutes.recentAverage / 6) / 10} hr average`} · Steps: ${context.health.steps.recentAverage?.toLocaleString() ?? 'unavailable'} average`}
+                value={`Last 7 days: ${context.health.steps.recentAverage?.toLocaleString() ?? '—'} steps/day · ${formatHealthMinutes(context.health.sleepMinutes.recentAverage)} sleep/night · ${context.health.recent.exerciseMinutes} exercise min · ${context.health.recent.mindfulMinutes} mindful min recorded. Last 30 days: ${context.health.history.coverageDays} days with data · ${context.health.history.workoutCount} workouts · ${context.health.history.moodOverlapDays} mood overlap ${context.health.history.moodOverlapDays === 1 ? 'day' : 'days'}.`}
               />
             ) : null}
             {!context.mood && !context.goals.length && !context.habits.length && !context.health ? (

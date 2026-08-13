@@ -47,4 +47,18 @@ describe('mobile Advisor screen contracts', () => {
     expect(advisor).toContain('Smallest step: ${context.habits[0].tinyStep?.trim()');
     expect(advisor).toContain('Advisor could not safely turn the selected item into an action.');
   });
+
+  it('supports a reviewed Mood and Apple Health handoff from the Mood screen', () => {
+    const healthCard = readFileSync(
+      path.resolve(process.cwd(), 'mobile/components/AppleHealthInsights.tsx'),
+      'utf8'
+    );
+    expect(healthCard).toContain('Make sense of this');
+    expect(healthCard).toContain("pathname: '/advisor'");
+    expect(healthCard).toContain("params: { health: '1', mood: '1' }");
+    expect(advisor).toContain('health: healthRequested');
+    expect(advisor).toContain('mood: moodRequested');
+    expect(advisor).toContain('moodOverlapDays');
+    expect(advisor).toContain('Nothing is sent to an AI provider. These summaries are used on this device.');
+  });
 });

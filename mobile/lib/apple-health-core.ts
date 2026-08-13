@@ -55,6 +55,7 @@ export interface AppleHealthWindowSummary {
 export interface MoodTimestamp {
   emoji: string;
   created_at: string;
+  local_date?: string | null;
 }
 
 export interface AppleHealthOverview {
@@ -108,6 +109,14 @@ export function localDayKey(date: Date): string {
 
 function safeLocalDayKey(date: Date): string | null {
   return Number.isFinite(date.getTime()) ? localDayKey(date) : null;
+}
+
+function moodLocalDayKey(mood: MoodTimestamp): string | null {
+  if (mood.local_date && /^\d{4}-\d{2}-\d{2}$/.test(mood.local_date)) {
+    return mood.local_date;
+  }
+  const date = new Date(mood.created_at);
+  return safeLocalDayKey(date);
 }
 
 function startOfLocalDay(date: Date): Date {
@@ -310,9 +319,8 @@ export function createAppleHealthPattern(
   const moodSamples = new Map<string, number[]>();
   for (const mood of moods) {
     const score = MOOD_SCORE[mood.emoji];
-    const date = new Date(mood.created_at);
-    if (!score || !Number.isFinite(date.getTime())) continue;
-    const key = localDayKey(date);
+    const key = moodLocalDayKey(mood);
+    if (!score || !key) continue;
     if (!daysByDate.has(key)) continue;
     moodSamples.set(key, [...(moodSamples.get(key) ?? []), score]);
   }
@@ -371,6 +379,33 @@ export function createAppleHealthPattern(
     return `Mood and Apple Health overlap on ${overlappingDays} of the last 30 days.`;
   }
   return 'Keep checking in to compare mood with sleep, movement, and mindfulness.';
+}
+
+export function countAppleHealthMoodOverlap(
+  days: readonly AppleHealthDay[],
+  moods: readonly MoodTimestamp[]
+): number {
+  const daysWithHealthData = new Set(
+    days
+      .filter(
+        (day) =>
+          day.steps !== null ||
+          day.exerciseMinutes !== null ||
+          day.sleepMinutes !== null ||
+          day.mindfulMinutes !== null ||
+          day.workoutCount > 0 ||
+          day.stateOfMindCount > 0
+      )
+      .map((day) => day.date)
+  );
+  const overlappingDays = new Set<string>();
+  for (const mood of moods) {
+    if (!MOOD_SCORE[mood.emoji]) continue;
+    const key = moodLocalDayKey(mood);
+    if (!key) continue;
+    if (daysWithHealthData.has(key)) overlappingDays.add(key);
+  }
+  return overlappingDays.size;
 }
 
 export function createAppleHealthOverview(

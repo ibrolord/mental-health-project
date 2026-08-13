@@ -180,6 +180,22 @@ describe('Apple Health local summaries', () => {
     expect(formatHealthMinutes(null)).toBe('—');
   });
 
+  it('uses the recorded local mood date when it differs from the timestamp day', () => {
+    const snapshot = buildAppleHealthSnapshot(
+      { ...emptyRaw(), steps: [{ date: localDate(8), value: 3000 }] },
+      localDate(8),
+      1
+    );
+    const mood = {
+      emoji: '🙂',
+      created_at: localDate(7, 23).toISOString(),
+      local_date: localDayKey(localDate(8)),
+    };
+    expect(createAppleHealthPattern(snapshot.days, [mood])).toBe(
+      'Mood and Apple Health overlap on 1 of the last 30 days.'
+    );
+  });
+
   it('creates a bounded AI aggregate without samples, dates, or source metadata', () => {
     const snapshot = buildAppleHealthSnapshot(
       {
@@ -360,12 +376,15 @@ describe('Apple Health release boundaries', () => {
       resolve(root, 'mobile/components/AppleHealthInsights.tsx'),
       'utf8'
     );
-    expect(insights).toContain('Ask AI about this');
+    expect(insights).toContain('Make sense of this');
+    expect(insights).toContain("pathname: '/advisor'");
     expect(insights).toContain("health: '1'");
-    expect(insights).toContain('healthRequest: Date.now().toString()');
-    expect(insights).toContain(
-      "process.env.EXPO_PUBLIC_HEALTH_AI_ENABLED === 'true'"
-    );
+    expect(insights).toContain("mood: '1'");
+
+    const advisor = readFileSync(resolve(root, 'mobile/app/advisor.tsx'), 'utf8');
+    expect(advisor).toContain('createAdvisorHealthFeatures(snapshot, moodTimestamps)');
+    expect(advisor).toContain('These summaries are used on this device.');
+    expect(advisor).not.toMatch(/fetch\(|apiRequest|generateText|streamText/);
 
     const consent = readFileSync(
       resolve(root, 'mobile/lib/apple-health-ai-consent.ts'),
