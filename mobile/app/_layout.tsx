@@ -165,6 +165,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="auth/login" options={stackScreenOptions('Sign In', '/settings', true)} />
           <Stack.Screen name="auth/signup" options={stackScreenOptions('Sign Up', '/settings', true)} />
+          <Stack.Screen name="auth/forgot-password" options={stackScreenOptions('Reset Password', '/auth/login', true)} />
           <Stack.Screen name="assessments/[type]" options={stackScreenOptions('Assessment', '/(tabs)/assessments')} />
           <Stack.Screen name="goals" options={stackScreenOptions('Goals')} />
           <Stack.Screen name="advisor" options={stackScreenOptions('Advisor')} />
@@ -196,7 +197,7 @@ export default function RootLayout() {
 
 function stackScreenOptions(
   title: string,
-  fallback: '/(tabs)' | '/(tabs)/assessments' | '/settings' = '/(tabs)',
+  fallback: '/(tabs)' | '/(tabs)/assessments' | '/settings' | '/auth/login' = '/(tabs)',
   modal = false
 ) {
   return {

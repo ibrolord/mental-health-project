@@ -4,11 +4,13 @@ import {
   ACCOUNT_UPGRADE_EMAIL_FIELD,
   ACCOUNT_UPGRADE_STARTED_FLAG,
   getPendingAccountUpgradeEmail,
+  isExistingAccountError,
   isAccountEmailConfirmed,
   isAccountUpgradeComplete,
   isAccountUpgradePending,
   normalizeEmail,
   signupErrorMessage,
+  signInErrorMessage,
   validateAccountEmail,
 } from '../../mobile/lib/auth-validation';
 
@@ -28,6 +30,31 @@ describe('mobile signup validation', () => {
 
   it('turns provider rate limits into actionable copy', () => {
     expect(signupErrorMessage(new Error('email rate limit exceeded'))).toContain('wait an hour');
+  });
+
+  it('recognizes existing accounts without depending on one Supabase message shape', () => {
+    expect(
+      isExistingAccountError(
+        new Error('A user with this email address has already been registered')
+      )
+    ).toBe(true);
+    expect(isExistingAccountError({ code: 'user_already_exists' })).toBe(true);
+    expect(isExistingAccountError({ code: 'email_exists' })).toBe(true);
+    expect(isExistingAccountError(new Error('email rate limit exceeded'))).toBe(false);
+    expect(signupErrorMessage({ code: 'user_already_exists' })).toContain(
+      'Sign in instead'
+    );
+  });
+
+  it('turns common sign-in failures into recovery guidance', () => {
+    expect(signInErrorMessage(new Error('Invalid login credentials'))).toContain(
+      'reset your password'
+    );
+    expect(signInErrorMessage({ code: 'invalid_credentials' })).toContain(
+      'reset your password'
+    );
+    expect(signInErrorMessage({ code: 'email_not_confirmed', message: 'Email not confirmed' }))
+      .toBe('Confirm your email before signing in.');
   });
 
   it('requires email confirmation and the completed password step', () => {

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-08-13.1",
+  "checklistVersion": "2026-08-13.2",
   "platform": "ios",
-  "expectedInventory": { "routes": 34, "routeChecks": 692, "workflows": 110, "total": 802 },
+  "expectedInventory": { "routes": 35, "routeChecks": 710, "workflows": 110, "total": 820 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -171,7 +171,7 @@
       "source": "app/auth/login.tsx",
       "kind": "modal",
       "identityRequirements": ["fresh-anonymous", "email-owner", "google-owner", "apple-owner"],
-      "controls": ["email", "password", "password-visibility", "submit", "google", "apple", "switch-to-signup", "return-to-app"]
+      "controls": ["existing-account-notice", "email", "password", "password-visibility", "forgot-password", "submit", "google", "apple", "switch-to-signup", "return-to-app"]
     },
     {
       "id": "signup",
@@ -179,7 +179,15 @@
       "source": "app/auth/signup.tsx",
       "kind": "modal",
       "identityRequirements": ["fresh-anonymous", "email-owner", "google-owner", "apple-owner"],
-      "controls": ["email", "submit-email", "confirmation-return", "password", "password-confirmation", "save-password", "google", "apple", "switch-to-login", "return-to-app"]
+      "controls": ["email", "submit-email", "existing-email-signin", "existing-email-reset", "linked-provider-signin", "confirmation-return", "password", "password-confirmation", "save-password", "google", "apple", "switch-to-login", "return-to-app"]
+    },
+    {
+      "id": "forgot-password",
+      "path": "/auth/forgot-password",
+      "source": "app/auth/forgot-password.tsx",
+      "kind": "modal",
+      "identityRequirements": ["fresh-anonymous", "email-owner", "google-owner", "apple-owner"],
+      "controls": ["prefilled-email", "invalid-email", "send-reset", "privacy-neutral-success", "send-again", "back-to-login"]
     },
     {
       "id": "assessment",

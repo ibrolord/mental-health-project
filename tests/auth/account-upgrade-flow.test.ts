@@ -78,7 +78,7 @@ describe('anonymous account upgrade journey', () => {
     expect(mobileAuth).toContain('clearAllReminders()');
     expect(webLogin).toContain('Keep data and create an account');
     expect(webLogin).toContain('Delete data and sign in');
-    expect(mobileLogin).toContain('Keep Data and Create Account');
+    expect(mobileLogin).toContain('Keep Data and Continue');
     expect(mobileLogin).toContain('Delete Data and Sign In');
   });
 
@@ -103,7 +103,7 @@ describe('anonymous account upgrade journey', () => {
     expect(webCallback).toContain('Sign in to existing account');
     expect(webLogin).toContain("searchParams.get('reason') === 'identity_already_linked'");
     expect(webSignup).toContain('onIdentityAlreadyLinked={setLinkedIdentityProvider}');
-    expect(mobileSignup).toContain('onIdentityAlreadyLinked={setLinkedIdentityProvider}');
-    expect(mobileSignup).toContain('Nothing in this anonymous profile has been deleted.');
+    expect(mobileSignup).toContain('onIdentityAlreadyLinked={(provider) =>');
+    expect(mobileSignup).toContain('Any anonymous activity stays separate');
   });
 });

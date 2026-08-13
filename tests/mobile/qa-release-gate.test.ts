@@ -114,10 +114,10 @@ describe('exhaustive mobile QA release gate', () => {
     expect(validateChecklist(checklist, MOBILE_ROOT)).toEqual([]);
     const ids = expandChecklist(checklist).map((item) => item.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(checklist.expectedInventory).toEqual({ routes: 34, routeChecks: 692, workflows: 110, total: 802 });
-    expect(checklist.routes).toHaveLength(34);
+    expect(checklist.expectedInventory).toEqual({ routes: 35, routeChecks: 710, workflows: 110, total: 820 });
+    expect(checklist.routes).toHaveLength(35);
     expect(checklist.workflows).toHaveLength(110);
-    expect(ids).toHaveLength(802);
+    expect(ids).toHaveLength(820);
     expect(checklistDigest(checklist)).toMatch(/^[a-f0-9]{64}$/);
   });
 

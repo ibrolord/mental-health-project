@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth, type SocialAuthProvider } from '@/lib/auth-context';
 import {
+  isExistingAccountError,
   normalizeEmail,
   signupErrorMessage,
   validateAccountEmail,
@@ -39,6 +40,7 @@ export default function SignupScreen() {
   const [error, setError] = useState('');
   const [linkedIdentityProvider, setLinkedIdentityProvider] =
     useState<SocialAuthProvider | null>(null);
+  const [existingEmailAccount, setExistingEmailAccount] = useState(false);
   const submissionRef = useRef(false);
   const [step, setStep] = useState<SignupStep>(
     accountUpgradePending ? 'confirmation' : 'email'
@@ -60,11 +62,13 @@ export default function SignupScreen() {
 
     submissionRef.current = true;
     setError('');
+    setExistingEmailAccount(false);
     setLoading(true);
     try {
       await startAccountUpgrade(normalizeEmail(email));
       setStep('confirmation');
     } catch (signupError) {
+      setExistingEmailAccount(isExistingAccountError(signupError));
       setError(signupErrorMessage(signupError));
     } finally {
       submissionRef.current = false;
@@ -226,31 +230,56 @@ export default function SignupScreen() {
           Add an email and password without losing anything saved in this anonymous profile.
         </Text>
 
-        {error ? (
+        {error && !existingEmailAccount ? (
           <View style={s.errorBox} accessibilityRole="alert">
             <Text style={s.errorText}>{error}</Text>
           </View>
         ) : null}
 
-        {linkedIdentityProvider ? (
+        {linkedIdentityProvider || existingEmailAccount ? (
           <View style={s.recoveryBox} accessibilityRole="alert">
             <Text style={s.recoveryTitle}>This account already exists</Text>
             <Text style={s.recoveryText}>
-              Sign in with {linkedIdentityProvider === 'google' ? 'Google' : 'Apple'}
-              {' '}instead. Nothing in this anonymous profile has been deleted.
+              {linkedIdentityProvider
+                ? `Sign in with ${linkedIdentityProvider === 'google' ? 'Google' : 'Apple'} instead.`
+                : 'Sign in with this email instead.'}{' '}
+              Any anonymous activity stays separate until you choose what to do
+              with it on the sign-in screen.
             </Text>
             <TouchableOpacity
               style={s.recoveryButton}
               onPress={() =>
                 router.replace({
                   pathname: '/auth/login',
-                  params: returnTo === '/(tabs)' ? {} : { returnTo },
+                  params: {
+                    email: normalizeEmail(email),
+                    reason: 'existing-account',
+                    ...(linkedIdentityProvider ? { provider: linkedIdentityProvider } : {}),
+                    ...(returnTo === '/(tabs)' ? {} : { returnTo }),
+                  },
                 })
               }
               accessibilityRole="button"
             >
-              <Text style={s.recoveryButtonText}>Go to Sign In</Text>
+              <Text style={s.recoveryButtonText}>Sign In to Existing Account</Text>
             </TouchableOpacity>
+            {existingEmailAccount ? (
+              <TouchableOpacity
+                style={s.recoveryLinkButton}
+                onPress={() =>
+                  router.push({
+                    pathname: '/auth/forgot-password',
+                    params: {
+                      email: normalizeEmail(email),
+                      ...(returnTo === '/(tabs)' ? {} : { returnTo }),
+                    },
+                  })
+                }
+                accessibilityRole="button"
+              >
+                <Text style={s.recoveryLink}>Reset Password</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : null}
 
@@ -258,7 +287,12 @@ export default function SignupScreen() {
         <TextInput
           style={s.input}
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(value) => {
+            setEmail(value);
+            setExistingEmailAccount(false);
+            setLinkedIdentityProvider(null);
+            setError('');
+          }}
           placeholder="you@example.com"
           placeholderTextColor={Colors.textSecondary}
           keyboardType="email-address"
@@ -267,6 +301,7 @@ export default function SignupScreen() {
           autoCapitalize="none"
           autoCorrect={false}
           onSubmitEditing={handleSignup}
+          accessibilityLabel="Email"
         />
 
         <Text style={s.helper}>
@@ -285,7 +320,11 @@ export default function SignupScreen() {
         <SocialAuthButtons
           intent="upgrade"
           onComplete={returnToApp}
-          onIdentityAlreadyLinked={setLinkedIdentityProvider}
+          onIdentityAlreadyLinked={(provider) => {
+            setError('');
+            setExistingEmailAccount(false);
+            setLinkedIdentityProvider(provider);
+          }}
         />
 
         <TouchableOpacity
@@ -363,10 +402,19 @@ const s = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 999,
     marginTop: 12,
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 9,
+    paddingVertical: 10,
   },
   recoveryButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+  recoveryLinkButton: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingVertical: 11,
+  },
+  recoveryLink: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
   btn: {
     backgroundColor: Colors.primary,
     borderRadius: 12,

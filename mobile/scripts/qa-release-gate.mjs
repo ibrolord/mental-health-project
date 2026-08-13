@@ -13,13 +13,16 @@ export const MOBILE_ROOT = path.resolve(SCRIPT_DIR, '..');
 export const REPO_ROOT = path.resolve(MOBILE_ROOT, '..');
 export const CHECKLIST_PATH = path.join(MOBILE_ROOT, 'qa', 'ios-release-checklist.json');
 export const RUNS_ROOT = path.join(MOBILE_ROOT, 'qa', 'runs');
-export const EXPECTED_INVENTORY = Object.freeze({ routes: 34, routeChecks: 692, workflows: 110, total: 802 });
-export const EXPECTED_CHECKLIST_SHA256 = '55de4c4e37918201941e780211caa46e624f6c764ba433479c438476e7167143';
+export const EXPECTED_INVENTORY = Object.freeze({ routes: 35, routeChecks: 710, workflows: 110, total: 820 });
+export const EXPECTED_CHECKLIST_SHA256 = '4b107490f124f8811f2caea223784a7f722038d8eede3fc587069450f32361ed';
 const REQUIRED_ROUTE_CONTROLS = Object.freeze({
   dashboard: ['open-together'],
   advisor: ['support', 'continue-without-context', 'context-preview', 'fixed-two-hour-reminder', 'cancel-reminder', 'together-share-review'],
   'ai-chat': ['individual-context-toggles', 'local-safety-region', 'local-safety-country'],
   assessment: ['about-collapse', 'safety-region', 'country-support', 'safety-plan'],
+  login: ['existing-account-notice', 'forgot-password'],
+  signup: ['existing-email-signin', 'existing-email-reset', 'linked-provider-signin'],
+  'forgot-password': ['send-reset', 'privacy-neutral-success', 'back-to-login'],
   goals: ['open-details', 'reminder', 'add-milestone', 'milestone-due-date', 'edit-milestone-due-date', 'clear-milestone-due-date', 'add-file', 'discard-unsaved'],
   voice: ['start-live', 'interrupt-ai', 'local-safety-spoken', 'safety-country'],
 });

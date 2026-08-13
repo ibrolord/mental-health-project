@@ -141,6 +141,7 @@ interface AuthContextType {
   accountUpgradePending: boolean;
   pendingAccountUpgradeEmail: string | null;
   signIn: (email: string, password: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
   startAccountUpgrade: (email: string) => Promise<void>;
   completeAccountUpgrade: () => Promise<AccountUpgradeStatus>;
   finishAccountUpgrade: (password: string) => Promise<void>;
@@ -162,6 +163,7 @@ const AuthContext = createContext<AuthContextType>({
   accountUpgradePending: false,
   pendingAccountUpgradeEmail: null,
   signIn: async () => {},
+  requestPasswordReset: async () => {},
   startAccountUpgrade: async () => {},
   completeAccountUpgrade: async () => 'complete',
   finishAccountUpgrade: async () => {},
@@ -310,6 +312,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     await assertAnonymousAccountIsEmpty();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  };
+
+  const requestPasswordReset = async (email: string): Promise<void> => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: 'https://mhtoolkit.vercel.app/auth/reset-password?source=mobile',
+    });
     if (error) throw error;
   };
 
@@ -682,6 +691,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         accountUpgradePending,
         pendingAccountUpgradeEmail,
         signIn,
+        requestPasswordReset,
         startAccountUpgrade,
         completeAccountUpgrade,
         finishAccountUpgrade,

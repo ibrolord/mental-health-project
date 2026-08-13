@@ -18,7 +18,7 @@ import {
   useAuth,
   type SocialAuthProvider,
 } from '@/lib/auth-context';
-import { normalizeEmail } from '@/lib/auth-validation';
+import { normalizeEmail, signInErrorMessage } from '@/lib/auth-validation';
 import { Colors } from '@/lib/constants';
 import { SocialAuthButtons } from '@/components/social-auth-buttons';
 
@@ -29,9 +29,15 @@ type BlockedAttempt = (
 
 export default function LoginScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ returnTo?: string }>();
+  const params = useLocalSearchParams<{
+    returnTo?: string;
+    email?: string;
+    reason?: string;
+    provider?: SocialAuthProvider;
+    reset?: string;
+  }>();
   const { continueWithProvider, discardAnonymousProfile, signIn } = useAuth();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(params.email ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -64,7 +70,7 @@ export default function LoginScreen() {
         setAnonymousDataDeleted(false);
         setBlockedAttempt({ kind: 'password', anonymousUserId });
       } else {
-        setError(loginError instanceof Error ? loginError.message : 'Failed to sign in.');
+        setError(signInErrorMessage(loginError));
       }
     } finally {
       submissionRef.current = false;
@@ -135,30 +141,47 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={s.title}>Welcome back</Text>
-        <Text style={s.subtitle}>Sign in to sync your MHtoolkit data.</Text>
+        <Text style={s.subtitle}>Sign in to your MHtoolkit account.</Text>
+
+        {params.reason === 'existing-account' ? (
+          <View style={s.noticeBox} accessibilityRole="alert">
+            <Text style={s.noticeTitle}>This account already exists</Text>
+            <Text style={s.noticeText}>
+              {params.provider === 'apple'
+                ? 'Use Sign in with Apple below.'
+                : params.provider === 'google'
+                  ? 'Use Sign in with Google below.'
+                  : 'Enter your password, or reset it if you created the account with Apple or Google.'}
+            </Text>
+          </View>
+        ) : null}
+
+        {params.reset === 'complete' ? (
+          <View style={s.successBox} accessibilityRole="alert">
+            <Text style={s.successText}>Password updated. You can sign in now.</Text>
+          </View>
+        ) : null}
 
         {blockedAttempt ? (
           <View style={s.choiceBox} accessibilityRole="alert">
             <Text style={s.choiceTitle}>This profile has saved activity</Text>
             <Text style={s.choiceText}>
-              Keep it by creating an account, or permanently delete it before
-              signing in to a different account.
+              This anonymous activity cannot be merged automatically into an
+              existing account. Keep using this profile, or delete it before
+              signing in.
             </Text>
             <TouchableOpacity
               style={s.keepButton}
-              onPress={() =>
-                router.replace({
-                  pathname: '/auth/signup',
-                  params: returnTo === '/(tabs)' ? {} : { returnTo },
-                })
-              }
+              onPress={returnToApp}
+              accessibilityRole="button"
             >
-              <Text style={s.keepButtonText}>Keep Data and Create Account</Text>
+              <Text style={s.keepButtonText}>Keep Data and Continue</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={s.deleteButton}
               onPress={confirmDiscard}
               disabled={loading}
+              accessibilityRole="button"
             >
               <Text style={s.deleteButtonText}>
                 {loading ? 'Deleting Data...' : 'Delete Data and Sign In'}
@@ -193,6 +216,7 @@ export default function LoginScreen() {
           autoComplete="email"
           autoCapitalize="none"
           autoCorrect={false}
+          accessibilityLabel="Email"
         />
 
         <Text style={s.label}>Password</Text>
@@ -207,6 +231,7 @@ export default function LoginScreen() {
             autoComplete="current-password"
             secureTextEntry={!showPassword}
             onSubmitEditing={handleLogin}
+            accessibilityLabel="Password"
           />
           <TouchableOpacity
             style={s.passwordToggle}
@@ -222,6 +247,22 @@ export default function LoginScreen() {
             />
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          style={s.forgotButton}
+          onPress={() =>
+            router.push({
+              pathname: '/auth/forgot-password',
+              params: {
+                email: normalizeEmail(email),
+                ...(returnTo === '/(tabs)' ? {} : { returnTo }),
+              },
+            })
+          }
+          accessibilityRole="button"
+        >
+          <Text style={s.forgotText}>Forgot password?</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[s.btn, loading && s.disabled]}
@@ -290,6 +331,15 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    marginTop: -10,
+    marginBottom: 8,
+  },
+  forgotText: { color: Colors.primary, fontSize: 14, fontWeight: '600' },
   errorBox: {
     backgroundColor: '#fef2f2',
     borderWidth: 1,
@@ -308,6 +358,16 @@ const s = StyleSheet.create({
     marginBottom: 18,
   },
   successText: { color: '#064e3b', fontSize: 14, lineHeight: 20 },
+  noticeBox: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#93c5fd',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 18,
+  },
+  noticeTitle: { color: '#1e3a8a', fontSize: 15, fontWeight: '700' },
+  noticeText: { color: '#1e3a8a', fontSize: 14, lineHeight: 20, marginTop: 3 },
   choiceBox: {
     backgroundColor: '#fffbeb',
     borderWidth: 1,
@@ -321,6 +381,7 @@ const s = StyleSheet.create({
   keepButton: {
     backgroundColor: Colors.primary,
     borderRadius: 10,
+    minHeight: 44,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 14,
@@ -330,6 +391,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#dc2626',
     borderRadius: 10,
+    minHeight: 44,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 8,
