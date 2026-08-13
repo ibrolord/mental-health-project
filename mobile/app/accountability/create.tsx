@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/lib/constants';
 import { accountabilityClient } from '@/lib/accountability/runtime';
@@ -9,16 +9,21 @@ import { ScreenState } from '@/components/accountability/ScreenState';
 
 export default function CreateCommitmentScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ title?: string | string[]; source?: string | string[] }>();
+  const suggestedTitle = (Array.isArray(params.title) ? params.title[0] : params.title)
+    ?.trim()
+    .slice(0, 160) ?? '';
+  const fromAdvisor = (Array.isArray(params.source) ? params.source[0] : params.source) === 'advisor';
   const [connections, setConnections] = useState<AccountabilityConnection[]>([]);
   const [connectionId, setConnectionId] = useState('');
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(suggestedTitle);
   const [cadence, setCadence] = useState<CommitmentCadence>('daily');
   const [note, setNote] = useState('');
   const [notesShared, setNotesShared] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
+  const selectedConnection = connections.find((item) => item.id === connectionId) ?? null;
   useFocusEffect(useCallback(() => {
     let active = true;
     void accountabilityClient.listConnections()
@@ -26,7 +31,11 @@ export default function CreateCommitmentScreen() {
         if (!active) return;
         const next = items.filter((item) => item.status === 'active');
         setConnections(next);
-        setConnectionId((current) => current || next[0]?.id || '');
+        setConnectionId((current) =>
+          next.some((connection) => connection.id === current)
+            ? current
+            : next[0]?.id || ''
+        );
       })
       .catch((loadError: unknown) => active && setError(loadError instanceof Error ? loadError.message : 'Connections could not be loaded.'))
       .finally(() => active && setLoading(false));
@@ -34,11 +43,11 @@ export default function CreateCommitmentScreen() {
   }, []));
 
   const submit = async () => {
-    if (!title.trim() || !connectionId) return;
+    if (!title.trim() || !selectedConnection) return;
     setSubmitting(true);
     try {
       const commitment = await accountabilityClient.createCommitment({
-        connectionId,
+        connectionId: selectedConnection.id,
         title: title.trim(),
         cadence,
         ...(note.trim() ? { note: note.trim(), notesShared } : {}),
@@ -53,14 +62,18 @@ export default function CreateCommitmentScreen() {
 
   if (loading) return <SafeAreaView style={styles.safe} edges={['bottom']}><ScreenState kind="loading" title="Loading partners" message="Getting your active connections…" /></SafeAreaView>;
   if (error) return <SafeAreaView style={styles.safe} edges={['bottom']}><ScreenState kind="error" title="Could not start" message={error} /></SafeAreaView>;
-  if (connections.length === 0) return <SafeAreaView style={styles.safe} edges={['bottom']}><ScreenState kind="empty" title="Connect first" message="Invite or join a partner before sharing a commitment." actionLabel="Back to Together" onAction={() => router.back()} /></SafeAreaView>;
+  if (connections.length === 0) return <SafeAreaView style={styles.safe} edges={['bottom']}><ScreenState kind="empty" title="Connect first" message="Invite or join a partner before sharing a commitment." actionLabel="Set up Together" onAction={() => router.replace('/accountability')} /></SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>Share one commitment</Text>
-          <Text style={styles.body}>This creates a separate Together item. It does not share an existing goal or anything else in MHtoolkit.</Text>
+          <Text style={styles.title}>{fromAdvisor ? 'Review before sharing' : 'Share one commitment'}</Text>
+          <Text style={styles.body}>
+            {fromAdvisor
+              ? 'Your partner receives the commitment title, check-in rhythm, and any note you explicitly share. Mood, Apple Health, and Advisor context stay private.'
+              : 'This creates a separate Together item. It does not share an existing goal or anything else in MHtoolkit.'}
+          </Text>
 
           <Text style={styles.label}>Share with</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pills}>
@@ -84,7 +97,7 @@ export default function CreateCommitmentScreen() {
           </View>
 
           <Text style={styles.label}>Private note (optional)</Text>
-          <TextInput accessibilityLabel="Optional commitment note" multiline placeholder="Add context for yourself" placeholderTextColor={Colors.textSecondary} style={[styles.input, styles.note]} textAlignVertical="top" value={note} onChangeText={setNote} />
+          <TextInput accessibilityLabel="Optional commitment note" multiline placeholder="Add context for yourself" placeholderTextColor={Colors.textSecondary} style={[styles.input, styles.note]} textAlignVertical="top" value={note} onChangeText={(value) => { setNote(value); if (!value.trim()) setNotesShared(false); }} />
           <View style={styles.switchRow}>
             <View style={styles.switchText}>
               <Text style={styles.switchTitle}>Share this note</Text>
@@ -93,7 +106,17 @@ export default function CreateCommitmentScreen() {
             <Switch accessibilityLabel="Share this note with partner" disabled={!note.trim()} trackColor={{ false: Colors.border, true: Colors.primary }} value={notesShared && Boolean(note.trim())} onValueChange={setNotesShared} />
           </View>
 
-          <TouchableOpacity accessibilityRole="button" disabled={submitting || !title.trim()} style={[styles.button, (submitting || !title.trim()) && styles.disabled]} onPress={() => void submit()}>
+          <View style={styles.reviewCard} accessibilityLabel="Sharing preview">
+            <Text style={styles.reviewTitle}>Before you share</Text>
+            <Text style={styles.reviewLine}>Partner: {selectedConnection?.partnerName ?? 'Choose a partner'}</Text>
+            <Text style={styles.reviewLine}>Commitment: {title.trim() || 'Add a commitment'}</Text>
+            <Text style={styles.reviewLine}>Check-in rhythm: {cadence === 'daily' ? 'Daily' : 'Weekly'}</Text>
+            <Text style={styles.reviewLine}>
+              Note: {note.trim() && notesShared ? note.trim() : 'Stays private'}
+            </Text>
+          </View>
+
+          <TouchableOpacity accessibilityRole="button" disabled={submitting || !title.trim() || !selectedConnection} style={[styles.button, (submitting || !title.trim() || !selectedConnection) && styles.disabled]} onPress={() => void submit()}>
             <Text style={styles.buttonText}>{submitting ? 'Sharing…' : 'Share commitment'}</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -124,6 +147,9 @@ const styles = StyleSheet.create({
   switchText: { flex: 1, paddingRight: 12 },
   switchTitle: { color: Colors.text, fontSize: 15, fontWeight: '600' },
   switchBody: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 3 },
+  reviewCard: { backgroundColor: Colors.primaryLight, borderColor: Colors.border, borderRadius: 12, borderWidth: 1, marginTop: 18, padding: 14 },
+  reviewTitle: { color: Colors.text, fontSize: 15, fontWeight: '700', marginBottom: 7 },
+  reviewLine: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19 },
   button: { alignItems: 'center', backgroundColor: Colors.primary, borderRadius: 12, marginTop: 24, paddingVertical: 15 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   disabled: { opacity: 0.45 },

@@ -276,7 +276,7 @@ describe('mobile guided reflections', () => {
       'reflectionDraftStorage.read(session.user.id)'
     );
     expect(authContextSource).toContain(
-      'result.hasOwnedData !== false || remindersEnabled || reflectionDraft'
+      'result.hasOwnedData !== false || remindersEnabled || advisorReminder || reflectionDraft'
     );
   });
 

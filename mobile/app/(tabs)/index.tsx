@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Pressable,
@@ -25,6 +24,7 @@ import { chooseRandomAffirmation } from '@/lib/affirmations';
 import { loadAffirmationCatalog } from '@/lib/affirmations-client';
 import { getMoodLabel, MoodGlyph, MoodPicker } from '@/components/MoodPicker';
 import { AppScreen, InlineStatus, ListRow } from '@/components/AppUI';
+import { LeafMark } from '@/components/LeafMark';
 import { UNIFIED_LIBRARY } from '@/lib/library/content';
 import {
   composeSavedCollection,
@@ -33,10 +33,7 @@ import {
   type SavedLibraryStateRow,
   type SavedLibraryViewItem,
 } from '@/lib/product-state';
-import {
-  createDashboardPreferenceWriter,
-  dashboardPreferences,
-} from '@/lib/dashboard-preferences';
+import { dashboardPreferences } from '@/lib/dashboard-preferences';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -48,12 +45,7 @@ export default function DashboardScreen() {
   const [savingMood, setSavingMood] = useState(false);
   const [lowEnergyMode, setLowEnergyMode] = useState(false);
   const [lowEnergyOwnerKey, setLowEnergyOwnerKey] = useState<string | null>(null);
-  const [lowEnergyLoadError, setLowEnergyLoadError] = useState(false);
   const [lowEnergyLoadAttempt, setLowEnergyLoadAttempt] = useState(0);
-  const [viewPreferenceError, setViewPreferenceError] = useState(false);
-  const preferenceWriterRef = useRef(
-    createDashboardPreferenceWriter(dashboardPreferences)
-  );
   const [moodStatus, setMoodStatus] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -90,9 +82,6 @@ export default function DashboardScreen() {
     const expectedOwnerKey = ownerKey;
     setLowEnergyMode(false);
     setLowEnergyOwnerKey(null);
-    setLowEnergyLoadError(false);
-    setViewPreferenceError(false);
-    preferenceWriterRef.current.invalidate();
     if (!expectedOwnerKey) return;
 
     let active = true;
@@ -100,14 +89,14 @@ export default function DashboardScreen() {
       .readLowEnergyMode(expectedOwnerKey)
       .then((enabled) => {
         if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
-        preferenceWriterRef.current.hydrate(expectedOwnerKey, enabled);
         setLowEnergyMode(enabled);
         setLowEnergyOwnerKey(expectedOwnerKey);
       })
       .catch((error) => {
         console.warn('Unable to restore the dashboard view preference:', error);
         if (active && ownerKeyRef.current === expectedOwnerKey) {
-          setLowEnergyLoadError(true);
+          setLowEnergyMode(false);
+          setLowEnergyOwnerKey(expectedOwnerKey);
         }
       });
 
@@ -263,8 +252,10 @@ export default function DashboardScreen() {
     visibleWeekMoods.map((entry) => format(new Date(entry.created_at), 'yyyy-MM-dd'))
   ).size;
 
+  const showGroundingFirst =
+    visibleLowEnergyMode || visibleTodayMood === '😞' || visibleTodayMood === '😢';
   const nextStep =
-    visibleLowEnergyMode || visibleTodayMood === '😞' || visibleTodayMood === '😢'
+    showGroundingFirst
       ? {
           eyebrow: 'FOR RIGHT NOW',
           title: 'Steady myself',
@@ -273,57 +264,22 @@ export default function DashboardScreen() {
           icon: 'wind' as const,
           route: '/ground' as const,
         }
-      : visibleTodayMood === '😄' || visibleTodayMood === '🙂'
-        ? {
-            eyebrow: 'BUILD ON THIS MOMENT',
-            title: 'Choose one meaningful step',
-            description: 'Use the energy you have without filling the whole day.',
-            label: 'Open my goals',
-            icon: 'flag' as const,
-            route: '/goals' as const,
-          }
-        : {
-            eyebrow: 'FOR RIGHT NOW',
-            title: 'Take one small step',
-            description: 'Choose something realistic enough to begin today.',
-            label: 'Choose a next step',
-            icon: 'arrow-right' as const,
-            route: '/habits' as const,
-          };
-
-  if (ownerKey && lowEnergyOwnerKey !== ownerKey) {
-    return (
-      <AppScreen>
-        <View style={s.brandRow}>
-          <Text style={s.brand}>MHtoolkit</Text>
-        </View>
-        <View style={s.preferenceLoadingCard}>
-          {lowEnergyLoadError ? (
-            <>
-              <Text accessibilityRole="alert" style={s.preferenceError}>
-                Your saved dashboard view could not be loaded.
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Retry loading dashboard view"
-                onPress={() => setLowEnergyLoadAttempt((attempt) => attempt + 1)}
-                style={s.preferenceRetry}
-              >
-                <Text style={s.preferenceRetryText}>Retry</Text>
-              </Pressable>
-            </>
-          ) : (
-            <ActivityIndicator accessibilityLabel="Loading dashboard view" color={Colors.primary} />
-          )}
-        </View>
-      </AppScreen>
-    );
-  }
+      : {
+          eyebrow: 'ADVISOR',
+          title: 'One practical next step',
+          description: 'Using only the information you choose.',
+          label: 'See my suggestion',
+          icon: 'arrow-right' as const,
+          route: '/advisor' as const,
+        };
 
   return (
     <AppScreen>
       <View style={s.brandRow}>
-        <Text style={s.brand}>MHtoolkit</Text>
+        <View style={s.brandIdentity}>
+          <LeafMark size={34} />
+          <Text style={s.brand}>MHtoolkit</Text>
+        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Get urgent and local support"
@@ -357,15 +313,10 @@ export default function DashboardScreen() {
           s.togetherCard,
           visibleLowEnergyMode && s.togetherCardCompact,
           pressed && s.pressed,
-        ]}
-      >
-        <View style={s.togetherLeaf}>
-          <MaterialCommunityIcons
-            accessible={false}
-            name="leaf"
-            size={24}
-            color={Colors.primary}
-          />
+         ]}
+       >
+         <View style={s.togetherLeaf}>
+           <MaterialCommunityIcons accessible={false} name="leaf" size={21} color={Colors.primary} />
         </View>
         <View style={s.togetherCopy}>
           <Text style={s.togetherEyebrow}>ACCOUNTABILITY PARTNER</Text>
@@ -382,13 +333,6 @@ export default function DashboardScreen() {
           <Feather name="arrow-right" size={20} color={Colors.primary} />
         </View>
       </Pressable>
-
-      {viewPreferenceError ? (
-        <InlineStatus
-          tone="error"
-          message="Your saved view could not be restored. This simpler view is still available."
-        />
-      ) : null}
 
       <View style={s.moodSection}>
         <MoodPicker
@@ -421,22 +365,40 @@ export default function DashboardScreen() {
             resizeMode="cover"
             style={StyleSheet.absoluteFillObject}
           />
-        </View>
-        <View style={s.nextStepContent}>
-          <Text style={s.nextStepEyebrow}>{nextStep.eyebrow}</Text>
-          <Text accessibilityRole="header" style={s.nextStepTitle}>{nextStep.title}</Text>
-          <Text style={s.nextStepCopy}>{nextStep.description}</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={nextStep.label}
-            onPress={() => router.push(nextStep.route)}
-            style={({ pressed }) => [s.nextStepButton, pressed && s.pressed]}
-          >
-            <Feather name={nextStep.icon} size={18} color={Colors.card} />
-            <Text style={s.nextStepButtonText}>{nextStep.label}</Text>
+         </View>
+         <View style={s.nextStepContent}>
+           <Text style={s.nextStepEyebrow}>{nextStep.eyebrow}</Text>
+           <Text accessibilityRole="header" style={s.nextStepTitle}>{nextStep.title}</Text>
+           <Text style={s.nextStepCopy}>{nextStep.description}</Text>
+           <Pressable
+             accessibilityRole="button"
+             accessibilityLabel={nextStep.label}
+             onPress={() => router.push(nextStep.route as never)}
+             style={({ pressed }) => [s.nextStepButton, pressed && s.pressed]}
+           >
+             <Feather name={nextStep.icon} size={18} color={Colors.card} />
+             <Text style={s.nextStepButtonText}>{nextStep.label}</Text>
           </Pressable>
         </View>
       </View>
+
+      {showGroundingFirst ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open Advisor for one practical next step"
+          onPress={() => router.push('/advisor')}
+          style={({ pressed }) => [s.advisorStrip, pressed && s.pressed]}
+        >
+          <View style={s.advisorStripIcon}>
+            <Feather name="compass" size={19} color={Colors.primary} />
+          </View>
+          <View style={s.advisorStripCopy}>
+            <Text style={s.advisorStripEyebrow}>ADVISOR</Text>
+            <Text style={s.advisorStripTitle}>Choose another small next step</Text>
+          </View>
+          <Feather name="arrow-right" size={19} color={Colors.primary} />
+        </Pressable>
+      ) : null}
 
       <Text style={s.sectionLabel}>YOUR DAY</Text>
       <View style={s.dayList}>
@@ -503,6 +465,7 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: Spacing.sm,
   },
+  brandIdentity: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   brand: { color: Colors.text, fontFamily: 'Georgia', fontSize: 22, fontWeight: '700' },
   supportAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   supportText: { color: Colors.text, ...Typography.label },
@@ -514,10 +477,6 @@ const s = StyleSheet.create({
   sectionLabel: { color: Colors.text, ...Typography.eyebrow, marginBottom: Spacing.sm },
   addDetailsButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   addDetailsButtonText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
-  preferenceLoadingCard: { minHeight: 160, alignItems: 'center', justifyContent: 'center' },
-  preferenceError: { color: '#b42318', fontSize: 13, lineHeight: 18, marginBottom: 10 },
-  preferenceRetry: { minHeight: 42, justifyContent: 'center', paddingHorizontal: 12 },
-  preferenceRetryText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
   nextStepCard: {
     minHeight: 188,
     overflow: 'hidden',
@@ -525,6 +484,30 @@ const s = StyleSheet.create({
     backgroundColor: '#f3efe3',
     marginBottom: Spacing.xl,
   },
+  advisorStrip: {
+    minHeight: 66,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderColor: Colors.border,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.card,
+    paddingHorizontal: Spacing.md,
+    marginTop: -Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  advisorStripIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  advisorStripCopy: { flex: 1, minWidth: 0 },
+  advisorStripEyebrow: { color: Colors.accent, ...Typography.eyebrow },
+  advisorStripTitle: { color: Colors.text, ...Typography.label, marginTop: Spacing.xxs },
   nextStepArtwork: {
     ...StyleSheet.absoluteFillObject,
     width: '100%',

@@ -7,7 +7,8 @@ export type NotificationScreen =
   | '/goals'
   | '/affirmations'
   | '/library'
-  | '/planner';
+  | '/planner'
+  | '/advisor';
 
 export type NotificationResponseLike = {
   notification: {
@@ -50,6 +51,7 @@ const ALLOWED_NOTIFICATION_SCREENS = new Set<NotificationScreen>([
   '/affirmations',
   '/library',
   '/planner',
+  '/advisor',
 ]);
 
 export function notificationScreenFromResponse(

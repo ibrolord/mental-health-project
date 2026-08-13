@@ -194,6 +194,24 @@ export const sendTestNotification = async () => {
   }
 };
 
+export const scheduleAdvisorReminder = async (date: Date) => {
+  try {
+    const scheduled = await getService().scheduleAdvisorReminder(date);
+    void recordOperationalEvent(
+      scheduled
+        ? 'notification_scheduling_succeeded'
+        : 'notification_permission_denied'
+    );
+    return scheduled;
+  } catch (error) {
+    void recordOperationalEvent('notification_scheduling_failed');
+    throw error;
+  }
+};
+
+export const cancelAdvisorReminder = () => getService().cancelAdvisorReminder();
+export const hasAdvisorReminder = () => getService().hasAdvisorReminder();
+
 // Rebuild local reminders after a user changes a goal, plan, or library state.
 // It is a no-op until the user has enabled reminders on this device.
 export const refreshReminders = async () => {

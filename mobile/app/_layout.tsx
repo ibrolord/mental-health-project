@@ -167,6 +167,7 @@ export default function RootLayout() {
           <Stack.Screen name="auth/signup" options={stackScreenOptions('Sign Up', '/settings', true)} />
           <Stack.Screen name="assessments/[type]" options={stackScreenOptions('Assessment', '/(tabs)/assessments')} />
           <Stack.Screen name="goals" options={stackScreenOptions('Goals')} />
+          <Stack.Screen name="advisor" options={stackScreenOptions('Advisor')} />
           <Stack.Screen name="habits" options={stackScreenOptions('Habit Tracker')} />
           <Stack.Screen name="journal" options={stackScreenOptions('Private Journal')} />
           <Stack.Screen name="reflect" options={stackScreenOptions('Guided Reflection')} />

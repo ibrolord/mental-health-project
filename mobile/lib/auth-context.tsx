@@ -44,7 +44,7 @@ import { offlineSafetyPlanCache } from './offline-safety-plan-cache';
 import { clearFullContextPreference } from './full-context-preference';
 import { clearGoToActions } from './go-to-actions-storage';
 import { clearContextSelections } from './chat-context-preference';
-import { areRemindersEnabled, clearAllReminders } from './notifications';
+import { areRemindersEnabled, clearAllReminders, hasAdvisorReminder } from './notifications';
 import { Colors } from './constants';
 import {
   clearReflectionDraft,
@@ -83,16 +83,17 @@ async function assertAnonymousAccountIsEmpty(): Promise<void> {
   }
   if (!session) return;
 
-  const [result, remindersEnabled, reflectionDraft] = await Promise.all([
+  const [result, remindersEnabled, advisorReminder, reflectionDraft] = await Promise.all([
     apiRequest<{ hasOwnedData?: boolean }>(
       '/api/data/switch-status',
       {},
       { accessToken: session.access_token }
     ),
     areRemindersEnabled(),
+    hasAdvisorReminder(),
     reflectionDraftStorage.read(session.user.id),
   ]);
-  if (result.hasOwnedData !== false || remindersEnabled || reflectionDraft) {
+  if (result.hasOwnedData !== false || remindersEnabled || advisorReminder || reflectionDraft) {
     throw anonymousProfileDataConflict(session.user.id);
   }
 }

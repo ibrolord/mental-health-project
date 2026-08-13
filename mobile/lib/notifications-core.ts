@@ -18,8 +18,10 @@ export const NOTIFICATIONS_KEY = 'mood_reminders_enabled';
 export const REMINDER_TIMES_KEY = 'reminder_times';
 export const MOOD_REMINDER_IDS_KEY = 'mood_reminder_notification_ids';
 export const DUE_DATE_REMINDER_IDS_KEY = 'due_date_reminder_notification_ids';
+export const ADVISOR_REMINDER_IDS_KEY = 'advisor_reminder_notification_ids';
 export const DEFAULT_REMINDER_TIMES = [9, 14, 20] as const;
 export const MOOD_TRACKER_NOTIFICATION_ROUTE = '/(tabs)/tracker';
+export const ADVISOR_NOTIFICATION_ROUTE = '/advisor';
 
 export type ReminderContent = {
   title: string;
@@ -221,6 +223,35 @@ export function createNotificationService(
     );
   }
 
+  async function cancelAdvisorReminderInternal(): Promise<void> {
+    return cancelStoredReminders(
+      ADVISOR_REMINDER_IDS_KEY,
+      'The Advisor reminder could not be removed.'
+    );
+  }
+
+  async function reconcileAdvisorReminder(): Promise<boolean> {
+    const storedIds = parseStoredNotificationIds(
+      await storage.getItem(ADVISOR_REMINDER_IDS_KEY)
+    );
+    if (storedIds.length === 0) {
+      await storage.removeItem(ADVISOR_REMINDER_IDS_KEY);
+      return false;
+    }
+
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const activeIds = new Set(scheduled.map((request) => request.identifier));
+    const retainedIds = storedIds.filter((id) => activeIds.has(id));
+    if (retainedIds.length === 0) {
+      await storage.removeItem(ADVISOR_REMINDER_IDS_KEY);
+      return false;
+    }
+    if (retainedIds.length !== storedIds.length) {
+      await storage.setItem(ADVISOR_REMINDER_IDS_KEY, JSON.stringify(retainedIds));
+    }
+    return true;
+  }
+
   async function scheduleMoodRemindersInternal(): Promise<string[]> {
     configureHandler();
     if ((await storage.getItem(NOTIFICATIONS_KEY)) !== 'true') return [];
@@ -394,12 +425,14 @@ export function createNotificationService(
 
   async function clearAllReminders(): Promise<void> {
     return enqueueReminderMutation(async () => {
-      const [dailyResult, dueDateResult] = await Promise.allSettled([
+      const [dailyResult, dueDateResult, advisorResult] = await Promise.allSettled([
         cancelMoodReminders(),
         cancelDueDateReminders(),
+        cancelAdvisorReminderInternal(),
       ]);
       if (dailyResult.status === 'rejected') throw dailyResult.reason;
       if (dueDateResult.status === 'rejected') throw dueDateResult.reason;
+      if (advisorResult.status === 'rejected') throw advisorResult.reason;
       await storage.setItem(NOTIFICATIONS_KEY, 'false');
     });
   }
@@ -445,6 +478,53 @@ export function createNotificationService(
     return true;
   }
 
+  async function scheduleAdvisorReminder(date: Date): Promise<boolean> {
+    if (!(date instanceof Date) || !Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) {
+      throw new Error('Choose a reminder time in the future.');
+    }
+    return enqueueReminderMutation(async () => {
+      if (!(await requestPermissions())) return false;
+      await cancelAdvisorReminderInternal();
+      await ensureAndroidChannel();
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'A gentle check-in',
+          body: 'Open MHtoolkit when you are ready to choose one small next step.',
+          data: { screen: ADVISOR_NOTIFICATION_ROUTE },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          ...(platform === 'android' ? { channelId: 'mood-reminders' } : {}),
+          date,
+        },
+      });
+      try {
+        await storage.setItem(ADVISOR_REMINDER_IDS_KEY, JSON.stringify([id]));
+      } catch (persistenceError) {
+        try {
+          await Notifications.cancelScheduledNotificationAsync(id);
+        } catch {
+          try {
+            await storage.setItem(ADVISOR_REMINDER_IDS_KEY, JSON.stringify([id]));
+          } catch {
+            // The caller receives a cleanup error; no false success is reported.
+          }
+          throw new Error('The Advisor reminder could not be saved or removed. Check notification settings before trying again.');
+        }
+        throw persistenceError;
+      }
+      return true;
+    });
+  }
+
+  async function cancelAdvisorReminder(): Promise<void> {
+    return enqueueReminderMutation(cancelAdvisorReminderInternal);
+  }
+
+  async function hasAdvisorReminder(): Promise<boolean> {
+    return enqueueReminderMutation(reconcileAdvisorReminder);
+  }
+
   return {
     requestPermissions,
     scheduleMoodReminders,
@@ -455,6 +535,9 @@ export function createNotificationService(
     setReminderTimes,
     getReminderTimes,
     sendTestNotification,
+    scheduleAdvisorReminder,
+    cancelAdvisorReminder,
+    hasAdvisorReminder,
   };
 }
 

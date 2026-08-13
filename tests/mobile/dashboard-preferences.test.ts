@@ -49,7 +49,7 @@ describe('mobile dashboard preferences', () => {
     ).resolves.toBe(false);
   });
 
-  it('keeps Today and its preference control gated to the hydrated owner', () => {
+  it('keeps the preference control owner-bound without blocking Today hydration', () => {
     const dashboard = readFileSync(
       resolve('mobile/app/(tabs)/index.tsx'),
       'utf8'
@@ -66,7 +66,9 @@ describe('mobile dashboard preferences', () => {
     expect(you).toContain('ownerKeyRef.current !== expectedOwnerKey');
     expect(you).toContain('{isAnonymous ? (');
     expect(you).not.toContain('{!isAuthenticated ? (');
-    expect(dashboard).toContain('if (ownerKey && lowEnergyOwnerKey !== ownerKey)');
+    expect(dashboard).not.toContain('if (ownerKey && lowEnergyOwnerKey !== ownerKey)');
+    expect(dashboard).toContain('setLowEnergyMode(false);');
+    expect(dashboard).toContain('setLowEnergyOwnerKey(expectedOwnerKey);');
     expect(dashboard).toContain('setLowEnergyLoadAttempt((attempt) => attempt + 1)');
   });
 

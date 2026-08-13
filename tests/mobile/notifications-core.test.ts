@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_REMINDER_TIMES,
+  ADVISOR_NOTIFICATION_ROUTE,
+  ADVISOR_REMINDER_IDS_KEY,
   DUE_DATE_REMINDER_IDS_KEY,
   MOOD_REMINDER_IDS_KEY,
   MOOD_TRACKER_NOTIFICATION_ROUTE,
@@ -73,6 +75,7 @@ function createStorage(initial: Record<string, string> = {}) {
 
 function createNotifications(initialPermission = permission('granted')) {
   let nextId = 0;
+  const scheduled = new Map<string, unknown>();
   const notificationsModule = {
     AndroidImportance: { DEFAULT: 3 },
     IosAuthorizationStatus: IOS_AUTHORIZATION,
@@ -85,8 +88,20 @@ function createNotifications(initialPermission = permission('granted')) {
     setNotificationChannelAsync: vi.fn(async () => null),
     getPermissionsAsync: vi.fn(async () => initialPermission),
     requestPermissionsAsync: vi.fn(async () => initialPermission),
-    scheduleNotificationAsync: vi.fn(async () => `notification-${++nextId}`),
-    cancelScheduledNotificationAsync: vi.fn(async () => undefined),
+    scheduleNotificationAsync: vi.fn(async (request) => {
+      const id = `notification-${++nextId}`;
+      scheduled.set(id, request);
+      return id;
+    }),
+    cancelScheduledNotificationAsync: vi.fn(async (id: string) => {
+      scheduled.delete(id);
+    }),
+    getAllScheduledNotificationsAsync: vi.fn(async () =>
+      Array.from(scheduled, ([identifier, request]) => ({
+        identifier,
+        ...(request as object),
+      }))
+    ),
   };
   return notificationsModule as unknown as NotificationsModule;
 }
@@ -527,6 +542,97 @@ describe('native local notifications', () => {
     );
   });
 
+  it('schedules one private Advisor reminder and replaces the previous one', async () => {
+    const Notifications = createNotifications();
+    const { storage, values } = createStorage({
+      [ADVISOR_REMINDER_IDS_KEY]: '["old-advisor"]',
+    });
+    const service = createNotificationService(Notifications, storage, 'ios');
+    const date = new Date(Date.now() + 60_000);
+
+    await expect(service.scheduleAdvisorReminder(date)).resolves.toBe(true);
+
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('old-advisor');
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: {
+          title: 'A gentle check-in',
+          body: 'Open MHtoolkit when you are ready to choose one small next step.',
+          data: { screen: ADVISOR_NOTIFICATION_ROUTE },
+        },
+        trigger: expect.objectContaining({ type: 'date', date }),
+      })
+    );
+    expect(JSON.parse(values.get(ADVISOR_REMINDER_IDS_KEY)!)).toEqual(['notification-1']);
+    await expect(service.hasAdvisorReminder()).resolves.toBe(true);
+    await expect(service.cancelAdvisorReminder()).resolves.toBeUndefined();
+    await expect(service.hasAdvisorReminder()).resolves.toBe(false);
+  });
+
+  it('cancels a newly scheduled Advisor reminder when persistence fails', async () => {
+    const Notifications = createNotifications();
+    const { storage } = createStorage();
+    vi.mocked(storage.setItem).mockRejectedValueOnce(new Error('storage failed'));
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(
+      service.scheduleAdvisorReminder(new Date(Date.now() + 60_000))
+    ).rejects.toThrow('storage failed');
+
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'notification-1'
+    );
+  });
+
+  it('serializes Advisor cancellation behind a pending schedule', async () => {
+    let releasePermission!: () => void;
+    const permissionPending = new Promise<void>((resolve) => {
+      releasePermission = resolve;
+    });
+    const Notifications = createNotifications();
+    vi.mocked(Notifications.getPermissionsAsync).mockImplementationOnce(async () => {
+      await permissionPending;
+      return permission('granted');
+    });
+    const { storage, values } = createStorage();
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    const scheduling = service.scheduleAdvisorReminder(new Date(Date.now() + 60_000));
+    const cancelling = service.cancelAdvisorReminder();
+    releasePermission();
+
+    await expect(scheduling).resolves.toBe(true);
+    await expect(cancelling).resolves.toBeUndefined();
+    expect(values.has(ADVISOR_REMINDER_IDS_KEY)).toBe(false);
+    await expect(service.hasAdvisorReminder()).resolves.toBe(false);
+  });
+
+  it('prunes an Advisor reminder delivered or removed by the OS', async () => {
+    const Notifications = createNotifications();
+    const { storage, values } = createStorage({
+      [ADVISOR_REMINDER_IDS_KEY]: '["delivered-advisor"]',
+    });
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(service.hasAdvisorReminder()).resolves.toBe(false);
+    expect(values.has(ADVISOR_REMINDER_IDS_KEY)).toBe(false);
+  });
+
+  it('records an Advisor reminder for recovery when persistence and cleanup both fail', async () => {
+    const Notifications = createNotifications();
+    const { storage, values } = createStorage();
+    vi.mocked(storage.setItem).mockRejectedValueOnce(new Error('storage failed'));
+    vi.mocked(Notifications.cancelScheduledNotificationAsync).mockRejectedValueOnce(
+      new Error('cancel failed')
+    );
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(
+      service.scheduleAdvisorReminder(new Date(Date.now() + 60_000))
+    ).rejects.toThrow('could not be saved or removed');
+    expect(JSON.parse(values.get(ADVISOR_REMINDER_IDS_KEY)!)).toEqual(['notification-1']);
+  });
+
   it('rejects notification routes that were not scheduled by the app', () => {
     const response = (screen: unknown): NotificationResponseLike => ({
       notification: {
@@ -538,6 +644,7 @@ describe('native local notifications', () => {
       MOOD_TRACKER_NOTIFICATION_ROUTE
     );
     expect(notificationScreenFromResponse(response('/planner'))).toBe('/planner');
+    expect(notificationScreenFromResponse(response('/advisor'))).toBe('/advisor');
     expect(notificationScreenFromResponse(response('/settings'))).toBeNull();
     expect(notificationScreenFromResponse(response({ route: '/(tabs)/tracker' }))).toBeNull();
   });

@@ -104,6 +104,7 @@ export default function YouScreen() {
       <SectionHeader title="Account" />
       <View style={styles.list}>
         <ListRow title="Settings and privacy" description="Account, reminders, export, and deletion" icon="settings" onPress={() => router.push('/settings')} />
+        <ListRow title="Advisor" description="Choose context and get one practical next step" icon="compass" onPress={() => router.push('/advisor' as never)} />
         <ListRow title="Together & sharing" description="Commitments, check-ins, and partner privacy" icon="heart" onPress={() => router.push('/accountability')} />
         <ListRow title="Support and FAQ" description="Contact us, report a bug, or find an answer" icon="help-circle" onPress={() => router.push('/support')} />
       </View>
