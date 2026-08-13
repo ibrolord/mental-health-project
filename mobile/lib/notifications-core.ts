@@ -16,6 +16,7 @@ export type NotificationPlatform = 'android' | 'ios';
 
 export const NOTIFICATIONS_KEY = 'mood_reminders_enabled';
 export const REMINDER_TIMES_KEY = 'reminder_times';
+export const NOTIFICATION_PREFERENCES_KEY = 'notification_preferences_v1';
 export const MOOD_REMINDER_IDS_KEY = 'mood_reminder_notification_ids';
 export const DUE_DATE_REMINDER_IDS_KEY = 'due_date_reminder_notification_ids';
 export const ADVISOR_REMINDER_IDS_KEY = 'advisor_reminder_notification_ids';
@@ -23,10 +24,30 @@ export const DEFAULT_REMINDER_TIMES = [9, 14, 20] as const;
 export const MOOD_TRACKER_NOTIFICATION_ROUTE = '/(tabs)/tracker';
 export const ADVISOR_NOTIFICATION_ROUTE = '/advisor';
 
+export type NotificationCategory =
+  | 'dailyPlanning'
+  | 'goalReminders'
+  | 'planReminders'
+  | 'affirmations'
+  | 'libraryPicks'
+  | 'advisorNudges';
+
+export type NotificationPreferences = Record<NotificationCategory, boolean>;
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  dailyPlanning: true,
+  goalReminders: true,
+  planReminders: true,
+  affirmations: true,
+  libraryPicks: true,
+  advisorNudges: true,
+};
+
 export type ReminderContent = {
   title: string;
   body: string;
   screen: NotificationScreen;
+  category: NotificationCategory;
 };
 
 export type DueDateReminder = ReminderContent & {
@@ -46,6 +67,7 @@ export const DEFAULT_REMINDER_CONTENT: ReminderContent = {
   title: 'MHtoolkit reminder',
   body: 'Take a moment for the step you planned.',
   screen: MOOD_TRACKER_NOTIFICATION_ROUTE,
+  category: 'dailyPlanning',
 };
 
 const TEST_REMINDER_CONTENT = {
@@ -72,6 +94,46 @@ export function parseStoredReminderTimes(value: string | null): number[] {
     return normalizeReminderTimes(JSON.parse(value));
   } catch {
     return [...DEFAULT_REMINDER_TIMES];
+  }
+}
+
+export function normalizeNotificationPreferences(
+  value: unknown
+): NotificationPreferences {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { ...DEFAULT_NOTIFICATION_PREFERENCES };
+  }
+  const stored = value as Partial<Record<NotificationCategory, unknown>>;
+  return {
+    dailyPlanning: typeof stored.dailyPlanning === 'boolean'
+      ? stored.dailyPlanning
+      : DEFAULT_NOTIFICATION_PREFERENCES.dailyPlanning,
+    goalReminders: typeof stored.goalReminders === 'boolean'
+      ? stored.goalReminders
+      : DEFAULT_NOTIFICATION_PREFERENCES.goalReminders,
+    planReminders: typeof stored.planReminders === 'boolean'
+      ? stored.planReminders
+      : DEFAULT_NOTIFICATION_PREFERENCES.planReminders,
+    affirmations: typeof stored.affirmations === 'boolean'
+      ? stored.affirmations
+      : DEFAULT_NOTIFICATION_PREFERENCES.affirmations,
+    libraryPicks: typeof stored.libraryPicks === 'boolean'
+      ? stored.libraryPicks
+      : DEFAULT_NOTIFICATION_PREFERENCES.libraryPicks,
+    advisorNudges: typeof stored.advisorNudges === 'boolean'
+      ? stored.advisorNudges
+      : DEFAULT_NOTIFICATION_PREFERENCES.advisorNudges,
+  };
+}
+
+export function parseStoredNotificationPreferences(
+  value: string | null
+): NotificationPreferences {
+  if (!value) return { ...DEFAULT_NOTIFICATION_PREFERENCES };
+  try {
+    return normalizeNotificationPreferences(JSON.parse(value));
+  } catch {
+    return { ...DEFAULT_NOTIFICATION_PREFERENCES };
   }
 }
 
@@ -108,6 +170,22 @@ export function reminderContentForTimes(
   return times.map((_, index) => available[index % available.length]);
 }
 
+function dailyCategoryFor(content: ReminderContent): NotificationCategory {
+  if (content.category && content.category in DEFAULT_NOTIFICATION_PREFERENCES) {
+    return content.category;
+  }
+  if (content.screen === '/affirmations') return 'affirmations';
+  if (content.screen === '/library') return 'libraryPicks';
+  return 'dailyPlanning';
+}
+
+function dueDateCategoryFor(reminder: DueDateReminder): NotificationCategory {
+  if (reminder.category && reminder.category in DEFAULT_NOTIFICATION_PREFERENCES) {
+    return reminder.category;
+  }
+  return reminder.screen === '/planner' ? 'planReminders' : 'goalReminders';
+}
+
 function validDueDateReminders(
   reminders: readonly DueDateReminder[],
   now: number = Date.now()
@@ -131,6 +209,8 @@ export function createNotificationService(
   let handlerConfigured = false;
   let reminderSyncInFlight: Promise<string[]> | null = null;
   let dueDateSyncInFlight: Promise<string[]> | null = null;
+  let reminderSyncDirty = false;
+  let dueDateSyncDirty = false;
   let reminderMutationTail: Promise<void> = Promise.resolve();
 
   function enqueueReminderMutation<T>(operation: () => Promise<T>): Promise<T> {
@@ -187,9 +267,38 @@ export function createNotificationService(
     failureMessage: string
   ): Promise<void> {
     configureHandler();
-    const ids = parseStoredNotificationIds(
+    const storedIds = parseStoredNotificationIds(
       await storage.getItem(storageKey)
     );
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const discoveredIds = scheduled
+      .filter((request) => {
+        const data = request.content.data;
+        const category = data && typeof data === 'object'
+          ? (data as Record<string, unknown>).category
+          : null;
+        const screen = data && typeof data === 'object'
+          ? (data as Record<string, unknown>).screen
+          : null;
+        const triggerType = request.trigger && typeof request.trigger === 'object'
+          ? (request.trigger as Record<string, unknown>).type
+          : null;
+        if (storageKey === ADVISOR_REMINDER_IDS_KEY) {
+          return category === 'advisorNudges' || screen === ADVISOR_NOTIFICATION_ROUTE;
+        }
+        if (storageKey === DUE_DATE_REMINDER_IDS_KEY) {
+          return category === 'goalReminders' ||
+            category === 'planReminders' ||
+            (triggerType === Notifications.SchedulableTriggerInputTypes.DATE &&
+              (screen === '/goals' || screen === '/planner'));
+        }
+        return category === 'dailyPlanning' ||
+          category === 'affirmations' ||
+          category === 'libraryPicks' ||
+          triggerType === Notifications.SchedulableTriggerInputTypes.DAILY;
+      })
+      .map((request) => request.identifier);
+    const ids = Array.from(new Set([...storedIds, ...discoveredIds]));
 
     if (ids.length === 0) {
       await storage.removeItem(storageKey);
@@ -230,6 +339,130 @@ export function createNotificationService(
     );
   }
 
+  function categoryForScheduledRequest(
+    request: Awaited<ReturnType<NotificationsModule['getAllScheduledNotificationsAsync']>>[number]
+  ): NotificationCategory | null {
+    const data = request.content.data;
+    const category = data && typeof data === 'object'
+      ? (data as Record<string, unknown>).category
+      : null;
+    if (
+      typeof category === 'string' &&
+      category in DEFAULT_NOTIFICATION_PREFERENCES
+    ) {
+      return category as NotificationCategory;
+    }
+    const screen = data && typeof data === 'object'
+      ? (data as Record<string, unknown>).screen
+      : null;
+    const triggerType = request.trigger && typeof request.trigger === 'object'
+      ? (request.trigger as Record<string, unknown>).type
+      : null;
+    if (screen === ADVISOR_NOTIFICATION_ROUTE) return 'advisorNudges';
+    if (screen === '/affirmations') return 'affirmations';
+    if (screen === '/library') return 'libraryPicks';
+    if (triggerType === Notifications.SchedulableTriggerInputTypes.DAILY) {
+      return 'dailyPlanning';
+    }
+    if (triggerType === Notifications.SchedulableTriggerInputTypes.DATE) {
+      if (screen === '/planner') return 'planReminders';
+      if (screen === '/goals') return 'goalReminders';
+    }
+    return null;
+  }
+
+  function storageKeyForCategory(category: NotificationCategory): string {
+    if (category === 'advisorNudges') return ADVISOR_REMINDER_IDS_KEY;
+    if (category === 'goalReminders' || category === 'planReminders') {
+      return DUE_DATE_REMINDER_IDS_KEY;
+    }
+    return MOOD_REMINDER_IDS_KEY;
+  }
+
+  async function cancelNotificationCategories(
+    categories: readonly NotificationCategory[]
+  ): Promise<void> {
+    const categorySet = new Set(categories);
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const targets = scheduled.filter((request) => {
+      const category = categoryForScheduledRequest(request);
+      return category !== null && categorySet.has(category);
+    });
+    const results = await Promise.allSettled(
+      targets.map((request) =>
+        Notifications.cancelScheduledNotificationAsync(request.identifier)
+      )
+    );
+    const successfulIds = new Set(
+      targets
+        .filter((_, index) => results[index].status === 'fulfilled')
+        .map((request) => request.identifier)
+    );
+    const failedByStorageKey = new Map<string, string[]>();
+    targets.forEach((request, index) => {
+      if (results[index].status !== 'rejected') return;
+      const category = categoryForScheduledRequest(request);
+      if (!category) return;
+      const key = storageKeyForCategory(category);
+      failedByStorageKey.set(key, [
+        ...(failedByStorageKey.get(key) ?? []),
+        request.identifier,
+      ]);
+    });
+
+    for (const key of [
+      MOOD_REMINDER_IDS_KEY,
+      DUE_DATE_REMINDER_IDS_KEY,
+      ADVISOR_REMINDER_IDS_KEY,
+    ]) {
+      const retained = parseStoredNotificationIds(await storage.getItem(key))
+        .filter((id) => !successfulIds.has(id));
+      const next = Array.from(new Set([
+        ...retained,
+        ...(failedByStorageKey.get(key) ?? []),
+      ]));
+      if (next.length > 0) {
+        await storage.setItem(key, JSON.stringify(next));
+      } else {
+        await storage.removeItem(key);
+      }
+    }
+
+    if (results.some((result) => result.status === 'rejected')) {
+      throw new Error('One or more notifications could not be removed. Try again.');
+    }
+  }
+
+  async function persistScheduledIdsOrCleanup(
+    storageKey: string,
+    scheduledIds: readonly string[],
+    cleanupMessage: string
+  ): Promise<void> {
+    try {
+      if (scheduledIds.length > 0) {
+        await storage.setItem(storageKey, JSON.stringify(scheduledIds));
+      } else {
+        await storage.removeItem(storageKey);
+      }
+    } catch (persistenceError) {
+      const cleanup = await Promise.allSettled(
+        scheduledIds.map((id) => Notifications.cancelScheduledNotificationAsync(id))
+      );
+      const unclearedIds = scheduledIds.filter(
+        (_, index) => cleanup[index].status === 'rejected'
+      );
+      if (unclearedIds.length > 0) {
+        try {
+          await storage.setItem(storageKey, JSON.stringify(unclearedIds));
+        } catch {
+          throw new Error(cleanupMessage);
+        }
+        throw new Error(cleanupMessage);
+      }
+      throw persistenceError;
+    }
+  }
+
   async function reconcileAdvisorReminder(): Promise<boolean> {
     const storedIds = parseStoredNotificationIds(
       await storage.getItem(ADVISOR_REMINDER_IDS_KEY)
@@ -254,7 +487,15 @@ export function createNotificationService(
 
   async function scheduleMoodRemindersInternal(): Promise<string[]> {
     configureHandler();
-    if ((await storage.getItem(NOTIFICATIONS_KEY)) !== 'true') return [];
+    if ((await storage.getItem(NOTIFICATIONS_KEY)) !== 'true') {
+      const [dailyResult, advisorResult] = await Promise.allSettled([
+        cancelMoodReminders(),
+        cancelAdvisorReminderInternal(),
+      ]);
+      if (dailyResult.status === 'rejected') throw dailyResult.reason;
+      if (advisorResult.status === 'rejected') throw advisorResult.reason;
+      return [];
+    }
     if (!(await hasPermission())) {
       await cancelMoodReminders();
       return [];
@@ -263,19 +504,20 @@ export function createNotificationService(
     const times = parseStoredReminderTimes(
       await storage.getItem(REMINDER_TIMES_KEY)
     );
-    let reminderPlan: ReminderSchedulePlan;
-    try {
-      reminderPlan = await contentProvider(times);
-    } catch (error) {
-      console.warn('Could not load personalized reminder content:', error);
-      reminderPlan = { daily: [DEFAULT_REMINDER_CONTENT], dueDates: [] };
-    }
+    const preferences = parseStoredNotificationPreferences(
+      await storage.getItem(NOTIFICATION_PREFERENCES_KEY)
+    );
+    const reminderPlan = await contentProvider(times);
 
     await cancelMoodReminders();
 
     await ensureAndroidChannel();
     const scheduledIds: string[] = [];
-    const dailyContent = reminderContentForTimes(times, reminderPlan.daily);
+    const enabledContent = reminderPlan.daily.filter(
+      (content) => preferences[dailyCategoryFor(content)]
+    );
+    if (enabledContent.length === 0) return [];
+    const dailyContent = reminderContentForTimes(times, enabledContent);
 
     try {
       for (const [index, hour] of times.entries()) {
@@ -284,7 +526,7 @@ export function createNotificationService(
           content: {
             title: content.title,
             body: content.body,
-            data: { screen: content.screen },
+            data: { screen: content.screen, category: dailyCategoryFor(content) },
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -309,29 +551,42 @@ export function createNotificationService(
       throw error;
     }
 
-    await storage.setItem(MOOD_REMINDER_IDS_KEY, JSON.stringify(scheduledIds));
+    await persistScheduledIdsOrCleanup(
+      MOOD_REMINDER_IDS_KEY,
+      scheduledIds,
+      'Daily reminders could not be saved or removed. Check notification settings before trying again.'
+    );
     return scheduledIds;
   }
 
   async function scheduleDueDateRemindersInternal(): Promise<string[]> {
     configureHandler();
-    await cancelDueDateReminders();
-    if (!(await hasPermission())) return [];
+    if ((await storage.getItem(NOTIFICATIONS_KEY)) !== 'true') {
+      await cancelDueDateReminders();
+      return [];
+    }
+    if (!(await hasPermission())) {
+      await cancelDueDateReminders();
+      return [];
+    }
 
     const times = parseStoredReminderTimes(
       await storage.getItem(REMINDER_TIMES_KEY)
     );
-    let reminderPlan: ReminderSchedulePlan;
-    try {
-      reminderPlan = await contentProvider(times);
-    } catch (error) {
-      console.warn('Could not load due-date reminder content:', error);
-      reminderPlan = { daily: [], dueDates: [] };
-    }
+    const preferences = parseStoredNotificationPreferences(
+      await storage.getItem(NOTIFICATION_PREFERENCES_KEY)
+    );
+    const reminderPlan = await contentProvider(times);
 
     await ensureAndroidChannel();
     const scheduledIds: string[] = [];
-    const dueDates = validDueDateReminders(reminderPlan.dueDates);
+    const dueDates = validDueDateReminders(reminderPlan.dueDates)
+      .filter((reminder) => preferences[dueDateCategoryFor(reminder)])
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+      .slice(0, 24);
+
+    // Keep the previous schedule intact until replacement content is ready.
+    await cancelDueDateReminders();
 
     try {
       for (const dueDate of dueDates) {
@@ -339,7 +594,7 @@ export function createNotificationService(
           content: {
             title: dueDate.title,
             body: dueDate.body,
-            data: { screen: dueDate.screen },
+            data: { screen: dueDate.screen, category: dueDateCategoryFor(dueDate) },
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -362,18 +617,28 @@ export function createNotificationService(
       throw error;
     }
 
-    if (scheduledIds.length > 0) {
-      await storage.setItem(DUE_DATE_REMINDER_IDS_KEY, JSON.stringify(scheduledIds));
-    } else {
-      await storage.removeItem(DUE_DATE_REMINDER_IDS_KEY);
-    }
+    await persistScheduledIdsOrCleanup(
+      DUE_DATE_REMINDER_IDS_KEY,
+      scheduledIds,
+      'Due-date reminders could not be saved or removed. Check notification settings before trying again.'
+    );
     return scheduledIds;
   }
 
   async function scheduleMoodReminders(): Promise<string[]> {
-    if (reminderSyncInFlight) return reminderSyncInFlight;
+    if (reminderSyncInFlight) {
+      reminderSyncDirty = true;
+      return reminderSyncInFlight;
+    }
 
-    const sync = enqueueReminderMutation(scheduleMoodRemindersInternal);
+    const sync = enqueueReminderMutation(async () => {
+      let result: string[] = [];
+      do {
+        reminderSyncDirty = false;
+        result = await scheduleMoodRemindersInternal();
+      } while (reminderSyncDirty);
+      return result;
+    });
     reminderSyncInFlight = sync;
     try {
       return await sync;
@@ -383,9 +648,19 @@ export function createNotificationService(
   }
 
   async function scheduleDueDateReminders(): Promise<string[]> {
-    if (dueDateSyncInFlight) return dueDateSyncInFlight;
+    if (dueDateSyncInFlight) {
+      dueDateSyncDirty = true;
+      return dueDateSyncInFlight;
+    }
 
-    const sync = enqueueReminderMutation(scheduleDueDateRemindersInternal);
+    const sync = enqueueReminderMutation(async () => {
+      let result: string[] = [];
+      do {
+        dueDateSyncDirty = false;
+        result = await scheduleDueDateRemindersInternal();
+      } while (dueDateSyncDirty);
+      return result;
+    });
     dueDateSyncInFlight = sync;
     try {
       return await sync;
@@ -395,28 +670,48 @@ export function createNotificationService(
   }
 
   async function setRemindersEnabled(enabled: boolean): Promise<boolean> {
-    if (!enabled) {
-      return enqueueReminderMutation(async () => {
-        await cancelMoodReminders();
-        await storage.setItem(NOTIFICATIONS_KEY, 'false');
-        return false;
-      });
-    }
-
-    if (!(await requestPermissions())) {
-      return enqueueReminderMutation(async () => {
-        await cancelMoodReminders();
-        await storage.setItem(NOTIFICATIONS_KEY, 'false');
-        return false;
-      });
-    }
-
     return enqueueReminderMutation(async () => {
+      if (!enabled) {
+        const [dailyResult, dueDateResult, advisorResult] = await Promise.allSettled([
+          cancelMoodReminders(),
+          cancelDueDateReminders(),
+          cancelAdvisorReminderInternal(),
+        ]);
+        if (dailyResult.status === 'rejected') throw dailyResult.reason;
+        if (dueDateResult.status === 'rejected') throw dueDateResult.reason;
+        if (advisorResult.status === 'rejected') throw advisorResult.reason;
+        await storage.setItem(NOTIFICATIONS_KEY, 'false');
+        return false;
+      }
+
+      if (!(await requestPermissions())) {
+        const [dailyResult, dueDateResult, advisorResult] = await Promise.allSettled([
+          cancelMoodReminders(),
+          cancelDueDateReminders(),
+          cancelAdvisorReminderInternal(),
+        ]);
+        if (dailyResult.status === 'rejected') throw dailyResult.reason;
+        if (dueDateResult.status === 'rejected') throw dueDateResult.reason;
+        if (advisorResult.status === 'rejected') throw advisorResult.reason;
+        await storage.setItem(NOTIFICATIONS_KEY, 'false');
+        return false;
+      }
+
       await storage.setItem(NOTIFICATIONS_KEY, 'true');
       try {
         await scheduleMoodRemindersInternal();
+        await scheduleDueDateRemindersInternal();
         return true;
       } catch (error) {
+        const cleanup = await Promise.allSettled([
+          cancelMoodReminders(),
+          cancelDueDateReminders(),
+          cancelAdvisorReminderInternal(),
+        ]);
+        if (cleanup.some((result) => result.status === 'rejected')) {
+          await storage.setItem(NOTIFICATIONS_KEY, 'true');
+          throw new Error('Some notifications are still active. Try turning notifications off again.');
+        }
         await storage.setItem(NOTIFICATIONS_KEY, 'false');
         throw error;
       }
@@ -449,9 +744,35 @@ export function createNotificationService(
     }
 
     return enqueueReminderMutation(async () => {
-      await storage.setItem(REMINDER_TIMES_KEY, JSON.stringify(normalized));
-      if ((await storage.getItem(NOTIFICATIONS_KEY)) === 'true') {
-        await scheduleMoodRemindersInternal();
+      const previousRaw = await storage.getItem(REMINDER_TIMES_KEY);
+      try {
+        await storage.setItem(REMINDER_TIMES_KEY, JSON.stringify(normalized));
+        if ((await storage.getItem(NOTIFICATIONS_KEY)) === 'true') {
+          await scheduleMoodRemindersInternal();
+          await scheduleDueDateRemindersInternal();
+        }
+      } catch (error) {
+        if (previousRaw === null) {
+          await storage.removeItem(REMINDER_TIMES_KEY);
+        } else {
+          await storage.setItem(REMINDER_TIMES_KEY, previousRaw);
+        }
+        if ((await storage.getItem(NOTIFICATIONS_KEY)) === 'true') {
+          const restored = await Promise.allSettled([
+            scheduleMoodRemindersInternal(),
+            scheduleDueDateRemindersInternal(),
+          ]);
+          if (restored.some((result) => result.status === 'rejected')) {
+            await Promise.allSettled([
+              cancelMoodReminders(),
+              cancelDueDateReminders(),
+              cancelAdvisorReminderInternal(),
+            ]);
+            await storage.setItem(NOTIFICATIONS_KEY, 'false');
+            throw new Error('Notification times could not be restored. Automatic notifications were turned off.');
+          }
+        }
+        throw error;
       }
       return normalized;
     });
@@ -459,6 +780,80 @@ export function createNotificationService(
 
   async function getReminderTimes(): Promise<number[]> {
     return parseStoredReminderTimes(await storage.getItem(REMINDER_TIMES_KEY));
+  }
+
+  async function getNotificationPreferences(): Promise<NotificationPreferences> {
+    return parseStoredNotificationPreferences(
+      await storage.getItem(NOTIFICATION_PREFERENCES_KEY)
+    );
+  }
+
+  async function setNotificationPreferences(
+    preferences: NotificationPreferences
+  ): Promise<NotificationPreferences> {
+    const normalized = normalizeNotificationPreferences(preferences);
+    return enqueueReminderMutation(async () => {
+      const previousRaw = await storage.getItem(NOTIFICATION_PREFERENCES_KEY);
+      const previous = parseStoredNotificationPreferences(previousRaw);
+      const categories = Object.keys(
+        DEFAULT_NOTIFICATION_PREFERENCES
+      ) as NotificationCategory[];
+      const disabledCategories = categories.filter(
+        (category) => previous[category] && !normalized[category]
+      );
+      const enabledCategories = categories.filter(
+        (category) => !previous[category] && normalized[category]
+      );
+      try {
+        if (
+          (await storage.getItem(NOTIFICATIONS_KEY)) === 'true' &&
+          disabledCategories.length > 0 &&
+          enabledCategories.length === 0
+        ) {
+          await cancelNotificationCategories(disabledCategories);
+          await storage.setItem(
+            NOTIFICATION_PREFERENCES_KEY,
+            JSON.stringify(normalized)
+          );
+          return normalized;
+        }
+        await storage.setItem(
+          NOTIFICATION_PREFERENCES_KEY,
+          JSON.stringify(normalized)
+        );
+        if ((await storage.getItem(NOTIFICATIONS_KEY)) === 'true') {
+          await scheduleMoodRemindersInternal();
+          await scheduleDueDateRemindersInternal();
+          if (!normalized.advisorNudges) await cancelAdvisorReminderInternal();
+        }
+      } catch (error) {
+        if (previousRaw === null) {
+          await storage.removeItem(NOTIFICATION_PREFERENCES_KEY);
+        } else {
+          await storage.setItem(NOTIFICATION_PREFERENCES_KEY, previousRaw);
+        }
+        if ((await storage.getItem(NOTIFICATIONS_KEY)) === 'true') {
+          const restored = await Promise.allSettled([
+            scheduleMoodRemindersInternal(),
+            scheduleDueDateRemindersInternal(),
+          ]);
+          if (restored.some((result) => result.status === 'rejected')) {
+            await Promise.allSettled([
+              cancelMoodReminders(),
+              cancelDueDateReminders(),
+              cancelAdvisorReminderInternal(),
+            ]);
+            await storage.setItem(NOTIFICATIONS_KEY, 'false');
+            throw new Error('Notification choices could not be restored. Automatic notifications were turned off.');
+          }
+          if (!previous.advisorNudges) {
+            await cancelAdvisorReminderInternal().catch(() => undefined);
+          }
+        }
+        throw error;
+      }
+      return normalized;
+    });
   }
 
   async function sendTestNotification(): Promise<boolean> {
@@ -483,6 +878,11 @@ export function createNotificationService(
       throw new Error('Choose a reminder time in the future.');
     }
     return enqueueReminderMutation(async () => {
+      if ((await storage.getItem(NOTIFICATIONS_KEY)) !== 'true') return false;
+      const preferences = parseStoredNotificationPreferences(
+        await storage.getItem(NOTIFICATION_PREFERENCES_KEY)
+      );
+      if (!preferences.advisorNudges) return false;
       if (!(await requestPermissions())) return false;
       await cancelAdvisorReminderInternal();
       await ensureAndroidChannel();
@@ -490,7 +890,7 @@ export function createNotificationService(
         content: {
           title: 'A gentle check-in',
           body: 'Open MHtoolkit when you are ready to choose one small next step.',
-          data: { screen: ADVISOR_NOTIFICATION_ROUTE },
+          data: { screen: ADVISOR_NOTIFICATION_ROUTE, category: 'advisorNudges' },
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -534,6 +934,8 @@ export function createNotificationService(
     areRemindersEnabled,
     setReminderTimes,
     getReminderTimes,
+    setNotificationPreferences,
+    getNotificationPreferences,
     sendTestNotification,
     scheduleAdvisorReminder,
     cancelAdvisorReminder,

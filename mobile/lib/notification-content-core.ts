@@ -108,6 +108,7 @@ function notificationForAffirmation(
       title: 'A moment for you',
       body: 'Pause and choose one small, kind next step.',
       screen: '/affirmations',
+      category: 'affirmations',
     };
   }
 
@@ -118,6 +119,7 @@ function notificationForAffirmation(
     title: 'Daily affirmation',
     body: `“${truncate(affirmation.content, 125)}”${attribution}`,
     screen: '/affirmations',
+    category: 'affirmations',
   };
 }
 
@@ -148,6 +150,7 @@ function notificationForLibrary(item: LibraryItem | null): ReminderContent {
       title: 'A useful next step',
       body: 'Open the library for a guide, talk, or story you can use today.',
       screen: '/library',
+      category: 'libraryPicks',
     };
   }
 
@@ -155,6 +158,7 @@ function notificationForLibrary(item: LibraryItem | null): ReminderContent {
     title: 'Your library pick',
     body: 'A library recommendation is ready. Open MHtoolkit when you are ready.',
     screen: '/library',
+    category: 'libraryPicks',
   };
 }
 
@@ -176,6 +180,7 @@ function dueReminder(
         : 'A plan item is due. Open MHtoolkit to review it.',
     screen,
     date,
+    category: screen === '/goals' ? 'goalReminders' : 'planReminders',
   };
 }
 
@@ -200,6 +205,7 @@ function goalReminder(
     body: 'A goal reminder is ready. Open MHtoolkit when you are ready.',
     screen: '/goals',
     date: reminderDate,
+    category: 'goalReminders',
   };
 }
 
@@ -212,21 +218,22 @@ export function buildSmartReminderPlan({
   affirmations,
 }: SmartReminderPlanInput): ReminderSchedulePlan {
   const today = format(now, 'yyyy-MM-dd');
-  const dueDates: DueDateReminder[] = [];
+  const goalDueDates: DueDateReminder[] = [];
   const scheduledGoals = [...goals].sort((a, b) =>
     (a.reminder_at ?? '').localeCompare(b.reminder_at ?? '')
   );
   for (const goal of scheduledGoals) {
-    if (dueDates.length >= MAX_DUE_DATE_REMINDERS) break;
+    if (goalDueDates.length >= MAX_DUE_DATE_REMINDERS) break;
     const reminder = goalReminder(goal, now, today);
-    if (reminder) dueDates.push(reminder);
+    if (reminder) goalDueDates.push(reminder);
   }
 
+  const planDueDates: DueDateReminder[] = [];
   const activePlans = lifePlans
     .filter((item) => item.target_date)
     .sort((a, b) => (a.target_date ?? '').localeCompare(b.target_date ?? ''));
   for (const plan of activePlans) {
-    if (dueDates.length >= MAX_DUE_DATE_REMINDERS || !plan.target_date) break;
+    if (planDueDates.length >= MAX_DUE_DATE_REMINDERS || !plan.target_date) break;
     const reminder = dueReminder(
       plan.target_date,
       reminderTimes,
@@ -234,8 +241,12 @@ export function buildSmartReminderPlan({
       today,
       '/planner'
     );
-    if (reminder) dueDates.push(reminder);
+    if (reminder) planDueDates.push(reminder);
   }
+
+  const dueDates = [...goalDueDates, ...planDueDates].sort(
+    (a, b) => a.date.getTime() - b.date.getTime()
+  );
 
   const affirmation = pickForDay(
     affirmations.length > 0 ? affirmations : SOURCED_QUOTE_FALLBACKS,
@@ -250,6 +261,7 @@ export function buildSmartReminderPlan({
         title: 'Plan your next step',
         body: 'Open your goals and choose one realistic priority for today.',
         screen: '/goals',
+        category: 'dailyPlanning',
       },
       notificationForAffirmation(affirmation),
       notificationForLibrary(library),

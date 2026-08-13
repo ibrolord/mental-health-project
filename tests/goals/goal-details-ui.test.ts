@@ -51,11 +51,13 @@ describe('goal details UI wiring', () => {
     expect(mobileDetails).toContain('size_bytes: size || bytes.byteLength');
   });
 
-  it('requests notification delivery when a native goal reminder is saved', () => {
-    expect(mobileDetails).toContain('requestPermissions()');
+  it('reports when a saved native goal reminder is inactive', () => {
+    expect(mobileDetails).toContain('areRemindersEnabled()');
+    expect(mobileDetails).toContain('getNotificationPreferences()');
     expect(mobileDetails).toContain('scheduleDueDateReminders()');
     expect(mobileDetails).not.toContain('setRemindersEnabled(true)');
-    expect(mobileDetails).toContain('Allow notifications in Settings');
+    expect(mobileDetails).toContain('Turn on Notifications in Settings');
+    expect(mobileDetails).toContain('Turn on Goal reminders in Settings');
   });
 
   it('guards native detail state when switching between goals', () => {

@@ -12,9 +12,14 @@ import {
   setRemindersEnabled,
   getReminderTimes,
   setReminderTimes,
+  getNotificationPreferences,
+  setNotificationPreferences,
   sendTestNotification,
   clearAllReminders,
+  type NotificationCategory,
+  type NotificationPreferences,
 } from '@/lib/notifications';
+import { DEFAULT_NOTIFICATION_PREFERENCES } from '@/lib/notifications-core';
 import { hasAiDataSharingConsent, resetAiDataSharingConsent, PRIVACY_POLICY_URL } from '@/lib/ai-consent';
 import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
 import { SUPPORT_EMAIL, SUPPORT_EMAIL_URL, SUPPORT_URL } from '@/lib/support';
@@ -42,6 +47,43 @@ const HOUR_OPTIONS = [
   { label: '9 PM', value: 21 },
 ];
 
+const NOTIFICATION_OPTIONS: {
+  key: NotificationCategory;
+  title: string;
+  description: string;
+}[] = [
+  {
+    key: 'dailyPlanning',
+    title: 'Daily planning',
+    description: 'A prompt to choose one realistic priority.',
+  },
+  {
+    key: 'goalReminders',
+    title: 'Goal reminders',
+    description: 'Alerts you set for your goals.',
+  },
+  {
+    key: 'planReminders',
+    title: 'Planner due dates',
+    description: 'Target dates from your Life Planner.',
+  },
+  {
+    key: 'affirmations',
+    title: 'Affirmations',
+    description: 'Sourced affirmations or quotes at your selected times.',
+  },
+  {
+    key: 'libraryPicks',
+    title: 'Library picks',
+    description: 'A recommendation from the MHtoolkit library.',
+  },
+  {
+    key: 'advisorNudges',
+    title: 'Advisor check-ins',
+    description: 'One-off check-ins you schedule with Advisor.',
+  },
+];
+
 export default function SettingsScreen() {
   const router = useRouter();
   const {
@@ -56,6 +98,9 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(false);
   const [remindersOn, setRemindersOn] = useState(false);
   const [selectedTimes, setSelectedTimes] = useState<number[]>([9, 14, 20]);
+  const [notificationPreferences, setLocalNotificationPreferences] =
+    useState<NotificationPreferences>({ ...DEFAULT_NOTIFICATION_PREFERENCES });
+  const [reminderHydrated, setReminderHydrated] = useState(false);
   const [reminderBusy, setReminderBusy] = useState(false);
   const [reminderStatus, setReminderStatus] = useState('');
   const [aiConsentGranted, setAiConsentGranted] = useState(false);
@@ -71,20 +116,33 @@ export default function SettingsScreen() {
   };
 
   useEffect(() => {
+    let active = true;
+    let reminderSettingsLoaded = false;
+    setReminderHydrated(false);
     (async () => {
       try {
-        const [enabled, times] = await Promise.all([
+        const [enabled, times, preferences] = await Promise.all([
           areRemindersEnabled(),
           getReminderTimes(),
+          getNotificationPreferences(),
         ]);
-        setRemindersOn(enabled);
-        setSelectedTimes(times);
+        if (active) {
+          setRemindersOn(enabled);
+          setSelectedTimes(times);
+          setLocalNotificationPreferences(preferences);
+          reminderSettingsLoaded = true;
+        }
       } catch (error) {
         console.warn('Unable to load local reminder settings:', error);
-        setReminderStatus('Reminder settings could not be loaded.');
+        if (active) setReminderStatus('Reminder settings could not be loaded.');
       }
-      setAiConsentGranted(await hasAiDataSharingConsent(consentSubjectId));
+      if (active && reminderSettingsLoaded) setReminderHydrated(true);
+      const consent = await hasAiDataSharingConsent(consentSubjectId);
+      if (active) setAiConsentGranted(consent);
     })();
+    return () => {
+      active = false;
+    };
   }, [consentSubjectId]);
 
   const toggleReminders = async (val: boolean) => {
@@ -109,14 +167,43 @@ export default function SettingsScreen() {
       } else {
         setReminderStatus(
           enabled
-            ? 'Reminders are on: plans, affirmations, and library picks are scheduled for this device.'
-            : 'Daily reminders are off.'
+            ? 'Notifications are on. You can choose each type below.'
+            : 'Notifications are off.'
         );
       }
     } catch (error) {
       console.warn('Unable to update local reminders:', error);
       setRemindersOn(await areRemindersEnabled().catch(() => false));
       Alert.alert('Reminder Error', 'Your reminder settings could not be updated. Please try again.');
+    } finally {
+      setReminderBusy(false);
+    }
+  };
+
+  const toggleNotificationCategory = async (
+    category: NotificationCategory,
+    enabled: boolean
+  ) => {
+    if (reminderBusy) return;
+    const next = { ...notificationPreferences, [category]: enabled };
+    setReminderBusy(true);
+    setReminderStatus('');
+    try {
+      const saved = await setNotificationPreferences(next);
+      setLocalNotificationPreferences(saved);
+      setReminderStatus('Notification choices updated.');
+    } catch (error) {
+      console.warn('Unable to update notification choices:', error);
+      const [preferences, enabled] = await Promise.all([
+        getNotificationPreferences().catch(() => notificationPreferences),
+        areRemindersEnabled().catch(() => false),
+      ]);
+      setLocalNotificationPreferences(preferences);
+      setRemindersOn(enabled);
+      Alert.alert(
+        'Notification Error',
+        'Your notification choices could not be updated. Please try again.'
+      );
     } finally {
       setReminderBusy(false);
     }
@@ -139,6 +226,12 @@ export default function SettingsScreen() {
       setReminderStatus('Reminder times updated.');
     } catch (error) {
       console.warn('Unable to update reminder times:', error);
+      const [times, enabled] = await Promise.all([
+        getReminderTimes().catch(() => selectedTimes),
+        areRemindersEnabled().catch(() => false),
+      ]);
+      setSelectedTimes(times);
+      setRemindersOn(enabled);
       Alert.alert('Reminder Error', 'The new reminder times could not be scheduled.');
     } finally {
       setReminderBusy(false);
@@ -381,52 +474,94 @@ export default function SettingsScreen() {
 
       <AppCard>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <Text style={s.cardTitle}>Daily Reminders</Text>
+          <View style={s.notificationHeading}>
+            <Text style={s.cardTitle}>Notifications</Text>
+            <Text style={s.bodyText}>Choose what MHtoolkit can send.</Text>
+          </View>
           <Switch
-            accessibilityLabel="Daily reminders"
+            accessibilityLabel="MHtoolkit notifications"
             value={remindersOn}
             onValueChange={toggleReminders}
-            disabled={reminderBusy}
+            disabled={reminderBusy || !reminderHydrated}
             trackColor={{ false: '#d1d5db', true: Colors.primary }}
             thumbColor="#fff"
           />
         </View>
-        <Text style={s.bodyText}>
-          Plans and target dates are scheduled at your chosen times. With three times, reminders cycle through a plan, affirmation, and library pick.
-        </Text>
 
-        {remindersOn && (
-          <View style={{ marginTop: 14 }}>
-            <Text style={[s.bodyText, { fontWeight: '500', marginBottom: 8 }]}>Reminder times:</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {HOUR_OPTIONS.map((opt) => {
-                const selected = selectedTimes.includes(opt.value);
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    accessibilityLabel={`Reminder time ${opt.label}`}
-                    onPress={() => toggleTime(opt.value)}
-                    disabled={reminderBusy}
-                    style={[
-                      s.timePill,
-                      selected && { backgroundColor: Colors.primary, borderColor: Colors.primary },
-                      reminderBusy && { opacity: 0.6 },
-                    ]}
-                  >
-                    <Text style={[s.timePillText, selected && { color: '#fff' }]}>{opt.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+        <View style={s.notificationSettings}>
+            <View style={s.notificationList}>
+              {NOTIFICATION_OPTIONS.map((option, index) => (
+                <View
+                  key={option.key}
+                  style={[
+                    s.notificationRow,
+                    index < NOTIFICATION_OPTIONS.length - 1 && s.notificationRowBorder,
+                  ]}
+                >
+                  <View style={s.notificationCopy}>
+                    <Text style={s.notificationTitle}>{option.title}</Text>
+                    <Text style={s.notificationDescription}>{option.description}</Text>
+                  </View>
+                  <Switch
+                    accessibilityLabel={option.title}
+                    accessibilityHint={option.description}
+                    value={notificationPreferences[option.key]}
+                    onValueChange={(value) =>
+                      toggleNotificationCategory(option.key, value)
+                    }
+                    disabled={reminderBusy || !reminderHydrated}
+                    trackColor={{ false: '#d1d5db', true: Colors.primary }}
+                    thumbColor="#fff"
+                  />
+                </View>
+              ))}
             </View>
+
+            {(notificationPreferences.dailyPlanning ||
+              notificationPreferences.planReminders ||
+              notificationPreferences.affirmations ||
+              notificationPreferences.libraryPicks) && (
+              <View style={s.reminderTimes}>
+                <Text style={s.reminderTimesTitle}>Delivery times</Text>
+                <Text style={s.notificationDescription}>
+                  Used for daily notifications and planner due dates.
+                </Text>
+                <View style={s.timePillRow}>
+                  {HOUR_OPTIONS.map((opt) => {
+                    const selected = selectedTimes.includes(opt.value);
+                    return (
+                      <TouchableOpacity
+                        key={opt.value}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        accessibilityLabel={`Reminder time ${opt.label}`}
+                        onPress={() => toggleTime(opt.value)}
+                        disabled={reminderBusy || !reminderHydrated}
+                        style={[
+                          s.timePill,
+                          selected && { backgroundColor: Colors.primary, borderColor: Colors.primary },
+                          reminderBusy && { opacity: 0.6 },
+                        ]}
+                      >
+                        <Text style={[s.timePillText, selected && { color: '#fff' }]}>{opt.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </View>
+
+        {!remindersOn && (
+          <Text style={s.bodyText}>
+            Automatic notifications are paused. You can still choose categories or send a manual test.
+          </Text>
         )}
 
         <TouchableOpacity
           style={[s.btnOutline, reminderBusy && { opacity: 0.6 }]}
           onPress={handleTestReminder}
-          disabled={reminderBusy}
+          disabled={reminderBusy || !reminderHydrated}
         >
           <Text style={s.btnOutlineText}>Send Test Notification</Text>
         </TouchableOpacity>
@@ -536,6 +671,17 @@ export default function SettingsScreen() {
 
 const s = StyleSheet.create({
   cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 10 },
+  notificationHeading: { flex: 1, paddingRight: 16 },
+  notificationSettings: { marginTop: 6 },
+  notificationList: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: Colors.border },
+  notificationRow: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 12 },
+  notificationRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  notificationCopy: { flex: 1 },
+  notificationTitle: { fontSize: 15, fontWeight: '600', color: Colors.text, marginBottom: 2 },
+  notificationDescription: { fontSize: 13, color: Colors.textSecondary, lineHeight: 18 },
+  reminderTimes: { marginTop: 18 },
+  reminderTimesTitle: { fontSize: 15, fontWeight: '600', color: Colors.text, marginBottom: 2 },
+  timePillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   bodyText: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20 },
   supportEmail: { fontSize: 14, color: Colors.primary, fontWeight: '600', marginTop: 10 },
   privacyItem: { fontSize: 14, color: Colors.textSecondary, marginBottom: 8, lineHeight: 20 },

@@ -332,7 +332,7 @@ export default function AdvisorScreen() {
       setStatus(
         scheduled
           ? `Reminder set for ${format(target, 'h:mm a')}.`
-          : 'Notifications are off. Your suggestion is still here.'
+          : 'Advisor check-ins are paused. You can turn them on in Notification settings.'
       );
     } catch (reminderError) {
       if (

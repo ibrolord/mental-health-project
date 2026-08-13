@@ -13,8 +13,8 @@ export const MOBILE_ROOT = path.resolve(SCRIPT_DIR, '..');
 export const REPO_ROOT = path.resolve(MOBILE_ROOT, '..');
 export const CHECKLIST_PATH = path.join(MOBILE_ROOT, 'qa', 'ios-release-checklist.json');
 export const RUNS_ROOT = path.join(MOBILE_ROOT, 'qa', 'runs');
-export const EXPECTED_INVENTORY = Object.freeze({ routes: 35, routeChecks: 710, workflows: 110, total: 820 });
-export const EXPECTED_CHECKLIST_SHA256 = '4b107490f124f8811f2caea223784a7f722038d8eede3fc587069450f32361ed';
+export const EXPECTED_INVENTORY = Object.freeze({ routes: 35, routeChecks: 711, workflows: 110, total: 821 });
+export const EXPECTED_CHECKLIST_SHA256 = '54d39f89654cbb8c383143f4b19e5e6c4597ff6ea0b5584eafbd6b97367cf21c';
 const REQUIRED_ROUTE_CONTROLS = Object.freeze({
   dashboard: ['open-together'],
   advisor: ['support', 'continue-without-context', 'context-preview', 'fixed-two-hour-reminder', 'cancel-reminder', 'together-share-review'],

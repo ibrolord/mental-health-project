@@ -64,14 +64,17 @@ export async function loadSmartReminderPlan(
     affirmationsPromise,
   ]);
 
+  const queryError = goalsResult.error ?? plansResult.error ?? libraryResult.error;
+  if (queryError) {
+    throw new Error('Notification content could not be loaded.');
+  }
+
   return buildSmartReminderPlan({
     now,
     reminderTimes,
-    goals: goalsResult.error ? [] : (goalsResult.data ?? []) as TodayGoal[],
-    lifePlans: plansResult.error ? [] : (plansResult.data ?? []) as LifePlanItem[],
-    libraryStates: libraryResult.error
-      ? []
-      : (libraryResult.data ?? []) as LibraryState[],
+    goals: (goalsResult.data ?? []) as TodayGoal[],
+    lifePlans: (plansResult.data ?? []) as LifePlanItem[],
+    libraryStates: (libraryResult.data ?? []) as LibraryState[],
     affirmations,
   });
 }

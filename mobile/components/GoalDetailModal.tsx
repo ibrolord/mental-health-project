@@ -23,7 +23,8 @@ import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/lib/constants';
 import {
-  requestPermissions,
+  areRemindersEnabled,
+  getNotificationPreferences,
   scheduleDueDateReminders,
 } from '@/lib/notifications';
 import {
@@ -328,10 +329,19 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
         reminderPreset: inferReminderPreset(savedGoal.due_at, savedGoal.reminder_at),
       };
       try {
-        if (reminderAt && !(await requestPermissions())) {
-          setError('Details saved. Allow notifications in Settings to receive this reminder.');
-          await scheduleDueDateReminders();
-          return;
+        if (reminderAt) {
+          const [notificationsEnabled, preferences] = await Promise.all([
+            areRemindersEnabled(),
+            getNotificationPreferences(),
+          ]);
+          if (!notificationsEnabled) {
+            setError('Details saved. Turn on Notifications in Settings to activate this reminder.');
+            return;
+          }
+          if (!preferences.goalReminders) {
+            setError('Details saved. Turn on Goal reminders in Settings to activate it.');
+            return;
+          }
         }
         await scheduleDueDateReminders();
         AccessibilityInfo.announceForAccessibility('Goal details saved.');

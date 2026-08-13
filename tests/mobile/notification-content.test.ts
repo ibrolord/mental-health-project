@@ -115,4 +115,29 @@ describe('smart local reminder content', () => {
 
     expect(plan.dueDates).toEqual([]);
   });
+
+  it('keeps planner reminders available when many goal reminders exist', () => {
+    const goals = Array.from({ length: 24 }, (_, index) => ({
+      content: `Goal ${index}`,
+      created_at: NOW.toISOString(),
+      due_at: new Date(2026, 7, 10, 18).toISOString(),
+      reminder_at: new Date(2026, 7, 10, 9, index).toISOString(),
+    }));
+    const plan = buildSmartReminderPlan({
+      now: NOW,
+      reminderTimes: [9],
+      goals,
+      lifePlans: [{
+        id: 'plan-1',
+        title: 'Plan item',
+        next_step: 'Continue',
+        target_date: '2026-08-09',
+      }],
+      libraryStates: [],
+      affirmations: [],
+    });
+
+    expect(plan.dueDates.some((item) => item.category === 'planReminders')).toBe(true);
+    expect(plan.dueDates.filter((item) => item.category === 'goalReminders')).toHaveLength(24);
+  });
 });

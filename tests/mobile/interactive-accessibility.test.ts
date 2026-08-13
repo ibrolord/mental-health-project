@@ -36,7 +36,9 @@ describe('interactive mobile accessibility', () => {
   it('labels notification enablement and each reminder-time option', () => {
     const source = mobileSource('mobile/app/settings.tsx');
 
-    expect(source).toContain('accessibilityLabel="Daily reminders"');
+    expect(source).toContain('accessibilityLabel="MHtoolkit notifications"');
+    expect(source).toContain('accessibilityLabel={option.title}');
+    expect(source).toContain('accessibilityHint={option.description}');
     expect(source).toContain('accessibilityLabel={`Reminder time ${opt.label}`}');
     expect(source).toContain('accessibilityState={{ selected }}');
   });

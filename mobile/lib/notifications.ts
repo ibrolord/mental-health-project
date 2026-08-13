@@ -9,6 +9,11 @@ import {
 import { loadSmartReminderPlan } from './notification-content';
 import { recordOperationalEvent } from './observability';
 
+export type {
+  NotificationCategory,
+  NotificationPreferences,
+} from './notifications-core';
+
 let service: NotificationService | null = null;
 
 export type NotificationNavigationQueue<Route extends string> = {
@@ -179,6 +184,11 @@ export const areRemindersEnabled = () => getService().areRemindersEnabled();
 export const setReminderTimes = (times: number[]) =>
   getService().setReminderTimes(times);
 export const getReminderTimes = () => getService().getReminderTimes();
+export const setNotificationPreferences = (
+  preferences: import('./notifications-core').NotificationPreferences
+) => getService().setNotificationPreferences(preferences);
+export const getNotificationPreferences = () =>
+  getService().getNotificationPreferences();
 export const sendTestNotification = async () => {
   try {
     const scheduled = await getService().sendTestNotification();

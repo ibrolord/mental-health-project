@@ -7,11 +7,14 @@ import {
   MOOD_REMINDER_IDS_KEY,
   MOOD_TRACKER_NOTIFICATION_ROUTE,
   NOTIFICATIONS_KEY,
+  NOTIFICATION_PREFERENCES_KEY,
   REMINDER_TIMES_KEY,
+  DEFAULT_NOTIFICATION_PREFERENCES,
   createNotificationService,
   normalizeReminderTimes,
   notificationPermissionAllowsDelivery,
   parseStoredNotificationIds,
+  parseStoredNotificationPreferences,
   parseStoredReminderTimes,
   reminderContentForTimes,
   type NotificationStorage,
@@ -113,6 +116,13 @@ describe('native local notifications', () => {
     expect(parseStoredReminderTimes('[8,18,8]')).toEqual([8, 18]);
     expect(parseStoredNotificationIds('["a","b","a",3,null]')).toEqual(['a', 'b']);
     expect(parseStoredNotificationIds('{"id":"a"}')).toEqual([]);
+    expect(parseStoredNotificationPreferences(null)).toEqual(
+      DEFAULT_NOTIFICATION_PREFERENCES
+    );
+    expect(parseStoredNotificationPreferences('{"affirmations":false}')).toEqual({
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      affirmations: false,
+    });
   });
 
   it('accepts authorized and provisional iOS delivery states', () => {
@@ -154,7 +164,7 @@ describe('native local notifications', () => {
       expect.objectContaining({
         content: expect.objectContaining({
           title: 'MHtoolkit reminder',
-          data: { screen: MOOD_TRACKER_NOTIFICATION_ROUTE },
+          data: expect.objectContaining({ screen: MOOD_TRACKER_NOTIFICATION_ROUTE }),
         }),
         trigger: expect.objectContaining({ type: 'daily', hour: 9, minute: 0 }),
       })
@@ -168,7 +178,7 @@ describe('native local notifications', () => {
     ]);
   });
 
-  it('keeps one-time due-date reminders independent from daily reminders', async () => {
+  it('enables daily and due-date reminders together', async () => {
     const Notifications = createNotifications();
     const { storage, values } = createStorage({
       [REMINDER_TIMES_KEY]: '[9,14]',
@@ -176,11 +186,11 @@ describe('native local notifications', () => {
     const dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const contentProvider = vi.fn(async () => ({
       daily: [
-        { title: 'Plan', body: 'Choose one next step.', screen: '/goals' as const },
-        { title: 'Affirmation', body: 'Keep going.', screen: '/affirmations' as const },
+        { title: 'Plan', body: 'Choose one next step.', screen: '/goals' as const, category: 'dailyPlanning' as const },
+        { title: 'Affirmation', body: 'Keep going.', screen: '/affirmations' as const, category: 'affirmations' as const },
       ],
       dueDates: [
-        { title: 'Due tomorrow', body: 'Complete your plan.', screen: '/planner' as const, date: dueDate },
+        { title: 'Due tomorrow', body: 'Complete your plan.', screen: '/planner' as const, date: dueDate, category: 'planReminders' as const },
       ],
     }));
     const service = createNotificationService(
@@ -192,29 +202,27 @@ describe('native local notifications', () => {
 
     await expect(service.setRemindersEnabled(true)).resolves.toBe(true);
 
+    expect(contentProvider).toHaveBeenCalledTimes(2);
     expect(contentProvider).toHaveBeenCalledWith([9, 14]);
-    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(2);
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(3);
     expect(Notifications.scheduleNotificationAsync).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        content: expect.objectContaining({ data: { screen: '/goals' } }),
+        content: expect.objectContaining({ data: expect.objectContaining({ screen: '/goals' }) }),
         trigger: expect.objectContaining({ type: 'daily', hour: 9 }),
       })
     );
     expect(Notifications.scheduleNotificationAsync).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        content: expect.objectContaining({ data: { screen: '/affirmations' } }),
+        content: expect.objectContaining({ data: expect.objectContaining({ screen: '/affirmations' }) }),
         trigger: expect.objectContaining({ type: 'daily', hour: 14 }),
       })
     );
-    await expect(service.scheduleDueDateReminders()).resolves.toEqual([
-      'notification-3',
-    ]);
     expect(Notifications.scheduleNotificationAsync).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
-        content: expect.objectContaining({ data: { screen: '/planner' } }),
+        content: expect.objectContaining({ data: expect.objectContaining({ screen: '/planner' }) }),
         trigger: expect.objectContaining({ type: 'date', date: dueDate }),
       })
     );
@@ -223,7 +231,7 @@ describe('native local notifications', () => {
     ]);
   });
 
-  it('schedules a due-date reminder without enabling daily reminders', async () => {
+  it('does not schedule due-date reminders while notifications are off', async () => {
     const Notifications = createNotifications();
     const { storage, values } = createStorage();
     const dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -234,32 +242,121 @@ describe('native local notifications', () => {
       async () => ({
         daily: [],
         dueDates: [
-          { title: 'Goal due', body: 'Open your goal.', screen: '/goals', date: dueDate },
+          { title: 'Goal due', body: 'Open your goal.', screen: '/goals', date: dueDate, category: 'goalReminders' },
         ],
       })
     );
 
-    await expect(service.scheduleDueDateReminders()).resolves.toEqual([
-      'notification-1',
-    ]);
+    await expect(service.scheduleDueDateReminders()).resolves.toEqual([]);
 
     expect(values.has(NOTIFICATIONS_KEY)).toBe(false);
     expect(values.has(MOOD_REMINDER_IDS_KEY)).toBe(false);
-    expect(JSON.parse(values.get(DUE_DATE_REMINDER_IDS_KEY)!)).toEqual([
-      'notification-1',
-    ]);
+    expect(values.has(DUE_DATE_REMINDER_IDS_KEY)).toBe(false);
+    expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it('turns off selected categories without querying or replacing enabled ones', async () => {
+    const Notifications = createNotifications();
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const scheduledIds: string[] = [];
+    for (const [category, screen, type] of [
+      ['dailyPlanning', '/goals', 'daily'],
+      ['affirmations', '/affirmations', 'daily'],
+      ['libraryPicks', '/library', 'daily'],
+      ['goalReminders', '/goals', 'date'],
+      ['planReminders', '/planner', 'date'],
+    ] as const) {
+      scheduledIds.push(await Notifications.scheduleNotificationAsync({
+        content: { title: category, body: 'Reminder', data: { category, screen } },
+        trigger: type === 'daily'
+          ? { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour: 9, minute: 0 }
+          : { type: Notifications.SchedulableTriggerInputTypes.DATE, date: future },
+      }));
+    }
+    vi.mocked(Notifications.scheduleNotificationAsync).mockClear();
+    const contentProvider = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const { storage, values } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [REMINDER_TIMES_KEY]: '[9,14]',
+      [MOOD_REMINDER_IDS_KEY]: JSON.stringify(scheduledIds.slice(0, 3)),
+      [DUE_DATE_REMINDER_IDS_KEY]: JSON.stringify(scheduledIds.slice(3)),
+    });
+    const service = createNotificationService(
+      Notifications,
+      storage,
+      'ios',
+      contentProvider
+    );
+
+    const saved = await service.setNotificationPreferences({
+      dailyPlanning: false,
+      goalReminders: true,
+      planReminders: false,
+      affirmations: true,
+      libraryPicks: false,
+      advisorNudges: true,
+    });
+
+    expect(saved).toEqual({
+      dailyPlanning: false,
+      goalReminders: true,
+      planReminders: false,
+      affirmations: true,
+      libraryPicks: false,
+      advisorNudges: true,
+    });
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(scheduledIds[0]);
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(scheduledIds[2]);
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(scheduledIds[4]);
+    expect(Notifications.cancelScheduledNotificationAsync).not.toHaveBeenCalledWith(scheduledIds[1]);
+    expect(Notifications.cancelScheduledNotificationAsync).not.toHaveBeenCalledWith(scheduledIds[3]);
+    expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+    expect(contentProvider).not.toHaveBeenCalled();
+    expect(JSON.parse(values.get(NOTIFICATION_PREFERENCES_KEY)!)).toEqual(saved);
   });
 
   it('uses a safe fallback when no personalized daily content is available', () => {
     expect(reminderContentForTimes([9, 14], [])).toHaveLength(2);
     expect(reminderContentForTimes([9], [
-      { title: 'Plan', body: 'Open goals.', screen: '/goals' },
+      { title: 'Plan', body: 'Open goals.', screen: '/goals', category: 'dailyPlanning' },
     ])).toEqual([
-      { title: 'Plan', body: 'Open goals.', screen: '/goals' },
+      { title: 'Plan', body: 'Open goals.', screen: '/goals', category: 'dailyPlanning' },
     ]);
   });
 
-  it('coalesces overlapping content refreshes to prevent duplicate schedules', async () => {
+  it('does not replace deliberately disabled daily categories with a fallback', async () => {
+    const Notifications = createNotifications();
+    const { storage } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [REMINDER_TIMES_KEY]: '[9,14]',
+      [NOTIFICATION_PREFERENCES_KEY]: JSON.stringify({
+        dailyPlanning: false,
+        goalReminders: true,
+        planReminders: true,
+        affirmations: false,
+        libraryPicks: false,
+      }),
+    });
+    const service = createNotificationService(
+      Notifications,
+      storage,
+      'ios',
+      async () => ({
+        daily: [
+          { title: 'Plan', body: 'Choose one step.', screen: '/goals', category: 'dailyPlanning' },
+          { title: 'Affirmation', body: 'Keep going.', screen: '/affirmations', category: 'affirmations' },
+        ],
+        dueDates: [],
+      })
+    );
+
+    await expect(service.scheduleMoodReminders()).resolves.toEqual([]);
+    expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it('coalesces overlapping refreshes and runs one follow-up sync', async () => {
     const Notifications = createNotifications();
     const { storage } = createStorage({
       [NOTIFICATIONS_KEY]: 'true',
@@ -272,7 +369,7 @@ describe('native local notifications', () => {
     const contentProvider = vi.fn(async () => {
       await contentReady;
       return {
-        daily: [{ title: 'Plan', body: 'Open goals.', screen: '/goals' as const }],
+        daily: [{ title: 'Plan', body: 'Open goals.', screen: '/goals' as const, category: 'dailyPlanning' as const }],
         dueDates: [],
       };
     });
@@ -284,14 +381,80 @@ describe('native local notifications', () => {
     );
 
     const first = service.scheduleMoodReminders();
+    await vi.waitFor(() => expect(contentProvider).toHaveBeenCalledTimes(1));
     const second = service.scheduleMoodReminders();
     releaseContent();
     await expect(Promise.all([first, second])).resolves.toEqual([
-      ['notification-1'],
-      ['notification-1'],
+      ['notification-2'],
+      ['notification-2'],
     ]);
-    expect(contentProvider).toHaveBeenCalledTimes(1);
-    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(contentProvider).toHaveBeenCalledTimes(2);
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(2);
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'notification-1'
+    );
+  });
+
+  it('keeps the prior due-date schedule when replacement content cannot load', async () => {
+    const Notifications = createNotifications();
+    const { storage, values } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [DUE_DATE_REMINDER_IDS_KEY]: '["existing-due"]',
+    });
+    const service = createNotificationService(
+      Notifications,
+      storage,
+      'ios',
+      async () => {
+        throw new Error('network unavailable');
+      }
+    );
+
+    await expect(service.scheduleDueDateReminders()).rejects.toThrow(
+      'network unavailable'
+    );
+    expect(Notifications.cancelScheduledNotificationAsync).not.toHaveBeenCalledWith(
+      'existing-due'
+    );
+    expect(values.get(DUE_DATE_REMINDER_IDS_KEY)).toBe('["existing-due"]');
+  });
+
+  it('keeps the prior daily schedule when replacement content cannot load', async () => {
+    const Notifications = createNotifications();
+    const { storage, values } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [MOOD_REMINDER_IDS_KEY]: '["existing-daily"]',
+    });
+    const service = createNotificationService(
+      Notifications,
+      storage,
+      'ios',
+      async () => {
+        throw new Error('network unavailable');
+      }
+    );
+
+    await expect(service.scheduleMoodReminders()).rejects.toThrow('network unavailable');
+    expect(Notifications.cancelScheduledNotificationAsync).not.toHaveBeenCalledWith(
+      'existing-daily'
+    );
+    expect(values.get(MOOD_REMINDER_IDS_KEY)).toBe('["existing-daily"]');
+  });
+
+  it('cancels newly scheduled daily notifications when ID persistence fails', async () => {
+    const Notifications = createNotifications();
+    const { storage, values } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [REMINDER_TIMES_KEY]: '[9]',
+    });
+    vi.mocked(storage.setItem).mockRejectedValueOnce(new Error('storage failed'));
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(service.scheduleMoodReminders()).rejects.toThrow('storage failed');
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'notification-1'
+    );
+    expect(values.has(MOOD_REMINDER_IDS_KEY)).toBe(false);
   });
 
   it('reschedules with new times when settings change during a refresh', async () => {
@@ -307,7 +470,7 @@ describe('native local notifications', () => {
     const contentProvider = vi.fn(async () => {
       if (contentProvider.mock.calls.length === 1) await contentReady;
       return {
-        daily: [{ title: 'Plan', body: 'Open goals.', screen: '/goals' as const }],
+        daily: [{ title: 'Plan', body: 'Open goals.', screen: '/goals' as const, category: 'dailyPlanning' as const }],
         dueDates: [],
       };
     });
@@ -324,7 +487,7 @@ describe('native local notifications', () => {
     releaseContent();
     await Promise.all([refresh, update]);
 
-    expect(contentProvider).toHaveBeenCalledTimes(2);
+    expect(contentProvider).toHaveBeenCalledTimes(3);
     expect(Notifications.scheduleNotificationAsync).toHaveBeenLastCalledWith(
       expect.objectContaining({
         trigger: expect.objectContaining({ hour: 20 }),
@@ -334,6 +497,38 @@ describe('native local notifications', () => {
     expect(JSON.parse(values.get(MOOD_REMINDER_IDS_KEY)!)).toEqual([
       'notification-2',
     ]);
+  });
+
+  it('rolls back delivery times when the new schedule cannot be built', async () => {
+    const Notifications = createNotifications();
+    const { storage, values } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [REMINDER_TIMES_KEY]: '[9]',
+    });
+    let calls = 0;
+    const service = createNotificationService(
+      Notifications,
+      storage,
+      'ios',
+      async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('new schedule failed');
+        return {
+          daily: [{
+            title: 'Plan',
+            body: 'Open goals.',
+            screen: '/goals',
+            category: 'dailyPlanning',
+          }],
+          dueDates: [],
+        };
+      }
+    );
+
+    await expect(service.setReminderTimes([20])).rejects.toThrow('new schedule failed');
+    expect(values.get(REMINDER_TIMES_KEY)).toBe('[9]');
+    expect(values.get(NOTIFICATIONS_KEY)).toBe('true');
+    expect(calls).toBeGreaterThanOrEqual(3);
   });
 
   it('finishes disabling after an active refresh completes', async () => {
@@ -349,7 +544,7 @@ describe('native local notifications', () => {
     const contentProvider = vi.fn(async () => {
       await contentReady;
       return {
-        daily: [{ title: 'Plan', body: 'Open goals.', screen: '/goals' as const }],
+        daily: [{ title: 'Plan', body: 'Open goals.', screen: '/goals' as const, category: 'dailyPlanning' as const }],
         dueDates: [],
       };
     });
@@ -376,6 +571,29 @@ describe('native local notifications', () => {
     expect(values.has(MOOD_REMINDER_IDS_KEY)).toBe(false);
   });
 
+  it('serializes a later disable behind permission-gated enablement', async () => {
+    let releasePermission!: () => void;
+    const permissionPending = new Promise<void>((resolve) => {
+      releasePermission = resolve;
+    });
+    const Notifications = createNotifications();
+    vi.mocked(Notifications.getPermissionsAsync).mockImplementationOnce(async () => {
+      await permissionPending;
+      return permission('granted');
+    });
+    const { storage, values } = createStorage({ [REMINDER_TIMES_KEY]: '[9]' });
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    const enable = service.setRemindersEnabled(true);
+    await vi.waitFor(() => expect(Notifications.getPermissionsAsync).toHaveBeenCalled());
+    const disable = service.setRemindersEnabled(false);
+    releasePermission();
+
+    await expect(Promise.all([enable, disable])).resolves.toEqual([true, false]);
+    expect(values.get(NOTIFICATIONS_KEY)).toBe('false');
+    expect(values.has(MOOD_REMINDER_IDS_KEY)).toBe(false);
+  });
+
   it('does not claim reminders are enabled when permission is denied', async () => {
     const denied = permission('denied', IOS_AUTHORIZATION.DENIED);
     const Notifications = createNotifications(denied);
@@ -386,6 +604,29 @@ describe('native local notifications', () => {
 
     expect(values.get(NOTIFICATIONS_KEY)).toBe('false');
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it('does not report master-off when failed enablement cleanup leaves an alert active', async () => {
+    const Notifications = createNotifications();
+    const originalSchedule = vi.mocked(
+      Notifications.scheduleNotificationAsync
+    ).getMockImplementation()!;
+    vi.mocked(Notifications.scheduleNotificationAsync)
+      .mockImplementationOnce(originalSchedule)
+      .mockRejectedValueOnce(new Error('second schedule failed'));
+    vi.mocked(Notifications.cancelScheduledNotificationAsync).mockRejectedValue(
+      new Error('cancel failed')
+    );
+    const { storage, values } = createStorage({ [REMINDER_TIMES_KEY]: '[9,14]' });
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(service.setRemindersEnabled(true)).rejects.toThrow(
+      'Some notifications are still active'
+    );
+    expect(values.get(NOTIFICATIONS_KEY)).toBe('true');
+    expect(JSON.parse(values.get(MOOD_REMINDER_IDS_KEY)!)).toEqual([
+      'notification-1',
+    ]);
   });
 
   it('cleans up an active refresh when an enable request is denied', async () => {
@@ -407,7 +648,7 @@ describe('native local notifications', () => {
     const contentProvider = vi.fn(async () => {
       await contentReady;
       return {
-        daily: [{ title: 'Plan', body: 'Open goals.', screen: '/goals' as const }],
+        daily: [{ title: 'Plan', body: 'Open goals.', screen: '/goals' as const, category: 'dailyPlanning' as const }],
         dueDates: [],
       };
     });
@@ -451,6 +692,41 @@ describe('native local notifications', () => {
 
     expect(values.get(NOTIFICATIONS_KEY)).toBe('true');
     expect(JSON.parse(values.get(MOOD_REMINDER_IDS_KEY)!)).toEqual(['retry-me']);
+  });
+
+  it('master-off cancels Advisor notifications too', async () => {
+    const Notifications = createNotifications();
+    const { storage, values } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [ADVISOR_REMINDER_IDS_KEY]: '["advisor"]',
+    });
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(service.setRemindersEnabled(false)).resolves.toBe(false);
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('advisor');
+    expect(values.has(ADVISOR_REMINDER_IDS_KEY)).toBe(false);
+    expect(values.get(NOTIFICATIONS_KEY)).toBe('false');
+  });
+
+  it('discovers and cancels a legacy Advisor reminder without a stored ID', async () => {
+    const Notifications = createNotifications();
+    const legacyId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'A gentle check-in',
+        body: 'Open MHtoolkit.',
+        data: { screen: ADVISOR_NOTIFICATION_ROUTE },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: new Date(Date.now() + 60_000),
+      },
+    });
+    vi.mocked(Notifications.cancelScheduledNotificationAsync).mockClear();
+    const { storage } = createStorage({ [NOTIFICATIONS_KEY]: 'false' });
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(service.scheduleMoodReminders()).resolves.toEqual([]);
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(legacyId);
   });
 
   it('clears daily and due-date notifications at an owner boundary', async () => {
@@ -545,6 +821,7 @@ describe('native local notifications', () => {
   it('schedules one private Advisor reminder and replaces the previous one', async () => {
     const Notifications = createNotifications();
     const { storage, values } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
       [ADVISOR_REMINDER_IDS_KEY]: '["old-advisor"]',
     });
     const service = createNotificationService(Notifications, storage, 'ios');
@@ -558,7 +835,7 @@ describe('native local notifications', () => {
         content: {
           title: 'A gentle check-in',
           body: 'Open MHtoolkit when you are ready to choose one small next step.',
-          data: { screen: ADVISOR_NOTIFICATION_ROUTE },
+          data: { screen: ADVISOR_NOTIFICATION_ROUTE, category: 'advisorNudges' },
         },
         trigger: expect.objectContaining({ type: 'date', date }),
       })
@@ -569,9 +846,27 @@ describe('native local notifications', () => {
     await expect(service.hasAdvisorReminder()).resolves.toBe(false);
   });
 
+  it('does not schedule Advisor nudges while their category is off', async () => {
+    const Notifications = createNotifications();
+    const { storage } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [NOTIFICATION_PREFERENCES_KEY]: JSON.stringify({
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        advisorNudges: false,
+      }),
+    });
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(
+      service.scheduleAdvisorReminder(new Date(Date.now() + 60_000))
+    ).resolves.toBe(false);
+    expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
   it('cancels a newly scheduled Advisor reminder when persistence fails', async () => {
     const Notifications = createNotifications();
     const { storage } = createStorage();
+    await storage.setItem(NOTIFICATIONS_KEY, 'true');
     vi.mocked(storage.setItem).mockRejectedValueOnce(new Error('storage failed'));
     const service = createNotificationService(Notifications, storage, 'ios');
 
@@ -594,7 +889,7 @@ describe('native local notifications', () => {
       await permissionPending;
       return permission('granted');
     });
-    const { storage, values } = createStorage();
+    const { storage, values } = createStorage({ [NOTIFICATIONS_KEY]: 'true' });
     const service = createNotificationService(Notifications, storage, 'ios');
 
     const scheduling = service.scheduleAdvisorReminder(new Date(Date.now() + 60_000));
@@ -620,7 +915,7 @@ describe('native local notifications', () => {
 
   it('records an Advisor reminder for recovery when persistence and cleanup both fail', async () => {
     const Notifications = createNotifications();
-    const { storage, values } = createStorage();
+    const { storage, values } = createStorage({ [NOTIFICATIONS_KEY]: 'true' });
     vi.mocked(storage.setItem).mockRejectedValueOnce(new Error('storage failed'));
     vi.mocked(Notifications.cancelScheduledNotificationAsync).mockRejectedValueOnce(
       new Error('cancel failed')

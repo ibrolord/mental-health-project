@@ -40,7 +40,13 @@ describe('iOS local notification configuration', () => {
     expect(layout).toContain('clearLastNotificationResponseAsync');
     expect(layout).not.toContain('if (!cancelled) router.navigate(screen as any)');
     expect(settings).toContain('Send Test Notification');
-    expect(settings).toContain('reminders cycle through a plan, affirmation, and library pick.');
+    expect(settings).toContain("title: 'Daily planning'");
+    expect(settings).toContain("title: 'Goal reminders'");
+    expect(settings).toContain("title: 'Planner due dates'");
+    expect(settings).toContain("title: 'Affirmations'");
+    expect(settings).toContain("title: 'Library picks'");
+    expect(settings).toContain("title: 'Advisor check-ins'");
+    expect(settings).toContain('setNotificationPreferences(next)');
     expect(settings).not.toContain('iPhone reminders are not available');
   });
 });
