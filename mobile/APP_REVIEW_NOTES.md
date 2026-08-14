@@ -1,11 +1,11 @@
-# App Review Notes - Version 1.0.3
+# App Review Notes - Version 1.0.4
 
-Last updated: August 9, 2026
+Last updated: August 14, 2026
 
 ## Build Under Review
 
-- Version: 1.0.3
-- iOS build: 49
+- Version: 1.0.4
+- iOS build: 51
 - Bundle ID: `com.mhtoolkit.app`
 - Support URL: https://mhtoolkit.vercel.app/support
 - Support email: bolajiag10@gmail.com
