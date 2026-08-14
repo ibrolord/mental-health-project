@@ -75,6 +75,11 @@ const NOTIFICATION_OPTIONS: {
     description: 'Target dates from your Life Planner.',
   },
   {
+    key: 'routineReminders',
+    title: 'Routine reminders',
+    description: 'Private nudges for routines that are still open.',
+  },
+  {
     key: 'affirmations',
     title: 'Affirmations',
     description: 'Sourced affirmations or quotes at your selected times.',
@@ -86,8 +91,8 @@ const NOTIFICATION_OPTIONS: {
   },
   {
     key: 'advisorNudges',
-    title: 'Advisor check-ins',
-    description: 'One-off check-ins you schedule with Advisor.',
+    title: 'Advisor daily brief',
+    description: 'A private prompt to open today’s next-step brief.',
   },
 ];
 
@@ -540,12 +545,14 @@ export default function SettingsScreen() {
 
             {(notificationPreferences.dailyPlanning ||
               notificationPreferences.planReminders ||
+              notificationPreferences.routineReminders ||
               notificationPreferences.affirmations ||
-              notificationPreferences.libraryPicks) && (
+              notificationPreferences.libraryPicks ||
+              notificationPreferences.advisorNudges) && (
               <View style={s.reminderTimes}>
                 <Text style={s.reminderTimesTitle}>Delivery times</Text>
                 <Text style={s.notificationDescription}>
-                  Used for daily notifications and planner due dates.
+                  Used for daily briefs, routines, and planner due dates.
                 </Text>
                 <View style={s.timePillRow}>
                   {HOUR_OPTIONS.map((opt) => {

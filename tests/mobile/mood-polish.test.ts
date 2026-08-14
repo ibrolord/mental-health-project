@@ -52,12 +52,21 @@ describe('native mood visual consistency', () => {
       resolve(process.cwd(), 'mobile/components/AdvisorHomeCard.tsx'),
       'utf8'
     );
+    const botanicalHero = readFileSync(
+      resolve(process.cwd(), 'mobile/components/BotanicalHero.tsx'),
+      'utf8'
+    );
 
     expect(existsSync(resolve(process.cwd(), 'mobile/assets/today-botanical.png'))).toBe(true);
     expect(advisorCard).toContain("source={require('../assets/today-botanical.png')}");
     expect(advisorCard).toContain('style={styles.artwork}');
     expect(advisorCard).toContain('accessible={false}');
-    expect(advisorCard).toContain('...StyleSheet.absoluteFillObject');
+    expect(advisorCard).toContain('fontScale < LARGE_TEXT_SCALE');
+    expect(advisorCard).toContain("position: 'absolute'");
     expect(advisorCard).not.toContain('<ImageBackground');
+    expect(botanicalHero).toContain("source={require('../assets/today-botanical.png')}");
+    expect(botanicalHero).toContain('accessibilityElementsHidden');
+    expect(botanicalHero).toContain('fontScale < LARGE_TEXT_SCALE');
+    expect(botanicalHero).toContain('...StyleSheet.absoluteFillObject');
   });
 });

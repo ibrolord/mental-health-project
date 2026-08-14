@@ -1,13 +1,9 @@
 import { Tabs } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, LARGE_TEXT_SCALE, Radius } from '@/lib/constants';
+import { Colors, Radius } from '@/lib/constants';
 
 export default function TabLayout() {
-  const { fontScale } = useWindowDimensions();
-  const hidesTabLabels = fontScale >= LARGE_TEXT_SCALE;
-
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: Colors.background }}
@@ -21,7 +17,7 @@ export default function TabLayout() {
         tabBarActiveBackgroundColor: Colors.primaryLight,
         tabBarHideOnKeyboard: true,
         tabBarAllowFontScaling: true,
-        tabBarShowLabel: !hidesTabLabels,
+        tabBarShowLabel: true,
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '700',
@@ -66,12 +62,18 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="advisor"
+        options={{
+          title: 'Advisor',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="compass" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="chat"
         options={{
-          title: 'Talk',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="message-circle" size={size} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

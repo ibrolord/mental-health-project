@@ -37,13 +37,15 @@ describe('Together identity mark', () => {
 
   it('keeps Together prominent on the iOS Today screen', () => {
     const source = fs.readFileSync(path.join(root, 'mobile/app/(tabs)/index.tsx'), 'utf8');
+    const layout = fs.readFileSync(path.join(root, 'mobile/lib/dashboard-layout.ts'), 'utf8');
 
-    expect(source).toContain('title="Together"');
-    expect(source).toContain('Share one commitment with someone you trust.');
-    expect(source).toContain("router.push('/accountability')");
-    expect(source).toContain('<LeafMark size={34} />');
-    expect(source.indexOf('<MoodPicker')).toBeLessThan(
-      source.indexOf('title="Together"')
-    );
+    expect(layout).toContain("id: 'accountability', title: 'Together'");
+    expect(layout).toContain('Share a commitment with someone you trust.');
+    expect(layout).toMatch(/mixed:[\s\S]*?'accountability'/);
+    expect(layout).toContain("href: '/accountability'");
+    expect(source).toContain('<BotanicalHero style={styles.hero}>');
+    expect(source).not.toContain('<LeafMark');
+    expect(source).toContain('visibleModuleIds.slice(1).map');
+    expect(source.indexOf('<MoodPicker')).toBeLessThan(source.indexOf('<RowGroup>'));
   });
 });

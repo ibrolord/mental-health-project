@@ -7,6 +7,10 @@ import { containsExplicitCrisis, CRISIS_RESPONSE } from './crisis';
 export type ChatModel = 'gemini' | 'claude' | 'safety';
 type ModelProvider = Exclude<ChatModel, 'safety'>;
 
+export type ChatRoutingOptions = {
+  preferredProvider?: ModelProvider;
+};
+
 function hasProviderCredential(provider: ModelProvider): boolean {
   const value =
     provider === 'gemini'
@@ -91,16 +95,23 @@ function requiresClaudeModel(messages: Message[]): boolean {
 /**
  * Routes chat requests to the appropriate AI model based on conversation complexity
  */
-export async function chat(messages: Message[], userContext?: UserContext): Promise<{ response: string; model: ChatModel }> {
+export async function chat(
+  messages: Message[],
+  userContext?: UserContext,
+  options: ChatRoutingOptions = {}
+): Promise<{ response: string; model: ChatModel }> {
   if (containsExplicitCrisis(messages)) {
     console.warn('[Model Router] Explicit crisis detected; returning deterministic safety response');
     return { response: CRISIS_RESPONSE, model: 'safety' };
   }
 
   const prefersClaude = requiresClaudeModel(messages);
+  const preferredProvider = options.preferredProvider;
   const primary: ModelProvider =
     prefersClaude && hasProviderCredential('claude')
       ? 'claude'
+      : preferredProvider && hasProviderCredential(preferredProvider)
+        ? preferredProvider
       : userContext?.appleHealthSummary && hasProviderCredential('gemini')
         ? 'gemini'
       : configuredPrimaryProvider();

@@ -45,6 +45,10 @@ describe('smart local reminder content', () => {
     });
 
     expect(plan.daily).toEqual([
+      expect.objectContaining({
+        title: 'Time for your daily brief',
+        screen: '/advisor',
+      }),
       expect.objectContaining({ screen: '/goals' }),
       expect.objectContaining({
         title: 'Daily affirmation',
@@ -139,5 +143,31 @@ describe('smart local reminder content', () => {
 
     expect(plan.dueDates.some((item) => item.category === 'planReminders')).toBe(true);
     expect(plan.dueDates.filter((item) => item.category === 'goalReminders')).toHaveLength(24);
+  });
+
+  it('adds privacy-safe Advisor and routine nudges without lock-screen titles', () => {
+    const plan = buildSmartReminderPlan({
+      now: NOW,
+      reminderTimes: [9, 14, 20],
+      goals: [],
+      lifePlans: [],
+      libraryStates: [],
+      affirmations: [],
+      routines: [
+        {
+          id: 'habit-private',
+          routine_slot: 'evening',
+          streak_count: 12,
+          completed_today: false,
+        },
+      ],
+    });
+
+    expect(plan.daily).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: 'advisorNudges', screen: '/advisor' }),
+      expect.objectContaining({ category: 'routineReminders', screen: '/habits' }),
+    ]));
+    expect(JSON.stringify(plan.daily)).not.toContain('habit-private');
+    expect(JSON.stringify(plan.daily)).not.toContain('12');
   });
 });

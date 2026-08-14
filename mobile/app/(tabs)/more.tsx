@@ -152,7 +152,7 @@ export default function YouScreen() {
                 : 'See what matters and get one practical next step'
             }
             icon="compass"
-            onPress={() => router.push('/advisor' as never)}
+            onPress={() => router.navigate('/advisor')}
           />
           <ListRow title="Together & sharing" description="Commitments, check-ins, and partner privacy" icon="heart" onPress={() => router.push('/accountability')} />
         </RowGroup>

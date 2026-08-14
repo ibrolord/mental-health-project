@@ -3,6 +3,7 @@ import {
   createAdvisorContextSnapshot,
   createAdvisorHealthFeatures,
   createAdvisorRecommendation,
+  createAdvisorTrendSummary,
   getAdvisorChangeSignals,
   selectAdvisorRecommendation,
   type AdvisorContext,
@@ -18,6 +19,12 @@ function context(overrides: Partial<AdvisorContext> = {}): AdvisorContext {
     habits: [],
     health: null,
     habitWeek: null,
+    momentumAvailability: 'available',
+    momentumProgress: {
+      totalPoints: 0,
+      recentPoints: 0,
+      previousPoints: 0,
+    },
     ...overrides,
   };
 }
@@ -56,6 +63,415 @@ function health(overrides: Partial<AdvisorHealthFeatures> = {}): AdvisorHealthFe
 }
 
 describe('mobile Advisor recommendation engine', () => {
+  it('describes one changed area without producing a warning', () => {
+    const trend = createAdvisorTrendSummary(
+      context({
+        habitTrend: {
+          recentCompleted: 1,
+          recentOpportunities: 7,
+          previousCompleted: 5,
+          previousOpportunities: 7,
+        },
+        checkInTrend: { recentDays: 2, previousDays: 2 },
+        health: health(),
+      })
+    );
+
+    expect(trend.level).toBe('available');
+    expect(trend.showsCaution).toBe(false);
+    expect(trend.areas.find((area) => area.id === 'habits')?.level).toBe('changed');
+    expect(trend.areas.find((area) => area.id === 'sleep')?.level).toBe('similar');
+    expect(trend.areas.find((area) => area.id === 'movement')?.level).toBe('similar');
+  });
+
+  it('describes habit rate rather than raw totals when opportunities differ', () => {
+    const trend = createAdvisorTrendSummary(
+      context({
+        habitTrend: {
+          recentCompleted: 10,
+          recentOpportunities: 14,
+          previousCompleted: 7,
+          previousOpportunities: 7,
+        },
+      })
+    );
+
+    expect(trend.areas.find((area) => area.id === 'habits')).toMatchObject({
+      level: 'changed',
+      detail: 'The recorded habit check-off rate was lower than in the previous 7-day window.',
+      meter: {
+        kind: 'progress',
+        position: 10 / 14,
+        label: '10 of 14 scheduled check-offs',
+      },
+    });
+  });
+
+  it('names only adequately sampled Apple Health streams', () => {
+    const sleepOnly = createAdvisorTrendSummary(
+      context({
+        health: health({
+          sleepMinutes: {
+            recentAverage: 420,
+            baselineAverage: 430,
+            recentCoverageDays: 4,
+            baselineCoverageDays: 7,
+          },
+          steps: {
+            recentAverage: null,
+            baselineAverage: null,
+            recentCoverageDays: 0,
+            baselineCoverageDays: 0,
+          },
+        }),
+      })
+    );
+    const movementOnly = createAdvisorTrendSummary(
+      context({
+        health: health({
+          sleepMinutes: {
+            recentAverage: null,
+            baselineAverage: null,
+            recentCoverageDays: 0,
+            baselineCoverageDays: 0,
+          },
+          steps: {
+            recentAverage: 5000,
+            baselineAverage: 5200,
+            recentCoverageDays: 4,
+            baselineCoverageDays: 7,
+          },
+        }),
+      })
+    );
+
+    expect(sleepOnly.areas.find((area) => area.id === 'sleep')).toMatchObject({
+      level: 'similar',
+      meter: { kind: 'baseline', label: '7h recent · 7h 10m earlier' },
+    });
+    expect(sleepOnly.areas.find((area) => area.id === 'movement')?.meter).toBeNull();
+    expect(movementOnly.areas.find((area) => area.id === 'movement')).toMatchObject({
+      level: 'similar',
+      meter: { kind: 'baseline', label: '5,000 recent · 5,200 earlier' },
+    });
+    expect(movementOnly.areas.find((area) => area.id === 'sleep')?.meter).toBeNull();
+  });
+
+  it('positions personal-baseline markers for equal, changed, clamped, and zero baselines', () => {
+    const marker = (recentAverage: number, baselineAverage: number) =>
+      createAdvisorTrendSummary(
+        context({
+          health: health({
+            sleepMinutes: {
+              recentAverage,
+              baselineAverage,
+              recentCoverageDays: 4,
+              baselineCoverageDays: 7,
+            },
+            steps: {
+              recentAverage: null,
+              baselineAverage: null,
+              recentCoverageDays: 0,
+              baselineCoverageDays: 0,
+            },
+          }),
+        })
+      ).areas.find((area) => area.id === 'sleep')?.meter?.position;
+
+    expect(marker(420, 420)).toBe(0.5);
+    expect(marker(462, 420)).toBeCloseTo(0.6);
+    expect(marker(378, 420)).toBeCloseTo(0.4);
+    expect(marker(840, 420)).toBe(1);
+    expect(marker(210, 420)).toBe(0);
+    expect(marker(30, 0)).toBe(1);
+    expect(marker(0, 0)).toBe(0.5);
+  });
+
+  it('does not render malformed Apple Health averages', () => {
+    const trend = createAdvisorTrendSummary(
+      context({
+        health: health({
+          sleepMinutes: {
+            recentAverage: Number.NaN,
+            baselineAverage: 420,
+            recentCoverageDays: 4,
+            baselineCoverageDays: 7,
+          },
+        }),
+      })
+    );
+
+    expect(trend.areas.find((area) => area.id === 'sleep')?.meter).toBeNull();
+  });
+
+  it('rejects negative Apple Health averages from meters and recommendations', () => {
+    const invalidHealth = health({
+      sleepMinutes: {
+        recentAverage: -60,
+        baselineAverage: 420,
+        recentCoverageDays: 7,
+        baselineCoverageDays: 14,
+      },
+      steps: {
+        recentAverage: -1000,
+        baselineAverage: 5000,
+        recentCoverageDays: 7,
+        baselineCoverageDays: 14,
+      },
+    });
+    const input = context({ health: invalidHealth });
+
+    expect(
+      createAdvisorTrendSummary(input).areas.every((area) => area.meter === null)
+    ).toBe(true);
+    expect(getAdvisorChangeSignals(input)).toEqual([]);
+    expect(createAdvisorRecommendation(input).sourceLabels).not.toContain('Apple Health');
+  });
+
+  it('never turns reduced check-in frequency into a warning', () => {
+    const trend = createAdvisorTrendSummary(
+      context({
+        habitTrend: {
+          recentCompleted: 1,
+          recentOpportunities: 7,
+          previousCompleted: 5,
+          previousOpportunities: 7,
+        },
+        checkInTrend: { recentDays: 0, previousDays: 4 },
+      })
+    );
+
+    expect(trend.showsCaution).toBe(false);
+    expect(trend.areas.find((area) => area.id === 'check-ins')).toMatchObject({
+      level: 'learning',
+      detail: 'No recent check-ins are included. Check in only when it is useful; feelings are never scored.',
+      meter: { kind: 'progress', position: 0, label: '0 of 7 days' },
+    });
+  });
+
+  it('never scores the mood value as part of the trend signal', () => {
+    const shared = {
+      habitTrend: {
+        recentCompleted: 4,
+        recentOpportunities: 7,
+        previousCompleted: 4,
+        previousOpportunities: 7,
+      },
+      checkInTrend: { recentDays: 3, previousDays: 3 },
+      health: health(),
+    } satisfies Partial<AdvisorContext>;
+    const low = createAdvisorTrendSummary(
+      context({ ...shared, mood: { emoji: '😢', localDate: '2026-08-13' } })
+    );
+    const great = createAdvisorTrendSummary(
+      context({ ...shared, mood: { emoji: '😄', localDate: '2026-08-13' } })
+    );
+
+    expect(low).toEqual(great);
+    expect(JSON.stringify(low)).toContain('Feelings are never scored');
+  });
+
+  it('treats missing history as learning rather than decline', () => {
+    const trend = createAdvisorTrendSummary(context());
+
+    expect(trend).toMatchObject({
+      level: 'learning',
+      label: 'Momentum',
+      showsCaution: false,
+      momentum: {
+        availability: 'available',
+        points: 0,
+        level: 1,
+        weeklyPoints: 0,
+        delta: null,
+        nextMilestone: 25,
+        pointsToNextMilestone: 25,
+        milestoneProgress: 0,
+        unlockedMilestone: 0,
+        status: 'Level 1',
+      },
+    });
+    expect(trend.areas.every((area) => area.level === 'learning')).toBe(true);
+    expect(trend.areas.every((area) => area.meter === null)).toBe(true);
+  });
+
+  it('turns intentional actions into transparent momentum points and milestones', () => {
+    const trend = createAdvisorTrendSummary(
+      context({
+        habitTrend: {
+          recentCompleted: 5,
+          recentOpportunities: 7,
+          previousCompleted: 4,
+          previousOpportunities: 7,
+        },
+        checkInTrend: { recentDays: 3, previousDays: 2 },
+        momentumProgress: {
+          totalPoints: 65,
+          recentPoints: 50,
+          previousPoints: 40,
+        },
+        health: health(),
+      })
+    );
+
+    expect(trend.showsCaution).toBe(false);
+    expect(trend.summary).toBe('65 lifetime XP from saved habit check-offs.');
+    expect(trend.momentum).toEqual({
+      availability: 'available',
+      points: 65,
+      level: 3,
+      weeklyPoints: 50,
+      delta: 10,
+      nextMilestone: 75,
+      pointsToNextMilestone: 10,
+      milestoneProgress: 0.6,
+      unlockedMilestone: 50,
+      status: 'Level 3',
+    });
+    expect(trend.areas.find((area) => area.id === 'habits')?.meter).toMatchObject({
+      kind: 'progress',
+      position: 5 / 7,
+    });
+    expect(trend.areas.find((area) => area.id === 'check-ins')?.meter).toMatchObject({
+      kind: 'progress',
+      position: 3 / 7,
+    });
+    expect(trend.areas.filter((area) => area.meter?.kind === 'baseline')).toHaveLength(2);
+    expect(JSON.stringify(trend)).not.toMatch(/overall|wellbeing score|grade/i);
+  });
+
+  it('keeps mood and Apple Health context outside the momentum score', () => {
+    const shared = {
+      habitTrend: {
+        recentCompleted: 2,
+        recentOpportunities: 4,
+        previousCompleted: 1,
+        previousOpportunities: 4,
+      },
+      checkInTrend: { recentDays: 2, previousDays: 1 },
+      momentumProgress: {
+        totalPoints: 30,
+        recentPoints: 20,
+        previousPoints: 10,
+      },
+    } satisfies Partial<AdvisorContext>;
+    const lowerContext = createAdvisorTrendSummary(
+      context({
+        ...shared,
+        mood: { emoji: '😢', localDate: '2026-08-13' },
+        health: health({
+          sleepMinutes: { recentAverage: 300, baselineAverage: 480, recentCoverageDays: 7, baselineCoverageDays: 14 },
+          steps: { recentAverage: 1500, baselineAverage: 7000, recentCoverageDays: 7, baselineCoverageDays: 14 },
+        }),
+      })
+    );
+    const higherContext = createAdvisorTrendSummary(
+      context({
+        ...shared,
+        mood: { emoji: '😄', localDate: '2026-08-13' },
+        health: health({
+          sleepMinutes: { recentAverage: 540, baselineAverage: 480, recentCoverageDays: 7, baselineCoverageDays: 14 },
+          steps: { recentAverage: 12000, baselineAverage: 7000, recentCoverageDays: 7, baselineCoverageDays: 14 },
+        }),
+      })
+    );
+
+    expect(lowerContext.momentum).toEqual(higherContext.momentum);
+    expect(lowerContext.momentum.points).toBe(30);
+  });
+
+  it('keeps an unlocked milestone while starting the next permanent level', () => {
+    const trend = createAdvisorTrendSummary(
+      context({
+        momentumProgress: {
+          totalPoints: 50,
+          recentPoints: 20,
+          previousPoints: 10,
+        },
+      })
+    );
+
+    expect(trend.momentum).toMatchObject({
+      points: 50,
+      level: 3,
+      nextMilestone: 75,
+      pointsToNextMilestone: 25,
+      milestoneProgress: 0,
+      unlockedMilestone: 50,
+      status: 'Level 3',
+    });
+  });
+
+  it('uses persisted XP for week comparison when habit opportunity counts differ', () => {
+    const trend = createAdvisorTrendSummary(
+      context({
+        habitTrend: {
+          recentCompleted: 10,
+          recentOpportunities: 14,
+          previousCompleted: 7,
+          previousOpportunities: 7,
+        },
+        checkInTrend: { recentDays: 2, previousDays: 2 },
+        momentumProgress: {
+          totalPoints: 110,
+          recentPoints: 70,
+          previousPoints: 50,
+        },
+      })
+    );
+
+    expect(trend.areas.find((area) => area.id === 'habits')?.detail).toContain('lower');
+    expect(trend.momentum).toMatchObject({
+      points: 110,
+      weeklyPoints: 70,
+      delta: 20,
+      status: 'Level 5',
+    });
+  });
+
+  it('keeps lifetime XP when the latest complete week is quiet', () => {
+    const trend = createAdvisorTrendSummary(
+      context({
+        checkInTrend: { recentDays: 0, previousDays: 4 },
+        habitTrend: {
+          recentCompleted: 0,
+          recentOpportunities: 7,
+          previousCompleted: 4,
+          previousOpportunities: 7,
+        },
+        momentumProgress: {
+          totalPoints: 80,
+          recentPoints: 0,
+          previousPoints: 40,
+        },
+      })
+    );
+
+    expect(trend.momentum).toMatchObject({
+      points: 80,
+      weeklyPoints: 0,
+      delta: -40,
+      status: 'Level 4',
+    });
+  });
+
+  it('does not turn a failed momentum load into a truthful-looking zero', () => {
+    const trend = createAdvisorTrendSummary(
+      context({
+        momentumAvailability: 'unavailable',
+        momentumProgress: null,
+      })
+    );
+
+    expect(trend.momentum).toMatchObject({
+      availability: 'unavailable',
+      points: 0,
+      delta: null,
+      status: 'XP is unavailable',
+    });
+    expect(trend.summary).toBe('Momentum points are not available for this session.');
+  });
+
   it('keeps deterministic Advisor copy within the evidence-language boundary', () => {
     const outputs = [
       createAdvisorRecommendation(context()),
@@ -239,10 +655,13 @@ describe('mobile Advisor recommendation engine', () => {
     expect(result.id).toBe('low-grounding');
   });
 
-  it('keeps missing Health metrics missing and never computes mood comparisons', () => {
+  it('keeps missing Health metrics missing, excludes today, and never compares moods', () => {
     const snapshot = buildAppleHealthSnapshot(
       {
-        steps: [{ date: new Date(2026, 7, 13, 12), value: 4200 }],
+        steps: [
+          { date: new Date(2026, 7, 12, 12), value: 4200 },
+          { date: new Date(2026, 7, 13, 8), value: 1000 },
+        ],
         exerciseMinutes: [],
         sleep: [],
         mindfulSessions: [],
@@ -404,7 +823,7 @@ describe('mobile Advisor recommendation engine', () => {
     expect(features.recent.eligibleForSuggestion).toBe(false);
   });
 
-  it('freezes one deterministic active goal and one incomplete habit in the snapshot', () => {
+  it('freezes up to three deterministic active goals and incomplete habits in the snapshot', () => {
     const snapshot = createAdvisorContextSnapshot(
       context({
         goals: [
@@ -416,10 +835,20 @@ describe('mobile Advisor recommendation engine', () => {
           { id: 'b', name: 'Second', tinyStep: null, completedToday: false },
           { id: 'a', name: 'First', tinyStep: null, completedToday: false },
         ],
+        momentumProgress: {
+          totalPoints: Number.POSITIVE_INFINITY,
+          recentPoints: -10,
+          previousPoints: 15.9,
+        },
       })
     );
-    expect(snapshot.goals.map((item) => item.id)).toEqual(['soon']);
-    expect(snapshot.habits.map((item) => item.id)).toEqual(['a']);
+    expect(snapshot.goals.map((item) => item.id)).toEqual(['soon', 'later']);
+    expect(snapshot.habits.map((item) => item.id)).toEqual(['a', 'b']);
+    expect(snapshot.momentumProgress).toEqual({
+      totalPoints: 0,
+      recentPoints: 0,
+      previousPoints: 15,
+    });
   });
 
   it('returns bounded observations whose first item is the legacy observation', () => {

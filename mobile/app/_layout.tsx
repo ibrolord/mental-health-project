@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Stack, useRootNavigationState, useRouter } from 'expo-router';
+import { Stack, useRootNavigationState, useRouter, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AppState } from 'react-native';
 import { AuthProvider } from '@/lib/auth-context';
@@ -170,7 +170,6 @@ export default function RootLayout() {
           <Stack.Screen name="auth/forgot-password" options={stackScreenOptions('Reset Password', '/auth/login', true)} />
           <Stack.Screen name="assessments/[type]" options={stackScreenOptions('Assessment', '/(tabs)/assessments')} />
           <Stack.Screen name="goals" options={stackScreenOptions('Goals')} />
-          <Stack.Screen name="advisor" options={stackScreenOptions('Advisor')} />
           <Stack.Screen name="habits" options={stackScreenOptions('Habit Tracker')} />
           <Stack.Screen name="journal" options={stackScreenOptions('Private Journal')} />
           <Stack.Screen name="reflect" options={stackScreenOptions('Guided Reflection')} />
@@ -191,6 +190,8 @@ export default function RootLayout() {
           <Stack.Screen name="support" options={stackScreenOptions('Support')} />
           <Stack.Screen name="settings" options={stackScreenOptions('Settings')} />
           <Stack.Screen name="voice" options={stackScreenOptions('AI Voice')} />
+          <Stack.Screen name="dashboard-layout" options={stackScreenOptions('Customize Today')} />
+          <Stack.Screen name="dashboard-tools" options={stackScreenOptions('Add Tools', '/dashboard-layout' as Href)} />
         </Stack>
       </AuthProvider>
     </ErrorBoundary>
@@ -199,7 +200,7 @@ export default function RootLayout() {
 
 function stackScreenOptions(
   _title: string,
-  fallback: '/(tabs)' | '/(tabs)/assessments' | '/settings' | '/auth/login' = '/(tabs)',
+  fallback: Href = '/(tabs)',
   modal = false
 ) {
   return {

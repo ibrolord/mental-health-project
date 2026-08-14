@@ -19,6 +19,14 @@ const appUi = readFileSync(
   resolve(process.cwd(), 'mobile/components/AppUI.tsx'),
   'utf8'
 );
+const advisor = readFileSync(
+  resolve(process.cwd(), 'mobile/app/(tabs)/advisor.tsx'),
+  'utf8'
+);
+const chat = readFileSync(
+  resolve(process.cwd(), 'mobile/app/(tabs)/chat.tsx'),
+  'utf8'
+);
 const checklist = JSON.parse(
   readFileSync(
     resolve(process.cwd(), 'mobile/qa/ios-release-checklist.json'),
@@ -84,5 +92,13 @@ describe('mobile back navigation', () => {
     expect(backButton).not.toContain('numberOfLines={1}');
     expect(appUi).toContain("flexWrap: 'wrap'");
     expect(appUi).toContain('flexBasis: 220');
+  });
+
+  it('returns AI support opened from Advisor directly to Advisor', () => {
+    expect(advisor).toContain("params: { from: 'advisor' }");
+    expect(chat).toContain('alwaysUseFallback={openedFromAdvisor}');
+    expect(chat).toContain('fallback="/(tabs)/advisor"');
+    expect(backButton).toContain('alwaysUseFallback');
+    expect(backButton).toContain('router.replace(fallback)');
   });
 });

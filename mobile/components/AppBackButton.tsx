@@ -5,7 +5,13 @@ import { Pressable, StyleSheet } from 'react-native';
 import { Colors } from '@/lib/constants';
 import { goBackOrReplace } from '@/lib/navigation';
 
-export function AppBackButton({ fallback }: { fallback: Href }) {
+export function AppBackButton({
+  fallback,
+  alwaysUseFallback = false,
+}: {
+  fallback: Href;
+  alwaysUseFallback?: boolean;
+}) {
   const router = useRouter();
 
   return (
@@ -14,7 +20,11 @@ export function AppBackButton({ fallback }: { fallback: Href }) {
       accessibilityLabel="Back"
       accessibilityRole="button"
       hitSlop={10}
-      onPress={() => goBackOrReplace(router, fallback)}
+      onPress={() =>
+        alwaysUseFallback
+          ? router.replace(fallback)
+          : goBackOrReplace(router, fallback)
+      }
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}
     >
       <Feather color={Colors.primary} name="chevron-left" size={24} />

@@ -45,7 +45,8 @@ describe('iOS local notification configuration', () => {
     expect(settings).toContain("title: 'Planner due dates'");
     expect(settings).toContain("title: 'Affirmations'");
     expect(settings).toContain("title: 'Library picks'");
-    expect(settings).toContain("title: 'Advisor check-ins'");
+    expect(settings).toContain("title: 'Routine reminders'");
+    expect(settings).toContain("title: 'Advisor daily brief'");
     expect(settings).toContain('setNotificationPreferences(next)');
     expect(settings).not.toContain('iPhone reminders are not available');
   });

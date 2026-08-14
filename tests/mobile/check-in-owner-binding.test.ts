@@ -63,15 +63,10 @@ describe('iOS check-in owner binding', () => {
     );
 
     expect(today).toContain('moodOwnerKey === ownerKey ? todayMood : null');
-    expect(today).toContain('moodOwnerKey === ownerKey ? weekMoods : []');
     expect(today).toContain(
       "moodOwnerKey === ownerKey ? affirmation : ''"
     );
-    expect(today).toContain(
-      'productOwnerId === user?.id ? resumeProgress : null'
-    );
-    expect(today).toContain(
-      'productOwnerId === user?.id ? savedItem : null'
-    );
+    expect(today).not.toContain('weekMoods');
+    expect(today).not.toContain('productOwnerId');
   });
 });

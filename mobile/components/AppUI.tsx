@@ -25,10 +25,12 @@ type FeatherName = ComponentProps<typeof Feather>['name'];
 export function AppScreen({
   children,
   scroll = true,
+  scrollEnabled = true,
   contentStyle,
 }: {
   children: ReactNode;
   scroll?: boolean;
+  scrollEnabled?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
 }) {
   const content = (
@@ -42,6 +44,7 @@ export function AppScreen({
           style={styles.screen}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          scrollEnabled={scrollEnabled}
           showsVerticalScrollIndicator={false}
         >
           {content}
@@ -172,7 +175,16 @@ export function ActionRow({
     <View style={styles.actionRow}>
       {actions.map((action, index) => (
         <View key={action.label} style={styles.actionRowItem}>
-          {index > 0 ? <Text style={styles.actionSeparator}>·</Text> : null}
+          {index > 0 ? (
+            <Text
+              accessible={false}
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+              style={styles.actionSeparator}
+            >
+              ·
+            </Text>
+          ) : null}
           <AppButton
             label={action.label}
             icon={action.icon}

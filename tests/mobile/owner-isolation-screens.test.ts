@@ -12,9 +12,9 @@ describe('iOS owner-isolated wellbeing screens', () => {
   it('clears Today state immediately and rejects stale owner responses', () => {
     expect(today).toContain('const ownerKeyRef = useRef(ownerKey)');
     expect(today).toContain('setTodayMood(null)');
-    expect(today).toContain('setWeekMoods([])');
     expect(today).toContain('setAffirmation(\'\')');
     expect(today).toContain('ownerKeyRef.current !== expectedOwnerKey');
+    expect(today).toContain('setMoodOwnerKey(null)');
   });
 
   it('clears tracker content and editor input on every owner change', () => {

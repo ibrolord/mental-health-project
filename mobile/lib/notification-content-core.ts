@@ -33,6 +33,13 @@ export type LibraryState = {
   priority: 'none' | 'next';
 };
 
+export type RoutineHabit = {
+  id: string;
+  routine_slot: 'morning' | 'afternoon' | 'evening' | 'anytime';
+  streak_count: number;
+  completed_today: boolean;
+};
+
 export type SmartReminderPlanInput = {
   now: Date;
   reminderTimes: readonly number[];
@@ -40,6 +47,7 @@ export type SmartReminderPlanInput = {
   lifePlans: readonly LifePlanItem[];
   libraryStates: readonly LibraryState[];
   affirmations: readonly AffirmationDisplayRecord[];
+  routines?: readonly RoutineHabit[];
 };
 
 const MAX_DUE_DATE_REMINDERS = 24;
@@ -162,6 +170,31 @@ function notificationForLibrary(item: LibraryItem | null): ReminderContent {
   };
 }
 
+function advisorBriefNotification(): ReminderContent {
+  return {
+    title: 'Time for your daily brief',
+    body: 'Open Advisor for one useful next step based on the context you approved.',
+    screen: '/advisor',
+    category: 'advisorNudges',
+  };
+}
+
+function routineNotification(
+  routines: readonly RoutineHabit[]
+): ReminderContent | null {
+  const openRoutine = routines.find((routine) => !routine.completed_today);
+  if (!openRoutine) return null;
+  const slot = openRoutine.routine_slot === 'anytime'
+    ? 'today'
+    : `this ${openRoutine.routine_slot}`;
+  return {
+    title: 'Keep your routine moving',
+    body: `A routine is still open ${slot}. Open MHtoolkit when you are ready.`,
+    screen: '/habits',
+    category: 'routineReminders',
+  };
+}
+
 function dueReminder(
   targetDate: string,
   reminderTimes: readonly number[],
@@ -216,6 +249,7 @@ export function buildSmartReminderPlan({
   lifePlans,
   libraryStates,
   affirmations,
+  routines = [],
 }: SmartReminderPlanInput): ReminderSchedulePlan {
   const today = format(now, 'yyyy-MM-dd');
   const goalDueDates: DueDateReminder[] = [];
@@ -254,15 +288,18 @@ export function buildSmartReminderPlan({
     'affirmation'
   );
   const library = libraryRecommendation(libraryStates, today);
+  const routine = routineNotification(routines);
 
   return {
     daily: [
+      advisorBriefNotification(),
       {
         title: 'Plan your next step',
         body: 'Open your goals and choose one realistic priority for today.',
         screen: '/goals',
         category: 'dailyPlanning',
       },
+      ...(routine ? [routine] : []),
       notificationForAffirmation(affirmation),
       notificationForLibrary(library),
     ],

@@ -240,10 +240,13 @@ export function createAdvisorOutcomeStorage(
     await serialize(ownerKey, async () => {
       const outcomes = await read(ownerKey);
       const target = outcomes.find(
-        (outcome) => outcome.recommendationId === recommendationId
+        (outcome) =>
+          outcome.recommendationId === recommendationId &&
+          Boolean(outcome.startedAt) &&
+          !outcome.completedAt
       );
       if (!target) return;
-      if (completed && target.startedAt && !target.completedAt) {
+      if (completed) {
         target.completedAt = now.toISOString();
       }
       await write(ownerKey, outcomes, now);
@@ -261,9 +264,12 @@ export function createAdvisorOutcomeStorage(
     await serialize(ownerKey, async () => {
       const outcomes = await read(ownerKey);
       const target = outcomes.find(
-        (outcome) => outcome.recommendationId === recommendationId
+        (outcome) =>
+          outcome.recommendationId === recommendationId &&
+          Boolean(outcome.startedAt) &&
+          !outcome.feedbackAt
       );
-      if (!target || !target.startedAt || target.feedbackAt) return;
+      if (!target) return;
       target.helpful = helpful;
       target.feedbackAt = now.toISOString();
       await write(ownerKey, outcomes, now);

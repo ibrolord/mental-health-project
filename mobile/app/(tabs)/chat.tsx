@@ -39,6 +39,7 @@ import {
 import { appleHealthPreference } from '@/lib/apple-health-preference';
 import { loadAppleHealthSnapshot } from '@/lib/apple-health';
 import { apiRequest } from '@/lib/api';
+import { AppBackButton } from '@/components/AppBackButton';
 import { LocalSafetyActions } from '@/components/LocalSafetyActions';
 import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
 import {
@@ -89,7 +90,8 @@ const APPLE_HEALTH_AI_ENABLED =
 
 export default function ChatScreen() {
   const router = useRouter();
-  const { health, healthRequest } = useLocalSearchParams<{
+  const { from, health, healthRequest } = useLocalSearchParams<{
+    from?: string | string[];
     health?: string | string[];
     healthRequest?: string | string[];
   }>();
@@ -139,6 +141,8 @@ export default function ChatScreen() {
   selectionsRef.current = selections;
   const healthEntryRequested =
     health === '1' || (Array.isArray(health) && health.includes('1'));
+  const openedFromAdvisor =
+    from === 'advisor' || (Array.isArray(from) && from.includes('advisor'));
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
@@ -825,7 +829,13 @@ export default function ChatScreen() {
     >
       <View style={styles.topBar}>
         <View style={styles.topUtilityRow}>
-          <Text style={styles.topEyebrow}>AI SUPPORT</Text>
+          <View style={styles.topHeadingRow}>
+            <AppBackButton
+              fallback="/(tabs)/advisor"
+              alwaysUseFallback={openedFromAdvisor}
+            />
+            <Text style={styles.topEyebrow}>AI SUPPORT</Text>
+          </View>
           <View style={styles.topActions}>
             <Pressable
               accessibilityRole="button"
@@ -1163,6 +1173,12 @@ const styles = StyleSheet.create({
   topEyebrow: {
     color: Colors.accent,
     ...Typography.eyebrow,
+  },
+  topHeadingRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xxs,
   },
   topTitle: {
     color: Colors.text,

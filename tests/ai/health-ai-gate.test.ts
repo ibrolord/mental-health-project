@@ -22,4 +22,17 @@ describe('Apple Health AI release gate', () => {
       route.indexOf('await chat(messages, userContext)')
     );
   });
+
+  it('guards Advisor Health summaries before any model call', () => {
+    const route = readFileSync(
+      resolve(process.cwd(), 'app/api/advisor/route.ts'),
+      'utf8'
+    );
+
+    expect(route.indexOf('parsed.data.appleHealthSummary')).toBeGreaterThan(-1);
+    expect(route.indexOf('!isHealthAiEnabled()')).toBeGreaterThan(-1);
+    expect(route.indexOf('!isHealthAiEnabled()')).toBeLessThan(
+      route.indexOf('createModelAdvisorRecommendation(parsed.data)')
+    );
+  });
 });

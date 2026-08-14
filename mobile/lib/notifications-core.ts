@@ -28,6 +28,7 @@ export type NotificationCategory =
   | 'dailyPlanning'
   | 'goalReminders'
   | 'planReminders'
+  | 'routineReminders'
   | 'affirmations'
   | 'libraryPicks'
   | 'advisorNudges';
@@ -38,6 +39,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   dailyPlanning: true,
   goalReminders: true,
   planReminders: true,
+  routineReminders: true,
   affirmations: true,
   libraryPicks: true,
   advisorNudges: true,
@@ -114,6 +116,9 @@ export function normalizeNotificationPreferences(
     planReminders: typeof stored.planReminders === 'boolean'
       ? stored.planReminders
       : DEFAULT_NOTIFICATION_PREFERENCES.planReminders,
+    routineReminders: typeof stored.routineReminders === 'boolean'
+      ? stored.routineReminders
+      : DEFAULT_NOTIFICATION_PREFERENCES.routineReminders,
     affirmations: typeof stored.affirmations === 'boolean'
       ? stored.affirmations
       : DEFAULT_NOTIFICATION_PREFERENCES.affirmations,
@@ -293,6 +298,7 @@ export function createNotificationService(
               (screen === '/goals' || screen === '/planner'));
         }
         return category === 'dailyPlanning' ||
+          category === 'routineReminders' ||
           category === 'affirmations' ||
           category === 'libraryPicks' ||
           triggerType === Notifications.SchedulableTriggerInputTypes.DAILY;
@@ -359,6 +365,7 @@ export function createNotificationService(
       ? (request.trigger as Record<string, unknown>).type
       : null;
     if (screen === ADVISOR_NOTIFICATION_ROUTE) return 'advisorNudges';
+    if (screen === '/habits') return 'routineReminders';
     if (screen === '/affirmations') return 'affirmations';
     if (screen === '/library') return 'libraryPicks';
     if (triggerType === Notifications.SchedulableTriggerInputTypes.DAILY) {

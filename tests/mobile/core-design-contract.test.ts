@@ -43,7 +43,7 @@ describe('iOS calm utility design contract', () => {
     const tabs = mobileSource('app/(tabs)/_layout.tsx');
     const appUi = mobileSource('components/AppUI.tsx');
 
-    expect(tabs).toContain('tabBarShowLabel: !hidesTabLabels');
+    expect(tabs).toContain('tabBarShowLabel: true');
     expect(appUi).toContain('styles.headerTopStacked');
   });
 

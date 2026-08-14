@@ -19,6 +19,14 @@ export type AdvisorHabit = {
   name: string;
   tinyStep: string | null;
   completedToday: boolean;
+  routineSlot?: 'morning' | 'afternoon' | 'evening' | 'anytime';
+  streakCount?: number;
+};
+
+export type AdvisorNotificationContext = {
+  enabled: boolean;
+  enabledCategories: readonly string[];
+  reminderTimes: readonly number[];
 };
 
 export type AdvisorHealthMetric = {
@@ -61,6 +69,59 @@ export type AdvisorContext = {
     completedDays: number;
     habitAgeDays: number;
   } | null;
+  habitTrend?: {
+    recentCompleted: number;
+    recentOpportunities: number;
+    previousCompleted: number;
+    previousOpportunities: number;
+  } | null;
+  checkInTrend?: {
+    recentDays: number;
+    previousDays: number;
+  } | null;
+  momentumProgress?: {
+    totalPoints: number;
+    recentPoints: number;
+    previousPoints: number;
+  } | null;
+  momentumAvailability?: 'available' | 'unavailable' | 'signed-out';
+  notifications?: AdvisorNotificationContext | null;
+};
+
+export type AdvisorTrendLevel = 'changed' | 'similar' | 'available' | 'learning';
+
+export type AdvisorTrendArea = {
+  id: 'habits' | 'sleep' | 'movement' | 'check-ins';
+  label: string;
+  level: AdvisorTrendLevel;
+  detail: string;
+  meter: {
+    kind: 'progress' | 'baseline';
+    position: number;
+    label: string;
+  } | null;
+};
+
+export type AdvisorMomentumGame = {
+  availability: 'available' | 'unavailable' | 'signed-out';
+  points: number;
+  level: number;
+  weeklyPoints: number;
+  delta: number | null;
+  nextMilestone: number;
+  pointsToNextMilestone: number;
+  milestoneProgress: number;
+  unlockedMilestone: number;
+  status: string;
+};
+
+export type AdvisorTrendSummary = {
+  level: AdvisorTrendLevel;
+  label: string;
+  summary: string;
+  showsCaution: boolean;
+  momentum: AdvisorMomentumGame;
+  areas: readonly AdvisorTrendArea[];
 };
 
 export type AdvisorChangeSignal = {
@@ -121,17 +182,24 @@ function average(values: readonly number[]): number | null {
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
+function isValidHealthValue(value: number | null): value is number {
+  return value !== null && Number.isFinite(value) && value >= 0;
+}
+
 function metric(
   snapshot: AppleHealthSnapshot,
   read: (day: AppleHealthSnapshot['days'][number]) => number | null
 ): AdvisorHealthMetric {
-  const recent = snapshot.days.slice(-7).flatMap((day) => {
+  // The final snapshot entry is today. Exclude that unfinished day from
+  // personal-baseline comparisons while keeping it available to the UI summary.
+  const completeDays = snapshot.days.slice(0, -1);
+  const recent = completeDays.slice(-7).flatMap((day) => {
     const value = read(day);
-    return value === null || !Number.isFinite(value) ? [] : [value];
+    return isValidHealthValue(value) ? [value] : [];
   });
-  const baseline = snapshot.days.slice(0, -7).flatMap((day) => {
+  const baseline = completeDays.slice(0, -7).flatMap((day) => {
     const value = read(day);
-    return value === null || !Number.isFinite(value) ? [] : [value];
+    return isValidHealthValue(value) ? [value] : [];
   });
   return {
     recentAverage: average(recent),
@@ -149,14 +217,14 @@ export function createAdvisorHealthFeatures(
   const history = summarizeAppleHealthWindow(snapshot.days, 30);
   const recentDays = snapshot.days.slice(-7);
   const lastTwoDays = recentDays.slice(-2);
-  const sleepDays = recentDays.filter((day) => day.sleepMinutes !== null).length;
-  const stepDays = recentDays.filter((day) => day.steps !== null).length;
+  const sleepDays = recentDays.filter((day) => isValidHealthValue(day.sleepMinutes)).length;
+  const stepDays = recentDays.filter((day) => isValidHealthValue(day.steps)).length;
   const exerciseDays = recentDays.filter(
     (day) => (day.exerciseMinutes ?? 0) > 0 || day.workoutCount > 0
   ).length;
   const mindfulDays = recentDays.filter((day) => (day.mindfulMinutes ?? 0) > 0).length;
-  const recentSleep = lastTwoDays.some((day) => day.sleepMinutes !== null);
-  const recentSteps = lastTwoDays.some((day) => day.steps !== null);
+  const recentSleep = lastTwoDays.some((day) => isValidHealthValue(day.sleepMinutes));
+  const recentSteps = lastTwoDays.some((day) => isValidHealthValue(day.steps));
   const recentExercise = lastTwoDays.some(
     (day) => (day.exerciseMinutes ?? 0) > 0 || day.workoutCount > 0
   );
@@ -275,7 +343,7 @@ export function createAdvisorContextSnapshot(context: AdvisorContext): AdvisorCo
         sortableDueAt(left.dueAt) - sortableDueAt(right.dueAt) ||
         left.id.localeCompare(right.id)
     )
-    .slice(0, 1)
+    .slice(0, 3)
     .map((goal) => ({ ...goal, title: sanitizeDisplayText(goal.title) }));
   const habits = [...context.habits]
     .filter(
@@ -283,15 +351,30 @@ export function createAdvisorContextSnapshot(context: AdvisorContext): AdvisorCo
         habit.id && sanitizeDisplayText(habit.name) && !habit.completedToday
     )
     .sort((left, right) => left.id.localeCompare(right.id))
-    .slice(0, 1)
+    .slice(0, 3)
     .map((habit) => ({
       ...habit,
       name: sanitizeDisplayText(habit.name),
       tinyStep: habit.tinyStep
         ? sanitizeDisplayText(habit.tinyStep) || null
         : null,
+      routineSlot:
+        habit.routineSlot === 'morning' ||
+        habit.routineSlot === 'afternoon' ||
+        habit.routineSlot === 'evening' ||
+        habit.routineSlot === 'anytime'
+          ? habit.routineSlot
+          : 'anytime',
+      streakCount: boundedCount(habit.streakCount ?? 0),
     }));
-  return { ...context, goals, habits };
+  const momentumProgress = context.momentumProgress
+    ? {
+        totalPoints: boundedCount(context.momentumProgress.totalPoints),
+        recentPoints: boundedCount(context.momentumProgress.recentPoints),
+        previousPoints: boundedCount(context.momentumProgress.previousPoints),
+      }
+    : null;
+  return { ...context, goals, habits, momentumProgress };
 }
 
 function safetyRecommendation(): AdvisorRecommendationCandidate {
@@ -559,7 +642,7 @@ function habitWeekState(
   return null;
 }
 
-function hasUnsafeAdvisorContext(context: AdvisorContext): boolean {
+export function hasUnsafeAdvisorContext(context: AdvisorContext): boolean {
   return (
     context.goals.some((goal) => isUnsafeActionText(goal.title)) ||
     context.habits.some(
@@ -665,8 +748,8 @@ function healthSignals(health: AdvisorHealthFeatures | null): AdvisorChangeSigna
   if (
     sleep.recentAverage !== null &&
     sleep.baselineAverage !== null &&
-    Number.isFinite(sleep.recentAverage) &&
-    Number.isFinite(sleep.baselineAverage) &&
+    isValidHealthValue(sleep.recentAverage) &&
+    isValidHealthValue(sleep.baselineAverage) &&
     sleep.recentCoverageDays >= 4 &&
     sleep.baselineCoverageDays >= 7
   ) {
@@ -701,8 +784,8 @@ function healthSignals(health: AdvisorHealthFeatures | null): AdvisorChangeSigna
   if (
     steps.recentAverage !== null &&
     steps.baselineAverage !== null &&
-    Number.isFinite(steps.recentAverage) &&
-    Number.isFinite(steps.baselineAverage) &&
+    isValidHealthValue(steps.recentAverage) &&
+    isValidHealthValue(steps.baselineAverage) &&
     steps.recentCoverageDays >= 4 &&
     steps.baselineCoverageDays >= 7
   ) {
@@ -731,6 +814,260 @@ function healthSignals(health: AdvisorHealthFeatures | null): AdvisorChangeSigna
     }
   }
   return signals;
+}
+
+function boundedCount(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function boundedPosition(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+function progressMeter(completed: number, opportunities: number, label: string) {
+  return {
+    kind: 'progress' as const,
+    position: opportunities > 0 ? boundedPosition(completed / opportunities) : 0,
+    label,
+  };
+}
+
+function baselineMeter(recent: number, baseline: number, label: string) {
+  const position = baseline > 0
+    ? 0.5 + (recent - baseline) / baseline
+    : recent > 0
+      ? 1
+      : 0.5;
+  return {
+    kind: 'baseline' as const,
+    // The centre is the user's earlier baseline. A 50% change reaches an edge.
+    position: boundedPosition(position),
+    label,
+  };
+}
+
+function formatSleepMinutes(minutes: number): string {
+  const rounded = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  return remainder === 0 ? `${hours}h` : `${hours}h ${remainder}m`;
+}
+
+function formatSteps(steps: number): string {
+  return Math.max(0, Math.round(steps)).toLocaleString('en-US');
+}
+
+function habitTrendArea(context: AdvisorContext): AdvisorTrendArea {
+  const trend = context.habitTrend;
+  if (!trend) {
+    return {
+      id: 'habits',
+      label: 'Habits',
+      level: 'learning',
+      detail: 'Complete a few habit days to establish your pattern.',
+      meter: null,
+    };
+  }
+
+  const recentOpportunities = boundedCount(trend.recentOpportunities);
+  const previousOpportunities = boundedCount(trend.previousOpportunities);
+  const recentCompleted = Math.min(
+    boundedCount(trend.recentCompleted),
+    recentOpportunities
+  );
+  const previousCompleted = Math.min(
+    boundedCount(trend.previousCompleted),
+    previousOpportunities
+  );
+  const meter = recentOpportunities > 0
+    ? progressMeter(
+        recentCompleted,
+        recentOpportunities,
+        `${recentCompleted} of ${recentOpportunities} scheduled check-offs`
+      )
+    : null;
+  if (recentOpportunities < 7 || previousOpportunities < 7) {
+    return {
+      id: 'habits',
+      label: 'Habits',
+      level: meter ? 'available' : 'learning',
+      detail: meter
+        ? 'Your recorded follow-through for the latest complete 7-day window.'
+        : 'A little more habit history is needed for a comparison.',
+      meter,
+    };
+  }
+
+  const recentRate = recentCompleted / recentOpportunities;
+  const previousRate = previousCompleted / previousOpportunities;
+  const change = recentRate - previousRate;
+  if (
+    Math.abs(change) >= 0.25 &&
+    Math.abs(recentCompleted - previousCompleted) >= 2
+  ) {
+    const direction = change > 0 ? 'higher' : 'lower';
+    return {
+      id: 'habits',
+      label: 'Habits',
+      level: 'changed',
+      detail: `The recorded habit check-off rate was ${direction} than in the previous 7-day window.`,
+      meter,
+    };
+  }
+  return {
+    id: 'habits',
+    label: 'Habits',
+    level: 'similar',
+    detail: 'The recorded habit check-off rate was similar across the two recent 7-day windows.',
+    meter,
+  };
+}
+
+function healthTrendArea(
+  context: AdvisorContext,
+  stream: 'sleep' | 'steps'
+): AdvisorTrendArea {
+  const isSleep = stream === 'sleep';
+  const metric = context.health?.[isSleep ? 'sleepMinutes' : 'steps'] ?? null;
+  const id = isSleep ? 'sleep' : 'movement';
+  const label = isSleep ? 'Sleep rhythm' : 'Movement rhythm';
+  const comparable = metric !== null &&
+    metric.recentCoverageDays >= 4 &&
+    metric.baselineCoverageDays >= 7 &&
+    metric.recentAverage !== null &&
+    metric.baselineAverage !== null &&
+    Number.isFinite(metric.recentAverage) &&
+    Number.isFinite(metric.baselineAverage) &&
+    metric.recentAverage >= 0 &&
+    metric.baselineAverage >= 0;
+  if (!comparable || metric.recentAverage === null || metric.baselineAverage === null) {
+    return {
+      id,
+      label,
+      level: 'learning',
+      detail: `More authorized ${isSleep ? 'sleep' : 'movement'} history is needed.`,
+      meter: null,
+    };
+  }
+
+  const signal = healthSignals(context.health).find((item) => item.stream === stream);
+  const recentLabel = isSleep
+    ? formatSleepMinutes(metric.recentAverage)
+    : formatSteps(metric.recentAverage);
+  const baselineLabel = isSleep
+    ? formatSleepMinutes(metric.baselineAverage)
+    : formatSteps(metric.baselineAverage);
+  return {
+    id,
+    label,
+    level: signal ? 'changed' : 'similar',
+    detail: signal
+      ? `Your recent average shifted from your earlier personal baseline.`
+      : 'Your recent average was close to your earlier personal baseline.',
+    meter: baselineMeter(
+      metric.recentAverage,
+      metric.baselineAverage,
+      `${recentLabel} recent · ${baselineLabel} earlier`
+    ),
+  };
+}
+
+function checkInTrendArea(context: AdvisorContext): AdvisorTrendArea {
+  const trend = context.checkInTrend;
+  if (!trend) {
+    return {
+      id: 'check-ins',
+      label: 'Check-ins',
+      level: 'learning',
+      detail: 'Check-ins add context; the feeling itself is never scored.',
+      meter: null,
+    };
+  }
+  const recentDays = Math.min(7, boundedCount(trend.recentDays));
+  if (recentDays === 0) {
+    return {
+      id: 'check-ins',
+      label: 'Check-ins',
+      level: 'learning',
+      detail: 'No recent check-ins are included. Check in only when it is useful; feelings are never scored.',
+      meter: progressMeter(0, 7, '0 of 7 days'),
+    };
+  }
+  return {
+    id: 'check-ins',
+    label: 'Check-ins',
+    level: 'available',
+    detail: `Check-ins from ${recentDays} recent ${recentDays === 1 ? 'day are' : 'days are'} available as context. Feelings are never scored.`,
+    meter: progressMeter(recentDays, 7, `${recentDays} of 7 days`),
+  };
+}
+
+function createMomentumGame(context: AdvisorContext): AdvisorMomentumGame {
+  const progress = context.momentumProgress;
+  const availability = context.momentumAvailability ?? (
+    progress ? 'available' : 'unavailable'
+  );
+  const points = progress ? boundedCount(progress.totalPoints) : 0;
+  const weeklyPoints = progress ? boundedCount(progress.recentPoints) : 0;
+  const comparisonReady = Boolean(
+    progress &&
+    context.habitTrend &&
+    boundedCount(context.habitTrend.previousOpportunities) > 0
+  );
+  const previousWeeklyPoints = comparisonReady && progress
+    ? boundedCount(progress.previousPoints)
+    : null;
+  const delta = previousWeeklyPoints === null
+    ? null
+    : weeklyPoints - previousWeeklyPoints;
+  const level = Math.floor(points / 25) + 1;
+  const unlockedMilestone = Math.floor(points / 25) * 25;
+  const nextMilestone = level * 25;
+  const pointsToNextMilestone = nextMilestone - points;
+
+  return {
+    availability,
+    points,
+    level,
+    weeklyPoints,
+    delta,
+    nextMilestone,
+    pointsToNextMilestone,
+    milestoneProgress: boundedPosition((points % 25) / 25),
+    unlockedMilestone,
+    status: availability === 'signed-out'
+      ? 'Sign in to earn XP'
+      : availability === 'unavailable'
+        ? 'XP is unavailable'
+        : `Level ${level}`,
+  };
+}
+
+export function createAdvisorTrendSummary(
+  context: AdvisorContext
+): AdvisorTrendSummary {
+  const areas = [
+    habitTrendArea(context),
+    healthTrendArea(context, 'sleep'),
+    healthTrendArea(context, 'steps'),
+    checkInTrendArea(context),
+  ] as const;
+  const availableCount = areas.filter((area) => area.meter !== null).length;
+  const momentum = createMomentumGame(context);
+
+  return {
+    level: availableCount > 0 || momentum.points > 0 ? 'available' : 'learning',
+    label: 'Momentum',
+    summary: momentum.availability !== 'available'
+      ? 'Momentum points are not available for this session.'
+      : momentum.points > 0
+      ? `${momentum.points} lifetime XP from saved habit check-offs.`
+      : 'Complete a planned habit to start building momentum.',
+    showsCaution: false,
+    momentum,
+    areas,
+  };
 }
 
 function goalSignal(goal: AdvisorGoal | null, now: Date): AdvisorChangeSignal | null {
@@ -1094,4 +1431,34 @@ export function createAdvisorRecommendation(
   options: AdvisorSelectionOptions = {}
 ): AdvisorRecommendation {
   return selectAdvisorRecommendation(context, recent, options);
+}
+
+export function createAdvisorCandidateSet(
+  context: AdvisorContext,
+  recent: readonly AdvisorRecentRecommendation[] = [],
+  options: AdvisorSelectionOptions = {},
+  limit = 3
+): AdvisorRecommendation[] {
+  const first = selectAdvisorRecommendation(context, recent, options);
+  const candidates = [first];
+  const boundedLimit = Math.max(1, Math.min(3, Math.floor(limit)));
+  if (first.kind === 'safety' || boundedLimit === 1) return candidates;
+
+  while (candidates.length < boundedLimit) {
+    const next = selectAdvisorRecommendation(
+      context,
+      [
+        ...recent,
+        ...candidates.map((candidate) => candidate.id),
+      ],
+      {
+        ...options,
+        preserveToday: false,
+        excludeRecommendationId: candidates[candidates.length - 1].id,
+      }
+    );
+    if (candidates.some((candidate) => candidate.id === next.id)) break;
+    candidates.push(next);
+  }
+  return candidates;
 }

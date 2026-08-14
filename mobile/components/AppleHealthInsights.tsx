@@ -228,7 +228,7 @@ export function AppleHealthInsights({ ownerId }: { ownerId: string | null }) {
                 variant="secondary"
                 style={s.aiAction}
                 onPress={() =>
-                  router.push({
+                  router.navigate({
                     pathname: '/advisor',
                     params: { health: '1' },
                   })

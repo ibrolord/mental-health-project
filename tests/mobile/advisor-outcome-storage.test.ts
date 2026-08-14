@@ -72,6 +72,90 @@ describe('Advisor outcome storage', () => {
     });
   });
 
+  it('answers the started row when the same recommendation is re-offered later', async () => {
+    const { adapter } = memoryStorage();
+    const storage = createAdvisorOutcomeStorage(adapter, () => NOW);
+    await storage.recordAdvisorOffered(
+      'owner',
+      { id: 'habit:walk' },
+      '2026-08-13T12:00:00.000Z'
+    );
+    await storage.markAdvisorStarted(
+      'owner',
+      'habit:walk',
+      '2026-08-13T12:01:00.000Z'
+    );
+    await storage.recordAdvisorOffered(
+      'owner',
+      { id: 'habit:walk' },
+      '2026-08-14T12:00:00.000Z'
+    );
+    await storage.answerAdvisorHelpfulness(
+      'owner',
+      'habit:walk',
+      true,
+      '2026-08-14T12:01:00.000Z'
+    );
+
+    const outcomes = await storage.loadAdvisorOutcomes('owner');
+    expect(outcomes[0]).toMatchObject({
+      offeredAt: '2026-08-14T12:00:00.000Z',
+      startedAt: null,
+      feedbackAt: null,
+    });
+    expect(outcomes[1]).toMatchObject({
+      offeredAt: '2026-08-13T12:00:00.000Z',
+      startedAt: '2026-08-13T12:01:00.000Z',
+      helpful: true,
+      feedbackAt: '2026-08-14T12:01:00.000Z',
+    });
+  });
+
+  it('answers the newest pending row when repeated recommendations are both started', async () => {
+    const { adapter } = memoryStorage();
+    const storage = createAdvisorOutcomeStorage(adapter, () => NOW);
+    await storage.recordAdvisorOffered(
+      'owner',
+      { id: 'habit:walk' },
+      '2026-08-13T12:00:00.000Z'
+    );
+    await storage.markAdvisorStarted(
+      'owner',
+      'habit:walk',
+      '2026-08-13T12:01:00.000Z'
+    );
+    await storage.recordAdvisorOffered(
+      'owner',
+      { id: 'habit:walk' },
+      '2026-08-14T12:00:00.000Z'
+    );
+    await storage.markAdvisorStarted(
+      'owner',
+      'habit:walk',
+      '2026-08-14T12:01:00.000Z'
+    );
+    await storage.answerAdvisorHelpfulness(
+      'owner',
+      'habit:walk',
+      false,
+      '2026-08-14T12:02:00.000Z'
+    );
+
+    const outcomes = await storage.loadAdvisorOutcomes('owner');
+    expect(outcomes[0]).toMatchObject({
+      offeredAt: '2026-08-14T12:00:00.000Z',
+      startedAt: '2026-08-14T12:01:00.000Z',
+      helpful: false,
+      feedbackAt: '2026-08-14T12:02:00.000Z',
+    });
+    expect(outcomes[1]).toMatchObject({
+      offeredAt: '2026-08-13T12:00:00.000Z',
+      startedAt: '2026-08-13T12:01:00.000Z',
+      helpful: null,
+      feedbackAt: null,
+    });
+  });
+
   it('carries the change signal shown when an action starts across reloads', async () => {
     const { adapter } = memoryStorage();
     const storage = createAdvisorOutcomeStorage(adapter, () => NOW);

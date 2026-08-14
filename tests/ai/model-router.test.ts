@@ -77,6 +77,22 @@ describe('model router crisis interception', () => {
     expect(claudeChat).not.toHaveBeenCalled();
   });
 
+  it('honors a per-request Gemini preference when Gemini is configured', async () => {
+    process.env.GOOGLE_API_KEY = 'configured';
+    process.env.ANTHROPIC_API_KEY = 'configured';
+    geminiChat.mockResolvedValue('A model-backed Advisor response');
+
+    const result = await chat(
+      [{ role: 'user', content: 'Choose a bounded next step.' }],
+      undefined,
+      { preferredProvider: 'gemini' }
+    );
+
+    expect(result.model).toBe('gemini');
+    expect(geminiChat).toHaveBeenCalledOnce();
+    expect(claudeChat).not.toHaveBeenCalled();
+  });
+
   it('skips a selected provider when its credential is missing', async () => {
     process.env.AI_PRIMARY_PROVIDER = 'gemini';
     process.env.ANTHROPIC_API_KEY = 'configured';

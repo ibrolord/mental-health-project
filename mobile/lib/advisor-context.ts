@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { differenceInCalendarDays, format, subDays } from 'date-fns';
 import { appleHealthPreference } from './apple-health-preference';
 import { loadAppleHealthSnapshot } from './apple-health';
@@ -11,6 +12,13 @@ import {
 } from './advisor-core';
 import { supabase } from './supabase';
 import { dashboardPreferences } from './dashboard-preferences';
+import {
+  NOTIFICATIONS_KEY,
+  NOTIFICATION_PREFERENCES_KEY,
+  REMINDER_TIMES_KEY,
+  parseStoredNotificationPreferences,
+  parseStoredReminderTimes,
+} from './notifications-core';
 import type { MoodEmoji } from './types';
 
 export type AdvisorContextOwner = {
@@ -83,7 +91,7 @@ async function loadIncompleteHabit(
   if (!owner.userId) return [];
   const habitsResult = await supabase
     .from('habits')
-    .select('id, name, tiny_step')
+    .select('id, name, tiny_step, routine_slot, streak_count')
     .eq('user_id', owner.userId)
     .eq('is_active', true)
     .order('created_at', { ascending: true });
@@ -101,15 +109,33 @@ async function loadIncompleteHabit(
       .filter((entry) => Boolean(entry.completed))
       .map((entry) => entry.habit_id)
   );
-  const habit = habitsResult.data.find((entry) => !completedIds.has(entry.id));
-  return habit
-    ? [{
-        id: habit.id,
-        name: habit.name,
-        tinyStep: habit.tiny_step,
-        completedToday: false,
-      }]
-    : [];
+  return habitsResult.data
+    .filter((entry) => !completedIds.has(entry.id))
+    .slice(0, 3)
+    .map((habit) => ({
+      id: habit.id,
+      name: habit.name,
+      tinyStep: habit.tiny_step,
+      completedToday: false,
+      routineSlot: habit.routine_slot ?? 'anytime',
+      streakCount: Math.max(0, habit.streak_count ?? 0),
+    }));
+}
+
+async function loadNotificationContext(): Promise<AdvisorContext['notifications']> {
+  const [enabled, preferencesRaw, timesRaw] = await Promise.all([
+    AsyncStorage.getItem(NOTIFICATIONS_KEY),
+    AsyncStorage.getItem(NOTIFICATION_PREFERENCES_KEY),
+    AsyncStorage.getItem(REMINDER_TIMES_KEY),
+  ]);
+  const preferences = parseStoredNotificationPreferences(preferencesRaw);
+  return {
+    enabled: enabled === 'true',
+    enabledCategories: Object.entries(preferences)
+      .filter(([, active]) => active)
+      .map(([category]) => category),
+    reminderTimes: parseStoredReminderTimes(timesRaw),
+  };
 }
 
 async function loadHabitWeek(
@@ -144,6 +170,185 @@ async function loadHabitWeek(
   };
 }
 
+function dateWindow(now: Date, daysAgo: number): string {
+  return format(subDays(now, daysAgo), 'yyyy-MM-dd');
+}
+
+async function loadCheckInTrend(
+  owner: AdvisorContextOwner,
+  now: Date
+): Promise<AdvisorContext['checkInTrend']> {
+  if (!owner.queryValue) return null;
+  const result = await supabase
+    .from('moods')
+    .select('local_date, created_at')
+    .eq(owner.queryColumn, owner.queryValue)
+    .gte('local_date', dateWindow(now, 14))
+    .lte('local_date', dateWindow(now, 1));
+  if (result.error) throw result.error;
+
+  const recentStart = dateWindow(now, 7);
+  const recentEnd = dateWindow(now, 1);
+  const previousStart = dateWindow(now, 14);
+  const previousEnd = dateWindow(now, 8);
+  const dates = new Set(
+    (result.data ?? [])
+      .map((entry) => entry.local_date ?? entry.created_at?.slice(0, 10))
+      .filter((date): date is string => Boolean(date))
+  );
+  return {
+    recentDays: [...dates].filter(
+      (date) => date >= recentStart && date <= recentEnd
+    ).length,
+    previousDays: [...dates].filter(
+      (date) => date >= previousStart && date <= previousEnd
+    ).length,
+  };
+}
+
+async function loadMomentumProgress(
+  owner: AdvisorContextOwner,
+  now: Date
+): Promise<AdvisorContext['momentumProgress']> {
+  if (!owner.userId) return null;
+  const previousStart = dateWindow(now, 14);
+  const recentStart = dateWindow(now, 7);
+  const recentEnd = dateWindow(now, 1);
+  const previousEnd = dateWindow(now, 8);
+  const [totalResult, windowResult] = await Promise.all([
+    supabase
+      .from('advisor_momentum_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', owner.userId),
+    supabase
+      .from('advisor_momentum_events')
+      .select('earned_on')
+      .eq('user_id', owner.userId)
+      .gte('earned_on', previousStart)
+      .lte('earned_on', recentEnd),
+  ]);
+  const ledgerError = totalResult.error ?? windowResult.error;
+  if (ledgerError) {
+    const missingLedger = ledgerError.code === '42P01' ||
+      ledgerError.code === 'PGRST205' ||
+      ledgerError.message.includes('advisor_momentum_events');
+    if (!missingLedger) throw ledgerError;
+
+    // Keep momentum useful during a staged rollout. The ledger migration
+    // backfills these same completed logs, so this fallback produces the same
+    // XP without inventing or double-counting activity.
+    const habitsResult = await supabase
+      .from('habits')
+      .select('id')
+      .eq('user_id', owner.userId);
+    if (habitsResult.error) throw habitsResult.error;
+    const habitIds = (habitsResult.data ?? []).map((habit) => habit.id);
+    if (habitIds.length === 0) {
+      return { totalPoints: 0, recentPoints: 0, previousPoints: 0 };
+    }
+    const [fallbackTotal, fallbackWindow] = await Promise.all([
+      supabase
+        .from('habit_logs')
+        .select('id', { count: 'exact', head: true })
+        .in('habit_id', habitIds)
+        .eq('completed', true),
+      supabase
+        .from('habit_logs')
+        .select('log_date')
+        .in('habit_id', habitIds)
+        .eq('completed', true)
+        .gte('log_date', previousStart)
+        .lte('log_date', recentEnd),
+    ]);
+    if (fallbackTotal.error) throw fallbackTotal.error;
+    if (fallbackWindow.error) throw fallbackWindow.error;
+    const recentCompletions = (fallbackWindow.data ?? []).filter(
+      (event) => event.log_date >= recentStart && event.log_date <= recentEnd
+    ).length;
+    const previousCompletions = (fallbackWindow.data ?? []).filter(
+      (event) => event.log_date >= previousStart && event.log_date <= previousEnd
+    ).length;
+    return {
+      totalPoints: (fallbackTotal.count ?? 0) * 10,
+      recentPoints: recentCompletions * 10,
+      previousPoints: previousCompletions * 10,
+    };
+  }
+  const recentEvents = (windowResult.data ?? []).filter(
+    (event) => event.earned_on >= recentStart && event.earned_on <= recentEnd
+  ).length;
+  const previousEvents = (windowResult.data ?? []).filter(
+    (event) => event.earned_on >= previousStart && event.earned_on <= previousEnd
+  ).length;
+  return {
+    totalPoints: (totalResult.count ?? 0) * 10,
+    recentPoints: recentEvents * 10,
+    previousPoints: previousEvents * 10,
+  };
+}
+
+async function loadHabitTrend(
+  owner: AdvisorContextOwner,
+  now: Date
+): Promise<AdvisorContext['habitTrend']> {
+  if (!owner.userId) return null;
+  const habitsResult = await supabase
+    .from('habits')
+    .select('id, created_at, frequency')
+    .eq('user_id', owner.userId)
+    .eq('is_active', true)
+    .or('frequency.eq.daily,frequency.is.null');
+  if (habitsResult.error) throw habitsResult.error;
+  if (!habitsResult.data?.length) return null;
+
+  // Compare two complete seven-day windows so an unfinished today never
+  // counts against the current week.
+  const start = dateWindow(now, 14);
+  const recentStart = dateWindow(now, 7);
+  const recentEnd = dateWindow(now, 1);
+  const previousEnd = dateWindow(now, 8);
+  const logsResult = await supabase
+    .from('habit_logs')
+    .select('habit_id, log_date, completed')
+    .in('habit_id', habitsResult.data.map((habit) => habit.id))
+    .gte('log_date', start)
+    .lte('log_date', recentEnd);
+  if (logsResult.error) throw logsResult.error;
+
+  const completed = new Set(
+    (logsResult.data ?? [])
+      .filter((entry) => Boolean(entry.completed) && entry.log_date)
+      .map((entry) => `${entry.habit_id}:${entry.log_date}`)
+  );
+  let recentOpportunities = 0;
+  let previousOpportunities = 0;
+  for (const habit of habitsResult.data) {
+    const createdAt = new Date(habit.created_at ?? '');
+    const createdDate = Number.isFinite(createdAt.getTime())
+      ? format(createdAt, 'yyyy-MM-dd')
+      : start;
+    for (let daysAgo = 14; daysAgo >= 1; daysAgo -= 1) {
+      const day = dateWindow(now, daysAgo);
+      if (day < createdDate) continue;
+      if (day >= recentStart && day <= recentEnd) recentOpportunities += 1;
+      else if (day <= previousEnd) previousOpportunities += 1;
+    }
+  }
+  let recentCompleted = 0;
+  let previousCompleted = 0;
+  for (const key of completed) {
+    const day = key.slice(key.lastIndexOf(':') + 1);
+    if (day >= recentStart && day <= recentEnd) recentCompleted += 1;
+    else if (day <= previousEnd) previousCompleted += 1;
+  }
+  return {
+    recentCompleted,
+    recentOpportunities,
+    previousCompleted,
+    previousOpportunities,
+  };
+}
+
 async function loadAuthorizedHealth(
   owner: AdvisorContextOwner
 ): Promise<AdvisorContext['health']> {
@@ -175,15 +380,23 @@ export async function loadAmbientAdvisorContext(
     goalResult,
     habitResult,
     habitWeekResult,
+    habitTrendResult,
+    checkInTrendResult,
+    momentumResult,
     healthResult,
     lowEnergyResult,
+    notificationResult,
   ] = await Promise.allSettled([
     loadLatestMood(owner),
     loadPendingGoal(owner),
     loadedHabitPromise,
     habitWeekPromise,
+    loadHabitTrend(owner, now),
+    loadCheckInTrend(owner, now),
+    loadMomentumProgress(owner, now),
     loadAuthorizedHealth(owner),
     loadLowEnergyMode(owner),
+    loadNotificationContext(),
   ]);
 
   return createAdvisorContextSnapshot({
@@ -196,6 +409,19 @@ export async function loadAmbientAdvisorContext(
     habits: habitResult.status === 'fulfilled' ? habitResult.value : [],
     habitWeek:
       habitWeekResult.status === 'fulfilled' ? habitWeekResult.value : null,
+    habitTrend:
+      habitTrendResult.status === 'fulfilled' ? habitTrendResult.value : null,
+    checkInTrend:
+      checkInTrendResult.status === 'fulfilled' ? checkInTrendResult.value : null,
+    momentumProgress:
+      momentumResult.status === 'fulfilled' ? momentumResult.value : null,
+    momentumAvailability: !owner.userId
+      ? 'signed-out'
+      : momentumResult.status === 'fulfilled'
+        ? 'available'
+        : 'unavailable',
     health: healthResult.status === 'fulfilled' ? healthResult.value : null,
+    notifications:
+      notificationResult.status === 'fulfilled' ? notificationResult.value : null,
   });
 }

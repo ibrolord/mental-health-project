@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-08-13.2",
+  "checklistVersion": "2026-08-14.3",
   "platform": "ios",
-  "expectedInventory": { "routes": 35, "routeChecks": 711, "workflows": 110, "total": 821 },
+  "expectedInventory": { "routes": 37, "routeChecks": 726, "workflows": 110, "total": 836 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -123,15 +123,15 @@
       "source": "app/(tabs)/index.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "share-challenge", "low-energy-mode", "weekly-insight", "weekly-reflection", "resume-practice", "saved-space", "open-together", "grounding", "focus", "habits", "go-to-customize", "go-to-select-limit", "go-to-cue", "go-to-reorder", "go-to-save-relaunch", "go-to-storage-failure"]
+      "controls": ["support", "mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "add-context", "safety-support", "open-advisor", "open-together", "customize-today"]
     },
     {
       "id": "advisor",
       "path": "/advisor",
-      "source": "app/advisor.tsx",
-      "kind": "stack",
+      "source": "app/(tabs)/advisor.tsx",
+      "kind": "tab",
       "identityRequirements": ["saved-anonymous", "email-owner"],
-      "controls": ["support", "mood-source", "health-source", "goals-source", "habits-source", "continue-without-context", "context-preview", "generate-step", "why-this-step", "make-smaller", "resource-action", "fixed-two-hour-reminder", "cancel-reminder", "together-share-review"]
+      "controls": ["support", "start", "make-smaller", "helpful-yes", "helpful-no", "helpful-skip", "why-this-step", "try-another", "share-with-together", "talk-this-through", "recent-steps", "safety-support"]
     },
     {
       "id": "mood-tracker",
@@ -147,7 +147,7 @@
       "source": "app/(tabs)/chat.tsx",
       "kind": "tab",
       "identityRequirements": ["email-owner"],
-      "controls": ["voice", "grounding", "resources", "context-collapse", "individual-context-toggles", "health-summary-toggle", "health-share-preview", "health-share-once", "health-share-cancel", "prompt-chips", "report-response", "save-response", "message-input", "send", "send-double-tap", "consent-accept", "consent-decline", "local-safety-region", "local-safety-call", "local-safety-text", "local-safety-country"]
+      "controls": ["back", "voice", "grounding", "resources", "context-collapse", "individual-context-toggles", "health-summary-toggle", "health-share-preview", "health-share-once", "health-share-cancel", "prompt-chips", "report-response", "save-response", "message-input", "send", "send-double-tap", "consent-accept", "consent-decline", "local-safety-region", "local-safety-call", "local-safety-text", "local-safety-country"]
     },
     {
       "id": "assessments-list",
@@ -163,7 +163,23 @@
       "source": "app/(tabs)/more.tsx",
       "kind": "tab",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["advisor", "goals", "habits", "plans", "focus", "guided-reflection", "journal", "affirmations", "grounding", "meditation", "yoga", "mind-games", "library", "saved", "accountability", "resources", "research", "support", "settings"]
+      "controls": ["advisor", "goals", "habits", "plans", "focus", "guided-reflection", "journal", "affirmations", "grounding", "meditation", "yoga", "mind-games", "library", "saved", "accountability", "resources", "research", "support", "settings", "low-energy-mode"]
+    },
+    {
+      "id": "dashboard-layout",
+      "path": "/dashboard-layout",
+      "source": "app/dashboard-layout.tsx",
+      "kind": "stack",
+      "identityRequirements": ["saved-anonymous"],
+      "controls": ["preset-mixed", "preset-productivity", "preset-mental-health", "preset-growth", "move-up", "move-down", "drag-reorder", "remove-tool", "add-tools", "reset-mixed"]
+    },
+    {
+      "id": "dashboard-tools",
+      "path": "/dashboard-tools",
+      "source": "app/dashboard-tools.tsx",
+      "kind": "stack",
+      "identityRequirements": ["saved-anonymous"],
+      "controls": ["select-tool", "deselect-tool", "six-tool-limit"]
     },
     {
       "id": "login",

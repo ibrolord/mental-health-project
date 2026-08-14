@@ -13,12 +13,12 @@ export const MOBILE_ROOT = path.resolve(SCRIPT_DIR, '..');
 export const REPO_ROOT = path.resolve(MOBILE_ROOT, '..');
 export const CHECKLIST_PATH = path.join(MOBILE_ROOT, 'qa', 'ios-release-checklist.json');
 export const RUNS_ROOT = path.join(MOBILE_ROOT, 'qa', 'runs');
-export const EXPECTED_INVENTORY = Object.freeze({ routes: 35, routeChecks: 711, workflows: 110, total: 821 });
-export const EXPECTED_CHECKLIST_SHA256 = '54d39f89654cbb8c383143f4b19e5e6c4597ff6ea0b5584eafbd6b97367cf21c';
+export const EXPECTED_INVENTORY = Object.freeze({ routes: 37, routeChecks: 726, workflows: 110, total: 836 });
+export const EXPECTED_CHECKLIST_SHA256 = 'db189d59f9095ee57754442721d5388286bc7cc2ad5f0c20e7ea5e682cd5eb16';
 const REQUIRED_ROUTE_CONTROLS = Object.freeze({
-  dashboard: ['open-together'],
-  advisor: ['support', 'continue-without-context', 'context-preview', 'fixed-two-hour-reminder', 'cancel-reminder', 'together-share-review'],
-  'ai-chat': ['individual-context-toggles', 'local-safety-region', 'local-safety-country'],
+  dashboard: ['support', 'safety-support', 'open-advisor', 'open-together'],
+  advisor: ['support', 'start', 'helpful-yes', 'helpful-no', 'helpful-skip', 'why-this-step', 'share-with-together', 'recent-steps'],
+  'ai-chat': ['back', 'individual-context-toggles', 'local-safety-region', 'local-safety-country'],
   assessment: ['about-collapse', 'safety-region', 'country-support', 'safety-plan'],
   login: ['existing-account-notice', 'forgot-password'],
   signup: ['existing-email-signin', 'existing-email-reset', 'linked-provider-signin'],
