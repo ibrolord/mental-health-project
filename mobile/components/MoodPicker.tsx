@@ -89,7 +89,13 @@ export function MoodPicker({
               pressed && !disabled && styles.pressed,
             ]}
           >
-            <View style={[styles.glyph, selected && styles.glyphSelected]}>
+            <View
+              style={[
+                styles.glyph,
+                selected && styles.glyphSelected,
+                selected && { borderColor: choice.tint },
+              ]}
+            >
               <MoodGlyph mood={choice.emoji} size={28} />
             </View>
             <Text style={[styles.label, selected && styles.labelSelected]}>
@@ -132,16 +138,20 @@ const styles = StyleSheet.create({
     minHeight: 72,
   },
   choiceSelected: {
-    borderColor: Colors.primary,
-    shadowOpacity: 0,
-    elevation: 0,
+    borderColor: Colors.borderStrong,
+    transform: [{ translateY: -2 }],
   },
   glyph: {
-    height: 32,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
   glyphSelected: {
+    backgroundColor: Colors.card,
     transform: [{ scale: 1.08 }],
   },
   label: {

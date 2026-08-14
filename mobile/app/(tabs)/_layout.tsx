@@ -2,16 +2,16 @@ import { Tabs } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius } from '@/lib/constants';
+import { Colors, LARGE_TEXT_SCALE, Radius } from '@/lib/constants';
 
 export default function TabLayout() {
   const { fontScale } = useWindowDimensions();
-  const hidesTabLabels = fontScale >= 1.35;
+  const hidesTabLabels = fontScale >= LARGE_TEXT_SCALE;
 
   return (
     <SafeAreaView
-      style={{ flex: 1, backgroundColor: Colors.card }}
-      edges={['top', 'left', 'right']}
+      style={{ flex: 1, backgroundColor: Colors.background }}
+      edges={['top']}
     >
       <Tabs
         screenOptions={{

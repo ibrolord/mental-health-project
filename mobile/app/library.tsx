@@ -4,6 +4,7 @@ import {
   Alert,
   Linking,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -11,7 +12,6 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   AppButton,
-  AppCard,
   AppInput,
   AppScreen,
   ChoiceChip,
@@ -370,14 +370,12 @@ export default function LibraryScreen() {
           eyebrow={`${mediaLabel(selected)} · ${selected.topic}`}
           title={selected.title}
           description={`${selected.creator} · ${selected.durationLabel}`}
-          icon={selectedIsBook ? 'book' : selectedIsStory ? 'user' : 'play'}
         />
         <View style={styles.actions}>
           <AppButton
             label={selectedState.is_saved ? 'Saved' : 'Save'}
-            icon={selectedState.is_saved ? 'bookmark' : 'bookmark'}
             loading={savingKey.startsWith(`${selected.id}:is_saved`)}
-            variant={selectedState.is_saved ? 'primary' : 'secondary'}
+            variant="text"
             onPress={() =>
               void persistState(selected, {
                 is_saved: !selectedState.is_saved,
@@ -389,11 +387,8 @@ export default function LibraryScreen() {
           />
           <AppButton
             label={selectedState.priority === 'next' ? 'Up next' : 'Add next'}
-            icon="list"
             loading={savingKey.startsWith(`${selected.id}:priority`)}
-            variant={
-              selectedState.priority === 'next' ? 'primary' : 'secondary'
-            }
+            variant="text"
             onPress={() =>
               void persistState(selected, {
                 priority:
@@ -404,8 +399,7 @@ export default function LibraryScreen() {
           {!selectedIsBook ? (
             <AppButton
               label={isVideoItem(selected) ? 'Watch' : 'Original source'}
-              icon="external-link"
-              variant="secondary"
+              variant="text"
               onPress={() =>
                 void Linking.openURL(selected.sourceUrl).catch(() =>
                   setError('That source could not be opened.')
@@ -416,18 +410,18 @@ export default function LibraryScreen() {
         </View>
 
         {!selectedIsBook && selected.contentNote ? (
-          <AppCard quiet>
+          <View style={styles.contentNote}>
             <Text style={appUiStyles.muted}>{selected.contentNote}</Text>
-          </AppCard>
+          </View>
         ) : null}
 
         <DetailSection title="A useful orientation">
           <Text style={appUiStyles.body}>{selected.summary}</Text>
         </DetailSection>
-        <AppCard style={styles.premiseCard}>
+        <View style={styles.premiseBlock}>
           <Text style={appUiStyles.label}>Central premise</Text>
           <Text style={styles.premiseText}>{selected.centralPremise}</Text>
-        </AppCard>
+        </View>
 
         {selectedIsStory ? (
           <>
@@ -461,7 +455,7 @@ export default function LibraryScreen() {
         {selectedIsBook ? (
           <DetailSection title="Core premises">
             {selected.corePremises.map((idea, index) => (
-              <AppCard key={idea.title}>
+              <View key={idea.title} style={styles.detailBlock}>
                 <Text style={appUiStyles.label}>Idea {index + 1}</Text>
                 <Text style={styles.blockTitle}>{idea.title}</Text>
                 <Text style={styles.readingText}>{idea.premise}</Text>
@@ -473,25 +467,24 @@ export default function LibraryScreen() {
                   Try it
                 </Text>
                 <Text style={appUiStyles.muted}>{idea.practice}</Text>
-              </AppCard>
+              </View>
             ))}
           </DetailSection>
         ) : null}
 
         <DetailSection title="Takeaways">
           {selected.practicalTakeaways.map((takeaway) => (
-            <AppCard key={takeaway.title} quiet>
+            <View key={takeaway.title} style={styles.detailBlock}>
               <Text style={styles.blockTitle}>{takeaway.title}</Text>
               <Text style={appUiStyles.muted}>{takeaway.description}</Text>
               <View style={styles.nextStep}>
-                <Feather name="arrow-right" size={15} color={Colors.accent} />
                 <Text style={styles.nextStepText}>{takeaway.nextStep}</Text>
               </View>
-            </AppCard>
+            </View>
           ))}
         </DetailSection>
 
-        <AppCard>
+        <View style={styles.noteSection}>
           <SectionHeader
             title="Your private note"
             description="Use this in AI chat only when you turn on library notes there."
@@ -511,7 +504,7 @@ export default function LibraryScreen() {
               void persistState(selected, { custom_notes: noteDraft })
             }
           />
-        </AppCard>
+        </View>
 
         {selectedIntegrations.length > 0 ? <DetailSection title="Practice templates">
           <Text style={[appUiStyles.muted, { marginBottom: 12 }]}>
@@ -550,10 +543,10 @@ export default function LibraryScreen() {
         </DetailSection>
 
         {selected.medicalCaveat ? (
-          <AppCard style={styles.caveat}>
+          <View style={styles.caveat}>
             <Text style={styles.blockTitle}>Keep in mind</Text>
             <Text style={appUiStyles.muted}>{selected.medicalCaveat}</Text>
-          </AppCard>
+          </View>
         ) : null}
 
         <DetailSection title="Sources">
@@ -577,9 +570,8 @@ export default function LibraryScreen() {
     <AppScreen>
       <PageHeader
         eyebrow="Library"
-        title="Ideas, talks, and real stories."
+        title="Library"
         description="Open the full guide, keep private notes, and turn useful ideas into action."
-        icon="book-open"
       />
       <View style={styles.libraryDestinations}>
         <Pressable
@@ -593,18 +585,6 @@ export default function LibraryScreen() {
             pressed && styles.pressed,
           ]}
         >
-          <View
-            style={[
-              styles.libraryDestinationIcon,
-              libraryView === 'resources' && styles.libraryDestinationIconSelected,
-            ]}
-          >
-            <Feather
-              name="book-open"
-              size={18}
-              color={libraryView === 'resources' ? '#fffef8' : Colors.primary}
-            />
-          </View>
           <Text
             style={[
               styles.libraryDestinationTitle,
@@ -619,7 +599,7 @@ export default function LibraryScreen() {
               libraryView === 'resources' && styles.libraryDestinationTextSelected,
             ]}
           >
-            {UNIFIED_LIBRARY.length} guides, talks, and stories
+            {UNIFIED_LIBRARY.length}
           </Text>
         </Pressable>
         <Pressable
@@ -633,18 +613,6 @@ export default function LibraryScreen() {
             pressed && styles.pressed,
           ]}
         >
-          <View
-            style={[
-              styles.libraryDestinationIcon,
-              libraryView === 'templates' && styles.libraryDestinationIconSelected,
-            ]}
-          >
-            <Feather
-              name="clipboard"
-              size={18}
-              color={libraryView === 'templates' ? '#fffef8' : Colors.primary}
-            />
-          </View>
           <Text
             style={[
               styles.libraryDestinationTitle,
@@ -659,11 +627,11 @@ export default function LibraryScreen() {
               libraryView === 'templates' && styles.libraryDestinationTextSelected,
             ]}
           >
-            {BOOK_PRACTICE_TEMPLATES.length} ready-to-use tools
+            {BOOK_PRACTICE_TEMPLATES.length}
           </Text>
         </Pressable>
       </View>
-      <AppCard>
+      <View style={styles.filterPanel}>
         <AppInput
           value={search}
           onChangeText={setSearch}
@@ -674,7 +642,11 @@ export default function LibraryScreen() {
           }
           accessibilityLabel="Search the library"
         />
-        <View style={styles.chips}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterChips}
+        >
           {(libraryView === 'resources' ? MEDIA_FILTERS : TEMPLATE_FILTERS).map((filter) => (
             <ChoiceChip
               key={filter.id}
@@ -693,7 +665,7 @@ export default function LibraryScreen() {
               }}
             />
           ))}
-        </View>
+        </ScrollView>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded: showTopics }}
@@ -701,10 +673,7 @@ export default function LibraryScreen() {
           onPress={() => setShowTopics((current) => !current)}
           style={styles.topicDisclosure}
         >
-          <View style={styles.topicDisclosureLabel}>
-            <Feather name="sliders" size={15} color={Colors.primary} />
-            <Text style={styles.topicDisclosureText}>Need: {topic}</Text>
-          </View>
+          <Text style={styles.topicDisclosureText}>Need: {topic}</Text>
           <Feather
             name={showTopics ? 'chevron-up' : 'chevron-down'}
             size={17}
@@ -712,21 +681,25 @@ export default function LibraryScreen() {
           />
         </Pressable>
         {showTopics ? (
-          <View style={[styles.chips, { marginTop: 9 }]}>
-            {LIBRARY_TOPICS.map((filterTopic) => (
-              <ChoiceChip
-                key={filterTopic}
-                label={filterTopic}
-                selected={topic === filterTopic}
-                onPress={() => {
-                  setTopic(filterTopic);
-                  setShowTopics(false);
-                }}
-              />
-            ))}
-          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.topicChips}
+          >
+              {LIBRARY_TOPICS.map((filterTopic) => (
+                <ChoiceChip
+                  key={filterTopic}
+                  label={filterTopic}
+                  selected={topic === filterTopic}
+                  onPress={() => {
+                    setTopic(filterTopic);
+                    setShowTopics(false);
+                  }}
+                />
+              ))}
+          </ScrollView>
         ) : null}
-      </AppCard>
+      </View>
       <SectionHeader
         title={
           libraryView === 'resources'
@@ -765,14 +738,6 @@ export default function LibraryScreen() {
         />
       ) : libraryView === 'templates' ? (
         filteredTemplates.map((template) => {
-          const icon =
-            template.integration.actionType === 'journal'
-              ? 'edit-3'
-              : template.integration.actionType === 'goal'
-                ? 'target'
-                : template.integration.actionType === 'routine'
-                  ? 'layers'
-                  : 'repeat';
           return (
             <Pressable
               key={template.id}
@@ -782,17 +747,14 @@ export default function LibraryScreen() {
                 router.push(integrationRoute(template.book, template.integration))
               }
               style={({ pressed }) => [
-                styles.templateCard,
+                styles.libraryRow,
                 pressed && { opacity: 0.76 },
               ]}
             >
               <View style={styles.templateTop}>
-                <View style={styles.mediaBadge}>
-                  <Feather name={icon} size={13} color={Colors.primary} />
-                  <Text style={styles.mediaBadgeText}>
-                    {template.integration.actionType.toUpperCase()} TEMPLATE
-                  </Text>
-                </View>
+                <Text style={styles.rowMeta}>
+                  {template.integration.actionType.toUpperCase()} TEMPLATE
+                </Text>
                 <Text style={styles.duration}>{template.book.topic}</Text>
               </View>
               <Text style={styles.resourceTitle}>{template.integration.title}</Text>
@@ -817,25 +779,12 @@ export default function LibraryScreen() {
               accessibilityLabel={`Open ${item.title}`}
               onPress={() => openItem(item)}
               style={({ pressed }) => [
-                styles.resourceCard,
+                styles.libraryRow,
                 pressed && { opacity: 0.76 },
               ]}
             >
               <View style={styles.resourceTop}>
-                <View style={styles.mediaBadge}>
-                  <Feather
-                    name={
-                      isBookItem(item)
-                        ? 'book'
-                        : isStoryItem(item)
-                          ? 'user'
-                          : 'play'
-                    }
-                    size={13}
-                    color={Colors.primary}
-                  />
-                  <Text style={styles.mediaBadgeText}>{mediaLabel(item)}</Text>
-                </View>
+                <Text style={styles.rowMeta}>{mediaLabel(item).toUpperCase()}</Text>
                 <Text style={styles.duration}>{item.durationLabel}</Text>
               </View>
               <Text style={styles.resourceTitle}>{item.title}</Text>
@@ -846,15 +795,13 @@ export default function LibraryScreen() {
               <View style={styles.resourceFooter}>
                 <Text style={styles.topic}>{item.topic}</Text>
                 <View style={styles.statuses}>
-                  {itemState.priority === 'next' ? (
-                    <Feather name="list" size={15} color={Colors.accent} />
-                  ) : null}
-                  {itemState.is_saved ? (
-                    <Feather name="bookmark" size={15} color={Colors.accent} />
-                  ) : null}
-                  {itemState.custom_notes ? (
-                    <Feather name="edit-3" size={15} color={Colors.accent} />
-                  ) : null}
+                  <Text style={styles.statusText}>
+                    {[
+                      itemState.priority === 'next' ? 'Up next' : '',
+                      itemState.is_saved ? 'Saved' : '',
+                      itemState.custom_notes ? 'Notes' : '',
+                    ].filter(Boolean).join(' · ')}
+                  </Text>
                   <Feather
                     name="arrow-right"
                     size={17}
@@ -871,239 +818,89 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
-  libraryDestinations: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  libraryDestinations: {
+    flexDirection: 'row',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+    marginBottom: 14,
+  },
   libraryDestination: {
     flex: 1,
-    minHeight: 126,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 17,
-    backgroundColor: Colors.card,
-    padding: 14,
-  },
-  libraryDestinationSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primary,
-  },
-  libraryDestinationIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    minHeight: 48,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.primaryLight,
+    gap: 7,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
   },
-  libraryDestinationIconSelected: { backgroundColor: 'rgba(255,254,248,0.16)' },
-  libraryDestinationTitle: {
-    color: Colors.text,
-    fontSize: 16,
-    lineHeight: 21,
-    fontWeight: '800',
-    marginTop: 10,
-  },
-  libraryDestinationDescription: {
-    color: Colors.textSecondary,
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 3,
-  },
-  libraryDestinationTextSelected: { color: '#fffef8' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  libraryDestinationSelected: { borderBottomColor: Colors.primary },
+  libraryDestinationTitle: { color: Colors.textSecondary, fontSize: 14, fontWeight: '700' },
+  libraryDestinationDescription: { color: Colors.textSecondary, fontSize: 11 },
+  libraryDestinationTextSelected: { color: Colors.primary },
+  filterPanel: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border, paddingBottom: 8 },
+  filterChips: { flexDirection: 'row', gap: 7, paddingRight: 16 },
+  topicChips: { flexDirection: 'row', gap: 7, paddingRight: 16, paddingBottom: 8 },
   topicDisclosure: {
     minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 4,
   },
-  topicDisclosureLabel: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   topicDisclosureText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
     marginBottom: 16,
   },
-  detailSection: { marginTop: 16, marginBottom: 6 },
-  detailSectionTitle: {
-    color: Colors.text,
-    fontSize: 21,
-    lineHeight: 26,
-    fontWeight: '700',
-    marginBottom: 11,
-  },
-  premiseCard: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  premiseText: {
-    color: '#fffef8',
-    fontSize: 18,
-    lineHeight: 27,
-    fontWeight: '600',
-    marginTop: 8,
-  },
+  contentNote: { borderLeftWidth: 3, borderLeftColor: Colors.sage, paddingLeft: 12, marginBottom: 12 },
+  detailSection: { marginTop: 18, marginBottom: 6 },
+  detailSectionTitle: { color: Colors.text, fontSize: 20, lineHeight: 26, fontWeight: '700', marginBottom: 11 },
+  premiseBlock: { borderLeftWidth: 3, borderLeftColor: Colors.primary, paddingLeft: 14, marginVertical: 16 },
+  premiseText: { color: Colors.text, fontSize: 18, lineHeight: 27, fontWeight: '600', marginTop: 8 },
+  detailBlock: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border, paddingVertical: 15 },
+  noteSection: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: Colors.borderStrong, paddingVertical: 16, marginTop: 18 },
   readingBlock: { marginBottom: 20 },
-  blockTitle: {
-    color: Colors.text,
-    fontSize: 16,
-    lineHeight: 21,
-    fontWeight: '700',
-    marginBottom: 5,
-  },
-  readingText: {
-    color: Colors.textSecondary,
-    fontSize: 15,
-    lineHeight: 24,
-  },
-  timelineRow: {
-    flexDirection: 'row',
-    gap: 13,
-    borderLeftWidth: 2,
-    borderLeftColor: Colors.sage,
-    paddingLeft: 12,
-    paddingBottom: 17,
-  },
-  timelinePeriod: {
-    width: 82,
-    color: Colors.accent,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  nextStep: {
-    flexDirection: 'row',
-    gap: 7,
-    alignItems: 'flex-start',
-    marginTop: 10,
-  },
-  nextStepText: {
-    flex: 1,
-    color: Colors.accent,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '600',
-  },
+  blockTitle: { color: Colors.text, fontSize: 16, lineHeight: 21, fontWeight: '700', marginBottom: 5 },
+  readingText: { color: Colors.textSecondary, fontSize: 15, lineHeight: 24 },
+  timelineRow: { flexDirection: 'row', gap: 13, borderLeftWidth: 2, borderLeftColor: Colors.sage, paddingLeft: 12, paddingBottom: 17 },
+  timelinePeriod: { width: 82, color: Colors.accent, fontSize: 11, fontWeight: '800' },
+  nextStep: { marginTop: 10 },
+  nextStepText: { color: Colors.accent, fontSize: 13, lineHeight: 19, fontWeight: '600' },
   integration: {
-    minHeight: 92,
+    minHeight: 82,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 9,
-  },
-  templateCard: {
-    backgroundColor: '#f4faf6',
-    borderWidth: 1,
-    borderColor: '#cfe2d5',
-    borderRadius: 17,
-    padding: 17,
-    marginBottom: 11,
-  },
-  templateTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  templateSource: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 13,
-  },
-  templateAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 16,
-    paddingTop: 13,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  templateActionText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
-  promptRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  promptNumber: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: Colors.primaryLight,
-    color: Colors.primary,
-    fontSize: 12,
-    fontWeight: '800',
-    textAlign: 'center',
-    paddingTop: 5,
-  },
-  promptText: {
-    flex: 1,
-    color: Colors.text,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  caveat: { backgroundColor: '#fff8e7', borderColor: '#e7cf9a' },
-  sourceLink: {
-    minHeight: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
-    paddingVertical: 11,
+    paddingVertical: 12,
   },
+  templateTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  templateSource: { color: Colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 11 },
+  templateAction: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 13 },
+  templateActionText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
+  promptRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  promptNumber: { width: 20, color: Colors.accent, fontSize: 12, fontWeight: '800', paddingTop: 2 },
+  promptText: { flex: 1, color: Colors.text, fontSize: 14, lineHeight: 21 },
+  caveat: { borderLeftWidth: 3, borderLeftColor: Colors.accent, paddingLeft: 12, marginVertical: 16 },
+  sourceLink: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: Colors.border, paddingVertical: 11 },
   sourceText: { flex: 1, color: Colors.primary, fontSize: 13, fontWeight: '600' },
-  resourceCard: {
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 17,
-    padding: 17,
-    marginBottom: 11,
-  },
-  resourceTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-  },
-  mediaBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.primaryLight,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  mediaBadgeText: { color: Colors.primary, fontSize: 10, fontWeight: '800' },
+  libraryRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border, paddingVertical: 16 },
+  resourceTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  rowMeta: { color: Colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.7 },
   duration: { color: Colors.textSecondary, fontSize: 10 },
-  resourceTitle: {
-    color: Colors.text,
-    fontSize: 20,
-    lineHeight: 25,
-    fontWeight: '700',
-    marginTop: 13,
-  },
+  resourceTitle: { color: Colors.text, fontSize: 17, lineHeight: 22, fontWeight: '700', marginTop: 7 },
   creator: { color: Colors.accent, fontSize: 12, marginTop: 3 },
-  summary: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 10,
-  },
-  resourceFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginTop: 14,
-  },
+  summary: { color: Colors.textSecondary, fontSize: 13, lineHeight: 20, marginTop: 8 },
+  resourceFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12 },
   topic: { flex: 1, color: Colors.textSecondary, fontSize: 10 },
   statuses: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  statusText: { color: Colors.accent, fontSize: 10, fontWeight: '600' },
   pressed: { opacity: 0.76 },
 });

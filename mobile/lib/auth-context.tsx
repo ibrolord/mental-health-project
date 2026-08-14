@@ -43,6 +43,8 @@ import {
 import { offlineSafetyPlanCache } from './offline-safety-plan-cache';
 import { clearFullContextPreference } from './full-context-preference';
 import { clearGoToActions } from './go-to-actions-storage';
+import { clearAdvisorOutcomes } from './advisor-outcome-storage';
+import { clearAdvisorObservationLedger } from './advisor-observation-ledger';
 import { clearContextSelections } from './chat-context-preference';
 import { areRemindersEnabled, clearAllReminders, hasAdvisorReminder } from './notifications';
 import { Colors } from './constants';
@@ -204,6 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authAttempt, setAuthAttempt] = useState(0);
   const accountDeletionInProgress = useRef(false);
   const lastOwnerId = useRef<string | null>(null);
+  const lastOwnerWasAnonymous = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -217,6 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // The authenticated profile can save immediately; the legacy migration
         // is a one-time background task and must not hold the app on its loader.
         lastOwnerId.current = session.user.id;
+        lastOwnerWasAnonymous.current = session.user.is_anonymous === true;
         setUser(session.user);
         setLoading(false);
         void migrateLegacyData(session).catch((error) => {
@@ -239,7 +243,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!active) return;
 
       if (session) {
+        const previousOwnerId = lastOwnerId.current;
+        const previousOwnerWasAnonymous = lastOwnerWasAnonymous.current;
         lastOwnerId.current = session.user.id;
+        lastOwnerWasAnonymous.current = session.user.is_anonymous === true;
+        if (
+          previousOwnerWasAnonymous &&
+          previousOwnerId &&
+          previousOwnerId !== session.user.id
+        ) {
+          void Promise.all([
+            clearAdvisorOutcomes(`user_id:${previousOwnerId}`),
+            clearAdvisorObservationLedger(`user_id:${previousOwnerId}`),
+          ]).catch((error) => {
+            console.error('Abandoned anonymous Advisor cleanup failed:', error);
+          });
+        }
         setUser(session.user);
         setInitializationError('');
         setLoading(false);
@@ -247,6 +266,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (accountDeletionInProgress.current) return;
         const previousOwnerId = lastOwnerId.current;
         lastOwnerId.current = null;
+        lastOwnerWasAnonymous.current = false;
         setLoading(true);
         setUser(null);
         setInitializationError('');
@@ -257,6 +277,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 resetAiDataSharingConsent(`user_id:${previousOwnerId}`),
                 clearFullContextPreference(`user_id:${previousOwnerId}`),
                 clearGoToActions(`user_id:${previousOwnerId}`),
+                clearAdvisorOutcomes(`user_id:${previousOwnerId}`),
+                clearAdvisorObservationLedger(`user_id:${previousOwnerId}`),
                 clearContextSelections(`user_id:${previousOwnerId}`),
                 clearAllReminders(),
                 offlineSafetyPlanCache.clear(previousOwnerId),
@@ -280,6 +302,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .then(async (anonymousSession) => {
               if (!active) return;
               lastOwnerId.current = anonymousSession.user.id;
+              lastOwnerWasAnonymous.current = true;
               setUser(anonymousSession.user);
               setLoading(false);
               void migrateLegacyData(anonymousSession).catch((error) => {
@@ -527,6 +550,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           resetAiDataSharingConsent(ownerKey),
           clearFullContextPreference(ownerKey),
           clearGoToActions(ownerKey),
+          clearAdvisorOutcomes(ownerKey),
+          clearAdvisorObservationLedger(ownerKey),
           clearContextSelections(ownerKey),
           clearAllReminders(),
           offlineSafetyPlanCache.clear(user.id),
@@ -562,6 +587,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             resetAiDataSharingConsent(ownerKey),
             clearFullContextPreference(ownerKey),
             clearGoToActions(ownerKey),
+            clearAdvisorOutcomes(ownerKey),
+            clearAdvisorObservationLedger(ownerKey),
             clearContextSelections(ownerKey),
             clearAllReminders(),
             offlineSafetyPlanCache.clear(expectedAnonymousUserId),
@@ -610,6 +637,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           resetAiDataSharingConsent(deletedOwnerKey),
           clearFullContextPreference(deletedOwnerKey),
           clearGoToActions(deletedOwnerKey),
+          clearAdvisorOutcomes(deletedOwnerKey),
+          clearAdvisorObservationLedger(deletedOwnerKey),
           clearContextSelections(deletedOwnerKey),
           clearAllReminders(),
           offlineSafetyPlanCache.clear(deletedOwnerId),

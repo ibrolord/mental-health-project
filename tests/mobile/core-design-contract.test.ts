@@ -10,11 +10,24 @@ function mobileSource(relativePath: string) {
 }
 
 describe('iOS calm utility design contract', () => {
-  it('keeps all tool collections collapsed until the user opens one', () => {
+  it('opens the first tool collection and leaves the others collapsed', () => {
     const source = mobileSource('app/(tabs)/assessments.tsx');
 
-    expect(source).toContain("useState('')");
+    expect(source).toContain('useState(GROUPS[0].title)');
     expect(source).toContain('Three focused collections');
+    expect(source).toContain('backgroundColor: Colors.primary');
+    expect(source).not.toContain('featuredEyebrow');
+    expect(source).not.toContain('icon={group.icon}');
+  });
+
+  it('uses flat row groups for You and Settings instead of card stacks', () => {
+    const more = mobileSource('app/(tabs)/more.tsx');
+    const settings = mobileSource('app/settings.tsx');
+
+    expect(more).toContain('<RowGroup>');
+    expect(more).not.toContain('accountCard');
+    expect(settings).toContain('<RowGroup>');
+    expect(settings).not.toContain('<AppCard');
   });
 
   it('uses an adaptive mood layout without capping Dynamic Type', () => {
@@ -37,7 +50,7 @@ describe('iOS calm utility design contract', () => {
   it('does not describe provider-processed AI chat as a private conversation', () => {
     const source = mobileSource('app/(tabs)/chat.tsx');
 
-    expect(source).toContain('AI-GUIDED CONVERSATION');
+    expect(source).toContain('AI SUPPORT');
     expect(source).not.toContain('A PRIVATE CONVERSATION');
   });
 

@@ -100,9 +100,12 @@ describe('My Go-To Actions integration boundaries', () => {
 
   it('keeps the native low-energy experience to one adaptive next action', () => {
     const dashboard = source('mobile/app/(tabs)/index.tsx');
-    expect(dashboard).toContain("title: 'Steady myself'");
-    expect(dashboard).toContain("route: '/ground'");
-    expect(dashboard).toContain('visibleLowEnergyMode ||');
+    const advisorCore = source('mobile/lib/advisor-core.ts');
+    const advisorContext = source('mobile/lib/advisor-context.ts');
+    expect(dashboard.match(/<AdvisorHomeCard\b/g)).toHaveLength(1);
+    expect(advisorCore).toContain("id: 'low-energy-grounding'");
+    expect(advisorCore).toContain("route: '/ground'");
+    expect(advisorContext).toContain('dashboardPreferences.readLowEnergyMode');
     expect(dashboard).not.toContain("{ label: 'One small step'");
   });
 

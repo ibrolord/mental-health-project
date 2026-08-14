@@ -1,6 +1,4 @@
 import {
-  countAppleHealthMoodOverlap,
-  createAppleHealthPattern,
   summarizeAppleHealthWindow,
   type AppleHealthSnapshot,
   type MoodTimestamp,
@@ -38,6 +36,8 @@ export type AdvisorHealthFeatures = {
     exerciseMinutes: number;
     mindfulMinutes: number;
     workoutCount: number;
+    eligibleForSuggestion: boolean;
+    availableCategoryCount: number;
   };
   history: {
     coverageDays: number;
@@ -51,10 +51,24 @@ export type AdvisorHealthFeatures = {
 export type AdvisorContext = {
   nowIso: string;
   intent?: 'general' | 'health-reflection';
+  lowEnergyMode?: boolean;
   mood: { emoji: MoodEmoji; localDate: string } | null;
   goals: readonly AdvisorGoal[];
   habits: readonly AdvisorHabit[];
   health: AdvisorHealthFeatures | null;
+  habitWeek?: {
+    habitId: string;
+    completedDays: number;
+    habitAgeDays: number;
+  } | null;
+};
+
+export type AdvisorChangeSignal = {
+  id: string;
+  stream: 'sleep' | 'steps' | 'habit' | 'goal' | 'feedback';
+  direction: 'up' | 'down' | 'due' | 'stalled' | 'steady';
+  severity: 'notable' | 'minor';
+  line: string;
 };
 
 export type AdvisorRecommendation = {
@@ -66,6 +80,27 @@ export type AdvisorRecommendation = {
   route: '/ground' | '/goals' | '/habits' | '/(tabs)/tracker' | '/plans' | '/resources';
   sourceLabels: readonly string[];
   resourceLabel: string;
+  observations: readonly string[];
+  changeSignal: AdvisorChangeSignal | null;
+};
+
+type AdvisorRecommendationCandidate = Omit<
+  AdvisorRecommendation,
+  'observations' | 'changeSignal'
+>;
+
+export type AdvisorRecentRecommendation =
+  | string
+  | {
+      recommendationId: string;
+      offeredAt?: string | null;
+      helpful?: boolean | null;
+    };
+
+export type AdvisorSelectionOptions = {
+  preserveToday?: boolean;
+  excludeRecommendationId?: string;
+  candidateFamily?: string;
 };
 
 const LOW_MOODS = new Set<MoodEmoji>(['😞', '😢']);
@@ -79,7 +114,7 @@ const MOOD_LABELS: Record<MoodEmoji, string> = {
 
 // Advisor can turn user-authored text into an imperative, reminder, or shared
 // commitment. Fail closed on explicit high-risk action fragments before doing so.
-const UNSAFE_ACTION_FRAGMENT = /\b(?:suicid(?:e|al)|self[ -]?harm|die(?:\s+(?:today|tonight|now))?|end\s+my\s+life|take\s+my\s+life|cut\s+myself|kill\s+(?:myself|someone|somebody|him|her|them)|hurt\s+(?:myself|someone|somebody|him|her|them)|harm\s+(?:myself|someone|somebody|him|her|them)|overdose|take\s+(?:extra|too\s+many|all\s+(?:of\s+)?my)\s+(?:pills|tablets|medications?)|shoot\s+(?:myself|someone|somebody|him|her|them)|stab\s+(?:myself|someone|somebody|him|her|them)|hang\s+myself|drown\s+myself|poison\s+(?:myself|someone|somebody|him|her|them))\b/i;
+const UNSAFE_ACTION_FRAGMENT = /\b(?:suicid(?:e|al)|self[ -]?harm|die(?:\s+(?:today|tonight|now))?|end\s+my\s+life|take\s+my\s+life|cut\s+myself|kill\s+(?:myself|someone|somebody|him|her|them)|murder\s+(?:myself|someone|somebody|him|her|them)|assassinate\s+(?:someone|somebody|him|her|them)|hurt\s+(?:myself|someone|somebody|him|her|them)|harm\s+(?:myself|someone|somebody|him|her|them)|overdose|take\s+(?:extra|too\s+many|all\s+(?:of\s+)?my)\s+(?:pills|tablets|medications?)|shoot\s+(?:myself|someone|somebody|him|her|them)|stab\s+(?:myself|someone|somebody|him|her|them)|hang\s+myself|drown\s+myself|poison\s+(?:myself|someone|somebody|him|her|them))\b/i;
 
 function average(values: readonly number[]): number | null {
   if (values.length === 0) return null;
@@ -108,10 +143,29 @@ function metric(
 
 export function createAdvisorHealthFeatures(
   snapshot: AppleHealthSnapshot,
-  moods: readonly MoodTimestamp[] = []
+  _moods: readonly MoodTimestamp[] = []
 ): AdvisorHealthFeatures {
   const recent = summarizeAppleHealthWindow(snapshot.days, 7);
   const history = summarizeAppleHealthWindow(snapshot.days, 30);
+  const recentDays = snapshot.days.slice(-7);
+  const lastTwoDays = recentDays.slice(-2);
+  const sleepDays = recentDays.filter((day) => day.sleepMinutes !== null).length;
+  const stepDays = recentDays.filter((day) => day.steps !== null).length;
+  const exerciseDays = recentDays.filter(
+    (day) => (day.exerciseMinutes ?? 0) > 0 || day.workoutCount > 0
+  ).length;
+  const mindfulDays = recentDays.filter((day) => (day.mindfulMinutes ?? 0) > 0).length;
+  const recentSleep = lastTwoDays.some((day) => day.sleepMinutes !== null);
+  const recentSteps = lastTwoDays.some((day) => day.steps !== null);
+  const recentExercise = lastTwoDays.some(
+    (day) => (day.exerciseMinutes ?? 0) > 0 || day.workoutCount > 0
+  );
+  const recentMindfulness = lastTwoDays.some(
+    (day) => (day.mindfulMinutes ?? 0) > 0
+  );
+  const availableCategoryCount = [sleepDays, stepDays, exerciseDays, mindfulDays].filter(
+    (days) => days > 0
+  ).length;
   return {
     sleepMinutes: metric(snapshot, (day) => day.sleepMinutes),
     steps: metric(snapshot, (day) => day.steps),
@@ -120,13 +174,19 @@ export function createAdvisorHealthFeatures(
       exerciseMinutes: recent.exerciseMinutes,
       mindfulMinutes: recent.mindfulMinutes,
       workoutCount: recent.workoutCount,
+      eligibleForSuggestion:
+        (sleepDays >= 4 && recentSleep) ||
+        (stepDays >= 4 && recentSteps) ||
+        (exerciseDays >= 2 && recentExercise) ||
+        (mindfulDays >= 2 && recentMindfulness),
+      availableCategoryCount,
     },
     history: {
       coverageDays: history.coverageDays,
       workoutCount: history.workoutCount,
       stateOfMindCount: history.stateOfMindCount,
-      moodOverlapDays: countAppleHealthMoodOverlap(snapshot.days, moods),
-      moodComparison: createAppleHealthPattern(snapshot.days, moods),
+      moodOverlapDays: 0,
+      moodComparison: 'Mood check-ins are not compared with Apple Health.',
     },
   };
 }
@@ -135,8 +195,8 @@ function dueSoon(goal: AdvisorGoal, now: Date): boolean {
   if (!goal.dueAt) return false;
   const due = new Date(goal.dueAt);
   if (!Number.isFinite(due.getTime())) return false;
-  const delta = due.getTime() - now.getTime();
-  return delta >= 0 && delta <= 3 * 24 * 60 * 60 * 1000;
+  const delta = localDayOrdinal(due) - localDayOrdinal(now);
+  return delta >= 0 && delta <= 3;
 }
 
 function localDateKey(date: Date): string {
@@ -146,6 +206,30 @@ function localDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function localDayOrdinal(date: Date): number {
+  return Math.floor(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS
+  );
+}
+
+function validDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function relativeMoodDay(localDate: string, now: Date): string {
+  const today = localDateKey(now);
+  if (localDate === today) return 'today';
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (localDate === localDateKey(yesterday)) return 'yesterday';
+  return 'earlier this week';
+}
+
 function sortableDueAt(value: string | null): number {
   if (!value) return Number.POSITIVE_INFINITY;
   const timestamp = new Date(value).getTime();
@@ -153,125 +237,111 @@ function sortableDueAt(value: string | null): number {
 }
 
 function isUnsafeActionText(value: string): boolean {
-  return hasExplicitUrgentSafetyLanguage(value) || UNSAFE_ACTION_FRAGMENT.test(value);
+  const normalized = value
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+    .replace(/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g, ' ');
+  return (
+    hasExplicitUrgentSafetyLanguage(normalized) ||
+    UNSAFE_ACTION_FRAGMENT.test(normalized)
+  );
+}
+
+function sanitizeDisplayText(value: string): string {
+  const normalized = value
+    .normalize('NFKC')
+    .replace(
+      /[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g,
+      ' '
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+  return Array.from(normalized).slice(0, 80).join('');
+}
+
+function quotedActionTitle(value: string): string {
+  const characters = Array.from(value);
+  const title = characters.length <= 54
+    ? value
+    : `${characters.slice(0, 53).join('').trimEnd()}…`;
+  return `“${title}”`;
 }
 
 export function createAdvisorContextSnapshot(context: AdvisorContext): AdvisorContext {
   const goals = [...context.goals]
-    .filter((goal) => goal.id && goal.title.trim())
+    .filter((goal) => goal.id && sanitizeDisplayText(goal.title))
     .sort(
       (left, right) =>
         sortableDueAt(left.dueAt) - sortableDueAt(right.dueAt) ||
         left.id.localeCompare(right.id)
     )
-    .slice(0, 1);
+    .slice(0, 1)
+    .map((goal) => ({ ...goal, title: sanitizeDisplayText(goal.title) }));
   const habits = [...context.habits]
-    .filter((habit) => habit.id && habit.name.trim() && !habit.completedToday)
+    .filter(
+      (habit) =>
+        habit.id && sanitizeDisplayText(habit.name) && !habit.completedToday
+    )
     .sort((left, right) => left.id.localeCompare(right.id))
-    .slice(0, 1);
+    .slice(0, 1)
+    .map((habit) => ({
+      ...habit,
+      name: sanitizeDisplayText(habit.name),
+      tinyStep: habit.tinyStep
+        ? sanitizeDisplayText(habit.tinyStep) || null
+        : null,
+    }));
   return { ...context, goals, habits };
 }
 
-function createHealthRecommendation(
-  health: AdvisorHealthFeatures
-): AdvisorRecommendation {
-  const { history } = health;
-  const hasMoodComparison = history.moodComparison.startsWith(
-    'Higher-mood check-in days averaged'
-  );
-  if (!hasMoodComparison) {
-    const overlap =
-      history.moodOverlapDays === 0
-        ? 'no days overlap with mood check-ins'
-        : `only ${history.moodOverlapDays} ${history.moodOverlapDays === 1 ? 'day overlaps' : 'days overlap'} with mood check-ins`;
-    const comparisonGap =
-      history.moodOverlapDays >= 4
-        ? `${history.moodOverlapDays} days overlap with mood check-ins, but there is not yet a balanced higher- and lower-mood comparison for the same Health measure`
-        : overlap;
-    return {
-      id: 'health-build-overlap',
-      kind: 'standard',
-      observation:
-        history.coverageDays > 0
-          ? `Apple Health has data on ${history.coverageDays} of the last 30 days, but ${comparisonGap}. That is not enough to identify a personal pattern.`
-          : 'There is not enough recent Apple Health data to identify a personal pattern.',
-      action: 'Add one quick mood check-in each day for the next seven days, then review the overlap again.',
-      smallerAction: 'Add one mood check-in today. No note is required.',
-      route: '/(tabs)/tracker',
-      sourceLabels:
-        history.moodOverlapDays > 0
-          ? ['Apple Health summary', 'Mood check-ins']
-          : ['Apple Health summary'],
-      resourceLabel: 'Check in',
-    };
-  }
-
+function safetyRecommendation(): AdvisorRecommendationCandidate {
   return {
-    id: 'health-pattern',
-    kind: 'standard',
-    observation: `${history.moodComparison} This is an association in your records, not a cause.`,
-    action: 'Keep one routine steady for seven days while continuing daily mood check-ins, then compare again.',
-    smallerAction: 'Choose one routine to keep steady today.',
-    route: '/(tabs)/tracker',
-    sourceLabels: ['Apple Health summary', 'Mood check-ins'],
-    resourceLabel: 'Review mood',
+    id: 'safety-support',
+    kind: 'safety',
+    observation: 'This needs support beyond Advisor.',
+    action: 'Open support options or contact someone you trust now.',
+    smallerAction: 'Open support options now.',
+    route: '/resources',
+    sourceLabels: [],
+    resourceLabel: 'Find support',
   };
 }
 
-export function createAdvisorRecommendation(
-  context: AdvisorContext
-): AdvisorRecommendation {
-  const now = new Date(context.nowIso);
-  const safeNow = Number.isFinite(now.getTime()) ? now : new Date(0);
-  if (
-    context.goals.some((goal) => isUnsafeActionText(goal.title)) ||
-    context.habits.some(
-      (habit) => isUnsafeActionText(habit.name) || isUnsafeActionText(habit.tinyStep ?? '')
-    )
-  ) {
-    return {
-      id: 'safety-support',
-      kind: 'safety',
-      observation: 'This needs support beyond Advisor.',
-      action: 'Open support options or contact someone you trust now.',
-      smallerAction: 'Open support options now.',
-      route: '/resources',
-      sourceLabels: [],
-      resourceLabel: 'Find support',
-    };
-  }
-
-  const snapshot = createAdvisorContextSnapshot(context);
-  const goals = snapshot.goals;
-  const habits = snapshot.habits;
-  const goal = goals[0] ?? null;
-  const habit = habits[0] ?? null;
-  const lowMood = context.mood
-    ? LOW_MOODS.has(context.mood.emoji) && context.mood.localDate === localDateKey(safeNow)
-    : false;
+function lowMoodCandidates(
+  context: AdvisorContext,
+  goal: AdvisorGoal | null
+): AdvisorRecommendationCandidate[] {
+  const now = validDate(context.nowIso) ?? new Date(0);
   const moodDescription = context.mood
-    ? `${MOOD_LABELS[context.mood.emoji]} on ${context.mood.localDate}`
-    : '';
-
-  if (context.intent === 'health-reflection' && context.health) {
-    return createHealthRecommendation(context.health);
+    ? `${MOOD_LABELS[context.mood.emoji]} ${relativeMoodDay(context.mood.localDate, now)}`
+    : 'Low today';
+  if (goal) {
+    const title = quotedActionTitle(goal.title);
+    return [
+      {
+        id: `low-goal:${goal.id}`,
+        kind: 'standard',
+        observation: `Your most recent check-in was ${moodDescription}, and you have an active goal.`,
+        action: `Open ${title} and work on the easiest part for two minutes.`,
+        smallerAction: `Open ${title} and only choose the first step.`,
+        route: '/goals',
+        sourceLabels: ['Mood check-in', 'Goal'],
+        resourceLabel: 'Open goal',
+      },
+      {
+        id: `low-goal:${goal.id}:alternate`,
+        kind: 'standard',
+        observation: `Your most recent check-in was ${moodDescription}, so the goal can stay small.`,
+        action: `Spend one minute choosing the next visible step for ${title}.`,
+        smallerAction: `Open ${title} without asking yourself to start yet.`,
+        route: '/goals',
+        sourceLabels: ['Mood check-in', 'Goal'],
+        resourceLabel: 'Open goal',
+      },
+    ];
   }
-
-  if (lowMood && goal) {
-    return {
-      id: `low-goal:${goal.id}`,
-      kind: 'standard',
-      observation: `Your most recent check-in was ${moodDescription}, and you have an active goal.`,
-      action: 'Open your selected goal and work on the easiest part for two minutes.',
-      smallerAction: 'Open your selected goal and only choose the first step.',
-      route: '/goals',
-      sourceLabels: ['Mood check-in', 'Goal'],
-      resourceLabel: 'Open goal',
-    };
-  }
-
-  if (lowMood) {
-    return {
+  return [
+    {
       id: 'low-grounding',
       kind: 'standard',
       observation: `Your most recent check-in was ${moodDescription}.`,
@@ -280,73 +350,748 @@ export function createAdvisorRecommendation(
       route: '/ground',
       sourceLabels: ['Mood check-in'],
       resourceLabel: 'Start grounding',
-    };
-  }
-
-  if (context.health && !goal && !habit) {
-    return createHealthRecommendation(context.health);
-  }
-
-  if (goal && dueSoon(goal, safeNow)) {
-    return {
-      id: `due-goal:${goal.id}`,
+    },
+    {
+      id: 'low-grounding:alternate',
       kind: 'standard',
-      observation: 'Your selected goal has a due date in the next few days.',
-      action: 'Give your selected goal five focused minutes, then decide what comes next.',
-      smallerAction: 'Open your selected goal and write down only the next action.',
+      observation: `Your most recent check-in was ${moodDescription}.`,
+      action: 'Pause for one minute and slowly name five things around you.',
+      smallerAction: 'Notice one color in the room.',
+      route: '/ground',
+      sourceLabels: ['Mood check-in'],
+      resourceLabel: 'Start grounding',
+    },
+  ];
+}
+
+function goalCandidates(
+  goal: AdvisorGoal,
+  state: 'active' | 'due' | 'overdue'
+): AdvisorRecommendationCandidate[] {
+  const title = quotedActionTitle(goal.title);
+  if (state !== 'active') {
+    const overdue = state === 'overdue';
+    return [
+      {
+        id: `due-goal:${goal.id}`,
+        kind: 'standard',
+        observation: overdue
+          ? `${title} is past its date.`
+          : `${title} has a due date in the next few days.`,
+        action: overdue
+          ? `Open ${title} and either start small or move its date.`
+          : `Give ${title} five focused minutes, then decide what comes next.`,
+        smallerAction: overdue
+          ? `Move the date for ${title} to something workable.`
+          : `Open ${title} and write down only the next action.`,
+        route: '/goals',
+        sourceLabels: ['Goal'],
+        resourceLabel: 'Open goal',
+      },
+      {
+        id: `due-goal:${goal.id}:alternate`,
+        kind: 'standard',
+        observation: overdue ? `${title} is past its date.` : `${title} is due soon.`,
+        action: overdue
+          ? `Choose a workable date for ${title}, or take one small step now.`
+          : `Choose one concrete piece of ${title} to move forward now.`,
+        smallerAction: overdue
+          ? `Move the date for ${title} to something workable.`
+          : `Open ${title} and identify the first unfinished piece.`,
+        route: '/goals',
+        sourceLabels: ['Goal'],
+        resourceLabel: 'Open goal',
+      },
+    ];
+  }
+  return [
+    {
+      id: `goal:${goal.id}`,
+      kind: 'standard',
+      observation: `${title} is your active goal.`,
+      action: `Give ${title} five focused minutes.`,
+      smallerAction: `Open ${title} and only choose the next action.`,
       route: '/goals',
       sourceLabels: ['Goal'],
       resourceLabel: 'Open goal',
-    };
-  }
+    },
+    {
+      id: `goal:${goal.id}:alternate`,
+      kind: 'standard',
+      observation: `${title} is available to move forward.`,
+      action: `Complete one visible step for ${title}.`,
+      smallerAction: `Write down one possible next step for ${title}.`,
+      route: '/goals',
+      sourceLabels: ['Goal'],
+      resourceLabel: 'Open goal',
+    },
+  ];
+}
 
-  if (habit) {
-    return {
+function habitCandidates(
+  habit: AdvisorHabit,
+  stalled: boolean
+): AdvisorRecommendationCandidate[] {
+  const title = quotedActionTitle(habit.name);
+  const tinyStep = habit.tinyStep
+    ? `Try this tiny step: ${habit.tinyStep}.`
+    : `Set up the cue for ${title}.`;
+  const primaryAction = stalled
+    ? `Do the smallest version of ${title} once.`
+    : `Do one small round of ${title}.`;
+  return [
+    {
       id: `habit:${habit.id}`,
       kind: 'standard',
-      observation: 'Your selected habit is available for today.',
-      action: 'Open your selected habit and do its smallest version once.',
-      smallerAction: 'Set up the cue for your selected habit without asking yourself to finish it.',
+      observation: `${title} is available for today.`,
+      action: primaryAction,
+      smallerAction: stalled ? primaryAction : tinyStep,
       route: '/habits',
       sourceLabels: ['Habit'],
       resourceLabel: 'Open habit',
-    };
-  }
-
-  if (goal) {
-    return {
-      id: `goal:${goal.id}`,
+    },
+    {
+      id: `habit:${habit.id}:alternate`,
       kind: 'standard',
-      observation: 'You selected one of your active goals.',
-      action: 'Give your selected goal five focused minutes.',
-      smallerAction: 'Open your selected goal and only choose the next action.',
-      route: '/goals',
-      sourceLabels: ['Goal'],
-      resourceLabel: 'Open goal',
-    };
-  }
+      observation: `${title} is still incomplete today.`,
+      action: stalled
+        ? primaryAction
+        : `Start ${title} once, with no streak or catch-up target.`,
+      smallerAction: stalled ? primaryAction : tinyStep,
+      route: '/habits',
+      sourceLabels: ['Habit'],
+      resourceLabel: 'Open habit',
+    },
+  ];
+}
 
+function healthCandidates(_health: AdvisorHealthFeatures): AdvisorRecommendationCandidate[] {
+  return [
+    {
+      id: 'health-wellbeing',
+      kind: 'standard',
+      observation: 'Your recent Apple Health summary has enough to work with.',
+      action: 'Take a short wellbeing pause for water, movement, or quiet breathing.',
+      smallerAction: 'Stand up and take one slow breath.',
+      route: '/ground',
+      sourceLabels: ['Apple Health summary'],
+      resourceLabel: 'Start pause',
+    },
+    {
+      id: 'health-wellbeing:alternate',
+      kind: 'standard',
+      observation: 'Your authorized Apple Health summary has enough recent wellbeing data for a general pause.',
+      action: 'Choose one brief wellbeing action that feels easy to do now.',
+      smallerAction: 'Take a sip of water or stretch once.',
+      route: '/ground',
+      sourceLabels: ['Apple Health summary'],
+      resourceLabel: 'Start pause',
+    },
+  ];
+}
+
+function fallbackCandidates(context: AdvisorContext): AdvisorRecommendationCandidate[] {
   if (!context.mood) {
-    return {
-      id: 'check-in',
+    return [
+      {
+        id: 'check-in',
+        kind: 'standard',
+        observation: 'There is no recent mood check-in in the context you selected.',
+        action: 'Take a quick check-in, then choose what would help right now.',
+        smallerAction: 'Choose the emoji that feels closest. No note is required.',
+        route: '/(tabs)/tracker',
+        sourceLabels: [],
+        resourceLabel: 'Check in',
+      },
+      {
+        id: 'check-in:alternate',
+        kind: 'standard',
+        observation: 'A quick check-in can help you choose a next step.',
+        action: 'Choose the emoji that feels closest today.',
+        smallerAction: 'Open the check-in. No note is required.',
+        route: '/(tabs)/tracker',
+        sourceLabels: [],
+        resourceLabel: 'Check in',
+      },
+    ];
+  }
+  return [
+    {
+      id: 'general-start',
       kind: 'standard',
-      observation: 'There is no recent mood check-in in the context you selected.',
-      action: 'Take a quick check-in, then choose what would help right now.',
-      smallerAction: 'Choose the emoji that feels closest. No note is required.',
-      route: '/(tabs)/tracker',
-      sourceLabels: [],
-      resourceLabel: 'Check in',
+      observation: 'There is not one clear priority in the context you selected.',
+      action: 'Choose one thing that matters and spend two minutes starting it.',
+      smallerAction: 'Write down only the first visible action.',
+      route: '/plans',
+      sourceLabels: ['Mood check-in'],
+      resourceLabel: 'Open plans',
+    },
+    {
+      id: 'general-start:alternate',
+      kind: 'standard',
+      observation: 'A small, visible action is enough for a start.',
+      action: 'Pick one useful task and begin for one minute.',
+      smallerAction: 'Name the task without starting it yet.',
+      route: '/plans',
+      sourceLabels: ['Mood check-in'],
+      resourceLabel: 'Open plans',
+    },
+  ];
+}
+
+function habitWeekState(
+  context: AdvisorContext,
+  habit: AdvisorHabit | null
+): 'stalled' | 'strong' | null {
+  const week = context.habitWeek;
+  if (
+    !habit ||
+    !week ||
+    week.habitId !== habit.id ||
+    !Number.isFinite(week.completedDays) ||
+    !Number.isFinite(week.habitAgeDays) ||
+    week.habitAgeDays < 7
+  ) {
+    return null;
+  }
+  if (week.completedDays <= 2) return 'stalled';
+  if (week.completedDays >= 5) return 'strong';
+  return null;
+}
+
+function hasUnsafeAdvisorContext(context: AdvisorContext): boolean {
+  return (
+    context.goals.some((goal) => isUnsafeActionText(goal.title)) ||
+    context.habits.some(
+      (habit) =>
+        isUnsafeActionText(habit.name) || isUnsafeActionText(habit.tinyStep ?? '')
+    )
+  );
+}
+
+function hasCurrentLowMood(context: AdvisorContext, now: Date): boolean {
+  return context.mood !== null &&
+    LOW_MOODS.has(context.mood.emoji) &&
+    context.mood.localDate === localDateKey(now);
+}
+
+function recommendationCandidates(
+  context: AdvisorContext
+): AdvisorRecommendationCandidate[] {
+  if (hasUnsafeAdvisorContext(context)) {
+    return [safetyRecommendation()];
+  }
+  const now = new Date(context.nowIso);
+  const safeNow = Number.isFinite(now.getTime()) ? now : new Date(0);
+  const snapshot = createAdvisorContextSnapshot(context);
+  const goal = snapshot.goals[0] ?? null;
+  const habit = snapshot.habits[0] ?? null;
+  const habitState = habitWeekState(snapshot, habit);
+  if (context.lowEnergyMode) {
+    return [
+      {
+        id: 'low-energy-grounding',
+        kind: 'standard',
+        observation: 'Low Energy mode is on, so this step stays short and simple.',
+        action: 'Take 90 seconds to notice your breathing and what is around you.',
+        smallerAction: 'Name one thing you can see and one thing you can feel.',
+        route: '/ground',
+        sourceLabels: [],
+        resourceLabel: 'Start grounding',
+      },
+      {
+        id: 'low-energy-grounding:alternate',
+        kind: 'standard',
+        observation: 'Low Energy mode is on, so there is no catch-up target.',
+        action: 'Pause for one minute and slowly name five things around you.',
+        smallerAction: 'Notice one sound near you.',
+        route: '/ground',
+        sourceLabels: [],
+        resourceLabel: 'Start grounding',
+      },
+      ...fallbackCandidates(context),
+    ];
+  }
+  const lowMood = hasCurrentLowMood(context, safeNow);
+  const candidates: AdvisorRecommendationCandidate[] = [];
+  if (lowMood) candidates.push(...lowMoodCandidates(context, goal));
+  const goalDueAt = goal ? validDate(goal.dueAt) : null;
+  const goalState = goalDueAt
+    ? localDayOrdinal(goalDueAt) < localDayOrdinal(safeNow)
+      ? 'overdue'
+      : goal && dueSoon(goal, safeNow)
+        ? 'due'
+        : 'active'
+    : 'active';
+  if (goal && !lowMood && goalState !== 'active') {
+    candidates.push(...goalCandidates(goal, goalState));
+  }
+  if (habit) candidates.push(...habitCandidates(habit, habitState === 'stalled'));
+  if (
+    context.health &&
+    context.health.recent.eligibleForSuggestion
+  ) {
+    candidates.push(...healthCandidates(context.health));
+  }
+  if (goal && goalState === 'active') candidates.push(...goalCandidates(goal, 'active'));
+  candidates.push(...fallbackCandidates(context));
+  return candidates;
+}
+
+function boundedSignalTitle(value: string, suffix: string): string {
+  const available = Math.max(1, 90 - Array.from(suffix).length - 2);
+  const characters = Array.from(sanitizeDisplayText(value));
+  if (characters.length <= available) return characters.join('');
+  return `${characters.slice(0, Math.max(1, available - 1)).join('')}…`;
+}
+
+function titledSignalLine(title: string, suffix: string): string {
+  return `“${boundedSignalTitle(title, suffix)}”${suffix}`;
+}
+
+function roundedSleepDifference(minutes: number): string {
+  const rounded = Math.max(15, Math.round(minutes / 15) * 15);
+  if (rounded % 60 === 0) {
+    const hours = rounded / 60;
+    return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  }
+  return `${rounded} minutes`;
+}
+
+function healthSignals(health: AdvisorHealthFeatures | null): AdvisorChangeSignal[] {
+  if (!health) return [];
+  const signals: AdvisorChangeSignal[] = [];
+  const sleep = health.sleepMinutes;
+  if (
+    sleep.recentAverage !== null &&
+    sleep.baselineAverage !== null &&
+    Number.isFinite(sleep.recentAverage) &&
+    Number.isFinite(sleep.baselineAverage) &&
+    sleep.recentCoverageDays >= 4 &&
+    sleep.baselineCoverageDays >= 7
+  ) {
+    if (
+      sleep.recentAverage <= sleep.baselineAverage - 45 &&
+      sleep.recentAverage <= sleep.baselineAverage * 0.88
+    ) {
+      signals.push({
+        id: 'sleep-down',
+        stream: 'sleep',
+        direction: 'down',
+        severity: 'notable',
+        line: `Your sleep is averaging about ${roundedSleepDifference(
+          sleep.baselineAverage - sleep.recentAverage
+        )} less than usual this week.`,
+      });
+    } else if (
+      sleep.recentAverage >= sleep.baselineAverage + 45 &&
+      sleep.recentAverage >= sleep.baselineAverage * 1.12
+    ) {
+      signals.push({
+        id: 'sleep-up',
+        stream: 'sleep',
+        direction: 'up',
+        severity: 'minor',
+        line: 'Your sleep has come back up this week.',
+      });
+    }
+  }
+
+  const steps = health.steps;
+  if (
+    steps.recentAverage !== null &&
+    steps.baselineAverage !== null &&
+    Number.isFinite(steps.recentAverage) &&
+    Number.isFinite(steps.baselineAverage) &&
+    steps.recentCoverageDays >= 4 &&
+    steps.baselineCoverageDays >= 7
+  ) {
+    if (
+      steps.recentAverage <= steps.baselineAverage - 1500 &&
+      steps.recentAverage <= steps.baselineAverage * 0.8
+    ) {
+      signals.push({
+        id: 'steps-down',
+        stream: 'steps',
+        direction: 'down',
+        severity: 'minor',
+        line: "You're moving less than your usual week.",
+      });
+    } else if (
+      steps.recentAverage >= steps.baselineAverage + 1500 &&
+      steps.recentAverage >= steps.baselineAverage * 1.2
+    ) {
+      signals.push({
+        id: 'steps-up',
+        stream: 'steps',
+        direction: 'up',
+        severity: 'minor',
+        line: "You've been more active than your usual week.",
+      });
+    }
+  }
+  return signals;
+}
+
+function goalSignal(goal: AdvisorGoal | null, now: Date): AdvisorChangeSignal | null {
+  if (!goal) return null;
+  const due = validDate(goal.dueAt);
+  if (!due) return null;
+  const dayDelta = localDayOrdinal(due) - localDayOrdinal(now);
+  if (dayDelta < 0) {
+    const suffix = ' is due and the date has passed.';
+    return {
+      id: `goal-overdue:${goal.id}`,
+      stream: 'goal',
+      direction: 'due',
+      severity: 'notable',
+      line: titledSignalLine(goal.title, suffix),
+    };
+  }
+  if (!dueSoon(goal, now)) return null;
+
+  const days = Math.max(0, dayDelta);
+  const suffix = days === 0
+    ? ' is due today.'
+    : ` is due in ${days} ${days === 1 ? 'day' : 'days'}.`;
+  return {
+    id: `goal-due:${goal.id}`,
+    stream: 'goal',
+    direction: 'due',
+    severity: 'notable',
+    line: titledSignalLine(goal.title, suffix),
+  };
+}
+
+function habitSignal(
+  context: AdvisorContext,
+  habit: AdvisorHabit | null
+): AdvisorChangeSignal | null {
+  const state = habitWeekState(context, habit);
+  const week = context.habitWeek;
+  if (!habit || !week || !state) return null;
+  const completedDays = Math.max(0, Math.min(7, Math.floor(week.completedDays)));
+  const suffix = ` has happened ${completedDays} of the last 7 days.`;
+  return {
+    id: `habit-${state}:${habit.id}`,
+    stream: 'habit',
+    direction: state === 'stalled' ? 'stalled' : 'up',
+    severity: state === 'stalled' ? 'notable' : 'minor',
+    line: titledSignalLine(habit.name, suffix),
+  };
+}
+
+function feedbackSignal(
+  recent: readonly AdvisorRecentRecommendation[],
+  now: Date
+): AdvisorChangeSignal | null {
+  if (recent.length < 3) return null;
+  const counts = new Map<string, number>();
+  for (const item of recent) {
+    if (typeof item === 'string' || item.helpful !== false) continue;
+    const offered = validDate(item.offeredAt);
+    if (!offered) continue;
+    const age = now.getTime() - offered.getTime();
+    if (age < 0 || age > 14 * DAY_MS) continue;
+    const family = item.recommendationId.split(':')[0];
+    if (!family) continue;
+    counts.set(family, (counts.get(family) ?? 0) + 1);
+  }
+  if (![...counts.values()].some((count) => count >= 2)) return null;
+  return {
+    id: 'feedback-shift',
+    stream: 'feedback',
+    direction: 'steady',
+    severity: 'minor',
+    line: "The last few suggestions haven't landed, so this one is different.",
+  };
+}
+
+const SIGNAL_RANK: Readonly<Record<string, number>> = {
+  'goal-overdue': 0,
+  'goal-due': 1,
+  'habit-stalled': 2,
+  'sleep-down': 3,
+  'feedback-shift': 4,
+  'habit-strong': 5,
+  'sleep-up': 6,
+  'steps-down': 7,
+  'steps-up': 7,
+};
+
+function signalRank(signal: AdvisorChangeSignal): number {
+  const stableId = signal.id.replace(/:(?:.*)$/, '');
+  return SIGNAL_RANK[stableId] ?? Number.POSITIVE_INFINITY;
+}
+
+export function getAdvisorChangeSignals(
+  context: AdvisorContext,
+  recent: readonly AdvisorRecentRecommendation[] = []
+): AdvisorChangeSignal[] {
+  const now = validDate(context.nowIso) ?? new Date(0);
+  if (
+    hasUnsafeAdvisorContext(context) ||
+    context.lowEnergyMode ||
+    hasCurrentLowMood(context, now)
+  ) {
+    return [];
+  }
+  const snapshot = createAdvisorContextSnapshot(context);
+  const signals = [
+    goalSignal(snapshot.goals[0] ?? null, now),
+    habitSignal(snapshot, snapshot.habits[0] ?? null),
+    ...healthSignals(snapshot.health),
+    feedbackSignal(recent, now),
+  ].filter((signal): signal is AdvisorChangeSignal => signal !== null);
+  return signals.sort(
+    (left, right) => signalRank(left) - signalRank(right) || left.id.localeCompare(right.id)
+  );
+}
+
+type ObservationStream = AdvisorChangeSignal['stream'] | 'mood' | 'health' | 'general';
+
+function candidateStream(candidate: AdvisorRecommendationCandidate): ObservationStream {
+  if (candidate.id.startsWith('low-') || candidate.sourceLabels.includes('Mood check-in')) {
+    return 'mood';
+  }
+  if (candidate.id.startsWith('due-goal:') || candidate.id.startsWith('goal:')) {
+    return 'goal';
+  }
+  if (candidate.id.startsWith('habit:')) return 'habit';
+  if (candidate.id.startsWith('health-')) return 'health';
+  return 'general';
+}
+
+function signalSourceLabel(signal: AdvisorChangeSignal): string {
+  if (signal.stream === 'sleep' || signal.stream === 'steps') {
+    return 'Apple Health summary';
+  }
+  if (signal.stream === 'feedback') return 'Your feedback';
+  if (signal.stream === 'goal') return 'Goal';
+  return 'Habit';
+}
+
+function appendSourceLabel(labels: string[], label: string): void {
+  if (!labels.includes(label)) labels.push(label);
+}
+
+function boundedObservation(value: string): string {
+  const normalized = value
+    .normalize('NFKC')
+    .replace(
+      /[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g,
+      ' '
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+  const characters = Array.from(normalized);
+  if (characters.length <= 120) return normalized;
+  return `${characters.slice(0, 119).join('').trimEnd()}.`;
+}
+
+function latestHelpfulFamily(
+  recent: readonly AdvisorRecentRecommendation[]
+): string | null {
+  const latestByFamily = new Map<
+    string,
+    { time: number; helpful: boolean | null }
+  >();
+  for (const item of recent) {
+    if (typeof item === 'string') continue;
+    const time = validDate(item.offeredAt)?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const family = item.recommendationId.split(':')[0];
+    if (!family) continue;
+    const current = latestByFamily.get(family);
+    if (!current || time > current.time) {
+      latestByFamily.set(family, { time, helpful: item.helpful ?? null });
+    }
+  }
+  let newestHelpful: { family: string; time: number } | null = null;
+  for (const [family, outcome] of latestByFamily) {
+    if (outcome.helpful !== true) continue;
+    if (!newestHelpful || outcome.time > newestHelpful.time) {
+      newestHelpful = { family, time: outcome.time };
+    }
+  }
+  return newestHelpful?.family ?? null;
+}
+
+function synthesizeRecommendation(
+  context: AdvisorContext,
+  recent: readonly AdvisorRecentRecommendation[],
+  candidate: AdvisorRecommendationCandidate
+): AdvisorRecommendation {
+  if (candidate.kind === 'safety' || context.lowEnergyMode) {
+    return { ...candidate, observations: [], changeSignal: null };
+  }
+
+  const now = validDate(context.nowIso) ?? new Date(0);
+  const lowMood = hasCurrentLowMood(context, now);
+  if (lowMood) {
+    const observation = boundedObservation(candidate.observation);
+    return {
+      ...candidate,
+      observation,
+      observations: [observation],
+      changeSignal: null,
     };
   }
 
+  const stateStream = candidateStream(candidate);
+  const signals = getAdvisorChangeSignals(context, recent);
+  const observations: string[] = [];
+  const streams = new Set<ObservationStream>();
+  const sourceLabels = [...candidate.sourceLabels];
+  const topSignal = signals[0] ?? null;
+  if (topSignal) {
+    observations.push(boundedObservation(topSignal.line));
+    streams.add(topSignal.stream);
+    appendSourceLabel(sourceLabels, signalSourceLabel(topSignal));
+  }
+
+  const healthStreamAlreadyUsed =
+    stateStream === 'health' && (streams.has('sleep') || streams.has('steps'));
+  if (!streams.has(stateStream) && !healthStreamAlreadyUsed) {
+    observations.push(boundedObservation(candidate.observation));
+    streams.add(stateStream);
+  }
+
+  const hasHealthObservation = streams.has('sleep') || streams.has('steps');
+  const positiveSignal = signals.find(
+    (signal) =>
+      (signal.direction === 'up' || signal.id.startsWith('habit-strong:')) &&
+      !streams.has(signal.stream) &&
+      (!(signal.stream === 'sleep' || signal.stream === 'steps') ||
+        !hasHealthObservation)
+  );
+  if (positiveSignal && observations.length < 3) {
+    observations.push(boundedObservation(positiveSignal.line));
+    streams.add(positiveSignal.stream);
+    appendSourceLabel(sourceLabels, signalSourceLabel(positiveSignal));
+  } else if (
+    observations.length < 3 &&
+    !streams.has('feedback') &&
+    latestHelpfulFamily(recent) === candidate.id.split(':')[0]
+  ) {
+    observations.push('That helped last time, so this one is similar.');
+    appendSourceLabel(sourceLabels, 'Your feedback');
+  }
+
+  const bounded = observations.slice(0, 3);
+  const observation = bounded[0] ?? boundedObservation(candidate.observation);
   return {
-    id: 'general-start',
-    kind: 'standard',
-    observation: 'There is not one clear priority in the context you selected.',
-    action: 'Choose one thing that matters and spend two minutes starting it.',
-    smallerAction: 'Write down only the first visible action.',
-    route: '/plans',
-    sourceLabels: ['Mood check-in'],
-    resourceLabel: 'Open plans',
+    ...candidate,
+    observation,
+    observations: bounded.length > 0 ? bounded : [observation],
+    changeSignal: topSignal?.severity === 'notable' ? topSignal : null,
+    sourceLabels,
   };
+}
+
+function recommendationOfferedToday(
+  context: AdvisorContext,
+  recent: readonly AdvisorRecentRecommendation[],
+  candidates: readonly AdvisorRecommendationCandidate[],
+  nowIso: string
+): AdvisorRecommendationCandidate | null {
+  const now = new Date(nowIso);
+  if (!Number.isFinite(now.getTime())) return null;
+  for (const item of recent) {
+    if (typeof item === 'string' || !item.offeredAt) continue;
+    const offered = new Date(item.offeredAt);
+    if (!Number.isFinite(offered.getTime())) continue;
+    if (localDateKey(offered) !== localDateKey(now)) continue;
+    const match = candidates.find(
+      (candidate) => candidate.id === item.recommendationId
+    );
+    if (!match) continue;
+    const currentLowMood =
+      context.mood !== null &&
+      LOW_MOODS.has(context.mood.emoji) &&
+      context.mood.localDate === localDateKey(now);
+    if (context.lowEnergyMode && !match.id.startsWith('low-energy-')) continue;
+    if (currentLowMood && !match.id.startsWith('low-')) continue;
+    return match;
+  }
+  return null;
+}
+
+function suppressedRecommendationIds(
+  recent: readonly AdvisorRecentRecommendation[],
+  nowIso: string
+): Set<string> {
+  const now = new Date(nowIso).getTime();
+  const safeNow = Number.isFinite(now) ? now : 0;
+  const threeDays = 3 * 24 * 60 * 60 * 1000;
+  const fourteenDays = 14 * 24 * 60 * 60 * 1000;
+  const suppressed = new Set<string>();
+  for (const item of recent) {
+    if (typeof item === 'string') {
+      suppressed.add(item);
+      continue;
+    }
+    if (!item.recommendationId) continue;
+    const offeredAt = item.offeredAt ? new Date(item.offeredAt).getTime() : NaN;
+    if (!Number.isFinite(offeredAt)) continue;
+    const age = safeNow - offeredAt;
+    if (age >= 0 && age <= threeDays) suppressed.add(item.recommendationId);
+    if (item.helpful === false && age >= 0 && age <= fourteenDays) {
+      suppressed.add(item.recommendationId);
+    }
+  }
+  return suppressed;
+}
+
+export function selectAdvisorRecommendation(
+  context: AdvisorContext,
+  recent: readonly AdvisorRecentRecommendation[] = [],
+  options: AdvisorSelectionOptions = {}
+): AdvisorRecommendation {
+  const allCandidates = recommendationCandidates(context);
+  const familyCandidates = options.candidateFamily
+    ? allCandidates.filter(
+        (candidate) => candidate.id.split(':')[0] === options.candidateFamily
+      )
+    : [];
+  const candidates = familyCandidates.length > 0 ? familyCandidates : allCandidates;
+  if (candidates[0]?.kind === 'safety') {
+    return synthesizeRecommendation(context, recent, candidates[0]);
+  }
+  if (options.preserveToday !== false) {
+    const offeredToday = recommendationOfferedToday(
+      context,
+      recent,
+      candidates,
+      context.nowIso
+    );
+    if (offeredToday) {
+      return synthesizeRecommendation(context, recent, offeredToday);
+    }
+  }
+  const suppressed = suppressedRecommendationIds(recent, context.nowIso);
+  const unsuppressed = candidates.find(
+    (candidate) =>
+      candidate.id !== options.excludeRecommendationId &&
+      !suppressed.has(candidate.id)
+  );
+  if (unsuppressed) {
+    return synthesizeRecommendation(context, recent, unsuppressed);
+  }
+
+  // An explicit "try another" should still change the visible action after the
+  // normal anti-repetition window has exhausted every candidate.
+  const fallback = (
+    candidates.find(
+      (candidate) => candidate.id !== options.excludeRecommendationId
+    ) ?? candidates[0]
+  );
+  return synthesizeRecommendation(context, recent, fallback);
+}
+
+export function createAdvisorRecommendation(
+  context: AdvisorContext,
+  recent: readonly AdvisorRecentRecommendation[] = [],
+  options: AdvisorSelectionOptions = {}
+): AdvisorRecommendation {
+  return selectAdvisorRecommendation(context, recent, options);
 }

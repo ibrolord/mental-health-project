@@ -197,13 +197,10 @@ const s = StyleSheet.create({
   card: {
     backgroundColor: Colors.card,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
     padding: 20,
     marginBottom: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   icon: {

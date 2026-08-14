@@ -321,12 +321,9 @@ const s = StyleSheet.create({
   card: {
     backgroundColor: Colors.card,
     borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.border,
     padding: 22,
-    shadowColor: '#173f38',
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
   },
   eyebrow: {
     color: '#287264',

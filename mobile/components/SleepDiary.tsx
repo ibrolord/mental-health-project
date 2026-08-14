@@ -4,9 +4,7 @@ import { format } from 'date-fns';
 import { Feather } from '@expo/vector-icons';
 import {
   AppButton,
-  AppCard,
   AppInput,
-  DisclosureCard,
   SectionHeader,
   appUiStyles,
 } from '@/components/AppUI';
@@ -46,7 +44,6 @@ export function SleepDiary() {
   const { user } = useAuth();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [draft, setDraft] = useState(newDraft);
-  const [sectionOpen, setSectionOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -69,7 +66,6 @@ export function SleepDiary() {
     ownerRef.current = ownerId;
     setEntries([]);
     setDraft(newDraft());
-    setSectionOpen(false);
     setOpen(false);
     setSaving(false);
     setError('');
@@ -161,16 +157,12 @@ export function SleepDiary() {
   ]);
 
   return (
-    <DisclosureCard
-      title="Sleep diary"
-      description={entries.length > 0 ? `${entries.length} recent ${entries.length === 1 ? 'entry' : 'entries'}` : 'Optional sleep context'}
-      icon="moon"
-      expanded={sectionOpen}
-      onToggle={() => setSectionOpen((value) => !value)}
-    >
+    <View style={styles.section}>
       <SectionHeader
-        title={open ? 'Add a sleep entry' : 'Recent sleep'}
-        description="Record what happened without scoring it."
+        title="Sleep diary"
+        description={entries.length > 0
+          ? `${entries.length} recent ${entries.length === 1 ? 'entry' : 'entries'}. Record what happened without scoring it.`
+          : 'Optional context. Record what happened without scoring it.'}
         action={
           <AppButton
             label={open ? 'Close' : 'Add'}
@@ -180,43 +172,60 @@ export function SleepDiary() {
           />
         }
       />
-      {open ? <AppCard tone="outline">
-        <AppInput label="Wake date" helper="YYYY-MM-DD" value={draft.entryDate} onChangeText={(entryDate) => setDraft({ ...draft, entryDate })} />
-        <AppInput label="Went to bed" helper="YYYY-MM-DD HH:mm (optional)" value={draft.wentToBedAt} onChangeText={(wentToBedAt) => setDraft({ ...draft, wentToBedAt })} />
-        <AppInput label="Tried to sleep" helper="YYYY-MM-DD HH:mm (optional)" value={draft.triedToSleepAt} onChangeText={(triedToSleepAt) => setDraft({ ...draft, triedToSleepAt })} />
-        <AppInput label="Fell asleep" helper="Best estimate, YYYY-MM-DD HH:mm (optional)" value={draft.fellAsleepAt} onChangeText={(fellAsleepAt) => setDraft({ ...draft, fellAsleepAt })} />
-        <AppInput label="Woke up" helper="YYYY-MM-DD HH:mm (optional)" value={draft.wokeUpAt} onChangeText={(wokeUpAt) => setDraft({ ...draft, wokeUpAt })} />
-        <AppInput label="Got out of bed" helper="YYYY-MM-DD HH:mm (optional)" value={draft.gotOutOfBedAt} onChangeText={(gotOutOfBedAt) => setDraft({ ...draft, gotOutOfBedAt })} />
-        <View style={styles.row}>
-          <AppInput style={styles.flex} label="Awakenings" keyboardType="number-pad" value={draft.awakenings} onChangeText={(awakenings) => setDraft({ ...draft, awakenings })} />
-          <AppInput style={styles.flex} label="Minutes awake" keyboardType="number-pad" value={draft.awakeMinutes} onChangeText={(awakeMinutes) => setDraft({ ...draft, awakeMinutes })} />
+      {open ? (
+        <View style={styles.form}>
+          <Text style={styles.formTitle}>Add a sleep entry</Text>
+          <AppInput label="Wake date" helper="YYYY-MM-DD" value={draft.entryDate} onChangeText={(entryDate) => setDraft({ ...draft, entryDate })} />
+          <AppInput label="Went to bed" helper="YYYY-MM-DD HH:mm (optional)" value={draft.wentToBedAt} onChangeText={(wentToBedAt) => setDraft({ ...draft, wentToBedAt })} />
+          <AppInput label="Tried to sleep" helper="YYYY-MM-DD HH:mm (optional)" value={draft.triedToSleepAt} onChangeText={(triedToSleepAt) => setDraft({ ...draft, triedToSleepAt })} />
+          <AppInput label="Fell asleep" helper="Best estimate, YYYY-MM-DD HH:mm (optional)" value={draft.fellAsleepAt} onChangeText={(fellAsleepAt) => setDraft({ ...draft, fellAsleepAt })} />
+          <AppInput label="Woke up" helper="YYYY-MM-DD HH:mm (optional)" value={draft.wokeUpAt} onChangeText={(wokeUpAt) => setDraft({ ...draft, wokeUpAt })} />
+          <AppInput label="Got out of bed" helper="YYYY-MM-DD HH:mm (optional)" value={draft.gotOutOfBedAt} onChangeText={(gotOutOfBedAt) => setDraft({ ...draft, gotOutOfBedAt })} />
+          <View style={styles.row}>
+            <AppInput style={styles.flex} label="Awakenings" keyboardType="number-pad" value={draft.awakenings} onChangeText={(awakenings) => setDraft({ ...draft, awakenings })} />
+            <AppInput style={styles.flex} label="Minutes awake" keyboardType="number-pad" value={draft.awakeMinutes} onChangeText={(awakeMinutes) => setDraft({ ...draft, awakeMinutes })} />
+          </View>
+          <AppInput label="Nap minutes" keyboardType="number-pad" value={draft.napMinutes} onChangeText={(napMinutes) => setDraft({ ...draft, napMinutes })} />
+          <AppInput label="Notes (optional)" multiline maxLength={2000} value={draft.notes} onChangeText={(notes) => setDraft({ ...draft, notes })} />
+          <AppButton label="Save entry" loading={saving} onPress={() => void save()} />
         </View>
-        <AppInput label="Nap minutes" keyboardType="number-pad" value={draft.napMinutes} onChangeText={(napMinutes) => setDraft({ ...draft, napMinutes })} />
-        <AppInput label="Notes (optional)" multiline maxLength={2000} value={draft.notes} onChangeText={(notes) => setDraft({ ...draft, notes })} />
-        <AppButton label="Save entry" loading={saving} onPress={() => void save()} />
-      </AppCard> : null}
+      ) : null}
       {error ? <Text style={appUiStyles.error}>{error}</Text> : null}
       {entries.length === 0 ? <Text style={appUiStyles.muted}>No sleep entries yet.</Text> : entries.map((entry) => (
-        <AppCard key={entry.id} tone="outline">
-          <View style={styles.entryRow}>
-            <View style={styles.flex}>
-              <Text style={styles.entryTitle}>{entry.entry_date}</Text>
-              <Text style={appUiStyles.muted}>{entry.awakenings === null ? 'Awakenings not entered' : `${entry.awakenings} awakenings`}</Text>
-            </View>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Delete sleep entry for ${entry.entry_date}`} onPress={() => remove(entry)} style={styles.deleteButton}>
-              <Feather name="trash-2" size={17} color={Colors.danger} />
-            </Pressable>
+        <View key={entry.id} style={styles.entryRow}>
+          <View style={styles.flex}>
+            <Text style={styles.entryTitle}>{entry.entry_date}</Text>
+            <Text style={appUiStyles.muted}>{entry.awakenings === null ? 'Awakenings not entered' : `${entry.awakenings} awakenings`}</Text>
           </View>
-        </AppCard>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Delete sleep entry for ${entry.entry_date}`} onPress={() => remove(entry)} style={styles.deleteButton}>
+            <Feather name="trash-2" size={17} color={Colors.danger} />
+          </Pressable>
+        </View>
       ))}
-    </DisclosureCard>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  section: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    paddingVertical: 18,
+  },
+  form: { gap: 14, paddingBottom: 18 },
+  formTitle: { color: Colors.text, fontSize: 15, lineHeight: 20, fontWeight: '700' },
   row: { flexDirection: 'row', gap: 10 },
   flex: { flex: 1 },
-  entryRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  entryRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
+    paddingVertical: 10,
+  },
   entryTitle: { color: Colors.text, fontSize: 15, fontWeight: '700', marginBottom: 3 },
   deleteButton: { padding: 10 },
 });

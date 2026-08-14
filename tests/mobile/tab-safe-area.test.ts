@@ -12,10 +12,16 @@ describe('native tab safe areas', () => {
     expect(layout).toContain(
       "import { SafeAreaView } from 'react-native-safe-area-context'"
     );
-    expect(layout).toContain("edges={['top', 'left', 'right']}");
+    expect(layout).toContain("edges={['top']}");
     expect(layout.indexOf('<SafeAreaView')).toBeLessThan(layout.indexOf('<Tabs'));
     expect(layout.indexOf('</Tabs>')).toBeLessThan(layout.indexOf('</SafeAreaView>'));
     expect(layout).not.toContain('height: 82');
     expect(layout).not.toContain('paddingBottom: 22');
+
+    const appUi = readFileSync(
+      resolve(process.cwd(), 'mobile/components/AppUI.tsx'),
+      'utf8'
+    );
+    expect(appUi).toContain("edges={['left', 'right', 'bottom']}");
   });
 });

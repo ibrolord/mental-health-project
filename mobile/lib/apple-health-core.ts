@@ -410,12 +410,16 @@ export function countAppleHealthMoodOverlap(
 
 export function createAppleHealthOverview(
   snapshot: AppleHealthSnapshot,
-  moods: readonly MoodTimestamp[]
+  _moods: readonly MoodTimestamp[] = []
 ): AppleHealthOverview {
+  const thirtyDay = summarizeAppleHealthWindow(snapshot.days, 30);
   return {
     sevenDay: summarizeAppleHealthWindow(snapshot.days, 7),
-    thirtyDay: summarizeAppleHealthWindow(snapshot.days, 30),
-    pattern: createAppleHealthPattern(snapshot.days, moods),
+    thirtyDay,
+    pattern:
+      thirtyDay.coverageDays > 0
+        ? `Health data is available on ${thirtyDay.coverageDays} of the last 30 days.`
+        : 'No Health data is available from the last 30 days.',
   };
 }
 

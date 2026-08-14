@@ -38,12 +38,12 @@ describe('Together identity mark', () => {
   it('keeps Together prominent on the iOS Today screen', () => {
     const source = fs.readFileSync(path.join(root, 'mobile/app/(tabs)/index.tsx'), 'utf8');
 
-    expect(source).toContain('ACCOUNTABILITY PARTNER');
-    expect(source).toContain('Do it together');
+    expect(source).toContain('title="Together"');
+    expect(source).toContain('Share one commitment with someone you trust.');
     expect(source).toContain("router.push('/accountability')");
-    expect(source).toContain('name="leaf"');
-    expect(source.indexOf('ACCOUNTABILITY PARTNER')).toBeLessThan(
-      source.indexOf('<MoodPicker')
+    expect(source).toContain('<LeafMark size={34} />');
+    expect(source.indexOf('<MoodPicker')).toBeLessThan(
+      source.indexOf('title="Together"')
     );
   });
 });

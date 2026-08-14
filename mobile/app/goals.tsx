@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, type ComponentProps } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   AccessibilityInfo,
   View,
@@ -28,9 +28,7 @@ import { refreshReminders } from '@/lib/notifications';
 import { GoalDetailModal, type GoalDetailRecord } from '@/components/GoalDetailModal';
 import { GOAL_ATTACHMENT_BUCKET } from '@/lib/goals/details';
 import { enqueueGoalAttachmentCleanup } from '@/lib/goals/attachment-cleanup';
-import { AppCard, PageHeader } from '@/components/AppUI';
-
-type FeatherName = ComponentProps<typeof Feather>['name'];
+import { AppButton, PageHeader } from '@/components/AppUI';
 
 interface Goal extends GoalDetailRecord {
   date: string;
@@ -41,25 +39,33 @@ interface Goal extends GoalDetailRecord {
   completed_at: string | null;
 }
 
-const FRAMEWORKS: { id: FrameworkType; label: string; icon: FeatherName }[] = [
-  { id: 'simple', label: 'Simple', icon: 'list' },
-  { id: 'eisenhower', label: 'Eisenhower', icon: 'grid' },
-  { id: 'ivy_lee', label: 'Ivy Lee', icon: 'align-left' },
-  { id: '1-3-5', label: '1-3-5', icon: 'layers' },
-  { id: 'abcde', label: 'ABCDE', icon: 'filter' },
+const FRAMEWORKS: { id: FrameworkType; label: string }[] = [
+  { id: 'simple', label: 'Simple' },
+  { id: 'eisenhower', label: 'Eisenhower' },
+  { id: 'ivy_lee', label: 'Ivy Lee' },
+  { id: '1-3-5', label: '1-3-5' },
+  { id: 'abcde', label: 'ABCDE' },
 ];
 
 const EISENHOWER_QUADRANTS = [
-  { id: 'urgent-important', label: 'Do first', color: '#fff0ed', icon: 'zap' as FeatherName },
-  { id: 'not-urgent-important', label: 'Schedule', color: '#edf4ea', icon: 'calendar' as FeatherName },
-  { id: 'urgent-not-important', label: 'Delegate', color: '#f7f3df', icon: 'users' as FeatherName },
-  { id: 'not-urgent-not-important', label: 'Let go', color: '#f8f6ee', icon: 'trash-2' as FeatherName },
+  { id: 'urgent-important', label: 'Do first' },
+  { id: 'not-urgent-important', label: 'Schedule' },
+  { id: 'urgent-not-important', label: 'Delegate' },
+  { id: 'not-urgent-not-important', label: 'Let go' },
 ];
 
 const PRIORITIES_135 = [
-  { id: 'big', label: '1 big thing', limit: 1, icon: 'target' as FeatherName },
-  { id: 'medium', label: '3 medium tasks', limit: 3, icon: 'layers' as FeatherName },
-  { id: 'small', label: '5 small tasks', limit: 5, icon: 'list' as FeatherName },
+  { id: 'big', label: '1 big thing', limit: 1 },
+  { id: 'medium', label: '3 medium tasks', limit: 3 },
+  { id: 'small', label: '5 small tasks', limit: 5 },
+];
+
+const ABCDE_PRIORITIES = [
+  { id: 'A', label: 'A - Must do' },
+  { id: 'B', label: 'B - Should do' },
+  { id: 'C', label: 'C - Nice to do' },
+  { id: 'D', label: 'D - Delegate' },
+  { id: 'E', label: 'E - Let go' },
 ];
 
 function firstParam(value: string | string[] | undefined): string {
@@ -193,6 +199,7 @@ export default function GoalsScreen() {
     appliedLibraryActionRef.current = actionIdentity;
     setFramework('simple');
     updateInput(content);
+    setActiveSection('simple');
     setLibrarySourceTitle(bookTitle || 'the library');
   }, [params.bookTitle, params.content, params.source, updateInput]);
 
@@ -369,6 +376,47 @@ export default function GoalsScreen() {
 
   const completed = goals.filter((g) => g.status === 'completed').length;
   const frameworkGoals = goals.filter((g) => g.framework === framework);
+  const composerOpen = activeSection !== null;
+  const allPrioritySlotsFilled = PRIORITIES_135.every(
+    (priority) =>
+      frameworkGoals.filter((goal) => goal.priority === priority.id).length >= priority.limit
+  );
+  const addLimitReached =
+    (framework === 'simple' && frameworkGoals.length >= 3) ||
+    (framework === 'ivy_lee' && frameworkGoals.length >= 6) ||
+    (framework === '1-3-5' && allPrioritySlotsFilled);
+
+  const defaultComposerSection = () => {
+    if (framework === 'eisenhower') return EISENHOWER_QUADRANTS[0].id;
+    if (framework === '1-3-5') {
+      return PRIORITIES_135.find(
+        (priority) =>
+          frameworkGoals.filter((goal) => goal.priority === priority.id).length < priority.limit
+      )?.id ?? PRIORITIES_135[0].id;
+    }
+    if (framework === 'abcde') return ABCDE_PRIORITIES[0].id;
+    return framework;
+  };
+
+  const toggleComposer = () => {
+    if (composerOpen) {
+      setActiveSection(null);
+      return;
+    }
+    setActiveSection(defaultComposerSection());
+  };
+
+  const submitComposer = (content: string) => {
+    if (framework === 'eisenhower') {
+      void addGoal(content, undefined, activeSection ?? EISENHOWER_QUADRANTS[0].id);
+      return;
+    }
+    if (framework === '1-3-5' || framework === 'abcde') {
+      void addGoal(content, activeSection ?? defaultComposerSection());
+      return;
+    }
+    void addGoal(content);
+  };
 
   if (loading) return <View style={s.centered}><ActivityIndicator accessibilityLabel="Loading goals" size="large" color={Colors.primary} /></View>;
 
@@ -388,8 +436,11 @@ export default function GoalsScreen() {
       </TouchableOpacity>
       <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Open details for ${g.content}`} onPress={() => setSelectedGoal(g)} style={s.goalTextButton}>
         <Text style={[s.goalText, g.status === 'completed' && s.goalTextDone]}>{g.content}</Text>
-        {g.due_at ? <Text style={s.goalDue}>Due {format(new Date(g.due_at), 'MMM d · h:mm a')}</Text> : null}
-        <Text style={s.goalHint}>Milestones, notes, reminders, and files</Text>
+        <Text style={s.goalHint}>
+          {g.due_at
+            ? `Due ${format(new Date(g.due_at), 'MMM d · h:mm a')}`
+            : 'Milestones, reminders and files'}
+        </Text>
       </TouchableOpacity>
       <Feather accessible={false} name="chevron-right" size={18} color={Colors.textSecondary} />
     </View>
@@ -428,7 +479,15 @@ export default function GoalsScreen() {
         eyebrow="Plan and progress"
         title="Goals"
         description="Make the next step small enough to start."
-        icon="check-circle"
+        action={
+          <AppButton
+            label={composerOpen ? 'Close' : 'Add goal'}
+            icon={composerOpen ? undefined : 'plus'}
+            variant={composerOpen ? 'text' : 'primary'}
+            disabled={!composerOpen && addLimitReached}
+            onPress={toggleComposer}
+          />
+        }
       />
       {librarySourceTitle ? (
         <View style={s.libraryDraft}>
@@ -462,9 +521,12 @@ export default function GoalsScreen() {
                   accessibilityState={{ selected: framework === fw.id }}
                   accessibilityLabel={`${fw.label} goal view`}
                   style={[s.fwBtn, framework === fw.id && s.fwBtnActive]}
-                  onPress={() => { setFramework(fw.id); setFrameworkPickerOpen(false); }}
+                  onPress={() => {
+                    setFramework(fw.id);
+                    setActiveSection(null);
+                    setFrameworkPickerOpen(false);
+                  }}
                 >
-                  <Feather name={fw.icon} size={15} color={framework === fw.id ? '#fffef8' : Colors.primary} />
                   <Text style={[s.fwBtnText, framework === fw.id && s.fwBtnTextActive]}>{fw.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -474,136 +536,143 @@ export default function GoalsScreen() {
       ) : null}
 
       {goals.length > 0 && completed > 0 && (
-        <AppCard quiet style={s.progressCard}>
-          <View style={s.progressRow}>
-            <Text style={s.progressTitle}>Moved forward today</Text>
-            <Text style={s.progressCount}>{completed}</Text>
-          </View>
-          <Text style={s.progressNote}>Small completed steps still count.</Text>
-        </AppCard>
+        <View style={s.progressSummary}>
+          <Text style={s.progressTitle}>Moved forward today</Text>
+          <Text style={s.progressCount}>{completed} completed</Text>
+        </View>
       )}
 
-      <AppCard style={s.card}>
-        <View style={s.cardHeading}>
-          <View>
-            <Text style={s.cardTitle}>Active goals</Text>
-            <Text style={s.cardDate}>{format(new Date(), 'EEEE, MMM d')}</Text>
-            <Text style={s.cardHint}>Tap a goal for milestones, reminders and files.</Text>
-          </View>
-          <View style={s.frameworkBadge}>
-            <Text style={s.frameworkBadgeText}>{FRAMEWORKS.find((item) => item.id === framework)?.label}</Text>
-          </View>
+      {composerOpen ? (
+        <View style={s.composer}>
+          {framework === 'eisenhower' ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.composerChoices}>
+              {EISENHOWER_QUADRANTS.map((section) => (
+                <TouchableOpacity
+                  key={section.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: activeSection === section.id }}
+                  onPress={() => setActiveSection(section.id)}
+                  style={[s.composerChoice, activeSection === section.id && s.composerChoiceSelected]}
+                >
+                  <Text style={[s.composerChoiceText, activeSection === section.id && s.composerChoiceTextSelected]}>{section.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : null}
+          {framework === '1-3-5' ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.composerChoices}>
+              {PRIORITIES_135.map((priority) => {
+                const count = frameworkGoals.filter((goal) => goal.priority === priority.id).length;
+                const disabled = count >= priority.limit;
+                return (
+                  <TouchableOpacity
+                    key={priority.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: activeSection === priority.id, disabled }}
+                    disabled={disabled}
+                    onPress={() => setActiveSection(priority.id)}
+                    style={[
+                      s.composerChoice,
+                      activeSection === priority.id && s.composerChoiceSelected,
+                      disabled && s.composerChoiceDisabled,
+                    ]}
+                  >
+                    <Text style={[s.composerChoiceText, activeSection === priority.id && s.composerChoiceTextSelected]}>{priority.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ) : null}
+          {framework === 'abcde' ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.composerChoices}>
+              {ABCDE_PRIORITIES.map((priority) => (
+                <TouchableOpacity
+                  key={priority.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: activeSection === priority.id }}
+                  onPress={() => setActiveSection(priority.id)}
+                  style={[s.composerChoice, activeSection === priority.id && s.composerChoiceSelected]}
+                >
+                  <Text style={[s.composerChoiceText, activeSection === priority.id && s.composerChoiceTextSelected]}>{priority.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : null}
+          {renderAddInput(submitComposer)}
         </View>
-        {goalError ? <Text accessibilityRole="alert" style={s.errorText}>{goalError}</Text> : null}
-        {goalStatusChange ? (
-          <View style={s.undoBanner}>
-            <Text style={s.undoText}>{goalCompletionFeedback(goalStatusChange.to)}</Text>
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Undo goal status change"
-              onPress={() => void undoGoalStatus()}
-              disabled={Boolean(statusUpdatingId)}
-            >
-              <Text style={s.undoAction}>Undo</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
+      ) : null}
 
-        {framework === 'simple' && (
-          <>
-            {frameworkGoals.length < 3 && renderAddInput((content) => { void addGoal(content); })}
-            {frameworkGoals.map((g, i) => renderGoalItem(g, i + 1))}
-            {frameworkGoals.length === 0 && <Text style={s.empty}>What are your top priorities today?</Text>}
-          </>
-        )}
+      <View style={s.listHeading}>
+        <View>
+          <Text style={s.listTitle}>Active goals</Text>
+          <Text style={s.listDate}>{format(new Date(), 'EEEE, MMM d')}</Text>
+        </View>
+        <Text style={s.frameworkLabel}>{FRAMEWORKS.find((item) => item.id === framework)?.label}</Text>
+      </View>
+      {goalError ? <Text accessibilityRole="alert" style={s.errorText}>{goalError}</Text> : null}
+      {goalStatusChange ? (
+        <View style={s.undoBanner}>
+          <Text style={s.undoText}>{goalCompletionFeedback(goalStatusChange.to)}</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Undo goal status change"
+            onPress={() => void undoGoalStatus()}
+            disabled={Boolean(statusUpdatingId)}
+          >
+            <Text style={s.undoAction}>Undo</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
-        {framework === 'eisenhower' && EISENHOWER_QUADRANTS.map((q) => {
+      {framework === 'simple' && (
+        <>
+          {frameworkGoals.map((g, i) => renderGoalItem(g, i + 1))}
+          {frameworkGoals.length === 0 && <Text style={s.empty}>What are your top priorities today?</Text>}
+        </>
+      )}
+
+      {framework === 'eisenhower' && EISENHOWER_QUADRANTS.map((q) => {
           const list = goals.filter((g) => g.eisenhower_quadrant === q.id);
           return (
-            <View key={q.id} style={[s.section, { backgroundColor: q.color }]}>
-              <View style={s.sectionHeading}>
-                <Feather name={q.icon} size={16} color={Colors.primary} />
-                <Text style={s.sectionTitle}>{q.label}</Text>
-              </View>
-              {activeSection === q.id ? (
-                <View style={s.inputRow}>
-                  <TextInput ref={inputControlRef} style={s.input} placeholder="Add task..." value={input} onChangeText={updateInput} onEndEditing={(event) => updateInput(event.nativeEvent.text)} onSubmitEditing={(event) => { updateInput(event.nativeEvent.text); void addGoal(event.nativeEvent.text, undefined, q.id); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
-                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => submitCurrentInput((content) => { void addGoal(content, undefined, q.id); })} disabled={adding || !input.trim()}>
-                    {adding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addSmallBtnText}>+</Text>}
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity onPress={() => setActiveSection(q.id)}>
-                  <Text style={s.addLink}>+ Add task</Text>
-                </TouchableOpacity>
-              )}
+            <View key={q.id} style={s.section}>
+              <Text style={s.sectionTitle}>{q.label}</Text>
               {list.map((g) => renderGoalItem(g))}
+              {list.length === 0 ? <Text style={s.sectionEmpty}>No goals here</Text> : null}
             </View>
           );
-        })}
+      })}
 
-        {framework === 'ivy_lee' && (
-          <>
-            {frameworkGoals.length < 6 && renderAddInput((content) => { void addGoal(content); })}
-            {frameworkGoals.length >= 6 && <Text style={s.limitMsg}>✓ You have your 6 tasks. Now focus on #1!</Text>}
-            {frameworkGoals.map((g, i) => renderGoalItem(g, i + 1))}
-          </>
-        )}
+      {framework === 'ivy_lee' && (
+        <>
+          {frameworkGoals.length >= 6 && <Text style={s.limitMsg}>You have your 6 tasks. Now focus on #1.</Text>}
+          {frameworkGoals.map((g, i) => renderGoalItem(g, i + 1))}
+        </>
+      )}
 
-        {framework === '1-3-5' && PRIORITIES_135.map((p) => {
+      {framework === '1-3-5' && PRIORITIES_135.map((p) => {
           const list = frameworkGoals.filter((g) => g.priority === p.id);
-          const atLimit = list.length >= p.limit;
           return (
             <View key={p.id} style={s.section}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <View style={s.sectionHeading}>
-                  <Feather name={p.icon} size={16} color={Colors.primary} />
-                  <Text style={s.sectionTitle}>{p.label}</Text>
-                </View>
+              <View style={s.sectionHeading}>
+                <Text style={s.sectionTitle}>{p.label}</Text>
                 <Text style={s.sectionCount}>{list.length}/{p.limit}</Text>
               </View>
-              {!atLimit && activeSection === p.id ? (
-                <View style={s.inputRow}>
-                  <TextInput ref={inputControlRef} style={s.input} placeholder="Add task..." value={input} onChangeText={updateInput} onEndEditing={(event) => updateInput(event.nativeEvent.text)} onSubmitEditing={(event) => { updateInput(event.nativeEvent.text); void addGoal(event.nativeEvent.text, p.id); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
-                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => submitCurrentInput((content) => { void addGoal(content, p.id); })} disabled={adding || !input.trim()}>
-                    {adding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addSmallBtnText}>+</Text>}
-                  </TouchableOpacity>
-                </View>
-              ) : !atLimit ? (
-                <TouchableOpacity onPress={() => setActiveSection(p.id)}>
-                  <Text style={s.addLink}>+ Add task</Text>
-                </TouchableOpacity>
-              ) : (
-                <Text style={s.limitMsg}>✓ Section complete!</Text>
-              )}
               {list.map((g) => renderGoalItem(g))}
+              {list.length === 0 ? <Text style={s.sectionEmpty}>No goals here</Text> : null}
             </View>
           );
-        })}
+      })}
 
-        {framework === 'abcde' && ['A', 'B', 'C', 'D', 'E'].map((p) => {
-          const labels: Record<string, string> = { A: 'A — Must do', B: 'B — Should do', C: 'C — Nice to do', D: 'D — Delegate', E: 'E — Let go' };
-          const list = frameworkGoals.filter((g) => g.priority === p);
+      {framework === 'abcde' && ABCDE_PRIORITIES.map((priority) => {
+          const list = frameworkGoals.filter((g) => g.priority === priority.id);
           return (
-            <View key={p} style={s.section}>
-              <Text style={s.sectionTitle}>{labels[p]}</Text>
-              {activeSection === p ? (
-                <View style={s.inputRow}>
-                  <TextInput ref={inputControlRef} style={s.input} placeholder="Add task..." value={input} onChangeText={updateInput} onEndEditing={(event) => updateInput(event.nativeEvent.text)} onSubmitEditing={(event) => { updateInput(event.nativeEvent.text); void addGoal(event.nativeEvent.text, p); }} placeholderTextColor={Colors.textSecondary} editable={!adding} autoFocus />
-                  <TouchableOpacity style={[s.addSmallBtn, adding && s.addSmallBtnDisabled]} onPress={() => submitCurrentInput((content) => { void addGoal(content, p); })} disabled={adding || !input.trim()}>
-                    {adding ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addSmallBtnText}>+</Text>}
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity onPress={() => setActiveSection(p)}>
-                  <Text style={s.addLink}>+ Add task</Text>
-                </TouchableOpacity>
-              )}
+            <View key={priority.id} style={s.section}>
+              <Text style={s.sectionTitle}>{priority.label}</Text>
               {list.map((g) => renderGoalItem(g))}
+              {list.length === 0 ? <Text style={s.sectionEmpty}>No goals here</Text> : null}
             </View>
           );
-        })}
-      </AppCard>
+      })}
     </ScrollView>
     <GoalDetailModal
       key={`${ownerKey}:${selectedGoal?.id ?? 'closed-goal-details'}`}
@@ -633,58 +702,56 @@ export default function GoalsScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: 16, paddingBottom: 44 },
-  libraryDraft: { backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', borderRadius: 14, padding: 14, marginBottom: 14 },
-  libraryDraftLabel: { color: '#047857', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
-  libraryDraftText: { color: '#064e3b', fontSize: 14, lineHeight: 20, fontWeight: '600', marginTop: 5 },
-  libraryDraftHint: { color: '#065f46', fontSize: 11, lineHeight: 17, marginTop: 5 },
+  libraryDraft: { borderLeftWidth: 3, borderLeftColor: Colors.success, paddingLeft: 12, marginBottom: 16 },
+  libraryDraftLabel: { color: Colors.success, fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+  libraryDraftText: { color: Colors.text, fontSize: 14, lineHeight: 20, fontWeight: '600', marginTop: 5 },
+  libraryDraftHint: { color: Colors.textSecondary, fontSize: 11, lineHeight: 17, marginTop: 5 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  card: { padding: 18 },
-  cardHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 },
-  cardTitle: { fontSize: 20, lineHeight: 25, fontWeight: '700', color: Colors.text },
-  cardDate: { color: Colors.textSecondary, fontSize: 12, marginTop: 3 },
-  cardHint: { color: Colors.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 5, maxWidth: 230 },
-  frameworkBadge: { borderRadius: 999, backgroundColor: Colors.primaryLight, paddingHorizontal: 10, paddingVertical: 6 },
-  frameworkBadgeText: { color: Colors.primary, fontSize: 11, fontWeight: '700' },
   pickerLabel: { color: Colors.textSecondary, fontSize: 10, lineHeight: 14, fontWeight: '800', letterSpacing: 1.2, marginBottom: 8 },
   viewPicker: { marginBottom: 16 },
   viewPickerHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, paddingVertical: 8 },
   viewPickerValue: { color: Colors.text, fontSize: 15, fontWeight: '700' },
   frameworkChoices: { paddingTop: 10 },
-  fwBtn: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: Colors.border, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 14, marginRight: 8, backgroundColor: Colors.card },
+  fwBtn: { minHeight: 44, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 14, marginRight: 8, backgroundColor: Colors.card },
   fwBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   fwBtnText: { fontSize: 13, fontWeight: '600', color: Colors.text },
-  fwBtnTextActive: { color: '#fffef8' },
-  progressCard: { marginBottom: 14 },
-  progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  progressTitle: { fontSize: 15, lineHeight: 20, fontWeight: '700', color: Colors.text },
+  fwBtnTextActive: { color: Colors.onPrimary },
+  progressSummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 14 },
+  progressTitle: { fontSize: 13, lineHeight: 18, fontWeight: '700', color: Colors.text },
   progressCount: { fontSize: 13, fontWeight: '700', color: Colors.success },
-  progressBar: { height: 8, backgroundColor: Colors.border, borderRadius: 4, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: Colors.success, borderRadius: 5 },
-  progressNote: { color: Colors.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 8 },
-  section: { backgroundColor: Colors.surfaceMuted, borderRadius: 14, padding: 14, marginBottom: 12 },
-  sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
+  composer: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: Colors.borderStrong, paddingVertical: 14, marginBottom: 18 },
+  composerChoices: { gap: 8, paddingBottom: 12 },
+  composerChoice: { minHeight: 40, justifyContent: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: 999, paddingHorizontal: 13, backgroundColor: Colors.card },
+  composerChoiceSelected: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  composerChoiceDisabled: { opacity: 0.4 },
+  composerChoiceText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
+  composerChoiceTextSelected: { color: Colors.onPrimary },
+  listHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.borderStrong },
+  listTitle: { fontSize: 20, lineHeight: 25, fontWeight: '700', color: Colors.text },
+  listDate: { color: Colors.textSecondary, fontSize: 12, marginTop: 3 },
+  frameworkLabel: { color: Colors.textSecondary, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.7, paddingTop: 5 },
+  section: { paddingTop: 18, marginBottom: 6 },
+  sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 7, marginBottom: 2 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.text },
   sectionCount: { fontSize: 13, color: Colors.textSecondary },
-  inputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  input: { flex: 1, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 10, fontSize: 14, color: Colors.text },
-  addSmallBtn: { backgroundColor: Colors.primary, borderRadius: 10, width: 40, justifyContent: 'center', alignItems: 'center' },
+  sectionEmpty: { color: Colors.textSecondary, fontSize: 12, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  inputRow: { flexDirection: 'row', gap: 8 },
+  input: { flex: 1, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.borderStrong, borderRadius: 10, padding: 10, fontSize: 14, color: Colors.text },
+  addSmallBtn: { backgroundColor: Colors.primary, borderRadius: 10, width: 44, justifyContent: 'center', alignItems: 'center' },
   addSmallBtnDisabled: { opacity: 0.55 },
-  addSmallBtnText: { color: '#fff', fontSize: 20, fontWeight: '600' },
-  addLink: { color: Colors.primary, fontSize: 14, fontWeight: '500', marginBottom: 8 },
+  addSmallBtnText: { color: Colors.onPrimary, fontSize: 20, fontWeight: '600' },
   limitMsg: { color: Colors.success, fontSize: 13, marginBottom: 8 },
-  goalRow: { flexDirection: 'row', alignItems: 'center', gap: 9, minHeight: 72, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  goalRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 66, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   goalNum: { fontSize: 16, fontWeight: '700', color: Colors.textSecondary, width: 20 },
   checkbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
   checkboxDone: { backgroundColor: Colors.success, borderColor: Colors.success },
   goalTextButton: { flex: 1, minWidth: 0, paddingVertical: 4 },
   goalText: { fontSize: 15, lineHeight: 20, color: Colors.text, fontWeight: '600' },
-  goalDue: { color: Colors.textSecondary, fontSize: 11, marginTop: 3 },
-  goalHint: { color: Colors.textSecondary, fontSize: 10, marginTop: 4 },
+  goalHint: { color: Colors.textSecondary, fontSize: 11, marginTop: 3 },
   goalTextDone: { textDecorationLine: 'line-through', color: Colors.textSecondary },
-  focusBtn: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: Colors.primaryLight },
-  empty: { textAlign: 'center', color: Colors.textSecondary, paddingVertical: 16 },
+  empty: { textAlign: 'center', color: Colors.textSecondary, paddingVertical: 24 },
   errorText: { color: Colors.danger, fontSize: 13, marginBottom: 10 },
-  undoBanner: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 11, backgroundColor: Colors.successLight, paddingHorizontal: 12, marginBottom: 12 },
+  undoBanner: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: Colors.successLight, paddingHorizontal: 12, marginBottom: 12 },
   undoText: { flex: 1, color: Colors.text, fontSize: 13, fontWeight: '600' },
   undoAction: { color: Colors.primary, fontSize: 13, fontWeight: '800' },
 });

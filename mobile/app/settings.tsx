@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Switch, Linking } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert, Switch, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { apiRequest } from '@/lib/api';
-import { Colors } from '@/lib/constants';
+import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import {
@@ -33,7 +33,14 @@ import { clearReflectionDraft } from '@/lib/reflection-draft-storage';
 import { supabase } from '@/lib/supabase';
 import { AppleHealthSettingsCard } from '@/components/AppleHealthSettingsCard';
 import { appleHealthPreference } from '@/lib/apple-health-preference';
-import { AppCard, AppScreen, PageHeader } from '@/components/AppUI';
+import {
+  AppScreen,
+  InlineStatus,
+  ListRow,
+  PageHeader,
+  RowGroup,
+  SectionHeader,
+} from '@/components/AppUI';
 
 const HOUR_OPTIONS = [
   { label: '7 AM', value: 7 },
@@ -418,77 +425,91 @@ export default function SettingsScreen() {
         eyebrow="Your app"
         title="Settings"
         description="Manage your account, reminders, privacy and support."
-        icon="settings"
       />
-      {/* Account */}
-      <AppCard>
-        <Text style={s.cardTitle}>Account</Text>
+
+      <SectionHeader title="Account" />
+      <View style={s.sectionBlock}>
+        <RowGroup>
         {accountUpgradePending ? (
-          <>
-            <Text style={s.bodyText}>Your account setup is waiting to be finished.</Text>
-            <Text style={[s.bodyText, { marginTop: 4 }]}>
-              Confirm your email, then create your password in MHtoolkit. Your saved data stays with this profile.
-            </Text>
-            <TouchableOpacity style={s.btn} onPress={() => router.push('/auth/signup')}>
-              <Text style={s.btnText}>Finish Account Setup</Text>
-            </TouchableOpacity>
-          </>
+          <ListRow
+            title="Finish account setup"
+            description="Confirm your email, then create your password. Your saved data stays with this profile."
+            icon="user-check"
+            onPress={() => router.push('/auth/signup')}
+          />
         ) : isAnonymous ? (
           <>
-            <Text style={s.bodyText}>You are using the app anonymously.</Text>
-            <Text style={[s.bodyText, { marginTop: 4 }]}>
-              Turn this profile into an account to sync across devices without losing saved data.
-            </Text>
-            <TouchableOpacity style={s.btn} onPress={() => router.push('/auth/signup')}>
-              <Text style={s.btnText}>Create Account</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.btnOutline} onPress={() => router.push('/auth/login')}>
-              <Text style={s.btnOutlineText}>Sign In to an Existing Account</Text>
-            </TouchableOpacity>
+            <ListRow
+              title="Anonymous profile"
+              description="Your data stays with this profile unless you create an account."
+              icon="user"
+            />
+            <ListRow
+              title="Create Account"
+              description="Sync this profile across devices without losing saved data."
+              onPress={() => router.push('/auth/signup')}
+            />
+            <ListRow
+              title="Sign In to an Existing Account"
+              onPress={() => router.push('/auth/login')}
+            />
           </>
         ) : (
           <>
-            <Text style={s.bodyText}>Email: {user?.email}</Text>
-            <Text style={[s.bodyText, { marginTop: 4 }]}>Your data is synced across devices.</Text>
-            <TouchableOpacity style={s.btnOutline} onPress={signOut}>
-              <Text style={s.btnOutlineText}>Sign Out</Text>
-            </TouchableOpacity>
+            <ListRow
+              title={user?.email ?? 'Connected account'}
+              description="Your data is synced across devices."
+              icon="user-check"
+            />
+            <ListRow title="Sign Out" onPress={() => void signOut()} />
           </>
         )}
-      </AppCard>
+        </RowGroup>
+      </View>
 
-      <AppCard>
-        <Text style={s.cardTitle}>Together</Text>
-        <Text style={s.bodyText}>
-          Share commitments with one person you trust. You control what they can see.
-        </Text>
-        <TouchableOpacity
-          style={s.btnOutline}
+      <SectionHeader title="Connections" />
+      <View style={s.sectionBlock}>
+        <RowGroup>
+        <ListRow
+          title="Together"
+          description="Share commitments with one person you trust. You control what they can see."
+          icon="heart"
           onPress={() => router.push(isAnonymous ? '/auth/signup?returnTo=/accountability' : '/accountability')}
-        >
-          <Text style={s.btnOutlineText}>
-            {isAnonymous ? 'Create an account for Together' : 'Open Together'}
-          </Text>
-        </TouchableOpacity>
-      </AppCard>
+        />
+        </RowGroup>
+      </View>
 
-      <AppCard>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <View style={s.notificationHeading}>
-            <Text style={s.cardTitle}>Notifications</Text>
-            <Text style={s.bodyText}>Choose what MHtoolkit can send.</Text>
+      <SectionHeader
+        title="Notifications"
+        description="Choose what MHtoolkit can send."
+      />
+      <View style={s.sectionBlock}>
+        <RowGroup>
+          <View style={s.notificationParent}>
+            <View style={s.notificationCopy}>
+              <Text style={s.notificationTitle}>Allow notifications</Text>
+              <Text style={s.notificationDescription}>
+                Master control for every notification type below.
+              </Text>
+            </View>
+            <Switch
+              accessibilityLabel="MHtoolkit notifications"
+              value={remindersOn}
+              onValueChange={toggleReminders}
+              disabled={reminderBusy || !reminderHydrated}
+              trackColor={{ false: Colors.border, true: Colors.primaryLight }}
+              thumbColor={remindersOn ? Colors.primary : Colors.card}
+            />
           </View>
-          <Switch
-            accessibilityLabel="MHtoolkit notifications"
-            value={remindersOn}
-            onValueChange={toggleReminders}
-            disabled={reminderBusy || !reminderHydrated}
-            trackColor={{ false: '#d1d5db', true: Colors.primary }}
-            thumbColor="#fff"
-          />
-        </View>
 
-        <View style={s.notificationSettings}>
+          {!remindersOn ? (
+            <Text style={s.pausedText}>Turn on notifications to change types and delivery times.</Text>
+          ) : null}
+          <View
+            accessibilityElementsHidden={!remindersOn}
+            importantForAccessibility={remindersOn ? 'auto' : 'no-hide-descendants'}
+            style={[s.notificationChildren, !remindersOn && s.notificationChildrenDisabled]}
+          >
             <View style={s.notificationList}>
               {NOTIFICATION_OPTIONS.map((option, index) => (
                 <View
@@ -509,9 +530,9 @@ export default function SettingsScreen() {
                     onValueChange={(value) =>
                       toggleNotificationCategory(option.key, value)
                     }
-                    disabled={reminderBusy || !reminderHydrated}
-                    trackColor={{ false: '#d1d5db', true: Colors.primary }}
-                    thumbColor="#fff"
+                    disabled={reminderBusy || !reminderHydrated || !remindersOn}
+                    trackColor={{ false: Colors.border, true: Colors.primaryLight }}
+                    thumbColor={notificationPreferences[option.key] ? Colors.primary : Colors.card}
                   />
                 </View>
               ))}
@@ -530,62 +551,81 @@ export default function SettingsScreen() {
                   {HOUR_OPTIONS.map((opt) => {
                     const selected = selectedTimes.includes(opt.value);
                     return (
-                      <TouchableOpacity
+                      <Pressable
                         key={opt.value}
                         accessibilityRole="button"
-                        accessibilityState={{ selected }}
+                        accessibilityState={{
+                          selected,
+                          disabled: reminderBusy || !reminderHydrated || !remindersOn,
+                        }}
                         accessibilityLabel={`Reminder time ${opt.label}`}
-                        onPress={() => toggleTime(opt.value)}
-                        disabled={reminderBusy || !reminderHydrated}
-                        style={[
+                        onPress={() => void toggleTime(opt.value)}
+                        disabled={reminderBusy || !reminderHydrated || !remindersOn}
+                        style={({ pressed }) => [
                           s.timePill,
-                          selected && { backgroundColor: Colors.primary, borderColor: Colors.primary },
-                          reminderBusy && { opacity: 0.6 },
+                          selected && s.timePillSelected,
+                          (reminderBusy || !remindersOn) && s.disabled,
+                          pressed && s.pressed,
                         ]}
                       >
-                        <Text style={[s.timePillText, selected && { color: '#fff' }]}>{opt.label}</Text>
-                      </TouchableOpacity>
+                        <Text style={[s.timePillText, selected && s.timePillTextSelected]}>{opt.label}</Text>
+                      </Pressable>
                     );
                   })}
                 </View>
               </View>
             )}
           </View>
-
-        {!remindersOn && (
-          <Text style={s.bodyText}>
-            Automatic notifications are paused. You can still choose categories or send a manual test.
-          </Text>
-        )}
-
-        <TouchableOpacity
-          style={[s.btnOutline, reminderBusy && { opacity: 0.6 }]}
-          onPress={handleTestReminder}
-          disabled={reminderBusy || !reminderHydrated}
-        >
-          <Text style={s.btnOutlineText}>Send Test Notification</Text>
-        </TouchableOpacity>
+          <ListRow
+            title="Send Test Notification"
+            description={
+              remindersOn
+                ? 'Schedule a test that should arrive in a few seconds.'
+                : 'Turn on notifications before sending a test.'
+            }
+            icon="bell"
+            onPress={
+              reminderBusy || !reminderHydrated || !remindersOn
+                ? undefined
+                : () => void handleTestReminder()
+            }
+          />
+        </RowGroup>
         {reminderStatus ? (
-          <Text accessibilityLiveRegion="polite" style={[s.bodyText, { marginTop: 10 }]}>
-            {reminderStatus}
-          </Text>
+          <InlineStatus tone="info" message={reminderStatus} />
         ) : null}
-      </AppCard>
+      </View>
 
+      <SectionHeader title="Advisor context" description="Optional signals Advisor may use on this device." />
       <AppleHealthSettingsCard ownerId={user?.id ?? null} />
 
-      {/* Export */}
-      <AppCard>
-        <Text style={s.cardTitle}>Export your data</Text>
-        <Text style={s.bodyText}>Download a copy of your MHtoolkit data, including Together activity, as a JSON file.</Text>
-        <TouchableOpacity style={s.btnOutline} onPress={handleExport} disabled={loading}>
-          <Text style={s.btnOutlineText}>{loading ? 'Exporting...' : 'Export Data (JSON)'}</Text>
-        </TouchableOpacity>
-      </AppCard>
-
-      {/* Privacy */}
-      <AppCard>
-        <Text style={s.cardTitle}>Privacy & Data Protection</Text>
+      <SectionHeader title="Privacy and data" />
+      <View style={s.sectionBlock}>
+        <RowGroup>
+          <ListRow
+            title={loading ? 'Exporting...' : 'Export Data (JSON)'}
+            description="Download your MHtoolkit data, including Together activity."
+            icon="download"
+            onPress={loading ? undefined : () => void handleExport()}
+          />
+          <ListRow
+            title={`AI data sharing consent: ${aiConsentGranted ? 'Granted' : 'Not granted yet'}`}
+            description="Chat, voice, and AI affirmations ask before sharing with third-party AI providers."
+            icon="shield"
+          />
+          {aiConsentGranted ? (
+            <ListRow title="Revoke AI Consent" onPress={handleRevokeAiConsent} />
+          ) : null}
+          <ListRow
+            title="View Privacy Policy"
+            icon="file-text"
+            onPress={() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {
+              Alert.alert('Unable to Open Privacy Policy', PRIVACY_POLICY_URL);
+            })}
+          />
+        </RowGroup>
+        <View style={s.privacySummary}>
+          <Text style={s.privacyTitle}>Privacy at a glance</Text>
         <Text style={s.privacyItem}>All data is encrypted at rest</Text>
         <Text style={s.privacyItem}>We never sell your data or share it for advertising</Text>
         <Text style={s.privacyItem}>After you consent, chat sends messages and chosen context to Google Gemini, Anthropic Claude, or OpenAI through MHtoolkit</Text>
@@ -594,105 +634,112 @@ export default function SettingsScreen() {
         <Text style={s.privacyItem}>Anonymous usage requires no personal info</Text>
         <Text style={s.privacyItem}>Together shares only the commitments and details you choose</Text>
         <Text style={s.privacyItem}>Export or delete your data anytime</Text>
-        <Text style={[s.privacyItem, { marginTop: 6 }]}>
-          AI data sharing consent: {aiConsentGranted ? 'Granted' : 'Not granted yet'}
-        </Text>
-        {aiConsentGranted && (
-          <TouchableOpacity style={s.btnOutline} onPress={handleRevokeAiConsent}>
-            <Text style={s.btnOutlineText}>Revoke AI Consent</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={s.btnOutline}
-          onPress={() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {
-            Alert.alert('Unable to Open Privacy Policy', PRIVACY_POLICY_URL);
-          })}
-        >
-          <Text style={s.btnOutlineText}>View Privacy Policy</Text>
-        </TouchableOpacity>
-      </AppCard>
+        </View>
+      </View>
 
+      <SectionHeader title="Professional sharing" />
       <VisitBriefBuilder key={`visit-brief-${user?.id ?? 'signed-out'}-${dataGeneration}`} ownerId={user?.id ?? null} />
+
+      <SectionHeader title="Privacy activity" />
       <PrivacyActivity key={`privacy-activity-${user?.id ?? 'signed-out'}-${dataGeneration}`} ownerId={user?.id ?? null} />
 
-      {/* Support */}
-      <AppCard>
-        <Text style={s.cardTitle}>Support & Feedback</Text>
-        <Text style={s.bodyText}>
-          Questions, feedback, or an app issue? Contact the MHtoolkit developer directly.
-        </Text>
-        <Text style={s.supportEmail}>{SUPPORT_EMAIL}</Text>
-        <TouchableOpacity
-          style={s.btnOutline}
+      <SectionHeader title="Support and feedback" />
+      <View style={s.sectionBlock}>
+        <RowGroup>
+        <ListRow
+          title="Email Support & Feedback"
+          description={SUPPORT_EMAIL}
+          icon="mail"
           onPress={() => openSupportLink(SUPPORT_EMAIL_URL, 'Email')}
-          accessibilityRole="button"
-          accessibilityLabel={`Email MHtoolkit support at ${SUPPORT_EMAIL}`}
-        >
-          <Text style={s.btnOutlineText}>Email Support & Feedback</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={s.btnOutline}
+        />
+        <ListRow
+          title="View Support & Crisis Resources"
+          description="Urgent support, trusted directories, and app help."
+          icon="life-buoy"
           onPress={() => openSupportLink(SUPPORT_URL, 'Support Page')}
-          accessibilityRole="button"
-          accessibilityLabel="Open MHtoolkit support and crisis resources"
-        >
-          <Text style={s.btnOutlineText}>View Support & Crisis Resources</Text>
-        </TouchableOpacity>
-      </AppCard>
+        />
+        </RowGroup>
+      </View>
 
-      {/* Data deletion */}
-      <AppCard style={{ backgroundColor: Colors.dangerLight, borderColor: '#e6b8ae' }}>
-        <Text style={[s.cardTitle, { color: Colors.danger }]}>Data deletion</Text>
-        <Text style={[s.bodyText, { color: '#991b1b' }]}>Delete the data saved in this profile. This cannot be undone.</Text>
-        <TouchableOpacity style={s.dangerBtn} onPress={handleDeleteAll} disabled={loading}>
-          <Text style={s.dangerBtnText}>Delete saved data</Text>
-        </TouchableOpacity>
-        {!isAnonymous && (
-          <>
-            <Text style={[s.bodyText, { color: '#991b1b', marginTop: 16 }]}>
-              Permanently delete your account and all associated data.
-            </Text>
-            <TouchableOpacity style={s.dangerBtnOutline} onPress={handleDeleteAccount} disabled={loading}>
-              <Text style={s.dangerBtnOutlineText}>Delete Account</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </AppCard>
+      <SectionHeader title="Data deletion" description="These actions cannot be undone." />
+      <View style={s.sectionBlock}>
+        <RowGroup>
+          <ListRow
+            title="Delete saved data"
+            description="Delete check-ins, plans, Together activity, and other data in this profile."
+            icon="trash-2"
+            destructive
+            onPress={loading ? undefined : () => void handleDeleteAll()}
+          />
+          {!isAnonymous ? (
+            <ListRow
+              title="Delete Account"
+              description="Permanently delete your account and all associated data."
+              destructive
+              onPress={loading ? undefined : () => void handleDeleteAccount()}
+            />
+          ) : null}
+        </RowGroup>
+      </View>
 
-      {/* Disclaimer */}
-      <AppCard tone="outline">
-        <Text style={{ fontSize: 13, color: Colors.textSecondary, lineHeight: 20, textAlign: 'center' }}>
+      <View style={s.disclaimer}>
+        <Text style={s.disclaimerText}>
           This app is a self-help tool, not a replacement for professional therapy. If you are in immediate danger, contact local emergency services. Crisis resources are available on the MHtoolkit support page.
         </Text>
-      </AppCard>
+      </View>
     </AppScreen>
   );
 }
 
 const s = StyleSheet.create({
-  cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 10 },
-  notificationHeading: { flex: 1, paddingRight: 16 },
-  notificationSettings: { marginTop: 6 },
-  notificationList: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: Colors.border },
-  notificationRow: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 12 },
-  notificationRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  sectionBlock: { marginBottom: Spacing.xl },
+  notificationParent: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+    paddingVertical: Spacing.sm,
+  },
+  notificationChildren: { paddingLeft: Spacing.md },
+  notificationChildrenDisabled: { opacity: 0.56 },
+  pausedText: { color: Colors.textSecondary, ...Typography.caption, paddingVertical: Spacing.sm },
+  notificationList: { borderBottomWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
+  notificationRow: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.sm },
+  notificationRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   notificationCopy: { flex: 1 },
-  notificationTitle: { fontSize: 15, fontWeight: '600', color: Colors.text, marginBottom: 2 },
-  notificationDescription: { fontSize: 13, color: Colors.textSecondary, lineHeight: 18 },
-  reminderTimes: { marginTop: 18 },
-  reminderTimesTitle: { fontSize: 15, fontWeight: '600', color: Colors.text, marginBottom: 2 },
-  timePillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  bodyText: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20 },
-  supportEmail: { fontSize: 14, color: Colors.primary, fontWeight: '600', marginTop: 10 },
-  privacyItem: { fontSize: 14, color: Colors.textSecondary, marginBottom: 8, lineHeight: 20 },
-  btn: { backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
-  btnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  btnOutline: { borderWidth: 1, borderColor: Colors.border, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
-  btnOutlineText: { color: Colors.text, fontWeight: '500', fontSize: 15 },
-  dangerBtn: { backgroundColor: Colors.danger, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
-  dangerBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  dangerBtnOutline: { borderWidth: 1, borderColor: Colors.danger, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
-  dangerBtnOutlineText: { color: Colors.danger, fontWeight: '600', fontSize: 15 },
-  timePill: { borderWidth: 1, borderColor: Colors.border, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
-  timePillText: { fontSize: 13, fontWeight: '500', color: Colors.text },
+  notificationTitle: { color: Colors.text, ...Typography.cardTitle },
+  notificationDescription: { color: Colors.textSecondary, ...Typography.bodySmall, marginTop: Spacing.xxs },
+  reminderTimes: { paddingVertical: Spacing.md },
+  reminderTimesTitle: { color: Colors.text, ...Typography.label },
+  timePillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.sm },
+  timePill: {
+    minHeight: 44,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.borderStrong,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.card,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  timePillSelected: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  timePillText: { color: Colors.text, ...Typography.caption },
+  timePillTextSelected: { color: Colors.onPrimary },
+  privacySummary: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+    paddingVertical: Spacing.md,
+  },
+  privacyTitle: { color: Colors.text, ...Typography.label, marginBottom: Spacing.sm },
+  privacyItem: { color: Colors.textSecondary, ...Typography.bodySmall, marginBottom: Spacing.xs },
+  disclaimer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
+    paddingVertical: Spacing.lg,
+  },
+  disclaimerText: { color: Colors.textSecondary, ...Typography.bodySmall, textAlign: 'center' },
+  disabled: { opacity: 0.48 },
+  pressed: { opacity: 0.72 },
 });

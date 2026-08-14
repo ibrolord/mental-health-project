@@ -135,7 +135,7 @@ describe('Apple Health local summaries', () => {
     });
   });
 
-  it('creates descriptive comparisons only after two higher and two lower mood days', () => {
+  it('keeps low-level comparisons available without exposing them in the overview', () => {
     const snapshot = buildAppleHealthSnapshot(
       {
         ...emptyRaw(),
@@ -162,6 +162,64 @@ describe('Apple Health local summaries', () => {
     const overview = createAppleHealthOverview(snapshot, moods);
     expect(overview.thirtyDay.coverageDays).toBe(4);
     expect(overview.thirtyDay.averageSleepMinutes).toBe(420);
+    expect(overview.pattern).toBe('Health data is available on 4 of the last 30 days.');
+    expect(overview.pattern).not.toMatch(/mood|higher|lower|cause|diagnos|advice/i);
+  });
+
+  it('calculates neutral aggregate stats and data coverage', () => {
+    const snapshot = buildAppleHealthSnapshot(
+      {
+        ...emptyRaw(),
+        steps: [
+          { date: localDate(7), value: 3000 },
+          { date: localDate(8), value: 5000 },
+        ],
+        exerciseMinutes: [
+          { date: localDate(7), value: 20 },
+          { date: localDate(8), value: 40 },
+        ],
+        sleep: [
+          { startDate: localDate(6, 23), endDate: localDate(7, 6) },
+          { startDate: localDate(7, 23), endDate: localDate(8, 7) },
+        ],
+        mindfulSessions: [
+          { startDate: localDate(8, 9), endDate: localDate(8, 9, 15) },
+        ],
+        workouts: [{ date: localDate(7) }, { date: localDate(8) }],
+      },
+      localDate(9),
+      3
+    );
+
+    const overview = createAppleHealthOverview(snapshot, [
+      { emoji: '😢', created_at: localDate(7).toISOString() },
+      { emoji: '😄', created_at: localDate(8).toISOString() },
+    ]);
+
+    expect(overview.sevenDay).toMatchObject({
+      coverageDays: 2,
+      averageSteps: 4000,
+      averageSleepMinutes: 450,
+      exerciseMinutes: 60,
+      mindfulMinutes: 15,
+      workoutCount: 2,
+    });
+    expect(overview.thirtyDay).toEqual(overview.sevenDay);
+    expect(overview.pattern).toBe('Health data is available on 2 of the last 30 days.');
+  });
+
+  it('returns a clean neutral overview when no Health data is available', () => {
+    const snapshot = buildAppleHealthSnapshot(emptyRaw(), localDate(9), 30);
+    const overview = createAppleHealthOverview(snapshot, [
+      { emoji: '😄', created_at: localDate(9).toISOString() },
+    ]);
+
+    expect(overview.sevenDay.coverageDays).toBe(0);
+    expect(overview.thirtyDay.coverageDays).toBe(0);
+    expect(overview.sevenDay.averageSteps).toBeNull();
+    expect(overview.sevenDay.averageSleepMinutes).toBeNull();
+    expect(overview.pattern).toBe('No Health data is available from the last 30 days.');
+    expect(overview.pattern).not.toMatch(/mood|overlap|pattern|cause|diagnos|advice/i);
   });
 
   it('uses neutral copy when there is not enough overlap for a comparison', () => {
@@ -376,15 +434,26 @@ describe('Apple Health release boundaries', () => {
       resolve(root, 'mobile/components/AppleHealthInsights.tsx'),
       'utf8'
     );
-    expect(insights).toContain('Make sense of this');
+    expect(insights).toContain("label=\"Open today’s suggestion\"");
     expect(insights).toContain("pathname: '/advisor'");
-    expect(insights).toContain("health: '1'");
-    expect(insights).toContain("mood: '1'");
+    expect(insights).toContain("params: { health: '1' }");
+    expect(insights).toContain(
+      'Raw Health samples stay on this device. Derived summaries are shared only after you confirm.'
+    );
+    expect(insights).toContain('No recent Health data');
+    expect(insights).toContain('Nothing available from the last 30 days.');
+    expect(insights).not.toMatch(
+      /make sense|higher-mood|lower-mood|mood and apple health|overlap|pattern|cause|diagnos|motivation|capacity|advice/i
+    );
+    expect(insights).not.toContain("mood: '1'");
 
-    const advisor = readFileSync(resolve(root, 'mobile/app/advisor.tsx'), 'utf8');
-    expect(advisor).toContain('createAdvisorHealthFeatures(snapshot, moodTimestamps)');
-    expect(advisor).toContain('These summaries are used on this device.');
-    expect(advisor).not.toMatch(/fetch\(|apiRequest|generateText|streamText/);
+    const advisorContext = readFileSync(
+      resolve(root, 'mobile/lib/advisor-context.ts'),
+      'utf8'
+    );
+    expect(advisorContext).toContain('createAdvisorHealthFeatures(snapshot)');
+    expect(advisorContext).toContain('withTimeout(loadAppleHealthSnapshot(), HEALTH_TIMEOUT_MS)');
+    expect(advisorContext).not.toMatch(/fetch\(|apiRequest|generateText|streamText/);
 
     const consent = readFileSync(
       resolve(root, 'mobile/lib/apple-health-ai-consent.ts'),

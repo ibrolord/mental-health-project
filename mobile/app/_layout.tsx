@@ -18,6 +18,7 @@ import {
 import { AcquisitionCapture } from '@/components/AcquisitionCapture';
 import { AppBackButton } from '@/components/AppBackButton';
 import { recordOperationalEvent } from '@/lib/observability';
+import { Colors } from '@/lib/constants';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -158,8 +159,9 @@ export default function RootLayout() {
           screenOptions={{
             headerShown: false,
             headerBackTitle: 'Back',
-            headerStyle: { backgroundColor: '#fffef8' },
-            headerTintColor: '#163a32',
+            headerStyle: { backgroundColor: Colors.background },
+            headerTintColor: Colors.primary,
+            headerShadowVisible: false,
           }}
         >
           <Stack.Screen name="(tabs)" />
@@ -196,14 +198,15 @@ export default function RootLayout() {
 }
 
 function stackScreenOptions(
-  title: string,
+  _title: string,
   fallback: '/(tabs)' | '/(tabs)/assessments' | '/settings' | '/auth/login' = '/(tabs)',
   modal = false
 ) {
   return {
     headerLeft: () => <AppBackButton fallback={fallback} />,
     headerShown: true,
+    headerTitle: '',
+    headerShadowVisible: false,
     presentation: modal ? ('modal' as const) : ('card' as const),
-    title,
   };
 }

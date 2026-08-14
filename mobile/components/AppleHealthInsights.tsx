@@ -10,24 +10,17 @@ import {
   Text,
   View,
 } from 'react-native';
-import { AppButton, AppCard, Stat, appUiStyles } from '@/components/AppUI';
+import { AppButton, Stat, appUiStyles } from '@/components/AppUI';
 import { appleHealthPreference } from '@/lib/apple-health-preference';
 import { loadAppleHealthSnapshot } from '@/lib/apple-health';
 import {
   createAppleHealthOverview,
   formatHealthMinutes,
   type AppleHealthOverview,
-  type MoodTimestamp,
 } from '@/lib/apple-health-core';
 import { Colors } from '@/lib/constants';
 
-export function AppleHealthInsights({
-  ownerId,
-  moods,
-}: {
-  ownerId: string | null;
-  moods: readonly MoodTimestamp[];
-}) {
+export function AppleHealthInsights({ ownerId }: { ownerId: string | null }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [enabled, setEnabled] = useState<boolean | null>(null);
@@ -120,7 +113,7 @@ export function AppleHealthInsights({
     setError('');
     void loadAppleHealthSnapshot()
       .then((snapshot) => {
-        if (active) setOverview(createAppleHealthOverview(snapshot, moods));
+        if (active) setOverview(createAppleHealthOverview(snapshot));
       })
       .catch((loadError) => {
         console.warn('Unable to load Apple Health insights:', loadError);
@@ -135,7 +128,7 @@ export function AppleHealthInsights({
     return () => {
       active = false;
     };
-  }, [enabled, expanded, moods, ownerId, refreshKey, resolvedOwnerId]);
+  }, [enabled, expanded, ownerId, refreshKey, resolvedOwnerId]);
 
   if (
     Platform.OS !== 'ios' ||
@@ -146,7 +139,7 @@ export function AppleHealthInsights({
 
   const coverage = overview?.thirtyDay.coverageDays ?? 0;
   return (
-    <AppCard style={s.card} quiet>
+    <View style={s.section}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Apple Health insights"
@@ -222,35 +215,25 @@ export function AppleHealthInsights({
                 <Stat label="Mindful" value={overview.sevenDay.mindfulMinutes} suffix="min" />
               </View>
 
-              <View style={s.pattern}>
-                <Text style={s.patternText}>{overview.pattern}</Text>
-                <Text style={s.patternNote}>A personal pattern, not a cause or diagnosis.</Text>
+              <Text style={s.windowLabel}>LAST 30 DAYS</Text>
+              <View style={s.summaryRow}>
+                <Text style={s.summaryText}>{overview.thirtyDay.workoutCount} workouts</Text>
+                <Text style={s.dot}>·</Text>
+                <Text style={s.summaryText}>{coverage} days with data</Text>
               </View>
-
               <AppButton
-                label="Make sense of this"
-                accessibilityLabel="Ask Advisor to make sense of this Apple Health summary"
+                label="Open today’s suggestion"
+                accessibilityLabel="Open today’s Advisor suggestion"
                 icon="compass"
                 variant="secondary"
                 style={s.aiAction}
                 onPress={() =>
                   router.push({
                     pathname: '/advisor',
-                    params: { health: '1', mood: '1' },
+                    params: { health: '1' },
                   })
                 }
               />
-
-              <Text style={s.windowLabel}>LAST 30 DAYS</Text>
-              <View style={s.summaryRow}>
-                <Text style={s.summaryText}>{overview.thirtyDay.workoutCount} workouts</Text>
-                <Text style={s.dot}>·</Text>
-                <Text style={s.summaryText}>
-                  {overview.thirtyDay.stateOfMindCount} State of Mind entries
-                </Text>
-                <Text style={s.dot}>·</Text>
-                <Text style={s.summaryText}>{coverage} days with data</Text>
-              </View>
               <AppButton
                 label="Refresh"
                 icon="refresh-cw"
@@ -278,17 +261,23 @@ export function AppleHealthInsights({
           {enabled ? (
             <View style={s.privateRow}>
               <Feather name="lock" size={12} color={Colors.textSecondary} />
-              <Text style={s.privateText}>Raw data stays on-device.</Text>
+              <Text style={s.privateText}>
+                Raw Health samples stay on this device. Derived summaries are shared only after you confirm.
+              </Text>
             </View>
           ) : null}
         </View>
       ) : null}
-    </AppCard>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  card: { paddingVertical: 0 },
+  section: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
   header: {
     minHeight: 62,
     flexDirection: 'row',
@@ -330,14 +319,11 @@ const s = StyleSheet.create({
     marginBottom: 10,
   },
   stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  pattern: { backgroundColor: Colors.primaryLight, borderRadius: 14, padding: 14, marginBottom: 18 },
-  patternText: { color: Colors.text, fontSize: 14, lineHeight: 20, fontWeight: '600' },
-  patternNote: { color: Colors.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 4 },
-  aiAction: { alignSelf: 'flex-start', marginBottom: 18 },
+  aiAction: { alignSelf: 'flex-start', marginTop: 16 },
   summaryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
   summaryText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19 },
   dot: { color: Colors.sage },
-  privateRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 9 },
-  privateText: { color: Colors.textSecondary, fontSize: 11 },
+  privateRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, marginTop: 9 },
+  privateText: { flex: 1, color: Colors.textSecondary, fontSize: 11, lineHeight: 16 },
   pressed: { opacity: 0.72 },
 });

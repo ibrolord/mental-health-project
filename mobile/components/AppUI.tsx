@@ -1,4 +1,4 @@
-import { useEffect, useId, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ComponentProps, type ReactNode } from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
+import { Colors, LARGE_TEXT_SCALE, Radius, Spacing, Typography } from '@/lib/constants';
 
 type FeatherName = ComponentProps<typeof Feather>['name'];
 
@@ -67,7 +67,7 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   const { fontScale } = useWindowDimensions();
-  const usesStackedHeader = fontScale >= 1.35;
+  const usesStackedHeader = fontScale >= LARGE_TEXT_SCALE;
 
   return (
     <View style={styles.header}>
@@ -76,11 +76,6 @@ export function PageHeader({
           {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
           <Text accessibilityRole="header" style={styles.title}>{title}</Text>
         </View>
-        {icon ? (
-          <View style={styles.headerIcon}>
-            <Feather name={icon} size={21} color={Colors.primary} />
-          </View>
-        ) : null}
         {action ? <View style={styles.headerAction}>{action}</View> : null}
       </View>
       {description ? <Text style={styles.description}>{description}</Text> : null}
@@ -130,7 +125,7 @@ export function DisclosureCard({
   children: ReactNode;
 }) {
   return (
-    <AppCard quiet style={styles.disclosureCard}>
+    <View style={styles.disclosureSection}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={title}
@@ -159,8 +154,41 @@ export function DisclosureCard({
         />
       </Pressable>
       {expanded ? <View style={styles.disclosureBody}>{children}</View> : null}
-    </AppCard>
+    </View>
   );
+}
+
+export function ActionRow({
+  actions,
+}: {
+  actions: readonly {
+    label: string;
+    icon?: FeatherName;
+    onPress: () => void;
+    disabled?: boolean;
+  }[];
+}) {
+  return (
+    <View style={styles.actionRow}>
+      {actions.map((action, index) => (
+        <View key={action.label} style={styles.actionRowItem}>
+          {index > 0 ? <Text style={styles.actionSeparator}>·</Text> : null}
+          <AppButton
+            label={action.label}
+            icon={action.icon}
+            onPress={action.onPress}
+            disabled={action.disabled}
+            variant="text"
+            style={styles.actionRowButton}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+export function RowGroup({ children }: { children: ReactNode }) {
+  return <View style={styles.rowGroup}>{children}</View>;
 }
 
 export function SectionHeader({
@@ -302,7 +330,7 @@ export function AppButton({
   label: string;
   onPress: () => void;
   icon?: FeatherName;
-  variant?: 'primary' | 'secondary' | 'quiet' | 'danger';
+  variant?: 'primary' | 'secondary' | 'quiet' | 'text' | 'danger';
   disabled?: boolean;
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -310,7 +338,7 @@ export function AppButton({
 }) {
   const foreground =
     variant === 'primary'
-      ? '#fffef8'
+      ? Colors.onPrimary
       : variant === 'danger'
         ? Colors.danger
         : Colors.primary;
@@ -326,7 +354,7 @@ export function AppButton({
         styles.button,
         variant === 'primary' && styles.primaryButton,
         variant === 'secondary' && styles.secondaryButton,
-        variant === 'quiet' && styles.quietButton,
+        (variant === 'quiet' || variant === 'text') && styles.textButton,
         variant === 'danger' && styles.dangerButton,
         (disabled || loading) && styles.disabled,
         pressed && !(disabled || loading) && styles.pressed,
@@ -376,7 +404,7 @@ export function ChoiceChip({
         <Feather
           name={icon}
           size={14}
-          color={selected ? '#fffef8' : Colors.primary}
+          color={selected ? Colors.onPrimary : Colors.primary}
         />
       ) : null}
       <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
@@ -389,13 +417,16 @@ export function ChoiceChip({
 export function AppInput({
   label,
   helper,
+  error,
   inputStyle,
   ...props
 }: ComponentProps<typeof TextInput> & {
   label?: string;
   helper?: string;
+  error?: string;
   inputStyle?: StyleProp<TextStyle>;
 }) {
+  const [focused, setFocused] = useState(false);
   const generatedAccessoryId = `app-input-${useId().replace(/:/g, '')}`;
   const usesNumericKeyboard = [
     'decimal-pad',
@@ -414,10 +445,24 @@ export function AppInput({
       {label ? <Text style={styles.inputLabel}>{label}</Text> : null}
       <TextInput
         {...props}
+        onBlur={(event) => {
+          setFocused(false);
+          props.onBlur?.(event);
+        }}
+        onFocus={(event) => {
+          setFocused(true);
+          props.onFocus?.(event);
+        }}
         inputAccessoryViewID={accessoryId}
         accessibilityLabel={props.accessibilityLabel ?? label}
         placeholderTextColor={Colors.textSecondary}
-        style={[styles.input, props.multiline && styles.multiline, inputStyle]}
+        style={[
+          styles.input,
+          focused && styles.inputFocused,
+          error && styles.inputError,
+          props.multiline && styles.multiline,
+          inputStyle,
+        ]}
       />
       {needsKeyboardDismiss && !props.inputAccessoryViewID ? (
         <InputAccessoryView nativeID={generatedAccessoryId}>
@@ -437,6 +482,11 @@ export function AppInput({
         </InputAccessoryView>
       ) : null}
       {helper ? <Text style={styles.helper}>{helper}</Text> : null}
+      {error ? (
+        <Text accessibilityLiveRegion="polite" style={styles.errorText}>
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -539,17 +589,8 @@ const styles = StyleSheet.create({
   description: {
     color: Colors.textSecondary,
     ...Typography.body,
-    lineHeight: 21,
     marginTop: Spacing.xxs,
     maxWidth: 620,
-  },
-  headerIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   card: {
     backgroundColor: Colors.card,
@@ -558,28 +599,17 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     padding: Spacing.md,
     marginBottom: Spacing.sm,
-    shadowColor: '#163a32',
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 0,
   },
   quietCard: {
     backgroundColor: Colors.surfaceMuted,
-    shadowOpacity: 0,
-    elevation: 0,
   },
   tintedCard: {
     backgroundColor: Colors.primaryLight,
-    borderColor: '#bfd0c4',
-    shadowOpacity: 0,
-    elevation: 0,
+    borderColor: Colors.borderTinted,
   },
   outlineCard: {
     backgroundColor: 'transparent',
     borderColor: Colors.borderStrong,
-    shadowOpacity: 0,
-    elevation: 0,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -606,7 +636,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.accentLight,
+    backgroundColor: 'transparent',
     paddingHorizontal: 12,
   },
   supportActionText: { color: Colors.accent, fontSize: 12, fontWeight: '700' },
@@ -671,17 +701,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderColor: Colors.borderStrong,
   },
-  quietButton: {
-    backgroundColor: Colors.primaryLight,
-    borderColor: Colors.primaryLight,
+  textButton: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
   },
   dangerButton: {
     backgroundColor: Colors.dangerLight,
-    borderColor: '#efc5bc',
+    borderColor: Colors.borderDanger,
   },
   buttonText: { fontSize: 14, fontWeight: '700' },
   disabled: { opacity: 0.48 },
-  pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
+  pressed: { opacity: 0.72 },
   chip: {
     minHeight: 44,
     minWidth: 44,
@@ -700,7 +730,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   chipText: { color: Colors.primary, fontSize: 12, fontWeight: '600' },
-  chipTextSelected: { color: '#fffef8' },
+  chipTextSelected: { color: Colors.onPrimary },
   inputGroup: { marginBottom: 14 },
   inputLabel: {
     color: Colors.text,
@@ -713,24 +743,31 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.borderStrong,
-    backgroundColor: '#fffef8',
+    backgroundColor: Colors.card,
     color: Colors.text,
     paddingHorizontal: 13,
     paddingVertical: 11,
     fontSize: 15,
   },
   multiline: { minHeight: 112, textAlignVertical: 'top' },
+  inputFocused: { borderColor: Colors.primary, borderWidth: 2 },
+  inputError: { borderColor: Colors.danger },
   helper: {
     color: Colors.textSecondary,
     fontSize: 12,
     lineHeight: 16,
     marginTop: 5,
   },
+  errorText: {
+    color: Colors.danger,
+    ...Typography.caption,
+    marginTop: Spacing.xxs,
+  },
   keyboardToolbar: {
     minHeight: 44,
     alignItems: 'flex-end',
     justifyContent: 'center',
-    backgroundColor: '#f3f0e8',
+    backgroundColor: Colors.surfaceKeyboard,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.border,
     paddingHorizontal: 12,
@@ -780,7 +817,11 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   emptyAction: { marginTop: 16 },
-  disclosureCard: { paddingVertical: 0, overflow: 'hidden' },
+  disclosureSection: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
   disclosureHeader: {
     minHeight: 64,
     flexDirection: 'row',
@@ -813,5 +854,20 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.md,
+  },
+  actionRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionRowItem: { flexDirection: 'row', alignItems: 'center' },
+  actionSeparator: { color: Colors.borderStrong, ...Typography.body },
+  actionRowButton: { minHeight: 44, paddingHorizontal: Spacing.sm },
+  rowGroup: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
   },
 });

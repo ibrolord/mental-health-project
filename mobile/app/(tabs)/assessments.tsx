@@ -35,13 +35,11 @@ type ToolRoute =
 const GROUPS: {
   title: string;
   description: string;
-  icon: FeatherName;
   items: { title: string; description: string; icon: FeatherName; route: ToolRoute }[];
 }[] = [
   {
     title: 'Calm and focus',
     description: 'Grounding, meditation, movement, and attention',
-    icon: 'sun',
     items: [
       { title: 'Ground me now', description: 'One guided step at a time', icon: 'compass', route: '/ground' },
       { title: 'Meditation', description: 'Breathing and guided practices', icon: 'wind', route: '/meditate' },
@@ -53,7 +51,6 @@ const GROUPS: {
   {
     title: 'Plan and reflect',
     description: 'Goals, routines, plans, and private writing',
-    icon: 'flag',
     items: [
       { title: 'Goals', description: 'Milestones and next steps', icon: 'check-circle', route: '/goals' },
       { title: 'Habits and routines', description: 'Build or change a pattern', icon: 'repeat', route: '/habits' },
@@ -66,7 +63,6 @@ const GROUPS: {
   {
     title: 'Learn and assess',
     description: 'Published screeners and practical resources',
-    icon: 'book-open',
     items: [
       { title: 'Anxiety pattern', description: 'GAD-7 · past 2 weeks', icon: 'activity', route: '/assessments/gad7' },
       { title: 'Depression pattern', description: 'PHQ-9 · past 2 weeks', icon: 'activity', route: '/assessments/phq9' },
@@ -80,7 +76,7 @@ const GROUPS: {
 
 export default function ToolsScreen() {
   const router = useRouter();
-  const [openGroup, setOpenGroup] = useState('');
+  const [openGroup, setOpenGroup] = useState(GROUPS[0].title);
 
   return (
     <AppScreen>
@@ -101,7 +97,6 @@ export default function ToolsScreen() {
           <Feather name="compass" size={22} color={Colors.card} />
         </View>
         <View style={styles.featuredCopy}>
-          <Text style={styles.featuredEyebrow}>NEED SOMETHING NOW?</Text>
           <Text style={styles.featuredTitle}>Steady myself</Text>
           <Text style={styles.featuredDescription}>Begin a short grounding practice.</Text>
         </View>
@@ -114,7 +109,6 @@ export default function ToolsScreen() {
           key={group.title}
           title={group.title}
           description={group.description}
-          icon={group.icon}
           expanded={openGroup === group.title}
           onToggle={() => setOpenGroup((current) => current === group.title ? '' : group.title)}
         >
@@ -155,8 +149,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   featuredCopy: { flex: 1, minWidth: 0 },
-  featuredEyebrow: { color: '#dce8e1', ...Typography.eyebrow, fontSize: 10 },
-  featuredTitle: { color: Colors.card, ...Typography.cardTitle, fontSize: 20, marginTop: Spacing.xxs },
+  featuredTitle: { color: Colors.card, ...Typography.cardTitle, fontSize: 20 },
   featuredDescription: { color: '#dce8e1', ...Typography.bodySmall, marginTop: Spacing.xxs },
   rows: { marginTop: -Spacing.sm },
   pressed: { opacity: 0.78 },

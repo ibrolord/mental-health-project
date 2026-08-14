@@ -40,7 +40,7 @@ import { appleHealthPreference } from '@/lib/apple-health-preference';
 import { loadAppleHealthSnapshot } from '@/lib/apple-health';
 import { apiRequest } from '@/lib/api';
 import { LocalSafetyActions } from '@/components/LocalSafetyActions';
-import { Colors } from '@/lib/constants';
+import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
 import {
   readContextSelections,
   storeContextSelections,
@@ -1003,7 +1003,6 @@ export default function ChatScreen() {
       >
         {messages.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyEyebrow}>AI-GUIDED CONVERSATION</Text>
             <Text style={styles.emptyTitle}>What is on your mind?</Text>
             <Text style={styles.emptyText}>
               Start anywhere. You can ask for one practical next step.
@@ -1149,9 +1148,9 @@ const styles = StyleSheet.create({
   topBar: {
     minHeight: 78,
     backgroundColor: Colors.background,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xs,
   },
   topUtilityRow: {
     minHeight: 40,
@@ -1163,18 +1162,11 @@ const styles = StyleSheet.create({
   },
   topEyebrow: {
     color: Colors.accent,
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '800',
-    letterSpacing: 1.3,
+    ...Typography.eyebrow,
   },
   topTitle: {
     color: Colors.text,
-    fontFamily: 'Georgia',
-    fontSize: 25,
-    lineHeight: 30,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+    ...Typography.displaySmall,
     marginTop: 2,
   },
   topActions: { flexDirection: 'row', gap: 6 },
@@ -1184,7 +1176,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     paddingHorizontal: 10,
     backgroundColor: Colors.primaryLight,
   },
@@ -1212,17 +1204,17 @@ const styles = StyleSheet.create({
   aiLimit: {
     color: Colors.textSecondary,
     fontSize: 11,
-    paddingHorizontal: 20,
+    paddingHorizontal: Spacing.md,
     paddingTop: 5,
     paddingBottom: 8,
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.background,
   },
   contextPanel: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     backgroundColor: Colors.surfaceMuted,
-    marginHorizontal: 16,
+    marginHorizontal: Spacing.md,
     marginTop: 6,
     overflow: 'hidden',
   },
@@ -1283,26 +1275,15 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.76 },
   messages: { flex: 1 },
-  messagesContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8 },
-  empty: { flex: 1, alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingBottom: 18 },
-  emptyEyebrow: {
-    color: Colors.accent,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.3,
-  },
+  messagesContent: { flexGrow: 1, paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.xs },
+  empty: { flex: 1, alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: Spacing.lg, paddingBottom: Spacing.md },
   emptyTitle: {
     color: Colors.text,
-    fontFamily: 'Georgia',
-    fontSize: 25,
-    lineHeight: 31,
-    fontWeight: '700',
-    marginTop: 10,
+    ...Typography.displaySmall,
   },
   emptyText: {
     color: Colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
+    ...Typography.bodySmall,
     textAlign: 'left',
     marginTop: 5,
   },
@@ -1314,20 +1295,19 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   prompt: {
-    width: '100%',
     minHeight: 44,
-    borderRadius: 14,
+    borderRadius: Radius.pill,
     borderWidth: 1,
     borderColor: Colors.border,
-    backgroundColor: Colors.card,
-    paddingHorizontal: 12,
+    backgroundColor: Colors.surfaceMuted,
+    paddingHorizontal: Spacing.md,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
-  promptText: { color: Colors.text, fontSize: 13, textAlign: 'left' },
+  promptText: { color: Colors.text, ...Typography.bodySmall },
   messageRow: { marginBottom: 11, alignItems: 'flex-start' },
   userRow: { alignItems: 'flex-end' },
-  bubble: { maxWidth: '84%', borderRadius: 16, padding: 13 },
+  bubble: { maxWidth: '84%', borderRadius: Radius.md, padding: Spacing.sm },
   userBubble: {
     backgroundColor: Colors.primary,
     borderBottomRightRadius: 5,
@@ -1338,7 +1318,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     borderBottomLeftRadius: 5,
   },
-  messageText: { color: Colors.text, fontSize: 14, lineHeight: 21 },
+  messageText: { color: Colors.text, ...Typography.body },
   report: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 6 },
   reportText: {
     color: Colors.textSecondary,
@@ -1357,7 +1337,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 9,
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.background,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     paddingHorizontal: 16,
@@ -1370,8 +1350,8 @@ const styles = StyleSheet.create({
     minHeight: 46,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: 16,
-    backgroundColor: Colors.background,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.card,
     color: Colors.text,
     fontSize: 14,
     paddingHorizontal: 13,

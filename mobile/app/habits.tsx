@@ -3,6 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import {
   Alert,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -12,14 +13,11 @@ import { format } from 'date-fns';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   AppButton,
-  AppCard,
   AppInput,
   AppScreen,
   ChoiceChip,
-  EmptyState,
   PageHeader,
   SectionHeader,
-  Stat,
   appUiStyles,
 } from '@/components/AppUI';
 import { useDataContext } from '@/lib/hooks/use-data-context';
@@ -77,32 +75,6 @@ const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? '' : value ?? '';
-}
-
-function iconName(value: string): keyof typeof Feather.glyphMap {
-  const supported: Record<string, keyof typeof Feather.glyphMap> = {
-    activity: 'activity',
-    'alarm-clock': 'clock',
-    apple: 'heart',
-    book: 'book',
-    calendar: 'calendar',
-    'calendar-heart': 'calendar',
-    circle: 'circle',
-    coffee: 'coffee',
-    droplets: 'droplet',
-    focus: 'target',
-    home: 'home',
-    moon: 'moon',
-    notebook: 'edit-3',
-    play: 'play',
-    shield: 'shield',
-    sparkles: 'star',
-    target: 'target',
-    timer: 'clock',
-    users: 'users',
-    wind: 'wind',
-  };
-  return supported[value] ?? 'check-circle';
 }
 
 function blankDraft(): HabitDraft {
@@ -491,55 +463,51 @@ export default function HabitsScreen() {
     <AppScreen>
       <PageHeader
         eyebrow="Habits and routines"
-        title="Build momentum without all-or-nothing rules."
-        description="Use a tiny step, a clear cue, and streaks that help you learn rather than judge yourself."
-        icon="repeat"
+        title="Habits"
+        description="Small steps, clear cues, and progress without all-or-nothing rules."
         action={
-          <AppButton
-            label={editorOpen ? 'Close' : 'Add'}
-            icon={editorOpen ? 'x' : 'plus'}
-            variant="quiet"
-            onPress={() => {
-              if (editorOpen) {
+          editorOpen ? (
+            <AppButton
+              label="Close"
+              variant="text"
+              onPress={() => {
                 setDraft(blankDraft());
                 setSourceTitle('');
                 setEditorOpen(false);
-              } else {
-                openBlankHabitEditor();
-              }
-            }}
-          />
+              }}
+            />
+          ) : (
+            <AppButton
+              label="Add habit"
+              icon="plus"
+              onPress={openBlankHabitEditor}
+            />
+          )
         }
       />
 
-      <AppCard style={styles.momentumCard}>
-        <View style={styles.stats}>
-          <Stat label="Momentum level" value={momentum.level} />
-          <Stat label="Completed today" value={`${completedToday}/${habits.length}`} />
-          <Stat label="Momentum points" value={momentum.xp} />
+      <View style={styles.momentumSummary}>
+        <View style={styles.momentumTopline}>
+          <Text style={styles.momentumTitle}>Level {momentum.level}</Text>
+          <Text style={styles.momentumToday}>{completedToday}/{habits.length} today</Text>
+          <Text style={styles.momentumPoints}>{momentum.xp} points</Text>
         </View>
         <View style={styles.levelTrack}>
           <View
             style={[styles.levelFill, { width: `${momentum.levelProgress}%` }]}
           />
         </View>
-      </AppCard>
-      <Text style={styles.momentumHelper}>
-        Points are based on completions and streaks.
-      </Text>
+      </View>
 
       <View style={styles.topActions}>
         <AppButton
           label={templatesOpen ? 'Hide routines' : 'Routine templates'}
-          icon="layers"
-          variant="secondary"
+          variant="text"
           onPress={() => setTemplatesOpen((current) => !current)}
-          style={{ flex: 1 }}
         />
         <AppButton
           label="Partners"
-          icon="users"
-          variant="secondary"
+          variant="text"
           onPress={() => router.push('/partner')}
         />
       </View>
@@ -551,11 +519,11 @@ export default function HabitsScreen() {
             description="Install only what fits. Duplicate items are skipped."
           />
           {sourceTitle && selectedRoutineId ? (
-            <AppCard style={styles.libraryRoutineNotice}>
+            <View style={styles.libraryRoutineNotice}>
               <Text style={styles.libraryRoutineNoticeText}>
                 Suggested from {sourceTitle}. Review the sequence and install only what fits.
               </Text>
-            </AppCard>
+            </View>
           ) : null}
           {[...ROUTINE_TEMPLATES]
             .sort(
@@ -564,9 +532,12 @@ export default function HabitsScreen() {
                 Number(left.id === selectedRoutineId)
             )
             .map((template) => (
-            <AppCard
+            <View
               key={template.id}
-              style={template.id === selectedRoutineId ? styles.selectedTemplate : undefined}
+              style={[
+                styles.templateRow,
+                template.id === selectedRoutineId && styles.selectedTemplate,
+              ]}
             >
               <Text style={appUiStyles.label}>{template.eyebrow}</Text>
               <Text style={styles.templateTitle}>{template.title}</Text>
@@ -576,31 +547,25 @@ export default function HabitsScreen() {
               <View style={styles.templateItems}>
                 {template.items.map((item) => (
                   <View key={item.name} style={styles.templateItem}>
-                    <Feather
-                      name={iconName(item.icon)}
-                      size={15}
-                      color={Colors.primary}
-                    />
                     <Text style={styles.templateItemText}>{item.name}</Text>
                   </View>
                 ))}
               </View>
               <AppButton
                 label="Install routine"
-                icon="plus"
-                variant="quiet"
+                variant="text"
                 loading={installingId === template.id}
                 disabled={Boolean(installingId)}
                 onPress={() => void installTemplate(template)}
                 style={{ marginTop: 14 }}
               />
-            </AppCard>
+            </View>
           ))}
         </>
       ) : null}
 
       {editorOpen ? (
-        <AppCard>
+        <View style={styles.editorPanel}>
           <SectionHeader
             title="Create a habit"
             description={
@@ -730,10 +695,14 @@ export default function HabitsScreen() {
             disabled={!draft.name.trim() || authLoading || !context.user_id}
             onPress={() => void createHabit()}
           />
-        </AppCard>
+        </View>
       ) : null}
 
-      <View style={styles.slotFilters}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.slotFilters}
+      >
         <ChoiceChip
           label="All"
           selected={slot === 'all'}
@@ -747,7 +716,7 @@ export default function HabitsScreen() {
             onPress={() => setSlot(item.id)}
           />
         ))}
-      </View>
+      </ScrollView>
 
       {error && !editorOpen ? (
         <Text style={[appUiStyles.error, { marginBottom: 12 }]}>{error}</Text>
@@ -756,18 +725,10 @@ export default function HabitsScreen() {
       {loading ? (
         <Text style={appUiStyles.muted}>Loading your habits...</Text>
       ) : visibleHabits.length === 0 ? (
-        <EmptyState
-          icon="repeat"
-          title="No habits in this routine"
-          description="Create one small habit or install a routine template."
-          action={
-            <AppButton
-              label="Create a habit"
-              icon="plus"
-              onPress={openBlankHabitEditor}
-            />
-          }
-        />
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>No habits in this routine</Text>
+          <Text style={styles.emptyDescription}>Use Add habit or choose a routine template.</Text>
+        </View>
       ) : (
         visibleHabits.map((habit) => {
           const done = Boolean(logs[habit.id]);
@@ -777,9 +738,9 @@ export default function HabitsScreen() {
             habit.reward
           );
           return (
-            <AppCard
+            <View
               key={habit.id}
-              style={done ? styles.habitDone : undefined}
+              style={[styles.habitRow, done && styles.habitDone]}
             >
               <View style={styles.habitHeader}>
                 <Pressable
@@ -791,13 +752,7 @@ export default function HabitsScreen() {
                 >
                   {done ? (
                     <Feather name="check" size={18} color="#fffef8" />
-                  ) : (
-                    <Feather
-                      name={iconName(habit.icon)}
-                      size={18}
-                      color={Colors.primary}
-                    />
-                  )}
+                  ) : null}
                 </Pressable>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.habitMeta}>
@@ -834,11 +789,6 @@ export default function HabitsScreen() {
                     rewardUnlocked && styles.rewardUnlocked,
                   ]}
                 >
-                  <Feather
-                    name={rewardUnlocked ? 'gift' : 'lock'}
-                    size={16}
-                    color={rewardUnlocked ? Colors.success : Colors.textSecondary}
-                  />
                   <Text
                     style={[
                       styles.rewardText,
@@ -955,11 +905,10 @@ export default function HabitsScreen() {
                   onPress={() => archiveHabit(habit)}
                   style={styles.archiveButton}
                 >
-                  <Feather name="archive" size={15} color={Colors.textSecondary} />
                   <Text style={styles.archiveText}>Archive</Text>
                 </Pressable>
               </View>
-            </AppCard>
+            </View>
           );
         })
       )}
@@ -968,37 +917,45 @@ export default function HabitsScreen() {
 }
 
 const styles = StyleSheet.create({
-  momentumCard: { backgroundColor: Colors.primaryLight },
-  momentumHelper: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: -4,
-    marginBottom: 12,
-    paddingHorizontal: 4,
+  momentumSummary: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    paddingVertical: 12,
   },
-  stats: { flexDirection: 'row', gap: 12 },
+  momentumTopline: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  momentumTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' },
+  momentumToday: { flex: 1, color: Colors.textSecondary, fontSize: 12 },
+  momentumPoints: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
   levelTrack: {
-    height: 7,
-    borderRadius: 7,
+    height: 4,
+    borderRadius: 4,
     backgroundColor: Colors.border,
     overflow: 'hidden',
-    marginTop: 15,
+    marginTop: 10,
   },
   levelFill: { height: '100%', backgroundColor: Colors.accent },
-  topActions: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  topActions: { flexDirection: 'row', gap: 8, marginVertical: 6 },
   libraryRoutineNotice: {
-    backgroundColor: Colors.successLight,
-    borderColor: Colors.success,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.success,
+    paddingLeft: 12,
+    marginBottom: 12,
   },
   libraryRoutineNoticeText: {
     color: Colors.text,
     fontSize: 13,
     lineHeight: 19,
   },
+  templateRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
+    paddingVertical: 16,
+  },
   selectedTemplate: {
-    borderColor: Colors.primary,
-    borderWidth: 2,
+    borderLeftColor: Colors.primary,
+    borderLeftWidth: 3,
+    paddingLeft: 12,
   },
   templateTitle: {
     color: Colors.text,
@@ -1008,8 +965,15 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   templateItems: { gap: 7, marginTop: 13 },
-  templateItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  templateItemText: { color: Colors.text, fontSize: 13, flex: 1 },
+  templateItem: { paddingLeft: 12 },
+  templateItemText: { color: Colors.textSecondary, fontSize: 13, flex: 1 },
+  editorPanel: {
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: Colors.borderStrong,
+    paddingVertical: 16,
+    marginBottom: 8,
+  },
   fieldLabel: {
     color: Colors.text,
     fontSize: 13,
@@ -1019,14 +983,21 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   slotFilters: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
     marginTop: 10,
     marginBottom: 16,
+    paddingRight: 16,
+  },
+  emptyState: { paddingVertical: 28, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
+  emptyTitle: { color: Colors.text, fontSize: 17, fontWeight: '700' },
+  emptyDescription: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 5 },
+  habitRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
+    paddingVertical: 16,
   },
   habitDone: {
-    backgroundColor: Colors.successLight,
-    borderColor: '#b8d8c5',
+    opacity: 0.72,
   },
   habitHeader: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   check: {
@@ -1035,7 +1006,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     borderColor: Colors.border,
-    backgroundColor: Colors.primaryLight,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1063,24 +1034,19 @@ const styles = StyleSheet.create({
   },
   streakLabel: { color: Colors.textSecondary, fontSize: 9 },
   habitPlan: {
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,254,248,0.75)',
-    padding: 12,
     gap: 5,
     marginTop: 13,
+    paddingLeft: 55,
   },
   planText: { color: Colors.textSecondary, fontSize: 12, lineHeight: 18 },
   planLabel: { color: Colors.text, fontWeight: '700' },
   reward: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    borderRadius: 11,
-    backgroundColor: Colors.primaryLight,
-    padding: 11,
     marginTop: 10,
+    paddingLeft: 55,
   },
-  rewardUnlocked: { backgroundColor: Colors.successLight },
+  rewardUnlocked: {},
   rewardText: { flex: 1, color: Colors.textSecondary, fontSize: 12 },
   accountabilityRow: {
     flexDirection: 'row',
@@ -1127,6 +1093,6 @@ const styles = StyleSheet.create({
     marginTop: 11,
   },
   history: { color: Colors.textSecondary, fontSize: 10 },
-  archiveButton: { flexDirection: 'row', alignItems: 'center', gap: 5, padding: 7 },
-  archiveText: { color: Colors.textSecondary, fontSize: 11 },
+  archiveButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 7 },
+  archiveText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
 });

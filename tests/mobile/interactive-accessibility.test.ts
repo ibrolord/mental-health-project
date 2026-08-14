@@ -40,6 +40,8 @@ describe('interactive mobile accessibility', () => {
     expect(source).toContain('accessibilityLabel={option.title}');
     expect(source).toContain('accessibilityHint={option.description}');
     expect(source).toContain('accessibilityLabel={`Reminder time ${opt.label}`}');
-    expect(source).toContain('accessibilityState={{ selected }}');
+    expect(source).toContain('disabled: reminderBusy || !reminderHydrated || !remindersOn');
+    expect(source).toContain("importantForAccessibility={remindersOn ? 'auto' : 'no-hide-descendants'}");
+    expect(source).toContain("'Turn on notifications before sending a test.'");
   });
 });

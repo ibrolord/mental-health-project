@@ -77,7 +77,7 @@ export default function TrackerScreen() {
   const [newSupport, setNewSupport] = useState<MoodSupport | null>(null);
   const [visibleTags, setVisibleTags] = useState<string[]>([]);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(true);
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [moodsLoadError, setMoodsLoadError] = useState(false);
@@ -179,7 +179,7 @@ export default function TrackerScreen() {
     setDraftLoadError(false);
     draftPersistenceRef.current.invalidatePendingWrites();
     setFilterTag(null);
-    setHistoryOpen(false);
+    setHistoryOpen(true);
     setShowAdd(false);
     setNewMood(null);
     setNewNote('');
@@ -574,7 +574,7 @@ export default function TrackerScreen() {
       ) : null}
 
       {visibleShowAdd && (
-        <AppCard style={s.checkInCard}>
+        <View style={s.checkInSection}>
           <SectionHeader
             title="How are you right now?"
             description="Tap the closest feeling."
@@ -754,10 +754,10 @@ export default function TrackerScreen() {
               loading={saving}
             />
           ) : null}
-        </AppCard>
+        </View>
       )}
 
-      <AppCard style={s.historyCard}>
+      <View style={s.historySection}>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded: visibleHistoryOpen }}
@@ -767,7 +767,11 @@ export default function TrackerScreen() {
           <View style={s.historyHeaderCopy}>
             <Text style={s.historyTitle}>Mood history</Text>
             <Text style={s.historyDescription}>
-              {visibleFilterTag ? `Showing entries tagged ${visibleFilterTag}` : 'This month'}
+              {visibleFilterTag
+                ? `Showing entries tagged ${visibleFilterTag}`
+                : loading
+                  ? 'Loading the last 30 days'
+                  : `${visibleMoods.length} ${visibleMoods.length === 1 ? 'check-in' : 'check-ins'} in the last 30 days`}
             </Text>
           </View>
           <Feather
@@ -872,8 +876,8 @@ export default function TrackerScreen() {
             )}
           </View>
         ) : null}
-      </AppCard>
-      <AppleHealthInsights ownerId={user?.id ?? null} moods={visibleMoods} />
+      </View>
+      <AppleHealthInsights ownerId={user?.id ?? null} />
       <SleepDiary />
     </AppScreen>
   );
@@ -892,7 +896,7 @@ const s = StyleSheet.create({
   },
   retryDraft: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
   disabled: { opacity: 0.48 },
-  checkInCard: { paddingTop: 5 },
+  checkInSection: { paddingTop: 5, marginBottom: 10 },
   draftNotice: {
     minHeight: 42,
     flexDirection: 'row',
@@ -925,11 +929,15 @@ const s = StyleSheet.create({
   customEmotionInput: { flex: 1 },
   customEmotionButton: { minWidth: 76, marginTop: 0 },
   detailMessage: { color: Colors.danger, fontSize: 12, marginTop: -5 },
-  historyCard: { padding: 0, overflow: 'hidden' },
+  historySection: {
+    overflow: 'hidden',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
   historyHeader: {
     minHeight: 70,
-    paddingHorizontal: 17,
-    paddingVertical: 13,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -938,7 +946,7 @@ const s = StyleSheet.create({
   historyHeaderCopy: { flex: 1 },
   historyTitle: { color: Colors.text, fontSize: 18, lineHeight: 23, fontWeight: '700' },
   historyDescription: { color: Colors.textSecondary, fontSize: 12, marginTop: 3 },
-  historyBody: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, padding: 17 },
+  historyBody: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, paddingVertical: 17 },
   filterBlock: { marginBottom: 16 },
   loadingCard: { minHeight: 108, alignItems: 'center', justifyContent: 'center', gap: 10 },
   moodEntry: { flexDirection: 'row', gap: 12, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },

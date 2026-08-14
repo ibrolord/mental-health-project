@@ -516,13 +516,10 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: Colors.card,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
     marginBottom: 14,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 20 },
   headerIcon: {
