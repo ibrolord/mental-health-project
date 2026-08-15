@@ -622,8 +622,8 @@ if [ -n "$IPA_PATH" ]; then
     fi
 
     if grep -aFq 'bolajiag10@gmail.com' "$BUNDLE_PATH" &&
-      grep -aFq 'Email Support & Feedback' "$BUNDLE_PATH" &&
-      grep -aFq 'View Support & Crisis Resources' "$BUNDLE_PATH"; then
+      grep -aFq 'Contact support' "$BUNDLE_PATH" &&
+      grep -aFq 'Send feedback' "$BUNDLE_PATH"; then
       pass "IPA includes the current support and feedback UI strings"
     else
       fail "IPA does not include the current support and feedback UI strings"
