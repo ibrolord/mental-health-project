@@ -50,9 +50,6 @@ export function WeeklyInsight({ summary }: WeeklyInsightProps) {
         </View>
       ) : null}
 
-      <Text style={styles.privacy}>
-        Your content stays private. Partners only see enabled activity totals.
-      </Text>
     </View>
   );
 }
@@ -124,12 +121,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 8,
     textDecorationLine: 'underline',
-  },
-  privacy: {
-    color: Colors.textSecondary,
-    fontSize: 11,
-    lineHeight: 16,
-    paddingBottom: 16,
-    paddingTop: 12,
   },
 });

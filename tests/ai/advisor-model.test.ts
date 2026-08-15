@@ -48,10 +48,10 @@ describe('model-backed Advisor selection', () => {
     routedChat.mockResolvedValue({
       model: 'gemini',
       response: JSON.stringify({
-        candidateId: 'goal:report',
-        observations: ['Your report goal has a next step.'],
+        candidateId: 'habit:walk',
+        observations: ['Your walk is still open today.'],
         signalIds: ['routine:walk'],
-        focus: 'deadline',
+        focus: 'routine',
       }),
     });
 
@@ -61,10 +61,10 @@ describe('model-backed Advisor selection', () => {
       model: 'gemini',
       personalized: true,
       selection: {
-        candidateId: 'goal:report',
-        observations: ['Your report goal has a next step.'],
+        candidateId: 'habit:walk',
+        observations: ['Your walk is still open today.'],
         signalIds: ['routine:walk'],
-        focus: 'deadline',
+        focus: 'routine',
       },
     });
     expect(routedChat).toHaveBeenCalledWith(
@@ -72,6 +72,26 @@ describe('model-backed Advisor selection', () => {
       undefined,
       { preferredProvider: 'gemini' }
     );
+  });
+
+  it('rejects provenance signals that do not support the selected candidate', async () => {
+    routedChat.mockResolvedValue({
+      model: 'gemini',
+      response: JSON.stringify({
+        candidateId: 'goal:report',
+        observations: ['Your report goal has a next step.'],
+        signalIds: ['routine:walk'],
+        focus: 'deadline',
+      }),
+    });
+
+    const result = await createModelAdvisorRecommendation(request());
+
+    expect(result.personalized).toBe(false);
+    expect(result.selection).toMatchObject({
+      candidateId: 'habit:walk',
+      signalIds: ['routine:walk'],
+    });
   });
 
   it('rejects an invented candidate and preserves the vetted fallback', async () => {

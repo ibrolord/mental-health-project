@@ -191,10 +191,15 @@ export function createAdvisorBriefFingerprint(
     momentumProgress: context.momentumProgress,
     momentumAvailability: context.momentumAvailability,
     notifications: context.notifications,
+    sourceAvailability: context.sourceAvailability,
     feedback: recent.slice(0, 5).map((item) =>
       typeof item === 'string'
-        ? { recommendationId: item, helpful: null }
-        : { recommendationId: item.recommendationId, helpful: item.helpful ?? null }
+        ? { recommendationId: item, helpful: null, resolution: null }
+        : {
+            recommendationId: item.recommendationId,
+            helpful: item.helpful ?? null,
+            resolution: item.resolution ?? (item.completedAt ? 'completed' : null),
+          }
     ),
     appleHealthSummary,
   }));

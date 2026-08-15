@@ -169,15 +169,6 @@ export default function YogaScreen() {
             })}
           </View>
 
-          <AppCard quiet style={styles.beforeCard}>
-            <View style={styles.safetyHeader}>
-              <Feather name="info" size={17} color={Colors.primary} />
-              <Text style={styles.safetyTitle}>Before you begin</Text>
-            </View>
-            <Text style={appUiStyles.muted}>
-              These are beginner self-guided yoga practices, not medical treatment. Ask a qualified health professional first if injury, pregnancy, surgery, or a health condition may affect safe movement.
-            </Text>
-          </AppCard>
         </>
       )}
     </AppScreen>
@@ -267,5 +258,4 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 3,
   },
-  beforeCard: { marginTop: 18 },
 });

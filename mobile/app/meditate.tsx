@@ -363,15 +363,6 @@ export default function MeditateScreen() {
             })}
           </View>
 
-          <AppCard quiet style={{ marginTop: 10 }}>
-            <View style={styles.noteHeader}>
-              <Feather name="shield" size={17} color={Colors.primary} />
-              <Text style={styles.noteTitle}>Use what feels steady</Text>
-            </View>
-            <Text style={appUiStyles.muted}>
-              Stop or switch if an exercise feels worse. Meditation is optional.
-            </Text>
-          </AppCard>
         </>
       )}
     </AppScreen>
@@ -437,11 +428,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
-  noteHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 7,
-  },
-  noteTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' },
 });

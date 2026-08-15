@@ -18,12 +18,24 @@ const advisorTrend = readFileSync(
 describe('mobile Advisor detail and context contracts', () => {
   it('keeps Advisor as a dedicated guidance and local-history surface', () => {
     expect(advisor).toContain('title="Advisor"');
-    expect(advisor).toContain('One useful read on your day. One step to take next.');
+    expect(advisor).toContain('One clear brief. One current step. Support that follows through.');
     expect(advisor).not.toContain('WHAT I’M SEEING');
     expect(advisor).not.toContain('ONE THING TO DO');
-    expect(advisor).toContain('recommendation.observations.slice(0, 3)');
-    expect(advisor).toContain('recommendation.observations.length ? (');
+    expect(advisor).toContain('activeObservations.slice(0, 3)');
+    expect(advisor).toContain('activeObservations.length ? (');
     expect(advisor).toContain('Start');
+    expect(advisor).toContain('Continue');
+    expect(advisor).toContain("? 'PLANNED STEP'");
+    expect(advisor).toContain("currentAdvisorAction?.status === 'accepted'");
+    expect(advisor).toContain("currentAdvisorAction?.status === 'in_progress'");
+    const startFlow = advisor.slice(
+      advisor.indexOf('const startRecommendation'),
+      advisor.indexOf('const generateAnotherRecommendation')
+    );
+    expect(startFlow).toContain("advisorFollowUpState(actionToStart, new Date()) === 'planned_due'");
+    expect(startFlow).toContain('setAdvisorActionFollowUp(');
+    expect(advisor).toContain("label: 'Done'");
+    expect(advisor).toContain("label: 'Remind me'");
     expect(advisor).toContain('If that feels like too much');
     expect(advisor).toContain('Try something else');
     expect(advisor).toContain('Share with Together');
@@ -31,10 +43,19 @@ describe('mobile Advisor detail and context contracts', () => {
     expect(advisor).toContain('Did your last step help?');
     expect(advisor).toContain('answerAdvisorHelpfulness');
     expect(advisor).toContain('const pendingFeedback = outcomes');
+    expect(advisor).toContain('.filter((outcome) => outcome.completedAt && !outcome.feedbackAt)');
     expect(advisor).toContain('title="Recent steps"');
     expect(advisor).toContain('const [detailsOpen, setDetailsOpen] = useState(false);');
     expect(advisor).toContain('const [historyOpen, setHistoryOpen] = useState(false);');
     expect(advisor).toContain('loadAdvisorOutcomes');
+    expect(advisor).toContain('loadAdvisorAction(expectedOwner)');
+    expect(advisor).toContain('acceptAdvisorAction(expectedOwner');
+    expect(advisor).toContain('reconcileAdvisorLifecycle(expectedOwner)');
+    expect(advisor).toContain('startAdvisorLifecycle(expectedOwner, actionToStart)');
+    expect(advisor).toContain('completeAdvisorLifecycle(expectedOwner, completed)');
+    expect(advisor).toContain('recoverAdvisorLifecycle(');
+    expect(advisor).toContain('replaceAdvisorLifecycle(expectedOwner, actionToReplace)');
+    expect(advisor).toContain('pendingFeedback.actionId ?? pendingFeedback.recommendationId');
     expect(advisor).toContain('recordAdvisorOffered(expectedOwner, currentRecommendation)');
     expect(advisor).toContain('stateOwnerKey === ownerKey');
     expect(advisor).toContain('stateOwnerKey !== ownerKey');
@@ -73,7 +94,7 @@ describe('mobile Advisor detail and context contracts', () => {
     expect(advisorTrend).not.toContain('of 3 sources');
     expect(advisorTrend).not.toContain('Worth a reset');
     expect(advisorTrend).not.toMatch(/diagnos|treatment|risk score|mental health score|wellbeing score/i);
-    expect(advisor.indexOf('<AdvisorTrendCard')).toBeLessThan(
+    expect(advisor.indexOf('<AdvisorTrendCard')).toBeGreaterThan(
       advisor.indexOf('<AppCard style={styles.currentCard}')
     );
     expect(advisor.match(/FASTEST NEXT MOVE/g)).toBeNull();
@@ -94,26 +115,34 @@ describe('mobile Advisor detail and context contracts', () => {
     expect(advisor).toContain('General guidance · no personal context used');
     expect(advisor).toContain('No personal pattern was used for this suggestion.');
     expect(advisor).toContain('Start a step and it will show up here.');
-    expect(advisor).toContain('Personal guidance, not a clinical assessment.');
+    expect(advisor).not.toContain('Personal guidance, not a clinical assessment.');
     expect(advisor).toContain('visibleOutcomes');
   });
 
-  it('uses the new recommendation provenance when trying another', () => {
+  it('rotates cached safe candidates without another paid model call', () => {
     const tryAnother = advisor.slice(
-      advisor.indexOf('const tryAnotherRecommendation'),
-      advisor.indexOf('const shareWithTogether')
+      advisor.indexOf('const generateAnotherRecommendation'),
+      advisor.indexOf('const answerHelpfulness')
     );
-    expect(tryAnother).toContain('selectModelBackedRecommendation(');
-    expect(tryAnother).toContain('const nextRecommendation: AdvisorRecommendation = generated.recommendation;');
-    expect(tryAnother).toContain('setAdvisorModel(generated.model);');
+    expect(tryAnother).toContain('selectAdvisorRecommendation(');
+    expect(tryAnother).toContain('brief: deterministicBrief(context, selected, null)');
+    expect(tryAnother).toContain('const nextBrief = generated.brief;');
+    expect(tryAnother).toContain('setAdvisorModel(null);');
     expect(tryAnother).toContain(
       "candidateFamily: currentRecommendation.id.split(':')[0]"
     );
-    expect(tryAnother).not.toContain('currentRecommendation.observations');
-    expect(tryAnother).not.toContain('currentRecommendation.sourceLabels');
     expect(tryAnother).toContain('preserveToday: false');
-    expect(tryAnother).not.toContain('evaluateAdvisorChangeSignal');
-    expect(advisor).not.toContain("from '@/lib/advisor-observation-ledger'");
+    expect(tryAnother).not.toContain('selectModelBackedRecommendation(');
+    expect(advisor).toContain("from '@/lib/advisor-observation-ledger'");
+    expect(advisor).toContain('evaluateAdvisorChangeSignals(');
+    expect(tryAnother).toContain('Change your current step?');
+    expect(tryAnother).toContain(
+      'Your current step stays until the replacement is ready.'
+    );
+    expect(tryAnother).toContain('replaceAdvisorLifecycle(expectedOwner, actionToReplace)');
+    expect(tryAnother.indexOf('const nextRecommendation')).toBeLessThan(
+      tryAnother.indexOf('replaceAdvisorLifecycle(expectedOwner, actionToReplace)')
+    );
   });
 
   it('uses a consented model request and shares Apple Health only after confirmation', () => {
@@ -133,11 +162,16 @@ describe('mobile Advisor detail and context contracts', () => {
       advisor.indexOf('const refreshWithAppleHealth'),
       advisor.indexOf('\n  return (', advisor.indexOf('const refreshWithAppleHealth'))
     );
+    expect(healthRefresh).toContain('activeAdvisorAction ||');
+    expect(advisor).toContain('APPLE_HEALTH_AI_ENABLED &&\n              !activeAdvisorAction &&');
     expect(healthRefresh.indexOf('ensureAiDataSharingConsent(expectedOwner)')).toBeLessThan(
       healthRefresh.indexOf('confirmAppleHealthAiShare(summary)')
     );
     expect(healthRefresh.indexOf('confirmAppleHealthAiShare(summary)')).toBeLessThan(
       healthRefresh.indexOf('selectModelBackedRecommendation(')
+    );
+    expect(advisor).toContain(
+      'weeklyReview.started + weeklyReview.completed + weeklyReview.partial + weeklyReview.skipped > 0'
     );
   });
 
@@ -183,13 +217,20 @@ describe('mobile Advisor detail and context contracts', () => {
     expect(advisor).toContain('Advisor action changed.');
   });
 
-  it('removes the source-review and fixed-reminder flow', () => {
+  it('keeps reminders explicit and user-controlled', () => {
     expect(advisor).not.toContain('<Switch');
     expect(advisor).not.toContain("type Phase = 'choose' | 'preview' | 'result'");
     expect(advisor).not.toContain('Review my context');
     expect(advisor).not.toContain('Review what Advisor will use');
     expect(advisor).not.toContain('Remind me in 2 hours');
-    expect(advisor).not.toContain('scheduleAdvisorReminder');
+    expect(advisor).toContain('createAdvisorReminderChoices(new Date())');
+    expect(advisor).toContain('scheduleAdvisorActionReminder({');
+    expect(advisor).toContain('date: choice.date');
+    expect(advisor).toContain('Enable notifications and Advisor check-ins in Settings first.');
+    expect(advisor).toContain('How did it go?');
+    expect(advisor).toContain("recordIncompleteAction('partial')");
+    expect(advisor).toContain('What got in the way?');
+    expect(advisor).toContain('RESET, DON’T RESTART');
   });
 
   it('keeps safety actions available for safety recommendations', () => {

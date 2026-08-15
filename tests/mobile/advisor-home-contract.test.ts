@@ -32,6 +32,11 @@ describe('mobile Advisor Home contracts', () => {
   it('makes Home a read-only Advisor doorway rather than a second recommendation engine', () => {
     expect(card).toContain('YOUR ADVISOR');
     expect(card).toContain('Open Advisor');
+    expect(home).toContain('loadAdvisorAction(expectedOwnerKey)');
+    expect(home).toContain('currentAction={visibleAdvisorActionText}');
+    expect(home).toContain('actionStatus={visibleAdvisorAction?.status ?? null}');
+    expect(card).toContain("actionStatus === 'accepted'");
+    expect(card).toContain("actionStatus === 'needs_recovery'");
     expect(home).toContain("router.navigate('/advisor')");
     expect(home).not.toMatch(/selectAdvisorRecommendation|recordAdvisorOffered|markAdvisorStarted/);
     expect(home).not.toMatch(/answerAdvisorHelpfulness|advisor-observation-ledger/);
@@ -78,7 +83,9 @@ describe('mobile Advisor Home contracts', () => {
     expect(card).toContain('accessible={false}');
     expect(card).toContain('style={styles.artwork}');
     expect(card).toContain('minHeight: 44');
-    expect(card).toContain('accessibilityLabel="Open Advisor"');
+    expect(card).toContain(
+      "accessibilityLabel={currentAction ? 'Open Advisor step' : 'Open Advisor'}"
+    );
     expect(home).toContain('accessibilityLabel="Add context to this check-in"');
   });
 });

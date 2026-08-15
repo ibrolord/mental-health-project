@@ -59,11 +59,12 @@ needed to establish a partnership.
 - A user may separately enable an aggregate-only Apple Health summary in AI
   Chat. The App previews the exact 7-day and 30-day averages/counts and requires
   "Share once" for every request. The aggregate is processed transiently through
-  the MHtoolkit backend and selected AI provider. The aggregate payload is not
-  persisted to Supabase, included in saved chat payloads, partner sharing,
-  operational events, analytics, advertising, or marketing. An AI response may
-  reflect the summary and is stored only if the user saves the chat or reports
-  that response.
+  the MHtoolkit backend and selected AI provider. A user may also explicitly add
+  the aggregate to a Visit Brief and choose its recipient through the iOS share
+  sheet. The aggregate payload is not persisted to Supabase, automatically
+  included in partner sharing, operational events, analytics, advertising, or
+  marketing. An AI response may reflect the summary and is stored only if the
+  user saves the chat or reports that response.
 - This path is fail-closed behind matching mobile and backend release flags. It
   is enabled in a submitted build only after the production provider's
   no-training data handling and App Store privacy answers have been verified.

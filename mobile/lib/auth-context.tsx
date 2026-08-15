@@ -43,8 +43,11 @@ import {
 import { offlineSafetyPlanCache } from './offline-safety-plan-cache';
 import { clearFullContextPreference } from './full-context-preference';
 import { clearGoToActions } from './go-to-actions-storage';
+import { clearAdvisorAction } from './advisor-action-storage';
+import { advisorBriefStorage } from './advisor-brief-storage';
 import { clearAdvisorOutcomes } from './advisor-outcome-storage';
 import { clearAdvisorObservationLedger } from './advisor-observation-ledger';
+import { clearAdvisorLifecycleJournal } from './advisor-lifecycle-runtime';
 import { clearContextSelections } from './chat-context-preference';
 import { areRemindersEnabled, clearAllReminders, hasAdvisorReminder } from './notifications';
 import { Colors } from './constants';
@@ -77,6 +80,18 @@ const AUTH_SESSION_TIMEOUT_MS = 12_000;
 const AUTH_INIT_ERROR_MESSAGE =
   'Your private profile could not be started. Check your connection and try again.';
 const MOBILE_AUTH_REDIRECT = 'mhtoolkit://auth/callback';
+
+async function clearAdvisorOwnerState(ownerKey: string): Promise<void> {
+  // Drain any in-flight lifecycle transition before clearing its dependent stores.
+  await clearAdvisorLifecycleJournal(ownerKey);
+  await Promise.all([
+    clearAdvisorAction(ownerKey),
+    advisorBriefStorage.clear(ownerKey),
+    clearAdvisorOutcomes(ownerKey),
+    clearAdvisorObservationLedger(ownerKey),
+  ]);
+}
+
 async function assertAnonymousAccountIsEmpty(): Promise<void> {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw sessionError;
@@ -253,8 +268,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           previousOwnerId !== session.user.id
         ) {
           void Promise.all([
-            clearAdvisorOutcomes(`user_id:${previousOwnerId}`),
-            clearAdvisorObservationLedger(`user_id:${previousOwnerId}`),
+            clearAdvisorOwnerState(`user_id:${previousOwnerId}`),
+            clearAllReminders(),
           ]).catch((error) => {
             console.error('Abandoned anonymous Advisor cleanup failed:', error);
           });
@@ -277,8 +292,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 resetAiDataSharingConsent(`user_id:${previousOwnerId}`),
                 clearFullContextPreference(`user_id:${previousOwnerId}`),
                 clearGoToActions(`user_id:${previousOwnerId}`),
-                clearAdvisorOutcomes(`user_id:${previousOwnerId}`),
-                clearAdvisorObservationLedger(`user_id:${previousOwnerId}`),
+                clearAdvisorOwnerState(`user_id:${previousOwnerId}`),
                 clearContextSelections(`user_id:${previousOwnerId}`),
                 clearAllReminders(),
                 offlineSafetyPlanCache.clear(previousOwnerId),
@@ -550,8 +564,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           resetAiDataSharingConsent(ownerKey),
           clearFullContextPreference(ownerKey),
           clearGoToActions(ownerKey),
-          clearAdvisorOutcomes(ownerKey),
-          clearAdvisorObservationLedger(ownerKey),
+          clearAdvisorOwnerState(ownerKey),
           clearContextSelections(ownerKey),
           clearAllReminders(),
           offlineSafetyPlanCache.clear(user.id),
@@ -587,8 +600,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             resetAiDataSharingConsent(ownerKey),
             clearFullContextPreference(ownerKey),
             clearGoToActions(ownerKey),
-            clearAdvisorOutcomes(ownerKey),
-            clearAdvisorObservationLedger(ownerKey),
+            clearAdvisorOwnerState(ownerKey),
             clearContextSelections(ownerKey),
             clearAllReminders(),
             offlineSafetyPlanCache.clear(expectedAnonymousUserId),
@@ -637,8 +649,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           resetAiDataSharingConsent(deletedOwnerKey),
           clearFullContextPreference(deletedOwnerKey),
           clearGoToActions(deletedOwnerKey),
-          clearAdvisorOutcomes(deletedOwnerKey),
-          clearAdvisorObservationLedger(deletedOwnerKey),
+          clearAdvisorOwnerState(deletedOwnerKey),
           clearContextSelections(deletedOwnerKey),
           clearAllReminders(),
           offlineSafetyPlanCache.clear(deletedOwnerId),

@@ -1,13 +1,21 @@
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Colors, LARGE_TEXT_SCALE, Radius, Spacing, Typography } from '@/lib/constants';
+import type { AdvisorActionStatus } from '@/lib/advisor-action-storage';
 
 type AdvisorHomeCardProps = {
   lowEnergy: boolean;
+  currentAction?: string | null;
+  actionStatus?: AdvisorActionStatus | null;
   onOpen: () => void;
 };
 
-export function AdvisorHomeCard({ lowEnergy, onOpen }: AdvisorHomeCardProps) {
+export function AdvisorHomeCard({
+  lowEnergy,
+  currentAction = null,
+  actionStatus = null,
+  onOpen,
+}: AdvisorHomeCardProps) {
   const { fontScale, width } = useWindowDimensions();
   const showsArtwork = fontScale < LARGE_TEXT_SCALE && width >= 390;
 
@@ -24,19 +32,35 @@ export function AdvisorHomeCard({ lowEnergy, onOpen }: AdvisorHomeCardProps) {
       <View style={[styles.content, showsArtwork && styles.contentWithArtwork]}>
         <Text style={styles.eyebrow}>YOUR ADVISOR</Text>
         <Text accessibilityRole="header" style={styles.heading}>
-          {lowEnergy ? 'Start with less.' : 'Your next step is ready.'}
+          {currentAction
+            ? actionStatus === 'accepted'
+              ? 'Your planned step.'
+              : actionStatus === 'needs_recovery'
+                ? 'Ready to pick back up.'
+                : 'Your current step.'
+            : lowEnergy
+              ? 'Start with less.'
+              : 'Your next step is ready.'}
         </Text>
         <Text style={styles.description}>
-          Open Advisor to see what fits today.
+          {currentAction ?? 'Open Advisor to see what fits today.'}
         </Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open Advisor"
-          accessibilityHint="Review your current suggestion"
+          accessibilityLabel={currentAction ? 'Open Advisor step' : 'Open Advisor'}
+          accessibilityHint={currentAction ? 'Review or continue this step' : 'Review your current suggestion'}
           onPress={onOpen}
           style={({ pressed }) => [styles.openButton, pressed && styles.pressed]}
         >
-          <Text style={styles.openButtonText}>Open Advisor</Text>
+          <Text style={styles.openButtonText}>
+            {currentAction
+              ? actionStatus === 'accepted'
+                ? 'Review'
+                : actionStatus === 'needs_recovery'
+                  ? 'Reset'
+                  : 'Continue'
+              : 'Open Advisor'}
+          </Text>
           <Feather accessible={false} name="arrow-right" size={17} color={Colors.onPrimary} />
         </Pressable>
       </View>

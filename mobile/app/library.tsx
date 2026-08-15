@@ -485,10 +485,7 @@ export default function LibraryScreen() {
         </DetailSection>
 
         <View style={styles.noteSection}>
-          <SectionHeader
-            title="Your private note"
-            description="Use this in AI chat only when you turn on library notes there."
-          />
+          <SectionHeader title="Your note" />
           <AppInput
             value={noteDraft}
             onChangeText={setNoteDraft}

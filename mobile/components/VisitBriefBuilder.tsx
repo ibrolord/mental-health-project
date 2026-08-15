@@ -11,6 +11,12 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import {
+  createAppleHealthAiSummary,
+  createAppleHealthOverview,
+} from '@/lib/apple-health-core';
+import { loadAppleHealthSnapshot } from '@/lib/apple-health';
+import { appleHealthPreference } from '@/lib/apple-health-preference';
 import { Colors } from '@/lib/constants';
 import {
   createPrivacyEventRpcPayload,
@@ -24,8 +30,17 @@ import {
   generateVisitBrief,
   type ActivityPlanRow,
   type ActivityStepRow,
+  type AssessmentRow,
+  type GoalAttachmentRow,
+  type GoalMilestoneRow,
+  type GoalRow,
+  type HabitLogRow,
+  type HabitRow,
+  type JournalEntryRow,
+  type MoodRow,
   type PlanItemRow,
   type PlanRow,
+  type SavedAiConversationRow,
   type SleepDiaryRow,
   type SupportPreferencesRow,
   type VisitBriefSectionId,
@@ -37,17 +52,30 @@ const SECTIONS: {
   id: Exclude<VisitBriefSectionId, 'safetyPlan'>;
   label: string;
   description: string;
+  sensitive?: boolean;
 }[] = [
+  { id: 'goals', label: 'Goals and milestones', description: 'Status, dates, notes, milestones, and file names' },
+  { id: 'habits', label: 'Habits', description: 'Routines, streaks, rewards, and recent check-ins' },
   { id: 'activityPlans', label: 'Activity plans', description: 'Actions and steps' },
   { id: 'stayingWellPlan', label: 'Staying-well plan', description: 'Routines and responses' },
-  { id: 'sleepDiary', label: 'Sleep diary', description: 'Complete factual entries' },
   { id: 'supportPreferences', label: 'Support preferences', description: 'How support works best' },
+  { id: 'moodHistory', label: 'Mood history', description: 'Recent emoji, dates, and feeling words', sensitive: true },
+  { id: 'moodNotes', label: 'Mood notes', description: 'Private text attached to recent check-ins', sensitive: true },
+  { id: 'assessmentScores', label: 'Assessment scores', description: 'Recent screener names and total scores', sensitive: true },
+  { id: 'sleepDiary', label: 'Sleep diary', description: 'Recent entries, including your notes', sensitive: true },
+  { id: 'appleHealth', label: 'Apple Health summary', description: 'Aggregate sleep, movement, and mindfulness', sensitive: true },
+  { id: 'journalEntries', label: 'Journal entries', description: 'Your 10 most recent entries', sensitive: true },
+  { id: 'savedAiConversations', label: 'Saved AI conversations', description: 'Your 5 most recent saved conversations', sensitive: true },
 ];
 const CATALOG_SECTIONS: VisitBriefSectionId[] = [
   ...SECTIONS.map((section) => section.id),
   'safetyPlan',
 ];
 const VISIT_BRIEF_LOAD_TIMEOUT_MS = 8000;
+const ITEM_SELECTABLE_SECTIONS = ['journalEntries', 'savedAiConversations'] as const;
+
+type ItemSelectableSection = (typeof ITEM_SELECTABLE_SECTIONS)[number];
+type ItemSelection = Record<ItemSelectableSection, Set<string>>;
 
 type SectionState = Partial<Record<VisitBriefSectionId, string>>;
 type CatalogEntry = {
@@ -87,21 +115,143 @@ async function hasSafetyPlan(ownerId: string): Promise<boolean> {
   return Boolean(result.data);
 }
 
+async function hasSectionContent(
+  section: VisitBriefSectionId,
+  ownerId: string
+): Promise<boolean> {
+  if (section === 'safetyPlan') return hasSafetyPlan(ownerId);
+
+  if (section === 'appleHealth') {
+    return Platform.OS === 'ios' && appleHealthPreference.read(ownerId);
+  }
+
+  const table = section === 'moodHistory' || section === 'moodNotes'
+    ? 'moods'
+    : section === 'assessmentScores'
+      ? 'assessments'
+      : section === 'goals'
+        ? 'goals'
+        : section === 'habits'
+          ? 'habits'
+          : section === 'activityPlans'
+            ? 'activity_plans'
+            : section === 'stayingWellPlan'
+              ? 'staying_well_plans'
+              : section === 'sleepDiary'
+                ? 'sleep_diary_entries'
+                : section === 'supportPreferences'
+                  ? 'partner_support_preferences'
+                  : section === 'journalEntries'
+                    ? 'journal_entries'
+                    : 'chat_history';
+  const probeColumn = section === 'supportPreferences' ? 'user_id' : 'id';
+  let query = supabase.from(table).select(probeColumn).eq('user_id', ownerId);
+  if (section === 'moodNotes') query = query.not('note', 'is', null);
+  if (section === 'savedAiConversations') query = query.eq('saved', true);
+  if (section === 'stayingWellPlan') query = query.in('status', ['active', 'draft']);
+  const result = await query.limit(1).maybeSingle();
+  if (result.error) throw result.error;
+  return Boolean(result.data);
+}
+
 async function loadCatalogEntry(
   section: VisitBriefSectionId,
   ownerId: string
 ): Promise<CatalogEntry> {
-  if (section === 'safetyPlan') {
-    return { section, available: await hasSafetyPlan(ownerId) };
-  }
-  const sectionSource = await loadSection(section, ownerId);
-  return { section, available: Boolean(sectionSource), source: sectionSource };
+  return { section, available: await hasSectionContent(section, ownerId) };
 }
 
 async function loadSection(
   section: VisitBriefSectionId,
   ownerId: string
 ): Promise<VisitBriefSource[VisitBriefSectionId]> {
+  if (section === 'moodHistory' || section === 'moodNotes') {
+    let query = supabase
+      .from('moods')
+      .select('id, emoji, note, tags, local_date, created_at')
+      .eq('user_id', ownerId);
+    if (section === 'moodNotes') query = query.not('note', 'is', null);
+    const result = await query.order('created_at', { ascending: false }).limit(31);
+    if (result.error) throw result.error;
+    const adapted = adaptVisitBriefRows({ moods: (result.data ?? []) as MoodRow[] });
+    return adapted[section];
+  }
+
+  if (section === 'assessmentScores') {
+    const result = await supabase
+      .from('assessments')
+      .select('id, type, score, max_score, created_at')
+      .eq('user_id', ownerId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (result.error) throw result.error;
+    return adaptVisitBriefRows({ assessments: (result.data ?? []) as AssessmentRow[] })
+      .assessmentScores;
+  }
+
+  if (section === 'goals') {
+    const result = await supabase
+      .from('goals')
+      .select('id, content, status, priority, notes, reflection, due_at, updated_at')
+      .eq('user_id', ownerId)
+      .order('updated_at', { ascending: false })
+      .limit(30);
+    if (result.error) throw result.error;
+    const goals = (result.data ?? []) as GoalRow[];
+    const goalIds = goals.map((goal) => goal.id);
+    const milestones = goalIds.length > 0
+      ? await supabase
+          .from('goal_milestones')
+          .select('goal_id, content, position, due_at, completed_at')
+          .eq('user_id', ownerId)
+          .in('goal_id', goalIds)
+          .order('position', { ascending: true })
+      : { data: [], error: null };
+    if (milestones.error) throw milestones.error;
+    const attachments = goalIds.length > 0
+      ? await supabase
+          .from('goal_attachments')
+          .select('goal_id, file_name')
+          .eq('user_id', ownerId)
+          .in('goal_id', goalIds)
+          .order('created_at', { ascending: true })
+      : { data: [], error: null };
+    if (attachments.error) throw attachments.error;
+    return adaptVisitBriefRows({
+      goals,
+      goalMilestones: (milestones.data ?? []) as GoalMilestoneRow[],
+      goalAttachments: (attachments.data ?? []) as GoalAttachmentRow[],
+    }).goals;
+  }
+
+  if (section === 'habits') {
+    const result = await supabase
+      .from('habits')
+      .select(
+        'id, name, description, frequency, streak_count, best_streak, total_completions, cue, tiny_step, reward, is_active, updated_at'
+      )
+      .eq('user_id', ownerId)
+      .order('updated_at', { ascending: false })
+      .limit(30);
+    if (result.error) throw result.error;
+    const habits = (result.data ?? []) as HabitRow[];
+    const habitIds = habits.map((habit) => habit.id);
+    const since = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+    const logs = habitIds.length > 0
+      ? await supabase
+          .from('habit_logs')
+          .select('habit_id, completed, note, log_date')
+          .in('habit_id', habitIds)
+          .gte('log_date', since)
+          .order('log_date', { ascending: false })
+      : { data: [], error: null };
+    if (logs.error) throw logs.error;
+    return adaptVisitBriefRows({
+      habits,
+      habitLogs: (logs.data ?? []) as HabitLogRow[],
+    }).habits;
+  }
+
   if (section === 'activityPlans') {
     const plans = await supabase
       .from('activity_plans')
@@ -169,6 +319,45 @@ async function loadSection(
     return adaptVisitBriefRows({ sleepEntries: (result.data ?? []) as SleepDiaryRow[] }).sleepDiary;
   }
 
+  if (section === 'appleHealth') {
+    if (Platform.OS !== 'ios' || !(await appleHealthPreference.read(ownerId))) {
+      return undefined;
+    }
+    const overview = createAppleHealthOverview(await loadAppleHealthSnapshot());
+    if (overview.thirtyDay.coverageDays === 0) return undefined;
+    return {
+      provenance: 'device-summary',
+      value: createAppleHealthAiSummary(overview),
+    };
+  }
+
+  if (section === 'journalEntries') {
+    const result = await supabase
+      .from('journal_entries')
+      .select('id, title, content, prompt, tags, created_at')
+      .eq('user_id', ownerId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    if (result.error) throw result.error;
+    return adaptVisitBriefRows({
+      journalEntries: (result.data ?? []) as JournalEntryRow[],
+    }).journalEntries;
+  }
+
+  if (section === 'savedAiConversations') {
+    const result = await supabase
+      .from('chat_history')
+      .select('id, title, messages, created_at')
+      .eq('user_id', ownerId)
+      .eq('saved', true)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    if (result.error) throw result.error;
+    return adaptVisitBriefRows({
+      savedAiConversations: (result.data ?? []) as SavedAiConversationRow[],
+    }).savedAiConversations;
+  }
+
   const result = await supabase
     .from('partner_support_preferences')
     .select(
@@ -194,6 +383,10 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
   const [catalogError, setCatalogError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [status, setStatus] = useState('');
+  const [selectedItems, setSelectedItems] = useState<ItemSelection>(() => ({
+    journalEntries: new Set(),
+    savedAiConversations: new Set(),
+  }));
   const ownerRef = useRef(ownerId);
 
   useEffect(() => {
@@ -209,6 +402,7 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
     setCatalogError('');
     setRefreshKey(0);
     setStatus('');
+    setSelectedItems({ journalEntries: new Set(), savedAiConversations: new Set() });
   }, [ownerId]);
 
   useEffect(() => {
@@ -233,9 +427,14 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
       let nextSource: VisitBriefSource = {};
       const nextAvailable = new Set<VisitBriefSectionId>();
       let failedCount = 0;
-      for (const result of results) {
+      for (const [index, result] of results.entries()) {
         if (result.status === 'rejected') {
           failedCount += 1;
+          console.warn(
+            '[VisitBrief] catalog probe failed',
+            CATALOG_SECTIONS[index],
+            result.reason
+          );
           continue;
         }
         const { section, available: sectionAvailable, source: sectionSource } = result.value;
@@ -268,9 +467,35 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
     };
   }, [open, ownerId, refreshKey]);
 
+  const selectedSource: VisitBriefSource = {
+    ...source,
+    journalEntries: source.journalEntries
+      ? {
+          ...source.journalEntries,
+          value: source.journalEntries.value.filter((entry) =>
+            selectedItems.journalEntries.has(entry.id)
+          ),
+        }
+      : undefined,
+    savedAiConversations: source.savedAiConversations
+      ? {
+          ...source.savedAiConversations,
+          value: source.savedAiConversations.value.filter((conversation) =>
+            selectedItems.savedAiConversations.has(conversation.id)
+          ),
+        }
+      : undefined,
+  };
+  const selectedSections: VisitBriefSelection = {
+    ...selection,
+    journalEntries: selection.journalEntries && selectedItems.journalEntries.size > 0,
+    savedAiConversations:
+      selection.savedAiConversations && selectedItems.savedAiConversations.size > 0,
+  };
+
   const brief = (() => {
     try {
-      return generateVisitBrief(selection, source);
+      return generateVisitBrief(selectedSections, selectedSource);
     } catch {
       return { preview: 'Visit brief', sectionCount: 0 };
     }
@@ -282,6 +507,9 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
     setErrors((current) => ({ ...current, [section]: '' }));
     if (!enabled) {
       setSelection((current) => ({ ...current, [section]: false }));
+      if (ITEM_SELECTABLE_SECTIONS.includes(section as ItemSelectableSection)) {
+        setSelectedItems((current) => ({ ...current, [section]: new Set() }));
+      }
       return;
     }
     if (!ownerId) {
@@ -290,6 +518,12 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
     }
     if (source[section]) {
       setSelection((current) => ({ ...current, [section]: true }));
+      if (section === 'journalEntries' || section === 'savedAiConversations') {
+        setSelectedItems((current) => ({
+          ...current,
+          [section]: new Set(source[section]?.value.map((item) => item.id) ?? []),
+        }));
+      }
       return;
     }
 
@@ -312,6 +546,19 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
       }
       setSource((current) => ({ ...current, [section]: sectionSource }));
       setSelection((current) => ({ ...current, [section]: true }));
+      if (section === 'journalEntries' || section === 'savedAiConversations') {
+        const itemIds = section === 'journalEntries'
+          ? (sectionSource as NonNullable<VisitBriefSource['journalEntries']>).value.map(
+              (item) => item.id
+            )
+          : (sectionSource as NonNullable<VisitBriefSource['savedAiConversations']>).value.map(
+              (item) => item.id
+            );
+        setSelectedItems((current) => ({
+          ...current,
+          [section]: new Set(itemIds),
+        }));
+      }
     } catch {
       if (ownerRef.current !== requestedOwner) return;
       setErrors((current) => ({ ...current, [section]: 'This section could not be loaded.' }));
@@ -324,6 +571,20 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
         });
       }
     }
+  };
+
+  const toggleItem = (
+    section: ItemSelectableSection,
+    itemId: string,
+    enabled: boolean
+  ) => {
+    setStatus('');
+    setSelectedItems((current) => {
+      const nextSection = new Set(current[section]);
+      if (enabled) nextSection.add(itemId);
+      else nextSection.delete(itemId);
+      return { ...current, [section]: nextSection };
+    });
   };
 
   const performShare = async () => {
@@ -373,28 +634,61 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
     label: string,
     description: string,
     safety = false
-  ) => (
-    <View key={id} style={[styles.option, safety && styles.safetyOption]}>
-      <View style={styles.optionCopy}>
-        <Text style={styles.optionTitle}>{label}</Text>
-        <Text style={styles.optionDescription}>{description}</Text>
-        {errors[id] ? <Text style={styles.error}>{errors[id]}</Text> : null}
+  ) => {
+    const selectable = id === 'journalEntries' || id === 'savedAiConversations';
+    const items = selectable ? source[id]?.value ?? [] : [];
+    return (
+      <View key={id} style={[styles.optionGroup, safety && styles.safetyOption]}>
+        <View style={styles.option}>
+          <View style={styles.optionCopy}>
+            <Text style={styles.optionTitle}>{label}</Text>
+            <Text style={styles.optionDescription}>{description}</Text>
+            {errors[id] ? <Text style={styles.error}>{errors[id]}</Text> : null}
+          </View>
+          {loading.has(id) ? (
+            <ActivityIndicator size="small" color={Colors.primary} />
+          ) : (
+            <Switch
+              accessibilityLabel={`Include ${label}`}
+              value={selection[id]}
+              onValueChange={(enabled) => void toggleSection(id, enabled)}
+              trackColor={{ false: '#d1d5db', true: safety ? '#b45309' : Colors.primary }}
+              thumbColor="#fff"
+            />
+          )}
+        </View>
+        {selectable && selection[id] && items.length > 0 ? (
+          <View style={styles.itemChoices}>
+            <Text style={styles.itemChoicesLabel}>Choose what to include</Text>
+            {items.map((item) => (
+              <View key={item.id} style={styles.itemChoice}>
+                <View style={styles.itemChoiceCopy}>
+                  <Text numberOfLines={1} style={styles.itemChoiceTitle}>{item.title}</Text>
+                  <Text style={styles.itemChoiceDate}>
+                    {new Date(item.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+                <Switch
+                  accessibilityLabel={`Include ${item.title}`}
+                  value={selectedItems[id].has(item.id)}
+                  onValueChange={(enabled) => toggleItem(id, item.id, enabled)}
+                  trackColor={{ false: '#d1d5db', true: Colors.primary }}
+                  thumbColor="#fff"
+                />
+              </View>
+            ))}
+            {selectedItems[id].size === 0 ? (
+              <Text style={styles.itemChoiceHint}>Choose at least one item to add this section.</Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
-      {loading.has(id) ? (
-        <ActivityIndicator size="small" color={Colors.primary} />
-      ) : (
-        <Switch
-          accessibilityLabel={`Include ${label}`}
-          value={selection[id]}
-          onValueChange={(enabled) => void toggleSection(id, enabled)}
-          trackColor={{ false: '#d1d5db', true: safety ? '#b45309' : Colors.primary }}
-          thumbColor="#fff"
-        />
-      )}
-    </View>
-  );
+    );
+  };
 
   const availableSections = SECTIONS.filter((section) => available.has(section.id));
+  const standardSections = availableSections.filter((section) => !section.sensitive);
+  const sensitiveSections = availableSections.filter((section) => section.sensitive);
   const hasSafetyPlan = available.has('safetyPlan');
   const hasAvailableContent = availableSections.length > 0 || hasSafetyPlan;
 
@@ -454,10 +748,17 @@ export function VisitBriefBuilder({ ownerId }: { ownerId: string | null }) {
           ) : hasAvailableContent ? (
             <>
               <Text style={styles.notice}>
-                Nothing is included until you turn it on. Journal, AI chat, assessments, and mood notes stay out.
+                Everything starts off. Turn on only what you want this professional to receive.
               </Text>
 
-              {availableSections.map((section) =>
+              {standardSections.map((section) =>
+                renderSwitch(section.id, section.label, section.description)
+              )}
+
+              {sensitiveSections.length > 0 ? (
+                <Text style={styles.safetyLabel}>Health and private records</Text>
+              ) : null}
+              {sensitiveSections.map((section) =>
                 renderSwitch(section.id, section.label, section.description)
               )}
 
@@ -593,9 +894,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    paddingVertical: 14,
+  },
+  optionGroup: {
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    paddingVertical: 14,
   },
   safetyOption: {
     borderWidth: 1,
@@ -609,6 +912,19 @@ const styles = StyleSheet.create({
   optionTitle: { fontSize: 14, fontWeight: '600', color: Colors.text },
   optionDescription: { marginTop: 2, fontSize: 12, lineHeight: 17, color: Colors.textSecondary },
   error: { marginTop: 5, fontSize: 12, color: Colors.danger },
+  itemChoices: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    gap: 10,
+  },
+  itemChoicesLabel: { color: Colors.textSecondary, fontSize: 12, fontWeight: '700' },
+  itemChoice: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  itemChoiceCopy: { flex: 1 },
+  itemChoiceTitle: { color: Colors.text, fontSize: 13, fontWeight: '600' },
+  itemChoiceDate: { marginTop: 2, color: Colors.textSecondary, fontSize: 11 },
+  itemChoiceHint: { color: Colors.danger, fontSize: 12, lineHeight: 17 },
   safetyLabel: {
     marginTop: 18,
     color: '#92400e',

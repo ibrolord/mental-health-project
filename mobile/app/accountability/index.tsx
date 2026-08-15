@@ -148,7 +148,6 @@ export default function TogetherScreen() {
           >
             <Text style={styles.primaryButtonText}>Sign in or create account</Text>
           </TouchableOpacity>
-          <Text style={styles.privateNote}>Your mood, journal, assessments, and AI chats stay private.</Text>
         </ScrollView>
       </SafeAreaView>
     );
@@ -345,7 +344,6 @@ const styles = StyleSheet.create({
   benefitRow: { alignItems: 'center', flexDirection: 'row', gap: Spacing.sm, minHeight: 32 },
   benefitText: { color: Colors.text, flex: 1, fontSize: 15, fontWeight: '600' },
   signInButton: { alignItems: 'center', backgroundColor: Colors.primary, borderRadius: Radius.md, justifyContent: 'center', marginTop: Spacing.lg, minHeight: 50, paddingHorizontal: Spacing.lg },
-  privateNote: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: Spacing.sm, textAlign: 'center' },
   heroRow: { alignItems: 'center', flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
   heroCopy: { flex: 1, minWidth: 0 },
   leafMark: { alignItems: 'center', backgroundColor: Colors.primaryLight, borderRadius: 24, height: 48, justifyContent: 'center', width: 48 },

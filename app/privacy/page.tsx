@@ -97,11 +97,13 @@ export default function PrivacyPolicyPage() {
               identifiers stay on your device. If you explicitly choose Apple
               Health summary in AI Chat, the App shows the exact derived 7-day and
               30-day aggregate first and sends it through the MHtoolkit backend to
-              the selected AI provider only after you choose Share once. The
-              aggregate payload is not stored in Supabase, shared with
-              accountability partners, or used for analytics, advertising, or
-              marketing. The AI response may reflect the summary and is stored
-              only if you choose to save that chat or report the response.
+              the selected AI provider only after you choose Share once. You can
+              also explicitly include that aggregate in a Visit Brief and choose
+              its recipient through the iOS share sheet. The aggregate payload is
+              not stored in Supabase, automatically shared with accountability
+              partners, or used for analytics, advertising, or marketing. The AI
+              response may reflect the summary and is stored only if you choose to
+              save that chat or report the response.
             </li>
             <li>
               <strong>Together:</strong> Partner invitations, Together-only

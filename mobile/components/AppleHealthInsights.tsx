@@ -258,14 +258,6 @@ export function AppleHealthInsights({ ownerId }: { ownerId: string | null }) {
             </View>
           )}
 
-          {enabled ? (
-            <View style={s.privateRow}>
-              <Feather name="lock" size={12} color={Colors.textSecondary} />
-              <Text style={s.privateText}>
-                Raw Health samples stay on this device. Derived summaries are shared only after you confirm.
-              </Text>
-            </View>
-          ) : null}
         </View>
       ) : null}
     </View>
@@ -323,7 +315,5 @@ const s = StyleSheet.create({
   summaryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
   summaryText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19 },
   dot: { color: Colors.sage },
-  privateRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, marginTop: 9 },
-  privateText: { flex: 1, color: Colors.textSecondary, fontSize: 11, lineHeight: 16 },
   pressed: { opacity: 0.72 },
 });

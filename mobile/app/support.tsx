@@ -19,6 +19,7 @@ import {
 } from '@/components/AppUI';
 import { Colors } from '@/lib/constants';
 import {
+  FEEDBACK_EMAIL_URL,
   SUPPORT_EMAIL,
   SUPPORT_EMAIL_URL,
 } from '@/lib/support';
@@ -104,6 +105,26 @@ export default function SupportScreen() {
           </Text>
         </Pressable>
       </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Send product feedback"
+        accessibilityHint="Opens an email with feedback prompts"
+        onPress={() => {
+          void Linking.openURL(FEEDBACK_EMAIL_URL).catch(() =>
+            Alert.alert('Email unavailable', `Contact ${SUPPORT_EMAIL}`)
+          );
+        }}
+        style={[styles.contactCard, styles.feedbackCard]}
+      >
+        <Feather name="message-square" size={21} color={Colors.accent} />
+        <View style={styles.feedbackCopy}>
+          <Text style={[styles.contactTitle, styles.feedbackTitle]}>Send feedback</Text>
+          <Text style={appUiStyles.muted}>
+            Share an idea or tell us what could be better.
+          </Text>
+        </View>
+        <Feather name="arrow-up-right" size={19} color={Colors.textSecondary} />
+      </Pressable>
       <View style={styles.contactGrid}>
         <AppButton
           label="Research guide"
@@ -174,6 +195,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 15,
   },
+  feedbackCard: {
+    minHeight: 86,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  feedbackCopy: { flex: 1 },
+  feedbackTitle: { marginTop: 0 },
   contactTitle: {
     color: Colors.text,
     fontSize: 16,

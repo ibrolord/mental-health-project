@@ -153,12 +153,6 @@ export function AppleHealthSettingsCard({ ownerId }: { ownerId: string | null })
       </View>
 
       <Text style={s.categories}>{APPLE_HEALTH_DATA_LABELS.join(' · ')}</Text>
-      <View style={s.privateRow}>
-        <Feather name="lock" size={14} color={Colors.textSecondary} />
-        <Text style={s.privateText}>
-          Raw data stays on-device. AI sharing needs approval each time. Never shared with partners.
-        </Text>
-      </View>
 
       {!loading && resolvedOwnerId === ownerId ? (
         <Pressable
@@ -215,8 +209,6 @@ const s = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '600', color: Colors.text },
   body: { fontSize: 14, lineHeight: 20, color: Colors.textSecondary, marginTop: 2 },
   categories: { fontSize: 13, lineHeight: 19, color: Colors.text, marginTop: 14 },
-  privateRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 10 },
-  privateText: { flex: 1, fontSize: 12, lineHeight: 17, color: Colors.textSecondary },
   primaryButton: {
     minHeight: 48,
     borderRadius: 12,

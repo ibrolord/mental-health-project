@@ -644,6 +644,24 @@ describe('mobile Advisor recommendation engine', () => {
     expect(result.sourceLabels).not.toContain('Apple Health summary');
   });
 
+  it('does not interpret a failed mood source as no mood activity', () => {
+    const result = createAdvisorRecommendation(
+      context({
+        sourceAvailability: {
+          mood: 'unavailable',
+          goals: 'ready',
+          habits: 'ready',
+          health: 'ready',
+          notifications: 'ready',
+        },
+      })
+    );
+
+    expect(result.id).toBe('general-source-unavailable');
+    expect(result.observation).toContain('could not load every source');
+    expect(JSON.stringify(result)).not.toContain('no recent mood check-in');
+  });
+
   it('does not let an explicit Health intent override higher-priority context', () => {
     const result = createAdvisorRecommendation(
       context({

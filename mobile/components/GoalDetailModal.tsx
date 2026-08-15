@@ -104,12 +104,14 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
   const savedDraftRef = useRef({ notes: '', dueAt: null as string | null, reminderPreset: 'off' as GoalReminderPreset });
   const [notes, setNotes] = useState('');
   const [dueAt, setDueAt] = useState<Date | null>(null);
+  const [dueAtDraft, setDueAtDraft] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [reminderPreset, setReminderPreset] = useState<GoalReminderPreset>('off');
   const [milestones, setMilestones] = useState<GoalMilestone[]>([]);
   const [attachments, setAttachments] = useState<GoalAttachment[]>([]);
   const [milestoneInput, setMilestoneInput] = useState('');
   const [milestoneDueAt, setMilestoneDueAt] = useState<Date | null>(null);
+  const [milestoneDueAtDraft, setMilestoneDueAtDraft] = useState<Date | null>(null);
   const [showMilestoneDuePicker, setShowMilestoneDuePicker] = useState(false);
   const [editingMilestoneDueId, setEditingMilestoneDueId] = useState<string | null>(null);
   const [editingMilestoneDueAt, setEditingMilestoneDueAt] = useState<Date | null>(null);
@@ -177,11 +179,14 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
       activeGoalKeyRef.current = null;
       setNotes('');
       setDueAt(null);
+      setDueAtDraft(null);
+      setShowDatePicker(false);
       setReminderPreset('off');
       setMilestones([]);
       setAttachments([]);
       setMilestoneInput('');
       setMilestoneDueAt(null);
+      setMilestoneDueAtDraft(null);
       setShowMilestoneDuePicker(false);
       setEditingMilestoneDueId(null);
       setEditingMilestoneDueAt(null);
@@ -204,11 +209,13 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
     };
     setNotes(initialNotes);
     setDueAt(initialDueAt);
+    setDueAtDraft(null);
     setReminderPreset(initialReminderPreset);
     setMilestones([]);
     setAttachments([]);
     setMilestoneInput('');
     setMilestoneDueAt(null);
+    setMilestoneDueAtDraft(null);
     setShowMilestoneDuePicker(false);
     setEditingMilestoneDueId(null);
     setEditingMilestoneDueAt(null);
@@ -325,7 +332,7 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
       onUpdated(savedGoal);
       savedDraftRef.current = {
         notes: savedNotes,
-        dueAt: savedGoal.due_at,
+        dueAt: savedGoal.due_at ? new Date(savedGoal.due_at).toISOString() : null,
         reminderPreset: inferReminderPreset(savedGoal.due_at, savedGoal.reminder_at),
       };
       try {
@@ -388,6 +395,7 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
     setMilestones((current) => [...current, data as GoalMilestone]);
     setMilestoneInput('');
     setMilestoneDueAt(null);
+    setMilestoneDueAtDraft(null);
     setShowMilestoneDuePicker(false);
     setAddingMilestone(false);
     AccessibilityInfo.announceForAccessibility('Milestone added.');
@@ -698,7 +706,15 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Due date</Text>
-            <TouchableOpacity accessibilityRole="button" onPress={() => setShowDatePicker((current) => !current)} style={styles.dateButton}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={() => {
+                const next = !showDatePicker;
+                setDueAtDraft(next ? (dueAt ?? new Date(Date.now() + 60 * 60 * 1000)) : null);
+                setShowDatePicker(next);
+              }}
+              style={styles.dateButton}
+            >
               <Text style={styles.dateButtonText}>{dueAt ? format(dueAt, 'MMM d, yyyy · h:mm a') : 'Add due date'}</Text>
               <Feather
                 name={showDatePicker ? 'chevron-up' : 'chevron-down'}
@@ -708,18 +724,35 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
             </TouchableOpacity>
             {showDatePicker ? (
               <DateTimePicker
-                value={dueAt ?? new Date(Date.now() + 60 * 60 * 1000)}
+                value={dueAtDraft ?? dueAt ?? new Date(Date.now() + 60 * 60 * 1000)}
                 mode="datetime"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 minimumDate={new Date()}
-                onChange={(_event, date) => {
-                  if (date) setDueAt(date);
-                  if (Platform.OS !== 'ios') setShowDatePicker(false);
+                onChange={(event, date) => {
+                  if (event.type === 'dismissed') {
+                    setDueAtDraft(null);
+                    setShowDatePicker(false);
+                    return;
+                  }
+                  if (!date) return;
+                  if (Platform.OS === 'ios') {
+                    setDueAtDraft(date);
+                  } else {
+                    setDueAt(date);
+                    setDueAtDraft(null);
+                    setShowDatePicker(false);
+                  }
                 }}
               />
             ) : null}
+            {showDatePicker && Platform.OS === 'ios' ? (
+              <View style={styles.milestoneDateActions}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cancel goal due date" onPress={() => { setDueAtDraft(null); setShowDatePicker(false); }} style={styles.dateActionButton}><Text style={styles.secondaryActionText}>Cancel</Text></TouchableOpacity>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Use goal due date" onPress={() => { if (dueAtDraft) setDueAt(dueAtDraft); setDueAtDraft(null); setShowDatePicker(false); }} style={styles.dateSaveButton}><Text style={styles.dateSaveText}>Use date</Text></TouchableOpacity>
+              </View>
+            ) : null}
             {dueAt ? (
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear due date" onPress={() => { setDueAt(null); setReminderPreset('off'); setShowDatePicker(false); }} style={styles.clearButton}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear due date" onPress={() => { setDueAt(null); setDueAtDraft(null); setReminderPreset('off'); setShowDatePicker(false); }} style={styles.clearButton}>
                 <Text style={styles.clearLink}>Clear due date</Text>
               </TouchableOpacity>
             ) : null}
@@ -778,10 +811,12 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
                 setShowMilestoneDuePicker((current) => {
                   const next = !current;
                   if (next) {
-                    if (!milestoneDueAt) {
-                      setMilestoneDueAt(new Date(Date.now() + 60 * 60 * 1000));
-                    }
+                    setMilestoneDueAtDraft(
+                      milestoneDueAt ?? new Date(Date.now() + 60 * 60 * 1000)
+                    );
                     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+                  } else {
+                    setMilestoneDueAtDraft(null);
                   }
                   return next;
                 });
@@ -794,18 +829,35 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
             </TouchableOpacity>
             {showMilestoneDuePicker ? (
               <DateTimePicker
-                value={milestoneDueAt ?? new Date(Date.now() + 60 * 60 * 1000)}
+                value={milestoneDueAtDraft ?? milestoneDueAt ?? new Date(Date.now() + 60 * 60 * 1000)}
                 mode="datetime"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 minimumDate={new Date()}
-                onChange={(_event, date) => {
-                  if (date) setMilestoneDueAt(date);
-                  if (Platform.OS !== 'ios') setShowMilestoneDuePicker(false);
+                onChange={(event, date) => {
+                  if (event.type === 'dismissed') {
+                    setMilestoneDueAtDraft(null);
+                    setShowMilestoneDuePicker(false);
+                    return;
+                  }
+                  if (!date) return;
+                  if (Platform.OS === 'ios') {
+                    setMilestoneDueAtDraft(date);
+                  } else {
+                    setMilestoneDueAt(date);
+                    setMilestoneDueAtDraft(null);
+                    setShowMilestoneDuePicker(false);
+                  }
                 }}
               />
             ) : null}
+            {showMilestoneDuePicker && Platform.OS === 'ios' ? (
+              <View style={styles.milestoneDateActions}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cancel milestone due date" onPress={() => { setMilestoneDueAtDraft(null); setShowMilestoneDuePicker(false); }} style={styles.dateActionButton}><Text style={styles.secondaryActionText}>Cancel</Text></TouchableOpacity>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Use milestone due date" onPress={() => { if (milestoneDueAtDraft) setMilestoneDueAt(milestoneDueAtDraft); setMilestoneDueAtDraft(null); setShowMilestoneDuePicker(false); }} style={styles.dateSaveButton}><Text style={styles.dateSaveText}>Use date</Text></TouchableOpacity>
+              </View>
+            ) : null}
             {milestoneDueAt ? (
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear milestone due date" onPress={() => { setMilestoneDueAt(null); setShowMilestoneDuePicker(false); }} style={styles.clearButton}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear milestone due date" onPress={() => { setMilestoneDueAt(null); setMilestoneDueAtDraft(null); setShowMilestoneDuePicker(false); }} style={styles.clearButton}>
                 <Text style={styles.clearLink}>Clear milestone due date</Text>
               </TouchableOpacity>
             ) : null}

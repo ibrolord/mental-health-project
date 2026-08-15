@@ -7,9 +7,13 @@ const RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
 export type AdvisorOutcome = {
   recommendationId: string;
+  actionId?: string | null;
   offeredAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  resolution?: 'completed' | 'partial' | 'skipped' | null;
+  resolvedAt?: string | null;
+  barrier?: 'time' | 'energy' | 'unclear' | 'priority' | 'other' | null;
   helpful: boolean | null;
   feedbackAt: string | null;
   shownSignalId?: string | null;
@@ -21,7 +25,9 @@ export type AdvisorOutcomeStorageAdapter = {
   removeItem(key: string): Promise<void>;
 };
 
-type RecommendationReference = Pick<AdvisorRecommendation, 'id'>;
+type RecommendationReference = Pick<AdvisorRecommendation, 'id'> & {
+  actionId?: string | null;
+};
 
 export function advisorOutcomesStorageKey(ownerKey: string): string {
   return `${STORAGE_PREFIX}:${encodeURIComponent(ownerKey)}`;
@@ -33,6 +39,23 @@ function validIso(value: unknown): value is string {
 
 function validSignalId(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && value.length <= 160;
+}
+
+function validActionId(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 256;
+}
+
+function matchesOutcomeId(outcome: AdvisorOutcome, id: string): boolean {
+  return outcome.actionId === id || (!outcome.actionId && outcome.recommendationId === id);
+}
+
+function validResolution(value: unknown): value is NonNullable<AdvisorOutcome['resolution']> {
+  return value === 'completed' || value === 'partial' || value === 'skipped';
+}
+
+function validBarrier(value: unknown): value is NonNullable<AdvisorOutcome['barrier']> {
+  return value === 'time' || value === 'energy' || value === 'unclear' ||
+    value === 'priority' || value === 'other';
 }
 
 function parseOutcomes(raw: string | null): AdvisorOutcome[] | null {
@@ -47,9 +70,29 @@ function parseOutcomes(raw: string | null): AdvisorOutcome[] | null {
       if (
         typeof row.recommendationId !== 'string' ||
         !row.recommendationId.trim() ||
+        !(
+          row.actionId === undefined ||
+          row.actionId === null ||
+          validActionId(row.actionId)
+        ) ||
         !validIso(row.offeredAt) ||
         !(row.startedAt === null || validIso(row.startedAt)) ||
         !(row.completedAt === null || validIso(row.completedAt)) ||
+        !(
+          row.resolution === undefined ||
+          row.resolution === null ||
+          validResolution(row.resolution)
+        ) ||
+        !(
+          row.resolvedAt === undefined ||
+          row.resolvedAt === null ||
+          validIso(row.resolvedAt)
+        ) ||
+        !(
+          row.barrier === undefined ||
+          row.barrier === null ||
+          validBarrier(row.barrier)
+        ) ||
         !(row.helpful === null || typeof row.helpful === 'boolean') ||
         !(
           row.feedbackAt === undefined ||
@@ -69,9 +112,19 @@ function parseOutcomes(raw: string | null): AdvisorOutcome[] | null {
         offeredAt: row.offeredAt,
         startedAt: row.startedAt,
         completedAt: row.completedAt,
+        resolution: validResolution(row.resolution)
+          ? row.resolution
+          : row.completedAt
+            ? 'completed'
+            : null,
+        resolvedAt: validIso(row.resolvedAt)
+          ? row.resolvedAt
+          : row.completedAt,
+        barrier: validBarrier(row.barrier) ? row.barrier : null,
         helpful: row.helpful,
         feedbackAt: validIso(row.feedbackAt) ? row.feedbackAt : null,
       };
+      if (validActionId(row.actionId)) outcome.actionId = row.actionId;
       if (row.shownSignalId === null || validSignalId(row.shownSignalId)) {
         outcome.shownSignalId = row.shownSignalId;
       }
@@ -178,11 +231,17 @@ export function createAdvisorOutcomeStorage(
     const now = operationDate(nowIso, clock);
     await serialize(ownerKey, async () => {
       const outcomes = await read(ownerKey);
-      const alreadyOfferedToday = outcomes.some(
-        (outcome) =>
-          outcome.recommendationId === recommendation.id &&
-          localDayKey(new Date(outcome.offeredAt)) === localDayKey(now)
-      );
+      const actionId = validActionId(recommendation.actionId)
+        ? recommendation.actionId
+        : null;
+      const alreadyOfferedToday = actionId
+        ? outcomes.some((outcome) => outcome.actionId === actionId)
+        : outcomes.some(
+            (outcome) =>
+              !outcome.actionId &&
+              outcome.recommendationId === recommendation.id &&
+              localDayKey(new Date(outcome.offeredAt)) === localDayKey(now)
+          );
       if (alreadyOfferedToday) {
         await write(ownerKey, outcomes, now);
         return;
@@ -192,9 +251,13 @@ export function createAdvisorOutcomeStorage(
         [
           {
             recommendationId: recommendation.id,
+            ...(actionId ? { actionId } : {}),
             offeredAt: now.toISOString(),
             startedAt: null,
             completedAt: null,
+            resolution: null,
+            resolvedAt: null,
+            barrier: null,
             helpful: null,
             feedbackAt: null,
           },
@@ -216,7 +279,7 @@ export function createAdvisorOutcomeStorage(
     await serialize(ownerKey, async () => {
       const outcomes = await read(ownerKey);
       const target = outcomes.find(
-        (outcome) => outcome.recommendationId === recommendationId
+        (outcome) => matchesOutcomeId(outcome, recommendationId)
       );
       if (!target) return;
       if (!target.startedAt && !target.completedAt) {
@@ -241,14 +304,43 @@ export function createAdvisorOutcomeStorage(
       const outcomes = await read(ownerKey);
       const target = outcomes.find(
         (outcome) =>
-          outcome.recommendationId === recommendationId &&
+          matchesOutcomeId(outcome, recommendationId) &&
           Boolean(outcome.startedAt) &&
           !outcome.completedAt
       );
       if (!target) return;
       if (completed) {
         target.completedAt = now.toISOString();
+        target.resolution = 'completed';
+        target.resolvedAt = now.toISOString();
+        target.barrier = null;
       }
+      await write(ownerKey, outcomes, now);
+    });
+  }
+
+  async function answerAdvisorResolution(
+    ownerKey: string | null,
+    recommendationId: string,
+    resolution: 'completed' | 'partial' | 'skipped',
+    barrier: AdvisorOutcome['barrier'] = null,
+    nowIso?: string
+  ): Promise<void> {
+    if (!ownerKey || !recommendationId.trim()) return;
+    const now = operationDate(nowIso, clock);
+    await serialize(ownerKey, async () => {
+      const outcomes = await read(ownerKey);
+      const target = outcomes.find(
+        (outcome) =>
+          matchesOutcomeId(outcome, recommendationId) &&
+          Boolean(outcome.startedAt) &&
+          !outcome.completedAt
+      );
+      if (!target) return;
+      target.resolution = resolution;
+      target.resolvedAt = now.toISOString();
+      target.completedAt = resolution === 'completed' ? now.toISOString() : null;
+      target.barrier = validBarrier(barrier) ? barrier : null;
       await write(ownerKey, outcomes, now);
     });
   }
@@ -265,7 +357,7 @@ export function createAdvisorOutcomeStorage(
       const outcomes = await read(ownerKey);
       const target = outcomes.find(
         (outcome) =>
-          outcome.recommendationId === recommendationId &&
+          matchesOutcomeId(outcome, recommendationId) &&
           Boolean(outcome.startedAt) &&
           !outcome.feedbackAt
       );
@@ -288,6 +380,7 @@ export function createAdvisorOutcomeStorage(
     recordAdvisorOffered,
     markAdvisorStarted,
     answerAdvisorCompletion,
+    answerAdvisorResolution,
     answerAdvisorHelpfulness,
     clearAdvisorOutcomes,
   };
@@ -299,5 +392,6 @@ export const loadAdvisorOutcomes = advisorOutcomeStorage.loadAdvisorOutcomes;
 export const recordAdvisorOffered = advisorOutcomeStorage.recordAdvisorOffered;
 export const markAdvisorStarted = advisorOutcomeStorage.markAdvisorStarted;
 export const answerAdvisorCompletion = advisorOutcomeStorage.answerAdvisorCompletion;
+export const answerAdvisorResolution = advisorOutcomeStorage.answerAdvisorResolution;
 export const answerAdvisorHelpfulness = advisorOutcomeStorage.answerAdvisorHelpfulness;
 export const clearAdvisorOutcomes = advisorOutcomeStorage.clearAdvisorOutcomes;

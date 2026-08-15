@@ -117,9 +117,7 @@ describe('mobile weekly insights', () => {
     expect(component).not.toMatch(
       /assessment_score|mood_value|journal_text|habit_name|goal_name|notes|chat|row_id/i
     );
-    expect(component).toContain(
-      'Your content stays private. Partners only see enabled activity totals.'
-    );
+    expect(component).not.toContain('Your content stays private.');
     expect(component).toContain('Reflect on this week');
     expect(component).toContain("mode: 'weekly-patterns'");
   });

@@ -36,9 +36,103 @@ describe('Advisor outcome storage', () => {
       offeredAt: NOW.toISOString(),
       startedAt: '2026-08-13T12:01:00.000Z',
       completedAt: '2026-08-13T12:02:00.000Z',
+      resolution: 'completed',
+      resolvedAt: '2026-08-13T12:02:00.000Z',
+      barrier: null,
       helpful: null,
       feedbackAt: null,
     }]);
+  });
+
+  it('records partial and skipped resolutions with the stated barrier', async () => {
+    const { adapter } = memoryStorage();
+    const storage = createAdvisorOutcomeStorage(adapter, () => NOW);
+    await storage.recordAdvisorOffered('owner', { id: 'habit:walk' });
+    await storage.markAdvisorStarted('owner', 'habit:walk');
+    await storage.answerAdvisorResolution(
+      'owner',
+      'habit:walk',
+      'partial',
+      'energy',
+      '2026-08-13T12:02:00.000Z'
+    );
+
+    expect((await storage.loadAdvisorOutcomes('owner'))[0]).toMatchObject({
+      resolution: 'partial',
+      resolvedAt: '2026-08-13T12:02:00.000Z',
+      barrier: 'energy',
+      completedAt: null,
+    });
+  });
+
+  it('keeps repeated same-day recommendation attempts distinct by action instance', async () => {
+    const { adapter } = memoryStorage();
+    const storage = createAdvisorOutcomeStorage(adapter, () => NOW);
+    await storage.recordAdvisorOffered('owner', {
+      id: 'habit:walk',
+      actionId: 'habit:walk:attempt-one',
+    });
+    await storage.markAdvisorStarted('owner', 'habit:walk:attempt-one');
+    await storage.answerAdvisorResolution(
+      'owner',
+      'habit:walk:attempt-one',
+      'completed'
+    );
+    await storage.recordAdvisorOffered('owner', {
+      id: 'habit:walk',
+      actionId: 'habit:walk:attempt-two',
+    });
+    await storage.markAdvisorStarted('owner', 'habit:walk:attempt-two');
+    await storage.answerAdvisorResolution(
+      'owner',
+      'habit:walk:attempt-two',
+      'partial',
+      'energy'
+    );
+
+    expect(await storage.loadAdvisorOutcomes('owner')).toEqual([
+      expect.objectContaining({
+        recommendationId: 'habit:walk',
+        actionId: 'habit:walk:attempt-two',
+        resolution: 'partial',
+      }),
+      expect.objectContaining({
+        recommendationId: 'habit:walk',
+        actionId: 'habit:walk:attempt-one',
+        resolution: 'completed',
+      }),
+    ]);
+  });
+
+  it('lets a partial accountability check-in become completed later', async () => {
+    const { adapter } = memoryStorage();
+    const storage = createAdvisorOutcomeStorage(adapter, () => NOW);
+    await storage.recordAdvisorOffered('owner', {
+      id: 'goal:ship',
+      actionId: 'goal:ship:attempt-one',
+    });
+    await storage.markAdvisorStarted('owner', 'goal:ship:attempt-one');
+    await storage.answerAdvisorResolution(
+      'owner',
+      'goal:ship:attempt-one',
+      'partial',
+      'time',
+      '2026-08-13T12:02:00.000Z'
+    );
+    await storage.answerAdvisorResolution(
+      'owner',
+      'goal:ship:attempt-one',
+      'completed',
+      null,
+      '2026-08-13T12:05:00.000Z'
+    );
+
+    expect((await storage.loadAdvisorOutcomes('owner'))[0]).toMatchObject({
+      resolution: 'completed',
+      completedAt: '2026-08-13T12:05:00.000Z',
+      resolvedAt: '2026-08-13T12:05:00.000Z',
+      barrier: null,
+    });
   });
 
   it('upserts one offer per recommendation per local day', async () => {
@@ -338,8 +432,17 @@ describe('Advisor outcome storage', () => {
   it('wires clearing into sign-out, anonymous discard, and account deletion cleanup', () => {
     const auth = readFileSync(resolve(process.cwd(), 'mobile/lib/auth-context.tsx'), 'utf8');
     expect(auth).toContain("import { clearAdvisorOutcomes } from './advisor-outcome-storage';");
+    expect(auth).toContain("import { clearAdvisorAction } from './advisor-action-storage';");
+    expect(auth).toContain("import { advisorBriefStorage } from './advisor-brief-storage';");
     expect(auth).toContain(
       "import { clearAdvisorObservationLedger } from './advisor-observation-ledger';"
+    );
+    const orderedCleanup = auth.slice(
+      auth.indexOf('async function clearAdvisorOwnerState'),
+      auth.indexOf('async function assertAnonymousAccountIsEmpty')
+    );
+    expect(orderedCleanup.indexOf('await clearAdvisorLifecycleJournal(ownerKey)')).toBeLessThan(
+      orderedCleanup.indexOf('clearAdvisorOutcomes(ownerKey)')
     );
     const signOut = auth.slice(auth.indexOf('const signOut = async () =>'), auth.indexOf('const discardAnonymousProfile = async'));
     const discard = auth.slice(auth.indexOf('const discardAnonymousProfile = async'), auth.indexOf('const deleteAccount = async'));
@@ -348,19 +451,31 @@ describe('Advisor outcome storage', () => {
       auth.indexOf('const localCleanup = previousOwnerId'),
       auth.indexOf('// Avoid calling another auth method')
     );
-    expect(signOut).toContain('clearAdvisorOutcomes(ownerKey)');
-    expect(signOut).toContain('clearAdvisorObservationLedger(ownerKey)');
-    expect(discard).toContain('clearAdvisorOutcomes(ownerKey)');
-    expect(discard).toContain('clearAdvisorObservationLedger(ownerKey)');
-    expect(deletion).toContain('clearAdvisorOutcomes(deletedOwnerKey)');
-    expect(deletion).toContain('clearAdvisorObservationLedger(deletedOwnerKey)');
-    expect(expiredSession).toContain(
-      'clearAdvisorOutcomes(`user_id:${previousOwnerId}`)'
-    );
-    expect(expiredSession).toContain(
-      'clearAdvisorObservationLedger(`user_id:${previousOwnerId}`)'
-    );
+    expect(signOut).toContain('clearAdvisorOwnerState(ownerKey)');
+    expect(discard).toContain('clearAdvisorOwnerState(ownerKey)');
+    expect(deletion).toContain('clearAdvisorOwnerState(deletedOwnerKey)');
+    expect(expiredSession).toContain('clearAdvisorOwnerState(`user_id:${previousOwnerId}`)');
     expect(auth).toContain('previousOwnerWasAnonymous');
     expect(auth).toContain("console.error('Abandoned anonymous Advisor cleanup failed:'");
+  });
+
+  it('clears every local Advisor store when profile data is deleted', () => {
+    const settings = readFileSync(
+      resolve(process.cwd(), 'mobile/app/settings.tsx'),
+      'utf8'
+    );
+    const deletion = settings.slice(
+      settings.indexOf('const handleDeleteAll = async () =>'),
+      settings.indexOf('const handleDeleteAccount = async () =>')
+    );
+
+    expect(deletion).toContain('clearAdvisorLifecycleJournal(consentSubjectId)');
+    expect(deletion.indexOf('clearAdvisorLifecycleJournal(consentSubjectId)')).toBeLessThan(
+      deletion.indexOf('clearAdvisorAction(consentSubjectId)')
+    );
+    expect(deletion).toContain('clearAdvisorAction(consentSubjectId)');
+    expect(deletion).toContain('advisorBriefStorage.clear(consentSubjectId)');
+    expect(deletion).toContain('clearAdvisorOutcomes(consentSubjectId)');
+    expect(deletion).toContain('clearAdvisorObservationLedger(consentSubjectId)');
   });
 });

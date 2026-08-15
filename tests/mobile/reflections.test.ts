@@ -252,9 +252,9 @@ describe('mobile guided reflections', () => {
     expect(reflectScreen).toContain('.insert({ ...prepared, user_id: ownerId })');
     expect(reflectScreen).toContain('ownerIdRef.current !== ownerId');
     expect(reflectScreen).toContain('ownerGenerationRef.current !== ownerGeneration');
-    expect(reflectScreen).toContain('AI does not receive it unless');
-    expect(reflectScreen).toContain('Partners only see enabled activity counts.');
-    expect(reflectScreen).toContain('They do not diagnose a condition');
+    expect(reflectScreen).not.toContain('AI does not receive it unless');
+    expect(reflectScreen).not.toContain('Partners only see enabled activity counts.');
+    expect(reflectScreen).not.toContain('They do not diagnose a condition');
     expect(reflectScreen).not.toContain('AsyncStorage');
     expect(reflectScreen).not.toContain("from('partner_links')");
     expect(reflectScreen).not.toContain('fetch(');

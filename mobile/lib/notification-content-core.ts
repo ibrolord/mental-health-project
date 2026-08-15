@@ -7,10 +7,11 @@ import {
   UNIFIED_LIBRARY,
   type LibraryItem,
 } from './library/content';
-import type {
-  DueDateReminder,
-  ReminderContent,
-  ReminderSchedulePlan,
+import {
+  ADVISOR_DAILY_BRIEF_KIND,
+  type DueDateReminder,
+  type ReminderContent,
+  type ReminderSchedulePlan,
 } from './notifications-core';
 
 export type TodayGoal = {
@@ -176,6 +177,7 @@ function advisorBriefNotification(): ReminderContent {
     body: 'Open Advisor for one useful next step based on the context you approved.',
     screen: '/advisor',
     category: 'advisorNudges',
+    deliveryKind: ADVISOR_DAILY_BRIEF_KIND,
   };
 }
 

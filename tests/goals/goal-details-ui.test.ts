@@ -78,6 +78,21 @@ describe('goal details UI wiring', () => {
     expect(mobileDetails).toContain('Discard changes and start focus?');
   });
 
+  it('commits goal and milestone due dates only after explicit confirmation', () => {
+    expect(mobileDetails).toContain('const next = !showDatePicker');
+    expect(mobileDetails).toContain('setDueAtDraft(next ? (dueAt ?? new Date');
+    expect(mobileDetails).toContain('accessibilityLabel="Use goal due date"');
+    expect(mobileDetails).toContain('if (dueAtDraft) setDueAt(dueAtDraft)');
+    expect(mobileDetails).toContain("event.type === 'dismissed'");
+    expect(mobileDetails).toContain('accessibilityLabel="Use milestone due date"');
+    expect(mobileDetails).toContain(
+      'if (milestoneDueAtDraft) setMilestoneDueAt(milestoneDueAtDraft)'
+    );
+    expect(mobileDetails).toContain(
+      'dueAt: savedGoal.due_at ? new Date(savedGoal.due_at).toISOString() : null'
+    );
+  });
+
   it('supports adding, editing, clearing, and reloading milestone due dates', () => {
     expect(webDetails).toContain('setMilestoneDueValue');
     expect(webDetails).toContain('updateMilestoneDueDate');
@@ -94,7 +109,7 @@ describe('goal details UI wiring', () => {
     expect(webDetails).toContain('closeRef.current?.focus();');
     expect(webDetails).toContain('}, [goal.id]);');
     expect(mobileDetails).toContain('scrollRef.current?.scrollToEnd');
-    expect(mobileDetails).toContain('setMilestoneDueAt(new Date(Date.now() + 60 * 60 * 1000))');
+    expect(mobileDetails).toContain('setMilestoneDueAtDraft(');
   });
 
   it('prevents save, close, and delete races in native goal details', () => {

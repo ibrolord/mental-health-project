@@ -620,7 +620,7 @@ export default function MindGamesScreen() {
       <PageHeader
         eyebrow="Offline attention games"
         title="Give attention one clear job."
-        description="Six short activities for focus and grounding. Results stay on this screen."
+        description="Six short activities for focus and grounding."
         icon="grid"
       />
 
@@ -685,16 +685,6 @@ export default function MindGamesScreen() {
         ))
       )}
 
-      <AppCard quiet style={{ marginTop: 10 }}>
-        <View style={styles.noteHeader}>
-          <Feather name="info" size={17} color={Colors.primary} />
-          <Text style={styles.noteTitle}>Practice, not diagnosis</Text>
-        </View>
-        <Text style={appUiStyles.muted}>
-          These activities do not measure intelligence or promise broad cognitive
-          improvement. Stop if one increases distress.
-        </Text>
-      </AppCard>
     </AppScreen>
   );
 }
@@ -878,11 +868,4 @@ const styles = StyleSheet.create({
   mathAnswerInputWrap: { flex: 1 },
   mathAnswerInput: { textAlign: 'center', fontSize: 18 },
   mathFeedback: { minHeight: 20, marginTop: 14, textAlign: 'center' },
-  noteHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 7,
-  },
-  noteTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' },
 });

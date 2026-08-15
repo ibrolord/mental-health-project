@@ -1143,7 +1143,7 @@ export default function ChatScreen() {
         </Pressable>
       </View>
       <Text style={styles.aiLimit}>
-        AI can make mistakes. For urgent help, use Find support.
+        AI can be wrong. For urgent help, use Support.
       </Text>
     </KeyboardAvoidingView>
   );

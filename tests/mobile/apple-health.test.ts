@@ -394,9 +394,23 @@ describe('Apple Health release boundaries', () => {
     expect(plugin?.[1].NSHealthShareUsageDescription).toContain(
       'Raw samples stay on your device'
     );
+    expect(plugin?.[1].NSHealthShareUsageDescription).toContain(
+      'include it in a Visit Brief'
+    );
     expect(plugin?.[1].NSHealthUpdateUsageDescription).toContain(
       'does not add or change Apple Health data'
     );
+  });
+
+  it('discloses explicit Visit Brief aggregate sharing in release privacy copy', () => {
+    const privacy = readFileSync(resolve(root, 'app/privacy/page.tsx'), 'utf8');
+    const reviewNotes = readFileSync(resolve(root, 'mobile/APP_REVIEW_NOTES.md'), 'utf8');
+    expect(privacy).toContain('include that aggregate in a Visit Brief');
+    expect(privacy).toContain('choose');
+    expect(privacy).toContain('its recipient through the iOS share sheet');
+    expect(reviewNotes).toContain('add');
+    expect(reviewNotes).toContain('the aggregate to a Visit Brief');
+    expect(reviewNotes).toContain('choose its recipient through the iOS share');
   });
 
   it('keeps raw HealthKit data out of AI, partner, analytics, and cloud modules', () => {
@@ -437,9 +451,7 @@ describe('Apple Health release boundaries', () => {
     expect(insights).toContain("label=\"Open today’s suggestion\"");
     expect(insights).toContain("pathname: '/advisor'");
     expect(insights).toContain("params: { health: '1' }");
-    expect(insights).toContain(
-      'Raw Health samples stay on this device. Derived summaries are shared only after you confirm.'
-    );
+    expect(insights).not.toContain('Raw Health samples stay on this device.');
     expect(insights).toContain('No recent Health data');
     expect(insights).toContain('Nothing available from the last 30 days.');
     expect(insights).not.toMatch(
@@ -490,8 +502,8 @@ describe('Apple Health release boundaries', () => {
     expect(settings).toContain('announceForAccessibility');
     expect(settings).toContain('lifecycleGenerationRef.current === expectedGeneration');
     expect(settings).toContain('await appleHealthPreference.clear(expectedOwnerId)');
-    expect(settings).toContain('AI sharing needs approval each time');
-    expect(settings).toContain('Never shared with partners');
+    expect(settings).not.toContain('AI sharing needs approval each time');
+    expect(settings).not.toContain('Never shared with partners');
     const tracker = readFileSync(
       resolve(root, 'mobile/app/(tabs)/tracker.tsx'),
       'utf8'
@@ -521,6 +533,6 @@ describe('Apple Health release boundaries', () => {
     expect(privacy).toContain('Share once');
     expect(description).toContain('OPTIONAL APPLE HEALTH CONTEXT');
     expect(description).toContain('read-only');
-    expect(description).toContain('one request at a time');
+    expect(description).toContain('one AI request');
   });
 });

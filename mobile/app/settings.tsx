@@ -22,13 +22,23 @@ import {
 import { DEFAULT_NOTIFICATION_PREFERENCES } from '@/lib/notifications-core';
 import { hasAiDataSharingConsent, resetAiDataSharingConsent, PRIVACY_POLICY_URL } from '@/lib/ai-consent';
 import { clearStoredAcquisitionAttribution } from '@/lib/acquisition';
-import { SUPPORT_EMAIL, SUPPORT_EMAIL_URL, SUPPORT_URL } from '@/lib/support';
+import {
+  FEEDBACK_EMAIL_URL,
+  SUPPORT_EMAIL,
+  SUPPORT_EMAIL_URL,
+  SUPPORT_URL,
+} from '@/lib/support';
 import { PrivacyActivity } from '@/components/PrivacyActivity';
 import { VisitBriefBuilder } from '@/components/VisitBriefBuilder';
 import { offlineSafetyPlanCache } from '@/lib/offline-safety-plan-cache';
 import { clearFullContextPreference } from '@/lib/full-context-preference';
 import { clearContextSelections } from '@/lib/chat-context-preference';
 import { clearGoToActions } from '@/lib/go-to-actions-storage';
+import { clearAdvisorAction } from '@/lib/advisor-action-storage';
+import { advisorBriefStorage } from '@/lib/advisor-brief-storage';
+import { clearAdvisorOutcomes } from '@/lib/advisor-outcome-storage';
+import { clearAdvisorObservationLedger } from '@/lib/advisor-observation-ledger';
+import { clearAdvisorLifecycleJournal } from '@/lib/advisor-lifecycle-runtime';
 import { clearReflectionDraft } from '@/lib/reflection-draft-storage';
 import { supabase } from '@/lib/supabase';
 import { AppleHealthSettingsCard } from '@/components/AppleHealthSettingsCard';
@@ -77,7 +87,7 @@ const NOTIFICATION_OPTIONS: {
   {
     key: 'routineReminders',
     title: 'Routine reminders',
-    description: 'Private nudges for routines that are still open.',
+    description: 'Nudges for routines that are still open.',
   },
   {
     key: 'affirmations',
@@ -91,8 +101,8 @@ const NOTIFICATION_OPTIONS: {
   },
   {
     key: 'advisorNudges',
-    title: 'Advisor daily brief',
-    description: 'A private prompt to open today’s next-step brief.',
+    title: 'Advisor check-ins',
+    description: 'Daily briefs and follow-ups you explicitly schedule.',
   },
 ];
 
@@ -333,12 +343,18 @@ export default function SettingsScreen() {
                 { accessToken }
               );
               if (!result?.deleted) throw new Error(result?.error || 'Deletion failed');
+              // Drain the recovery journal before clearing stores it could recreate.
+              await clearAdvisorLifecycleJournal(consentSubjectId);
               const cleanup = await Promise.allSettled([
                 clearStoredAcquisitionAttribution(),
                 resetAiDataSharingConsent(consentSubjectId),
                 clearFullContextPreference(consentSubjectId),
                 clearContextSelections(consentSubjectId),
                 clearGoToActions(consentSubjectId),
+                clearAdvisorAction(consentSubjectId),
+                advisorBriefStorage.clear(consentSubjectId),
+                clearAdvisorOutcomes(consentSubjectId),
+                clearAdvisorObservationLedger(consentSubjectId),
                 clearAllReminders(),
                 offlineSafetyPlanCache.clear(expectedOwnerId),
                 clearReflectionDraft(expectedOwnerId),
@@ -412,9 +428,9 @@ export default function SettingsScreen() {
     );
   };
 
-  const openSupportLink = (url: string, label: string) => {
+  const openSupportLink = (url: string, label: string, fallback = url) => {
     Linking.openURL(url).catch(() => {
-      Alert.alert(`Unable to Open ${label}`, url);
+      Alert.alert(`Unable to Open ${label}`, fallback);
     });
   };
 
@@ -617,7 +633,7 @@ export default function SettingsScreen() {
           />
           <ListRow
             title={`AI data sharing consent: ${aiConsentGranted ? 'Granted' : 'Not granted yet'}`}
-            description="Chat, voice, and AI affirmations ask before sharing with third-party AI providers."
+            description="Chat, voice, and AI affirmations ask before sharing with Google Gemini, Anthropic Claude, or OpenAI."
             icon="shield"
           />
           {aiConsentGranted ? (
@@ -631,17 +647,6 @@ export default function SettingsScreen() {
             })}
           />
         </RowGroup>
-        <View style={s.privacySummary}>
-          <Text style={s.privacyTitle}>Privacy at a glance</Text>
-        <Text style={s.privacyItem}>All data is encrypted at rest</Text>
-        <Text style={s.privacyItem}>We never sell your data or share it for advertising</Text>
-        <Text style={s.privacyItem}>After you consent, chat sends messages and chosen context to Google Gemini, Anthropic Claude, or OpenAI through MHtoolkit</Text>
-        <Text style={s.privacyItem}>Voice sends audio and transcripts to OpenAI or Gemini; AI affirmations can use recent mood, assessment, and goal data</Text>
-        <Text style={s.privacyItem}>Apple Health sharing asks every time</Text>
-        <Text style={s.privacyItem}>Anonymous usage requires no personal info</Text>
-        <Text style={s.privacyItem}>Together shares only the commitments and details you choose</Text>
-        <Text style={s.privacyItem}>Export or delete your data anytime</Text>
-        </View>
       </View>
 
       <SectionHeader title="Professional sharing" />
@@ -654,10 +659,28 @@ export default function SettingsScreen() {
       <View style={s.sectionBlock}>
         <RowGroup>
         <ListRow
-          title="Email Support & Feedback"
+          title="Send feedback"
+          description="Share an idea or tell us what could be better."
+          icon="message-square"
+          onPress={() =>
+            openSupportLink(
+              FEEDBACK_EMAIL_URL,
+              'Feedback',
+              `Send feedback to ${SUPPORT_EMAIL}`
+            )
+          }
+        />
+        <ListRow
+          title="Get app help"
           description={SUPPORT_EMAIL}
           icon="mail"
-          onPress={() => openSupportLink(SUPPORT_EMAIL_URL, 'Email')}
+          onPress={() =>
+            openSupportLink(
+              SUPPORT_EMAIL_URL,
+              'Email',
+              `Contact ${SUPPORT_EMAIL}`
+            )
+          }
         />
         <ListRow
           title="View Support & Crisis Resources"
@@ -689,11 +712,6 @@ export default function SettingsScreen() {
         </RowGroup>
       </View>
 
-      <View style={s.disclaimer}>
-        <Text style={s.disclaimerText}>
-          This app is a self-help tool, not a replacement for professional therapy. If you are in immediate danger, contact local emergency services. Crisis resources are available on the MHtoolkit support page.
-        </Text>
-      </View>
     </AppScreen>
   );
 }
@@ -734,19 +752,6 @@ const s = StyleSheet.create({
   timePillSelected: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   timePillText: { color: Colors.text, ...Typography.caption },
   timePillTextSelected: { color: Colors.onPrimary },
-  privacySummary: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-    paddingVertical: Spacing.md,
-  },
-  privacyTitle: { color: Colors.text, ...Typography.label, marginBottom: Spacing.sm },
-  privacyItem: { color: Colors.textSecondary, ...Typography.bodySmall, marginBottom: Spacing.xs },
-  disclaimer: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border,
-    paddingVertical: Spacing.lg,
-  },
-  disclaimerText: { color: Colors.textSecondary, ...Typography.bodySmall, textAlign: 'center' },
   disabled: { opacity: 0.48 },
   pressed: { opacity: 0.72 },
 });

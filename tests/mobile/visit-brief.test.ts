@@ -21,10 +21,18 @@ const activityRows = {
 describe('mobile Visit Brief', () => {
   it('starts with every section off', () => {
     expect(createVisitBriefSelection()).toEqual({
+      moodHistory: false,
+      moodNotes: false,
+      assessmentScores: false,
+      goals: false,
+      habits: false,
       activityPlans: false,
       stayingWellPlan: false,
       sleepDiary: false,
+      appleHealth: false,
       supportPreferences: false,
+      journalEntries: false,
+      savedAiConversations: false,
       safetyPlan: false,
     });
   });
@@ -101,20 +109,95 @@ describe('mobile Visit Brief', () => {
     );
   });
 
-  it('does not query or model excluded private content', () => {
+  it('makes every professional-sharing category available as an explicit toggle', () => {
     const component = readFileSync(
       new URL('../../mobile/components/VisitBriefBuilder.tsx', import.meta.url),
       'utf8'
     );
-    for (const forbidden of [
-      'journal_entries',
-      'chat_messages',
-      'assessment_results',
-      'mood_entries',
-      'mood_notes',
+    for (const category of [
+      'Mood history',
+      'Mood notes',
+      'Assessment scores',
+      'Goals and milestones',
+      'Habits',
+      'Apple Health summary',
+      'Journal entries',
+      'Saved AI conversations',
     ]) {
-      expect(component).not.toContain(forbidden);
+      expect(component).toContain(category);
     }
+    expect(component).toContain('Everything starts off.');
+    expect(component).toContain('Health and private records');
+    expect(component).toContain('Choose what to include');
+    expect(component).toContain('selectedItems.journalEntries');
+    expect(component).toContain('selectedItems.savedAiConversations');
+  });
+
+  it('renders selected professional context while excluding assessment answers and system prompts', () => {
+    const source = adaptVisitBriefRows({
+      moods: [{
+        id: 'mood-1', emoji: '🙂', note: 'More settled after the walk',
+        tags: ['calm'], local_date: '2026-08-14', created_at: '2026-08-14T12:00:00Z',
+      }],
+      assessments: [{
+        id: 'assessment-1', type: 'GAD7', score: 8, max_score: 21,
+        created_at: '2026-08-13T12:00:00Z',
+      }],
+      goals: [{
+        id: 'goal-1', content: 'Return to work gradually', status: 'pending',
+        priority: 'big', notes: 'Discuss reduced hours', reflection: null,
+        due_at: '2026-09-01T12:00:00Z', updated_at: '2026-08-14T12:00:00Z',
+      }],
+      goalMilestones: [{
+        goal_id: 'goal-1', content: 'Email manager', position: 0,
+        due_at: '2026-08-20T12:00:00Z', completed_at: null,
+      }],
+      goalAttachments: [{ goal_id: 'goal-1', file_name: 'return-plan.pdf' }],
+      habits: [{
+        id: 'habit-1', name: 'Morning walk', description: 'Ten minutes outside',
+        frequency: 'daily', streak_count: 3, best_streak: 7, total_completions: 18,
+        cue: 'After breakfast', tiny_step: 'Put on shoes', reward: 'Tea',
+        is_active: true, updated_at: '2026-08-14T12:00:00Z',
+      }],
+      habitLogs: [{
+        habit_id: 'habit-1', completed: true, note: 'Felt easier today',
+        log_date: '2026-08-14',
+      }],
+      journalEntries: [{
+        id: 'journal-1', title: 'Appointment notes', content: 'Sleep has improved.',
+        prompt: null, tags: ['sleep'], created_at: '2026-08-14T12:00:00Z',
+      }],
+      savedAiConversations: [{
+        id: 'chat-1', title: 'Planning', created_at: '2026-08-14T12:00:00Z',
+        messages: [
+          { role: 'system', content: 'private runtime instruction' },
+          { role: 'user', content: 'Help me prepare.' },
+          { role: 'assistant', content: 'Write down your main concern.' },
+        ],
+      }],
+    });
+    const brief = generateVisitBrief(
+      {
+        ...createVisitBriefSelection(),
+        moodHistory: true,
+        moodNotes: true,
+        assessmentScores: true,
+        goals: true,
+        habits: true,
+        journalEntries: true,
+        savedAiConversations: true,
+      },
+      source
+    );
+
+    expect(brief.preview).toContain('GAD-7 8/21');
+    expect(brief.preview).toContain('Milestone 1: Email manager | due 2026-08-20');
+    expect(brief.preview).toContain('Attachments: return-plan.pdf');
+    expect(brief.preview).toContain('current streak: 3');
+    expect(brief.preview).toContain('Entry: Sleep has improved.');
+    expect(brief.preview).toContain('You: Help me prepare.');
+    expect(brief.preview).not.toContain('private runtime instruction');
+    expect(brief.sectionCount).toBe(7);
   });
 
   it('treats missing brief content as a single empty state, not repeated errors', () => {
@@ -138,13 +221,29 @@ describe('mobile Visit Brief', () => {
       new URL('../../mobile/components/VisitBriefBuilder.tsx', import.meta.url),
       'utf8'
     );
-    const catalogLoader = component.slice(
-      component.indexOf('async function loadCatalogEntry'),
-      component.indexOf('async function loadSection')
+    const catalogProbe = component.slice(
+      component.indexOf('async function hasSectionContent'),
+      component.indexOf('async function loadCatalogEntry')
     );
 
-    expect(catalogLoader).toContain("section === 'safetyPlan'");
-    expect(catalogLoader).toContain('hasSafetyPlan(ownerId)');
-    expect(catalogLoader).not.toContain('safety_plan_items');
+    expect(catalogProbe).toContain("section === 'safetyPlan'");
+    expect(catalogProbe).toContain('hasSafetyPlan(ownerId)');
+    expect(catalogProbe).not.toContain('safety_plan_items');
+  });
+
+  it('probes private sections without preloading their text', () => {
+    const component = readFileSync(
+      new URL('../../mobile/components/VisitBriefBuilder.tsx', import.meta.url),
+      'utf8'
+    );
+    const catalogLoader = component.slice(
+      component.indexOf('async function hasSectionContent'),
+      component.indexOf('async function loadCatalogEntry')
+    );
+
+    expect(catalogLoader).toContain("section === 'supportPreferences' ? 'user_id' : 'id'");
+    expect(catalogLoader).toContain('.select(probeColumn)');
+    expect(catalogLoader).not.toContain(".select('id, title, content");
+    expect(catalogLoader).not.toContain(".select('id, title, messages");
   });
 });

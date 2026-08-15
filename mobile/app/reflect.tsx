@@ -590,35 +590,6 @@ export default function ReflectScreen() {
         </Text>
       ) : null}
       {error ? <Text style={[appUiStyles.error, styles.error]}>{error}</Text> : null}
-
-      <AppCard quiet style={styles.privacyCard}>
-        <View style={styles.noteHeader}>
-          <Feather name="lock" size={17} color={Colors.primary} />
-          <Text style={styles.noteTitle}>Private by default</Text>
-        </View>
-        <Text style={appUiStyles.muted}>
-          Your draft is encrypted on this device. AI does not receive it unless
-          you choose to share it.
-        </Text>
-      </AppCard>
-
-      <AppCard quiet>
-        <View style={styles.noteHeader}>
-          <Feather name="info" size={17} color={Colors.primary} />
-          <Text style={styles.noteTitle}>A reflection tool</Text>
-        </View>
-        <Text style={appUiStyles.muted}>
-          These prompts organize your own words. They do not diagnose a condition or
-          replace professional care.
-        </Text>
-        <AppButton
-          label="Read the evidence guide"
-          icon="arrow-right"
-          variant="quiet"
-          onPress={() => router.push('/research')}
-          style={styles.evidenceButton}
-        />
-      </AppCard>
     </AppScreen>
   );
 }
@@ -705,7 +676,7 @@ function ReflectionRunner({
           <Text style={styles.savedEyebrow}>SAVED TO JOURNAL</Text>
           <Text style={styles.savedTitle}>Your reflection is in your journal.</Text>
           <Text style={styles.savedDescription}>
-            Your words stay in your journal. Partners only see enabled activity counts.
+            Open it now or start another reflection.
           </Text>
           {error ? <Text style={[appUiStyles.error, styles.error]}>{error}</Text> : null}
           <AppButton
@@ -837,10 +808,6 @@ function ReflectionRunner({
         </View>
       </AppCard>
 
-      <Text style={styles.runnerNote}>
-        Skip any question that is not useful. Your encrypted draft stays on this
-        device until you save or discard it.
-      </Text>
     </AppScreen>
   );
 }
@@ -906,15 +873,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   error: { marginTop: 12 },
-  privacyCard: { marginTop: 10 },
-  noteHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 7,
-  },
-  noteTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' },
-  evidenceButton: { alignSelf: 'flex-start', marginTop: 14 },
   discardButton: { alignSelf: 'flex-start', marginBottom: 12 },
   runnerHeader: { padding: 16 },
   runnerTop: {
@@ -975,13 +933,6 @@ const styles = StyleSheet.create({
   },
   actionRow: { flexDirection: 'row', gap: 9, marginTop: 20 },
   actionButton: { flex: 1 },
-  runnerNote: {
-    color: Colors.textSecondary,
-    fontSize: 11,
-    lineHeight: 17,
-    paddingHorizontal: 4,
-    marginTop: 2,
-  },
   savedScreen: { justifyContent: 'center' },
   savedCard: { alignItems: 'center', paddingVertical: 34 },
   savedIcon: {

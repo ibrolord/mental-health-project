@@ -23,6 +23,10 @@ import {
 import { BotanicalHero } from '@/components/BotanicalHero';
 import { loadAmbientAdvisorContext } from '@/lib/advisor-context';
 import { hasUnsafeAdvisorContext } from '@/lib/advisor-core';
+import {
+  loadAdvisorAction,
+  type AdvisorActionInstance,
+} from '@/lib/advisor-action-storage';
 import { dashboardPreferences } from '@/lib/dashboard-preferences';
 import {
   dashboardModuleById,
@@ -54,6 +58,8 @@ export default function DashboardScreen() {
   const [lowEnergyLoadAttempt, setLowEnergyLoadAttempt] = useState(0);
   const [safetyOwnerKey, setSafetyOwnerKey] = useState<string | null>(null);
   const [showAdvisorSafety, setShowAdvisorSafety] = useState(false);
+  const [advisorAction, setAdvisorAction] = useState<AdvisorActionInstance | null>(null);
+  const [advisorActionOwnerKey, setAdvisorActionOwnerKey] = useState<string | null>(null);
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
@@ -97,6 +103,24 @@ export default function DashboardScreen() {
           setLowEnergyOwnerKey(expectedOwnerKey);
         }
       });
+
+    return () => {
+      active = false;
+    };
+  }, [lowEnergyLoadAttempt, ownerKey]);
+
+  useEffect(() => {
+    const expectedOwnerKey = ownerKey;
+    setAdvisorAction(null);
+    setAdvisorActionOwnerKey(null);
+    if (!expectedOwnerKey) return;
+
+    let active = true;
+    void loadAdvisorAction(expectedOwnerKey).then((loadedAction) => {
+      if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
+      setAdvisorAction(loadedAction);
+      setAdvisorActionOwnerKey(expectedOwnerKey);
+    });
 
     return () => {
       active = false;
@@ -226,6 +250,12 @@ export default function DashboardScreen() {
   const visibleAffirmationBy = moodOwnerKey === ownerKey ? affirmationBy : '';
   const visibleLowEnergyMode = lowEnergyOwnerKey === ownerKey && lowEnergyMode;
   const visibleAdvisorSafety = safetyOwnerKey === ownerKey && showAdvisorSafety;
+  const visibleAdvisorAction = advisorActionOwnerKey === ownerKey ? advisorAction : null;
+  const visibleAdvisorActionText = visibleAdvisorAction
+    ? visibleAdvisorAction.useSmallerStep
+      ? visibleAdvisorAction.smallerAction
+      : visibleAdvisorAction.action
+    : null;
   const visibleModuleIds = dashboardModulesForToday(
     dashboardLayout,
     visibleLowEnergyMode
@@ -302,6 +332,8 @@ export default function DashboardScreen() {
       {visibleModuleIds.includes('advisor') ? (
         <AdvisorHomeCard
           lowEnergy={visibleLowEnergyMode}
+          currentAction={visibleAdvisorActionText}
+          actionStatus={visibleAdvisorAction?.status ?? null}
           onOpen={() => router.navigate('/advisor')}
         />
       ) : null}

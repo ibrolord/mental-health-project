@@ -1,4 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AdvisorRecommendation } from '../../mobile/lib/advisor-core';
+
+const { apiRequest } = vi.hoisted(() => ({ apiRequest: vi.fn() }));
+
+vi.mock('../../mobile/lib/api', () => ({ apiRequest }));
+
+import {
+  ADVISOR_MODEL_TIMEOUT_MS,
+  requestModelAdvisorRecommendation,
+} from '../../mobile/lib/advisor-ai';
 import {
   createAdvisorBriefFingerprint,
   createAdvisorBriefSignals,
@@ -52,7 +62,43 @@ const health: AppleHealthAiSummary = {
   moodComparison: 'Mood check-ins are not compared with Apple Health.',
 };
 
+const candidate: AdvisorRecommendation = {
+  id: 'habit:walk',
+  kind: 'standard',
+  observation: 'Your walk is still open today.',
+  observations: ['Your walk is still open today.'],
+  action: 'Take a five-minute walk.',
+  smallerAction: 'Put on your walking shoes.',
+  route: '/habits',
+  resourceLabel: 'Open habits',
+  sourceLabels: ['Habit'],
+  changeSignal: null,
+};
+
 describe('Advisor daily brief signals', () => {
+  beforeEach(() => apiRequest.mockReset());
+
+  it('bounds optional model personalization so the deterministic brief can take over', async () => {
+    apiRequest.mockResolvedValue({
+      model: 'gemini',
+      personalized: true,
+      selection: {
+        candidateId: candidate.id,
+        observations: candidate.observations,
+        signalIds: ['routine:walk'],
+        focus: 'routine',
+      },
+    });
+
+    await requestModelAdvisorRecommendation(context, [candidate], []);
+
+    expect(apiRequest).toHaveBeenCalledWith(
+      '/api/advisor',
+      expect.any(Object),
+      { timeoutMs: ADVISOR_MODEL_TIMEOUT_MS }
+    );
+  });
+
   it('combines deadlines, routines, streaks, and notification choices', () => {
     const signals = createAdvisorBriefSignals(context);
 

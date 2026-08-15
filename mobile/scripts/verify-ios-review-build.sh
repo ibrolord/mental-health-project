@@ -8,7 +8,7 @@ RUN_ISOLATED_DOCTOR=1
 SOURCE_ONLY=0
 MIC_PERMISSION="MHtoolkit uses the microphone only for live voice or tap-to-talk sessions you start. Audio is sent to OpenAI or Gemini to transcribe and respond."
 CAMERA_PERMISSION="MHtoolkit's live voice sessions are audio-only. The bundled WebRTC library references camera APIs, but MHtoolkit never requests, captures, or transmits camera data."
-HEALTH_READ_PERMISSION="MHtoolkit reads the Apple Health categories you choose to show personal summaries. Raw samples stay on your device. A derived summary is sent to an AI provider only when you preview it and choose Share once."
+HEALTH_READ_PERMISSION="MHtoolkit reads the Apple Health categories you choose to show personal summaries. Raw samples stay on your device. A derived summary leaves your device only when you explicitly share it with an AI provider or include it in a Visit Brief."
 HEALTH_UPDATE_PERMISSION="MHtoolkit does not add or change Apple Health data. Apple requires this description because the app links HealthKit for optional read-only summaries."
 AI_CONSENT_TITLE="AI Data Sharing Consent"
 AI_PROVIDER_COPY="Google Gemini, Anthropic Claude, or OpenAI"
@@ -247,9 +247,12 @@ SUPPORT_SOURCE="$ROOT_DIR/lib/support.ts"
 SETTINGS_SOURCE="$ROOT_DIR/app/settings.tsx"
 if grep -Fq "bolajiag10@gmail.com" "$SUPPORT_SOURCE" &&
   grep -Fq "https://mhtoolkit.vercel.app/support" "$SUPPORT_SOURCE" &&
-  grep -Fq "import { SUPPORT_EMAIL, SUPPORT_EMAIL_URL, SUPPORT_URL } from '@/lib/support';" "$SETTINGS_SOURCE" &&
-  grep -Fq "Email Support & Feedback" "$SETTINGS_SOURCE" &&
-  grep -Fq "openSupportLink(SUPPORT_EMAIL_URL, 'Email')" "$SETTINGS_SOURCE" &&
+  grep -Fq "FEEDBACK_EMAIL_URL" "$SETTINGS_SOURCE" &&
+  grep -Fq "Send feedback" "$SETTINGS_SOURCE" &&
+  grep -Fq 'Send feedback to ${SUPPORT_EMAIL}' "$SETTINGS_SOURCE" &&
+  grep -Fq "Get app help" "$SETTINGS_SOURCE" &&
+  grep -Fq "SUPPORT_EMAIL_URL" "$SETTINGS_SOURCE" &&
+  grep -Fq 'Contact ${SUPPORT_EMAIL}' "$SETTINGS_SOURCE" &&
   grep -Fq "View Support & Crisis Resources" "$SETTINGS_SOURCE" &&
   grep -Fq "openSupportLink(SUPPORT_URL, 'Support Page')" "$SETTINGS_SOURCE"; then
   pass "Mobile Settings wires support email, feedback, and crisis resources"

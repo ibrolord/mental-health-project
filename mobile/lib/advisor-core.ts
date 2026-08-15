@@ -86,6 +86,13 @@ export type AdvisorContext = {
   } | null;
   momentumAvailability?: 'available' | 'unavailable' | 'signed-out';
   notifications?: AdvisorNotificationContext | null;
+  sourceAvailability?: {
+    mood: 'ready' | 'unavailable';
+    goals: 'ready' | 'unavailable';
+    habits: 'ready' | 'unavailable';
+    health: 'ready' | 'unavailable';
+    notifications: 'ready' | 'unavailable';
+  };
 };
 
 export type AdvisorTrendLevel = 'changed' | 'similar' | 'available' | 'learning';
@@ -156,6 +163,8 @@ export type AdvisorRecentRecommendation =
       recommendationId: string;
       offeredAt?: string | null;
       helpful?: boolean | null;
+      resolution?: 'completed' | 'partial' | 'skipped' | null;
+      completedAt?: string | null;
     };
 
 export type AdvisorSelectionOptions = {
@@ -575,6 +584,30 @@ function healthCandidates(_health: AdvisorHealthFeatures): AdvisorRecommendation
 
 function fallbackCandidates(context: AdvisorContext): AdvisorRecommendationCandidate[] {
   if (!context.mood) {
+    if (context.sourceAvailability?.mood === 'unavailable') {
+      return [
+        {
+          id: 'general-source-unavailable',
+          kind: 'standard',
+          observation: 'Advisor could not load every source, so this suggestion stays general.',
+          action: 'Choose one thing that matters and spend two minutes starting it.',
+          smallerAction: 'Write down only the first visible action.',
+          route: '/plans',
+          sourceLabels: [],
+          resourceLabel: 'Open plans',
+        },
+        {
+          id: 'general-source-unavailable:alternate',
+          kind: 'standard',
+          observation: 'This suggestion does not assume missing information means no activity.',
+          action: 'Pick one useful task and begin for one minute.',
+          smallerAction: 'Name the task without starting it yet.',
+          route: '/plans',
+          sourceLabels: [],
+          resourceLabel: 'Open plans',
+        },
+      ];
+    }
     return [
       {
         id: 'check-in',

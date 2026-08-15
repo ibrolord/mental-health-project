@@ -460,15 +460,6 @@ export default function JournalScreen() {
         </Text>
       </View>
 
-      <View style={s.privacyBox}>
-        <Feather name="lock" size={17} color={Colors.primary} />
-        <Text style={s.privacyText}>
-          Partners can see only the journal activity count you choose to share,
-          never your text. AI receives up to three recent entries only when you
-          turn on Journal entries for a chat.
-        </Text>
-      </View>
-
       <View style={s.actionRow}>
         <TouchableOpacity
           style={s.primaryButton}
@@ -781,17 +772,6 @@ const s = StyleSheet.create({
   kicker: { color: '#a7f3d0', fontSize: 11, fontWeight: '700', letterSpacing: 1.1 },
   heroTitle: { color: '#fff', fontSize: 31, lineHeight: 37, fontWeight: '700', marginTop: 8 },
   heroText: { color: '#d1fae5', fontSize: 14, lineHeight: 21, marginTop: 9 },
-  privacyBox: {
-    flexDirection: 'row',
-    gap: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    backgroundColor: '#ecfdf5',
-    padding: 14,
-    marginTop: 14,
-  },
-  privacyText: { flex: 1, color: '#064e3b', fontSize: 12, lineHeight: 18 },
   actionRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14 },
   primaryButton: {
     borderRadius: 10,

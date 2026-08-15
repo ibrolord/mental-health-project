@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  ADVISOR_ACTION_REMINDER_KIND,
   DEFAULT_REMINDER_TIMES,
   ADVISOR_NOTIFICATION_ROUTE,
   ADVISOR_REMINDER_IDS_KEY,
@@ -835,9 +836,13 @@ describe('native local notifications', () => {
     expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         content: {
-          title: 'A gentle check-in',
-          body: 'Open MHtoolkit when you are ready to choose one small next step.',
-          data: { screen: ADVISOR_NOTIFICATION_ROUTE, category: 'advisorNudges' },
+          title: 'How did your step go?',
+          body: 'Mark it done, make it smaller, or choose a better time.',
+          data: {
+            screen: ADVISOR_NOTIFICATION_ROUTE,
+            category: 'advisorNudges',
+            deliveryKind: ADVISOR_ACTION_REMINDER_KIND,
+          },
         },
         trigger: expect.objectContaining({ type: 'date', date }),
       })
@@ -846,6 +851,31 @@ describe('native local notifications', () => {
     await expect(service.hasAdvisorReminder()).resolves.toBe(true);
     await expect(service.cancelAdvisorReminder()).resolves.toBeUndefined();
     await expect(service.hasAdvisorReminder()).resolves.toBe(false);
+  });
+
+  it('does not cancel the recurring Advisor brief when replacing an action reminder', async () => {
+    const Notifications = createNotifications();
+    const dailyId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Daily brief',
+        body: 'Open Advisor.',
+        data: {
+          screen: ADVISOR_NOTIFICATION_ROUTE,
+          category: 'advisorNudges',
+          deliveryKind: 'advisorDailyBrief',
+        },
+      },
+      trigger: { type: 'daily', hour: 9, minute: 0 },
+    } as never);
+    const { storage } = createStorage({ [NOTIFICATIONS_KEY]: 'true' });
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(
+      service.scheduleAdvisorReminder(new Date(Date.now() + 60_000))
+    ).resolves.toBe(true);
+    expect(Notifications.cancelScheduledNotificationAsync).not.toHaveBeenCalledWith(
+      dailyId
+    );
   });
 
   it('does not schedule Advisor nudges while their category is off', async () => {
@@ -915,6 +945,27 @@ describe('native local notifications', () => {
     expect(values.has(ADVISOR_REMINDER_IDS_KEY)).toBe(false);
   });
 
+  it('recovers an Advisor action reminder when its local ID was lost', async () => {
+    const Notifications = createNotifications();
+    const orphanedId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'How did your step go?',
+        body: 'Open Advisor.',
+        data: {
+          screen: ADVISOR_NOTIFICATION_ROUTE,
+          category: 'advisorNudges',
+          deliveryKind: ADVISOR_ACTION_REMINDER_KIND,
+        },
+      },
+      trigger: { type: 'date', date: new Date(Date.now() + 60_000) },
+    } as never);
+    const { storage, values } = createStorage();
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(service.hasAdvisorReminder()).resolves.toBe(true);
+    expect(JSON.parse(values.get(ADVISOR_REMINDER_IDS_KEY)!)).toEqual([orphanedId]);
+  });
+
   it('records an Advisor reminder for recovery when persistence and cleanup both fail', async () => {
     const Notifications = createNotifications();
     const { storage, values } = createStorage({ [NOTIFICATIONS_KEY]: 'true' });
@@ -928,6 +979,26 @@ describe('native local notifications', () => {
       service.scheduleAdvisorReminder(new Date(Date.now() + 60_000))
     ).rejects.toThrow('could not be saved or removed');
     expect(JSON.parse(values.get(ADVISOR_REMINDER_IDS_KEY)!)).toEqual(['notification-1']);
+  });
+
+  it('tracks both reminders when replacing the old one and cleaning up the new one fail', async () => {
+    const Notifications = createNotifications();
+    vi.mocked(Notifications.cancelScheduledNotificationAsync)
+      .mockRejectedValueOnce(new Error('old cancellation failed'))
+      .mockRejectedValueOnce(new Error('new cancellation failed'));
+    const { storage, values } = createStorage({
+      [NOTIFICATIONS_KEY]: 'true',
+      [ADVISOR_REMINDER_IDS_KEY]: '["old-advisor"]',
+    });
+    const service = createNotificationService(Notifications, storage, 'ios');
+
+    await expect(
+      service.scheduleAdvisorReminder(new Date(Date.now() + 60_000))
+    ).rejects.toThrow('previous Advisor reminder could not be replaced');
+    expect(JSON.parse(values.get(ADVISOR_REMINDER_IDS_KEY)!)).toEqual([
+      'old-advisor',
+      'notification-1',
+    ]);
   });
 
   it('rejects notification routes that were not scheduled by the app', () => {

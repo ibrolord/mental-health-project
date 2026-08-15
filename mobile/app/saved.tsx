@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   AppButton,
-  AppCard,
   AppScreen,
   EmptyState,
   PageHeader,
@@ -141,7 +140,7 @@ export default function SavedScreen() {
       <PageHeader
         eyebrow="Saved"
         title="Return to what mattered."
-        description="Your library choices and important journal markers, together without duplicating private writing."
+        description="Your library choices and important journal markers in one place."
         icon="bookmark"
       />
 
@@ -196,7 +195,7 @@ export default function SavedScreen() {
             <View style={styles.section}>
               <SectionHeader
                 title="Important in your journal"
-                description="Saved shows the title, date, and important marker. Your writing stays in Journal."
+                description="Entries you marked important."
               />
               {collection.importantJournal.map((item) => (
                 <Pressable
@@ -221,15 +220,6 @@ export default function SavedScreen() {
             </View>
           ) : null}
 
-          <AppCard quiet style={styles.privacyCard}>
-            <View style={styles.privacyTitleRow}>
-              <Feather name="lock" size={16} color={Colors.primary} />
-              <Text style={styles.privacyTitle}>Private records stay put</Text>
-            </View>
-            <Text style={appUiStyles.muted}>
-              Saved links back to Library and Journal without copying your private writing.
-            </Text>
-          </AppCard>
         </>
       )}
     </AppScreen>
@@ -262,12 +252,4 @@ const styles = StyleSheet.create({
   rowTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' },
   rowMeta: { color: Colors.textSecondary, fontSize: 12, marginTop: 3 },
   rowAccent: { color: Colors.accent, fontSize: 11, fontWeight: '700', marginTop: 6 },
-  privacyCard: { marginTop: 6 },
-  privacyTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 7,
-  },
-  privacyTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' },
 });

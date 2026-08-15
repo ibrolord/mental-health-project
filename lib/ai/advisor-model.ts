@@ -24,9 +24,30 @@ function fallbackOutput(request: AdvisorModelRequest): AdvisorModelOutput {
   return {
     candidateId: candidate.id,
     observations: candidate.observations.slice(0, 3),
-    signalIds: request.signals.slice(0, 2).map((signal) => signal.id),
+    signalIds: request.signals
+      .filter((signal) => signalSupportsCandidate(signal, candidate))
+      .slice(0, 2)
+      .map((signal) => signal.id),
     focus: 'steady',
   };
+}
+
+function signalSupportsCandidate(
+  signal: AdvisorModelRequest['signals'][number],
+  candidate: AdvisorModelRequest['candidates'][number]
+): boolean {
+  const sources = new Set(candidate.sourceLabels);
+  if (signal.kind === 'mood') {
+    return sources.has('Mood check-in') || sources.has('Mood check-ins');
+  }
+  if (signal.kind === 'deadline') {
+    return sources.has('Goal') || sources.has('Goals');
+  }
+  if (signal.kind === 'routine' || signal.kind === 'streak') {
+    return sources.has('Habit') || sources.has('Habits');
+  }
+  if (signal.kind === 'health') return sources.has('Apple Health summary');
+  return false;
 }
 
 export async function createModelAdvisorRecommendation(
@@ -44,6 +65,7 @@ Rules:
 - Copy one to three observations verbatim from the selected candidate. Do not rewrite them.
 - Do not change or invent candidate IDs, actions, routes, or resources.
 - Select up to three signal IDs that most directly explain today's priority. Use only supplied signal IDs.
+- Every selected signal must support the selected candidate's source labels. Use no signal IDs when none match.
 - Choose one focus: steady, deadline, routine, baseline, or recover.
 - Return JSON only in this exact shape: {"candidateId":"...","observations":["..."],"signalIds":["..."],"focus":"steady"}
 
@@ -70,9 +92,12 @@ ${JSON.stringify(request)}`;
       )
     : false;
   const selectedSignalIdsAreSafe = selected
-    ? selected.signalIds.every((id) =>
-        request.signals.some((signal) => signal.id === id)
-      )
+    ? selected.signalIds.every((id) => {
+        const signal = request.signals.find((item) => item.id === id);
+        return Boolean(
+          signal && selectedCandidate && signalSupportsCandidate(signal, selectedCandidate)
+        );
+      })
     : false;
 
   if (

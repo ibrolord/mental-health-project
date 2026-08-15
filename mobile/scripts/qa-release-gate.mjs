@@ -13,11 +13,28 @@ export const MOBILE_ROOT = path.resolve(SCRIPT_DIR, '..');
 export const REPO_ROOT = path.resolve(MOBILE_ROOT, '..');
 export const CHECKLIST_PATH = path.join(MOBILE_ROOT, 'qa', 'ios-release-checklist.json');
 export const RUNS_ROOT = path.join(MOBILE_ROOT, 'qa', 'runs');
-export const EXPECTED_INVENTORY = Object.freeze({ routes: 37, routeChecks: 726, workflows: 110, total: 836 });
-export const EXPECTED_CHECKLIST_SHA256 = 'db189d59f9095ee57754442721d5388286bc7cc2ad5f0c20e7ea5e682cd5eb16';
+export const EXPECTED_INVENTORY = Object.freeze({ routes: 37, routeChecks: 735, workflows: 117, total: 852 });
+export const EXPECTED_CHECKLIST_SHA256 = 'e768c857d57b571b21f98255463ba2d2244292de123e8d929c582de55f34e8d2';
 const REQUIRED_ROUTE_CONTROLS = Object.freeze({
   dashboard: ['support', 'safety-support', 'open-advisor', 'open-together'],
-  advisor: ['support', 'start', 'helpful-yes', 'helpful-no', 'helpful-skip', 'why-this-step', 'share-with-together', 'recent-steps'],
+  advisor: [
+    'support',
+    'start',
+    'schedule-check-in',
+    'accountability-done',
+    'accountability-partly',
+    'accountability-not-yet',
+    'recovery-reason',
+    'recovery-make-smaller',
+    'recovery-check-in-later',
+    'weekly-review',
+    'helpful-yes',
+    'helpful-no',
+    'helpful-skip',
+    'why-this-step',
+    'share-with-together',
+    'recent-steps',
+  ],
   'ai-chat': ['back', 'individual-context-toggles', 'local-safety-region', 'local-safety-country'],
   assessment: ['about-collapse', 'safety-region', 'country-support', 'safety-plan'],
   login: ['existing-account-notice', 'forgot-password'],

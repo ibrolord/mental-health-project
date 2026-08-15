@@ -1,19 +1,102 @@
+import {
+  formatHealthMinutes,
+  type AppleHealthAiSummary,
+} from './apple-health-core';
 import { formatStoredSleepClock } from './sleep-entry';
 
 export const VISIT_BRIEF_SECTION_ORDER = [
+  'moodHistory',
+  'moodNotes',
+  'assessmentScores',
+  'goals',
+  'habits',
   'activityPlans',
   'stayingWellPlan',
   'sleepDiary',
+  'appleHealth',
   'supportPreferences',
+  'journalEntries',
+  'savedAiConversations',
   'safetyPlan',
 ] as const;
 
 export type VisitBriefSectionId = (typeof VISIT_BRIEF_SECTION_ORDER)[number];
 export type VisitBriefSelection = Record<VisitBriefSectionId, boolean>;
 
-type UserEnteredSection<T> = {
-  provenance: 'user-entered';
+type VisitBriefSection<T> = {
+  provenance: 'user-entered' | 'device-summary';
   value: T;
+};
+
+type MoodEntry = {
+  id: string;
+  date: string;
+  emoji: string;
+  tags: string[];
+};
+
+type MoodNote = MoodEntry & { note: string };
+
+type AssessmentScore = {
+  id: string;
+  type: string;
+  score: number;
+  maxScore: number;
+  date: string;
+};
+
+type GoalMilestone = {
+  content: string;
+  dueAt?: string;
+  completedAt?: string;
+  order: number;
+};
+
+type Goal = {
+  id: string;
+  content: string;
+  status: string;
+  priority?: string;
+  dueAt?: string;
+  notes?: string;
+  reflection?: string;
+  milestones: GoalMilestone[];
+  attachmentNames: string[];
+};
+
+type HabitLog = { date: string; completed: boolean; note?: string };
+
+type Habit = {
+  id: string;
+  name: string;
+  description?: string;
+  frequency: string;
+  streakCount: number;
+  bestStreak: number;
+  totalCompletions: number;
+  cue?: string;
+  tinyStep?: string;
+  reward?: string;
+  active: boolean;
+  recentLogs: HabitLog[];
+};
+
+type JournalEntry = {
+  id: string;
+  title: string;
+  content: string;
+  prompt?: string;
+  tags: string[];
+  createdAt: string;
+};
+
+type ConversationMessage = { role: 'You' | 'Advisor'; content: string };
+
+type SavedAiConversation = {
+  id: string;
+  title: string;
+  createdAt: string;
+  messages: ConversationMessage[];
 };
 
 type ActivityStep = {
@@ -71,11 +154,95 @@ type SupportPreferences = {
 };
 
 export type VisitBriefSource = {
-  activityPlans?: UserEnteredSection<ActivityPlan[]>;
-  stayingWellPlan?: UserEnteredSection<StayingWellPlan>;
-  sleepDiary?: UserEnteredSection<SleepEntry[]>;
-  supportPreferences?: UserEnteredSection<SupportPreferences>;
-  safetyPlan?: UserEnteredSection<SafetyPlan>;
+  moodHistory?: VisitBriefSection<MoodEntry[]>;
+  moodNotes?: VisitBriefSection<MoodNote[]>;
+  assessmentScores?: VisitBriefSection<AssessmentScore[]>;
+  goals?: VisitBriefSection<Goal[]>;
+  habits?: VisitBriefSection<Habit[]>;
+  activityPlans?: VisitBriefSection<ActivityPlan[]>;
+  stayingWellPlan?: VisitBriefSection<StayingWellPlan>;
+  sleepDiary?: VisitBriefSection<SleepEntry[]>;
+  appleHealth?: VisitBriefSection<AppleHealthAiSummary>;
+  supportPreferences?: VisitBriefSection<SupportPreferences>;
+  journalEntries?: VisitBriefSection<JournalEntry[]>;
+  savedAiConversations?: VisitBriefSection<SavedAiConversation[]>;
+  safetyPlan?: VisitBriefSection<SafetyPlan>;
+};
+
+export type MoodRow = {
+  id: string;
+  emoji: string;
+  note: string | null;
+  tags: string[];
+  local_date: string | null;
+  created_at: string;
+};
+
+export type AssessmentRow = {
+  id: string;
+  type: string;
+  score: number;
+  max_score: number;
+  created_at: string;
+};
+
+export type GoalRow = {
+  id: string;
+  content: string;
+  status: string;
+  priority: string | null;
+  notes: string | null;
+  reflection: string | null;
+  due_at: string | null;
+  updated_at: string;
+};
+
+export type GoalMilestoneRow = {
+  goal_id: string;
+  content: string;
+  position: number;
+  due_at: string | null;
+  completed_at: string | null;
+};
+
+export type GoalAttachmentRow = { goal_id: string; file_name: string };
+
+export type HabitRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  frequency: string;
+  streak_count: number;
+  best_streak: number;
+  total_completions: number;
+  cue: string;
+  tiny_step: string;
+  reward: string;
+  is_active: boolean;
+  updated_at: string;
+};
+
+export type HabitLogRow = {
+  habit_id: string;
+  completed: boolean;
+  note: string | null;
+  log_date: string;
+};
+
+export type JournalEntryRow = {
+  id: string;
+  title: string;
+  content: string;
+  prompt: string | null;
+  tags: string[];
+  created_at: string;
+};
+
+export type SavedAiConversationRow = {
+  id: string;
+  title: string | null;
+  messages: unknown;
+  created_at: string;
 };
 
 export type ActivityPlanRow = {
@@ -130,6 +297,13 @@ export type SupportPreferencesRow = {
 };
 
 export type VisitBriefDatabaseSnapshot = {
+  moods?: MoodRow[];
+  assessments?: AssessmentRow[];
+  goals?: GoalRow[];
+  goalMilestones?: GoalMilestoneRow[];
+  goalAttachments?: GoalAttachmentRow[];
+  habits?: HabitRow[];
+  habitLogs?: HabitLogRow[];
   activityPlans?: ActivityPlanRow[];
   activitySteps?: ActivityStepRow[];
   safetyPlan?: PlanRow | null;
@@ -138,6 +312,8 @@ export type VisitBriefDatabaseSnapshot = {
   stayingWellItems?: PlanItemRow[];
   sleepEntries?: SleepDiaryRow[];
   supportPreferences?: SupportPreferencesRow | null;
+  journalEntries?: JournalEntryRow[];
+  savedAiConversations?: SavedAiConversationRow[];
 };
 
 export type VisitBrief = {
@@ -173,12 +349,27 @@ const ADVICE_LABELS: Record<string, string> = {
   welcome: 'Advice is welcome',
 };
 
+const ASSESSMENT_LABELS: Record<string, string> = {
+  GAD7: 'GAD-7',
+  PHQ9: 'PHQ-9',
+  CBI: 'Copenhagen Burnout Inventory',
+  PSS4: 'PSS-4',
+};
+
 export function createVisitBriefSelection(): VisitBriefSelection {
   return {
+    moodHistory: false,
+    moodNotes: false,
+    assessmentScores: false,
+    goals: false,
+    habits: false,
     activityPlans: false,
     stayingWellPlan: false,
     sleepDiary: false,
+    appleHealth: false,
     supportPreferences: false,
+    journalEntries: false,
+    savedAiConversations: false,
     safetyPlan: false,
   };
 }
@@ -200,6 +391,36 @@ function summarize(label: string, details: string, maxLength = 160): string {
     normalizedDetails ? `${normalizedLabel}: ${normalizedDetails}` : normalizedLabel,
     maxLength
   );
+}
+
+function datePart(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString().slice(0, 10) : undefined;
+}
+
+function cleanStrings(values: readonly unknown[] | null | undefined): string[] {
+  return (values ?? [])
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => normalizeSpace(value))
+    .filter(Boolean);
+}
+
+function conversationMessages(value: unknown): ConversationMessage[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .flatMap((message): ConversationMessage[] => {
+      if (typeof message !== 'object' || message === null) return [];
+      const role = (message as Record<string, unknown>).role;
+      const content = (message as Record<string, unknown>).content;
+      if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string') {
+        return [];
+      }
+      const normalized = concise(content, 4_000);
+      if (!normalized) return [];
+      return [{ role: role === 'user' ? 'You' : 'Advisor', content: normalized }];
+    })
+    .slice(-40);
 }
 
 function elapsedMinutes(from: string, to: string): number | null {
@@ -229,6 +450,128 @@ function contactsForKind(items: PlanItemRow[], kind: string): Contact[] {
 
 export function adaptVisitBriefRows(snapshot: VisitBriefDatabaseSnapshot): VisitBriefSource {
   const source: VisitBriefSource = {};
+
+  const moods = (snapshot.moods ?? [])
+    .flatMap((mood): MoodEntry[] => {
+      const date = mood.local_date ?? datePart(mood.created_at);
+      if (!date || !normalizeSpace(mood.emoji)) return [];
+      return [{
+        id: mood.id,
+        date,
+        emoji: normalizeSpace(mood.emoji),
+        tags: cleanStrings(mood.tags),
+      }];
+    })
+    .sort((left, right) => right.date.localeCompare(left.date) || left.id.localeCompare(right.id));
+  if (moods.length > 0) {
+    source.moodHistory = { provenance: 'user-entered', value: moods };
+  }
+
+  const moodNotes = (snapshot.moods ?? [])
+    .flatMap((mood): MoodNote[] => {
+      const date = mood.local_date ?? datePart(mood.created_at);
+      const note = mood.note ? concise(mood.note, 2_000) : '';
+      if (!date || !note || !normalizeSpace(mood.emoji)) return [];
+      return [{
+        id: mood.id,
+        date,
+        emoji: normalizeSpace(mood.emoji),
+        tags: cleanStrings(mood.tags),
+        note,
+      }];
+    })
+    .sort((left, right) => right.date.localeCompare(left.date) || left.id.localeCompare(right.id));
+  if (moodNotes.length > 0) {
+    source.moodNotes = { provenance: 'user-entered', value: moodNotes };
+  }
+
+  const assessments = (snapshot.assessments ?? [])
+    .flatMap((assessment): AssessmentScore[] => {
+      const date = datePart(assessment.created_at);
+      if (
+        !date ||
+        !normalizeSpace(assessment.type) ||
+        !Number.isFinite(assessment.score) ||
+        !Number.isFinite(assessment.max_score) ||
+        assessment.max_score <= 0
+      ) return [];
+      return [{
+        id: assessment.id,
+        type: normalizeSpace(assessment.type),
+        score: assessment.score,
+        maxScore: assessment.max_score,
+        date,
+      }];
+    })
+    .sort((left, right) => right.date.localeCompare(left.date) || left.id.localeCompare(right.id));
+  if (assessments.length > 0) {
+    source.assessmentScores = { provenance: 'user-entered', value: assessments };
+  }
+
+  const goals = (snapshot.goals ?? [])
+    .flatMap((goal): Goal[] => {
+      const content = concise(goal.content, 500);
+      if (!content) return [];
+      const milestones = (snapshot.goalMilestones ?? [])
+        .filter((milestone) => milestone.goal_id === goal.id)
+        .sort((left, right) => left.position - right.position)
+        .map((milestone, index) => ({
+          content: concise(milestone.content, 500),
+          dueAt: datePart(milestone.due_at),
+          completedAt: datePart(milestone.completed_at),
+          order: index + 1,
+        }))
+        .filter((milestone) => Boolean(milestone.content));
+      return [{
+        id: goal.id,
+        content,
+        status: normalizeSpace(goal.status) || 'pending',
+        priority: goal.priority ? normalizeSpace(goal.priority) : undefined,
+        dueAt: datePart(goal.due_at),
+        notes: goal.notes ? concise(goal.notes, 5_000) : undefined,
+        reflection: goal.reflection ? concise(goal.reflection, 5_000) : undefined,
+        milestones,
+        attachmentNames: cleanStrings(
+          (snapshot.goalAttachments ?? [])
+            .filter((attachment) => attachment.goal_id === goal.id)
+            .map((attachment) => attachment.file_name)
+        ),
+      }];
+    });
+  if (goals.length > 0) {
+    source.goals = { provenance: 'user-entered', value: goals };
+  }
+
+  const habits = (snapshot.habits ?? [])
+    .flatMap((habit): Habit[] => {
+      const name = concise(habit.name, 160);
+      if (!name) return [];
+      return [{
+        id: habit.id,
+        name,
+        description: habit.description ? concise(habit.description, 1_000) : undefined,
+        frequency: normalizeSpace(habit.frequency) || 'daily',
+        streakCount: Math.max(0, habit.streak_count || 0),
+        bestStreak: Math.max(0, habit.best_streak || 0),
+        totalCompletions: Math.max(0, habit.total_completions || 0),
+        cue: normalizeSpace(habit.cue) || undefined,
+        tinyStep: normalizeSpace(habit.tiny_step) || undefined,
+        reward: normalizeSpace(habit.reward) || undefined,
+        active: habit.is_active,
+        recentLogs: (snapshot.habitLogs ?? [])
+          .filter((log) => log.habit_id === habit.id)
+          .sort((left, right) => right.log_date.localeCompare(left.log_date))
+          .map((log) => ({
+            date: log.log_date,
+            completed: log.completed,
+            note: log.note ? concise(log.note, 500) : undefined,
+          })),
+      }];
+    });
+  if (habits.length > 0) {
+    source.habits = { provenance: 'user-entered', value: habits };
+  }
+
   const activityPlans = (snapshot.activityPlans ?? [])
     .flatMap((plan): ActivityPlan[] => {
       const steps = (snapshot.activitySteps ?? [])
@@ -357,6 +700,44 @@ export function adaptVisitBriefRows(snapshot: VisitBriefDatabaseSnapshot): Visit
     };
   }
 
+  const journalEntries = (snapshot.journalEntries ?? [])
+    .flatMap((entry): JournalEntry[] => {
+      const title = concise(entry.title, 160);
+      const content = concise(entry.content, 12_000);
+      if (!title || !content) return [];
+      return [{
+        id: entry.id,
+        title,
+        content,
+        prompt: entry.prompt ? concise(entry.prompt, 500) : undefined,
+        tags: cleanStrings(entry.tags),
+        createdAt: entry.created_at,
+      }];
+    })
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id));
+  if (journalEntries.length > 0) {
+    source.journalEntries = { provenance: 'user-entered', value: journalEntries };
+  }
+
+  const savedAiConversations = (snapshot.savedAiConversations ?? [])
+    .flatMap((conversation): SavedAiConversation[] => {
+      const messages = conversationMessages(conversation.messages);
+      if (messages.length === 0) return [];
+      return [{
+        id: conversation.id,
+        title: conversation.title ? concise(conversation.title, 160) : 'Saved conversation',
+        createdAt: conversation.created_at,
+        messages,
+      }];
+    })
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id));
+  if (savedAiConversations.length > 0) {
+    source.savedAiConversations = {
+      provenance: 'user-entered',
+      value: savedAiConversations,
+    };
+  }
+
   return source;
 }
 
@@ -366,12 +747,15 @@ function addList(lines: string[], label: string, values: string[]): void {
 
 function requireSource<T>(
   selected: boolean,
-  section: UserEnteredSection<T> | undefined,
+  section: VisitBriefSection<T> | undefined,
   label: string
-): UserEnteredSection<T> | null {
+): VisitBriefSection<T> | null {
   if (!selected) return null;
-  if (!section || section.provenance !== 'user-entered') {
-    throw new Error(`${label} has no saved user-entered content.`);
+  if (
+    !section ||
+    (section.provenance !== 'user-entered' && section.provenance !== 'device-summary')
+  ) {
+    throw new Error(`${label} has no available content.`);
   }
   return section;
 }
@@ -385,6 +769,94 @@ export function generateVisitBrief(
   source: VisitBriefSource
 ): VisitBrief {
   const blocks: string[] = [];
+
+  const moodHistory = requireSource(
+    selection.moodHistory,
+    source.moodHistory,
+    'Mood history'
+  );
+  if (moodHistory) {
+    blocks.push(
+      `[Mood history]\n${moodHistory.value
+        .map((entry) =>
+          `${entry.date}: ${entry.emoji}${entry.tags.length > 0 ? ` | words: ${entry.tags.join(', ')}` : ''}`
+        )
+        .join('\n')}`
+    );
+  }
+
+  const moodNotes = requireSource(selection.moodNotes, source.moodNotes, 'Mood notes');
+  if (moodNotes) {
+    blocks.push(
+      `[Mood notes]\n${moodNotes.value
+        .map((entry) => `${entry.date} ${entry.emoji}: ${entry.note}`)
+        .join('\n')}`
+    );
+  }
+
+  const assessments = requireSource(
+    selection.assessmentScores,
+    source.assessmentScores,
+    'Assessment scores'
+  );
+  if (assessments) {
+    blocks.push(
+      `[Assessment scores]\n${assessments.value
+        .map((entry) =>
+          `${entry.date}: ${ASSESSMENT_LABELS[entry.type] ?? entry.type} ${entry.score}/${entry.maxScore}`
+        )
+        .join('\n')}`
+    );
+  }
+
+  const goals = requireSource(selection.goals, source.goals, 'Goals');
+  if (goals) {
+    const lines: string[] = [];
+    for (const goal of goals.value) {
+      const details = [
+        `status: ${goal.status}`,
+        goal.priority ? `priority: ${goal.priority}` : '',
+        goal.dueAt ? `due: ${goal.dueAt}` : '',
+      ].filter(Boolean);
+      lines.push(`Goal: ${goal.content} | ${details.join(' | ')}`);
+      if (goal.notes) lines.push(`Notes: ${goal.notes}`);
+      if (goal.reflection) lines.push(`Reflection: ${goal.reflection}`);
+      for (const milestone of goal.milestones) {
+        const milestoneState = milestone.completedAt
+          ? `completed ${milestone.completedAt}`
+          : milestone.dueAt
+            ? `due ${milestone.dueAt}`
+            : 'not completed';
+        lines.push(`Milestone ${milestone.order}: ${milestone.content} | ${milestoneState}`);
+      }
+      addList(lines, 'Attachments', goal.attachmentNames);
+    }
+    blocks.push(`[Goals and milestones]\n${lines.join('\n')}`);
+  }
+
+  const habits = requireSource(selection.habits, source.habits, 'Habits');
+  if (habits) {
+    const lines: string[] = [];
+    for (const habit of habits.value) {
+      lines.push(
+        `Habit: ${habit.name} | ${habit.active ? 'active' : 'inactive'} | ` +
+          `frequency: ${habit.frequency} | current streak: ${habit.streakCount} | ` +
+          `best streak: ${habit.bestStreak} | total completions: ${habit.totalCompletions}`
+      );
+      if (habit.description) lines.push(`Description: ${habit.description}`);
+      if (habit.cue) lines.push(`Cue: ${habit.cue}`);
+      if (habit.tinyStep) lines.push(`Small step: ${habit.tinyStep}`);
+      if (habit.reward) lines.push(`Reward: ${habit.reward}`);
+      const completedDates = habit.recentLogs
+        .filter((log) => log.completed)
+        .map((log) => log.date);
+      addList(lines, 'Recent completed dates', completedDates);
+      for (const log of habit.recentLogs) {
+        if (log.note) lines.push(`${log.date} note: ${log.note}`);
+      }
+    }
+    blocks.push(`[Habits]\n${lines.join('\n')}`);
+  }
 
   const activity = requireSource(
     selection.activityPlans,
@@ -455,6 +927,28 @@ export function generateVisitBrief(
     blocks.push(`[Sleep diary]\n${lines.join('\n')}`);
   }
 
+  const appleHealth = requireSource(
+    selection.appleHealth,
+    source.appleHealth,
+    'Apple Health summary'
+  );
+  if (appleHealth) {
+    const formatWindow = (
+      label: string,
+      window: AppleHealthAiSummary['sevenDay']
+    ) =>
+      `${label}: ${window.coverageDays} days with data; ` +
+      `average steps ${window.averageSteps?.toLocaleString() ?? 'unavailable'}; ` +
+      `average sleep ${formatHealthMinutes(window.averageSleepMinutes)}; ` +
+      `exercise minutes ${window.exerciseMinutes}; mindful minutes ${window.mindfulMinutes}; ` +
+      `workouts ${window.workoutCount}; State of Mind entries ${window.stateOfMindCount}`;
+    blocks.push(
+      `[Apple Health aggregate summary]\n${formatWindow('7 days', appleHealth.value.sevenDay)}\n` +
+      `${formatWindow('30 days', appleHealth.value.thirtyDay)}\n` +
+      `Coverage note: ${appleHealth.value.moodComparison}`
+    );
+  }
+
   const support = requireSource(
     selection.supportPreferences,
     source.supportPreferences,
@@ -465,6 +959,38 @@ export function generateVisitBrief(
     addList(lines, 'Communication needs', support.value.communicationNeeds);
     addList(lines, 'Helpful support', support.value.helpfulSupport);
     blocks.push(`[Support preferences]\n${lines.join('\n')}`);
+  }
+
+  const journal = requireSource(
+    selection.journalEntries,
+    source.journalEntries,
+    'Journal entries'
+  );
+  if (journal) {
+    const lines: string[] = [];
+    for (const entry of journal.value) {
+      lines.push(`${datePart(entry.createdAt) ?? 'Date unavailable'} — ${entry.title}`);
+      if (entry.prompt) lines.push(`Prompt: ${entry.prompt}`);
+      lines.push(`Entry: ${entry.content}`);
+      addList(lines, 'Tags', entry.tags);
+    }
+    blocks.push(`[Journal entries]\n${lines.join('\n')}`);
+  }
+
+  const conversations = requireSource(
+    selection.savedAiConversations,
+    source.savedAiConversations,
+    'Saved AI conversations'
+  );
+  if (conversations) {
+    const lines: string[] = [];
+    for (const conversation of conversations.value) {
+      lines.push(`${datePart(conversation.createdAt) ?? 'Date unavailable'} — ${conversation.title}`);
+      for (const message of conversation.messages) {
+        lines.push(`${message.role}: ${message.content}`);
+      }
+    }
+    blocks.push(`[Saved AI conversations]\n${lines.join('\n')}`);
   }
 
   const safety = requireSource(selection.safetyPlan, source.safetyPlan, 'Safety plan');

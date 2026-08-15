@@ -423,5 +423,13 @@ export async function loadAmbientAdvisorContext(
     health: healthResult.status === 'fulfilled' ? healthResult.value : null,
     notifications:
       notificationResult.status === 'fulfilled' ? notificationResult.value : null,
+    sourceAvailability: {
+      mood: moodResult.status === 'fulfilled' ? 'ready' : 'unavailable',
+      goals: goalResult.status === 'fulfilled' ? 'ready' : 'unavailable',
+      habits: habitResult.status === 'fulfilled' ? 'ready' : 'unavailable',
+      health: healthResult.status === 'fulfilled' ? 'ready' : 'unavailable',
+      notifications:
+        notificationResult.status === 'fulfilled' ? 'ready' : 'unavailable',
+    },
   });
 }

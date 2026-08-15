@@ -15,6 +15,8 @@ import {
 
 type AdvisorModel = 'gemini' | 'claude';
 
+export const ADVISOR_MODEL_TIMEOUT_MS = 6_000;
+
 type AdvisorModelResponse = {
   selection: {
     candidateId: string;
@@ -81,6 +83,8 @@ export async function requestModelAdvisorRecommendation(
         recommendationId: item.recommendationId,
         helpful: item.helpful ?? null,
       })),
+  }, {
+    timeoutMs: ADVISOR_MODEL_TIMEOUT_MS,
   });
 
   if (response.model === 'safety') {

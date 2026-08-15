@@ -23,6 +23,8 @@ export const ADVISOR_REMINDER_IDS_KEY = 'advisor_reminder_notification_ids';
 export const DEFAULT_REMINDER_TIMES = [9, 14, 20] as const;
 export const MOOD_TRACKER_NOTIFICATION_ROUTE = '/(tabs)/tracker';
 export const ADVISOR_NOTIFICATION_ROUTE = '/advisor';
+export const ADVISOR_DAILY_BRIEF_KIND = 'advisorDailyBrief';
+export const ADVISOR_ACTION_REMINDER_KIND = 'advisorActionReminder';
 
 export type NotificationCategory =
   | 'dailyPlanning'
@@ -50,6 +52,7 @@ export type ReminderContent = {
   body: string;
   screen: NotificationScreen;
   category: NotificationCategory;
+  deliveryKind?: typeof ADVISOR_DAILY_BRIEF_KIND;
 };
 
 export type DueDateReminder = ReminderContent & {
@@ -267,6 +270,21 @@ export function createNotificationService(
     return notificationPermissionAllowsDelivery(permission, Notifications);
   }
 
+  function isAdvisorActionReminder(
+    request: Awaited<ReturnType<NotificationsModule['getAllScheduledNotificationsAsync']>>[number]
+  ): boolean {
+    const data = request.content.data;
+    const values = data && typeof data === 'object'
+      ? (data as Record<string, unknown>)
+      : {};
+    const triggerType = request.trigger && typeof request.trigger === 'object'
+      ? (request.trigger as Record<string, unknown>).type
+      : null;
+    return values.deliveryKind === ADVISOR_ACTION_REMINDER_KIND ||
+      ((values.category === 'advisorNudges' || values.screen === ADVISOR_NOTIFICATION_ROUTE) &&
+        triggerType === Notifications.SchedulableTriggerInputTypes.DATE);
+  }
+
   async function cancelStoredReminders(
     storageKey: string,
     failureMessage: string
@@ -289,7 +307,7 @@ export function createNotificationService(
           ? (request.trigger as Record<string, unknown>).type
           : null;
         if (storageKey === ADVISOR_REMINDER_IDS_KEY) {
-          return category === 'advisorNudges' || screen === ADVISOR_NOTIFICATION_ROUTE;
+          return isAdvisorActionReminder(request);
         }
         if (storageKey === DUE_DATE_REMINDER_IDS_KEY) {
           return category === 'goalReminders' ||
@@ -474,19 +492,23 @@ export function createNotificationService(
     const storedIds = parseStoredNotificationIds(
       await storage.getItem(ADVISOR_REMINDER_IDS_KEY)
     );
-    if (storedIds.length === 0) {
-      await storage.removeItem(ADVISOR_REMINDER_IDS_KEY);
-      return false;
-    }
-
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
     const activeIds = new Set(scheduled.map((request) => request.identifier));
-    const retainedIds = storedIds.filter((id) => activeIds.has(id));
+    const discoveredIds = scheduled
+      .filter(isAdvisorActionReminder)
+      .map((request) => request.identifier);
+    const retainedIds = Array.from(new Set([
+      ...storedIds.filter((id) => activeIds.has(id)),
+      ...discoveredIds,
+    ]));
     if (retainedIds.length === 0) {
       await storage.removeItem(ADVISOR_REMINDER_IDS_KEY);
       return false;
     }
-    if (retainedIds.length !== storedIds.length) {
+    if (
+      retainedIds.length !== storedIds.length ||
+      retainedIds.some((id, index) => id !== storedIds[index])
+    ) {
       await storage.setItem(ADVISOR_REMINDER_IDS_KEY, JSON.stringify(retainedIds));
     }
     return true;
@@ -533,7 +555,11 @@ export function createNotificationService(
           content: {
             title: content.title,
             body: content.body,
-            data: { screen: content.screen, category: dailyCategoryFor(content) },
+            data: {
+              screen: content.screen,
+              category: dailyCategoryFor(content),
+              ...(content.deliveryKind ? { deliveryKind: content.deliveryKind } : {}),
+            },
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -891,13 +917,35 @@ export function createNotificationService(
       );
       if (!preferences.advisorNudges) return false;
       if (!(await requestPermissions())) return false;
-      await cancelAdvisorReminderInternal();
       await ensureAndroidChannel();
+      const storedIds = parseStoredNotificationIds(
+        await storage.getItem(ADVISOR_REMINDER_IDS_KEY)
+      );
+      const scheduledBefore = await Notifications.getAllScheduledNotificationsAsync();
+      const discoveredIds = scheduledBefore
+        .filter((request) => {
+          const data = request.content.data;
+          const row = data && typeof data === 'object'
+            ? data as Record<string, unknown>
+            : {};
+          const triggerType = request.trigger && typeof request.trigger === 'object'
+            ? (request.trigger as Record<string, unknown>).type
+            : null;
+          return row.deliveryKind === ADVISOR_ACTION_REMINDER_KIND ||
+            ((row.category === 'advisorNudges' || row.screen === ADVISOR_NOTIFICATION_ROUTE) &&
+              triggerType === Notifications.SchedulableTriggerInputTypes.DATE);
+        })
+        .map((request) => request.identifier);
+      const previousIds = Array.from(new Set([...storedIds, ...discoveredIds]));
       const id = await Notifications.scheduleNotificationAsync({
         content: {
-          title: 'A gentle check-in',
-          body: 'Open MHtoolkit when you are ready to choose one small next step.',
-          data: { screen: ADVISOR_NOTIFICATION_ROUTE, category: 'advisorNudges' },
+          title: 'How did your step go?',
+          body: 'Mark it done, make it smaller, or choose a better time.',
+          data: {
+            screen: ADVISOR_NOTIFICATION_ROUTE,
+            category: 'advisorNudges',
+            deliveryKind: ADVISOR_ACTION_REMINDER_KIND,
+          },
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -905,6 +953,30 @@ export function createNotificationService(
           date,
         },
       });
+      const cancellableIds = previousIds.filter((previousId) => previousId !== id);
+      const cancellation = await Promise.allSettled(
+        cancellableIds.map((previousId) =>
+          Notifications.cancelScheduledNotificationAsync(previousId)
+        )
+      );
+      if (cancellation.some((result) => result.status === 'rejected')) {
+        let newReminderNeedsRecovery = false;
+        try {
+          await Notifications.cancelScheduledNotificationAsync(id);
+        } catch {
+          newReminderNeedsRecovery = true;
+        }
+        const retained = cancellableIds.filter(
+          (_previousId, index) => cancellation[index]?.status === 'rejected'
+        );
+        if (newReminderNeedsRecovery) retained.push(id);
+        if (retained.length > 0) {
+          await storage.setItem(ADVISOR_REMINDER_IDS_KEY, JSON.stringify(retained));
+        } else {
+          await storage.removeItem(ADVISOR_REMINDER_IDS_KEY);
+        }
+        throw new Error('The previous Advisor reminder could not be replaced.');
+      }
       try {
         await storage.setItem(ADVISOR_REMINDER_IDS_KEY, JSON.stringify([id]));
       } catch (persistenceError) {
