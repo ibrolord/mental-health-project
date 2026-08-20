@@ -90,4 +90,13 @@ describe('habit identity and progress', () => {
     expect(mobileBlankEditor).toContain('setTemplatesOpen(false)');
     expect(mobileHabitsPage).toContain('onPress={openBlankHabitEditor}');
   });
+
+  it('keeps mobile routine filters compact, visual, and accessible', () => {
+    expect(mobileHabitsPage).toContain("label=\"🎯\"");
+    expect(mobileHabitsPage).toContain('label={item.emoji}');
+    expect(mobileHabitsPage).toContain('accessibilityLabel={`${item.label} habits`}');
+    expect(mobileHabitsPage).toContain('style={styles.slotFilterScroller}');
+    expect(mobileHabitsPage).toContain('slotFilterScroller: {');
+    expect(mobileHabitsPage).toContain('flexGrow: 0');
+  });
 });

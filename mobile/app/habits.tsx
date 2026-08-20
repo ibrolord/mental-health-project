@@ -64,11 +64,11 @@ type Habit = {
 const HABIT_SELECT =
   'id, user_id, name, description, habit_type, category, icon, cue, tiny_step, routine_slot, reward, reward_target, streak_count, best_streak, total_completions, accountability_enabled, accountability_days, accountability_timezone, accountability_share_streak, is_active, created_at';
 
-const SLOTS: { id: RoutineSlot; label: string }[] = [
-  { id: 'morning', label: 'Morning' },
-  { id: 'afternoon', label: 'Afternoon' },
-  { id: 'evening', label: 'Night' },
-  { id: 'anytime', label: 'Anytime' },
+const SLOTS: { id: RoutineSlot; label: string; emoji: string }[] = [
+  { id: 'morning', label: 'Morning', emoji: '🌅' },
+  { id: 'afternoon', label: 'Afternoon', emoji: '☀️' },
+  { id: 'evening', label: 'Night', emoji: '🌙' },
+  { id: 'anytime', label: 'Anytime', emoji: '✨' },
 ];
 
 const HABIT_EMOJI_BY_ICON: Record<string, string> = {
@@ -724,17 +724,20 @@ export default function HabitsScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.slotFilterScroller}
         contentContainerStyle={styles.slotFilters}
       >
         <ChoiceChip
-          label="All"
+          label="🎯"
+          accessibilityLabel="All habits"
           selected={slot === 'all'}
           onPress={() => setSlot('all')}
         />
         {SLOTS.map((item) => (
           <ChoiceChip
             key={item.id}
-            label={item.label}
+            label={item.emoji}
+            accessibilityLabel={`${item.label} habits`}
             selected={slot === item.id}
             onPress={() => setSlot(item.id)}
           />
@@ -1006,8 +1009,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  slotFilterScroller: {
+    flexGrow: 0,
+  },
   slotFilters: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
     marginTop: 10,
     marginBottom: 16,
