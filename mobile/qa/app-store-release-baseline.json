@@ -1,6 +1,6 @@
 {
-  "lastApprovedVersion": "1.0.3",
-  "candidateVersion": "1.0.4",
-  "verifiedAt": "2026-08-14",
-  "evidence": "App Store Connect reports version 1.0.3 Ready for Distribution, so its train is closed. The next candidate uses the higher 1.0.4 train."
+  "lastApprovedVersion": "1.0.4",
+  "candidateVersion": "1.0.5",
+  "verifiedAt": "2026-08-20",
+  "evidence": "App Store Connect reports version 1.0.4 Ready for Distribution and version 1.0.5 Prepare for Submission. The next candidate therefore uses the open 1.0.5 train."
 }

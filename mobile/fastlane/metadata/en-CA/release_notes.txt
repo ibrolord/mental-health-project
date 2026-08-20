@@ -1,4 +1,4 @@
-What's new in 1.0.4:
+What's new in 1.0.5:
 
 - A calmer, clearer iPhone experience with redesigned Today, Mood, Talk, Tools, and You areas.
 - Together makes accountability easier to find, with private invitations, shared commitments, check-ins, streaks, celebrations, and clear sharing controls.

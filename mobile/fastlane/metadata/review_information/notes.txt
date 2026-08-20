@@ -1,7 +1,7 @@
 No login is required for the core review path. MHtoolkit creates a private anonymous session. Together accountability features require a permanent account because two verified accounts are needed.
 
 BUILD UNDER REVIEW
-Version 1.0.4, build 56
+Version 1.0.5, build 59
 Bundle ID: com.mhtoolkit.app
 
 SUGGESTED REVIEW PATH
@@ -18,7 +18,7 @@ MEDICAL AND PRIVACY BOUNDARIES
 MHtoolkit supports self-management and reflection. It does not diagnose, treat, or replace a doctor or licensed professional. Partners receive only user-enabled activity counts and fixed-format celebrations; database authorization prevents access to raw private content. AI consent can be revoked in Settings.
 
 iPAD COMPATIBILITY
-The app is iPhone-only and requires fullscreen, and runs in iPhone compatibility mode on iPad. Build 56 uses expo-notifications 0.32.17 with Expo's iOS serializer thread-safety fix and omits expo-device. The signed IPA was verified as iPhone-only and includes the notification native module.
+The app is iPhone-only and requires fullscreen, and runs in iPhone compatibility mode on iPad. Build 59 uses expo-notifications 0.32.17 with Expo's iOS serializer thread-safety fix and omits expo-device. The signed IPA was verified as iPhone-only and includes the notification native module.
 
 Support: bolajiag10@gmail.com
 Support URL: https://mhtoolkit.vercel.app/support
