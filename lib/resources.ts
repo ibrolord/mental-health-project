@@ -312,7 +312,7 @@ export const SUPPORT_GROUPS: ResourceLink[] = [
     region: 'Kenya',
     description:
       'A Kenyan peer-led mental health organization with community support and recovery programming.',
-    url: 'https://www.mental360.or.ke/our-model/',
+    url: 'https://csoplatform.africa/search/cso/mental-360',
   },
   {
     name: 'Mental Health Uganda',
@@ -424,7 +424,7 @@ export const AFRICA_SUPPORT: ResourceLink[] = [
     region: 'Kenya',
     description:
       'Peer-led community support, prevention, and recovery programs developed in Kenya.',
-    url: 'https://www.mental360.or.ke/our-model/',
+    url: 'https://csoplatform.africa/search/cso/mental-360',
     note: 'Peer-led',
   },
   // Ghana's Mental Health Authority site (mhaghana.com) did not resolve
