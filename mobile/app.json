@@ -8,11 +8,6 @@
     "scheme": "mhtoolkit",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#f3f0e4"
-    },
     "ios": {
       "supportsTablet": false,
       "requireFullScreen": true,
@@ -66,6 +61,15 @@
     "plugins": [
       "./plugins/ios-build-fixes",
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#f6f2e7",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 112,
+          "resizeMode": "contain"
+        }
+      ],
       "expo-secure-store",
       [
         "@kingstinct/react-native-healthkit",

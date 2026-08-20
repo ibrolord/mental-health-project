@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, useRootNavigationState, useRouter, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AppState } from 'react-native';
@@ -19,10 +19,13 @@ import { AcquisitionCapture } from '@/components/AcquisitionCapture';
 import { AppBackButton } from '@/components/AppBackButton';
 import { recordOperationalEvent } from '@/lib/observability';
 import { Colors } from '@/lib/constants';
+import { LaunchExperience } from '@/components/LaunchExperience';
 
 export default function RootLayout() {
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
+  const [authReady, setAuthReady] = useState(false);
+  const handleAuthReady = useCallback(() => setAuthReady(true), []);
   const notificationResponseRef = useRef<NotificationSubscription | null>(null);
   const notificationQueueRef = useRef<
     NotificationNavigationQueue<NotificationScreen> | null
@@ -151,19 +154,23 @@ export default function RootLayout() {
   }, [router]);
 
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <AcquisitionCapture />
-        <StatusBar style="dark" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            headerBackTitle: 'Back',
-            headerStyle: { backgroundColor: Colors.background },
-            headerTintColor: Colors.primary,
-            headerShadowVisible: false,
-          }}
-        >
+    <LaunchExperience
+      contentReady={authReady}
+      ready={Boolean(rootNavigationState?.key)}
+    >
+      <ErrorBoundary>
+        <AuthProvider onReady={handleAuthReady}>
+          <AcquisitionCapture />
+          <StatusBar style="dark" />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              headerBackTitle: 'Back',
+              headerStyle: { backgroundColor: Colors.background },
+              headerTintColor: Colors.primary,
+              headerShadowVisible: false,
+            }}
+          >
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="auth/login" options={stackScreenOptions('Sign In', '/settings', true)} />
           <Stack.Screen name="auth/signup" options={stackScreenOptions('Sign Up', '/settings', true)} />
@@ -192,9 +199,10 @@ export default function RootLayout() {
           <Stack.Screen name="voice" options={stackScreenOptions('AI Voice')} />
           <Stack.Screen name="dashboard-layout" options={stackScreenOptions('Customize Today')} />
           <Stack.Screen name="dashboard-tools" options={stackScreenOptions('Add Tools', '/dashboard-layout' as Href)} />
-        </Stack>
-      </AuthProvider>
-    </ErrorBoundary>
+          </Stack>
+        </AuthProvider>
+      </ErrorBoundary>
+    </LaunchExperience>
   );
 }
 
