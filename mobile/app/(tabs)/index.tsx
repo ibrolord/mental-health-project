@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { format } from 'date-fns';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -30,6 +30,7 @@ import {
 import { dashboardPreferences } from '@/lib/dashboard-preferences';
 import { dashboardModuleById } from '@/lib/dashboard-layout';
 import { useDashboardLayout } from '@/lib/use-dashboard-layout';
+import { useLaunchMotion } from '@/components/LaunchExperience';
 
 function greetingForHour(hour: number): string {
   if (hour < 12) return 'Good morning.';
@@ -57,6 +58,7 @@ export default function DashboardScreen() {
   const [showAdvisorSafety, setShowAdvisorSafety] = useState(false);
   const [advisorAction, setAdvisorAction] = useState<AdvisorActionInstance | null>(null);
   const [advisorActionOwnerKey, setAdvisorActionOwnerKey] = useState<string | null>(null);
+  const launchMotion = useLaunchMotion();
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
@@ -260,28 +262,32 @@ export default function DashboardScreen() {
 
   return (
     <AppScreen>
-      <BotanicalHero style={styles.hero}>
-        <View style={styles.brandRow}>
-          <Text style={styles.brand}>MHtoolkit</Text>
-          <SupportAction label="Support" onPress={() => router.push('/resources')} />
-        </View>
+      <BotanicalHero
+        artworkStyle={launchMotion.heroArtwork}
+        contentStyle={launchMotion.heroContent}
+        style={styles.hero}
+      >
+          <View style={styles.brandRow}>
+            <Text style={styles.brand}>MHtoolkit</Text>
+            <SupportAction label="Support" onPress={() => router.push('/resources')} />
+          </View>
 
-        <View style={styles.heroCopy}>
-          <Text style={styles.date}>{format(now, 'MMMM d, yyyy').toUpperCase()}</Text>
-          <Text accessibilityRole="header" style={styles.title}>
-            {greetingForHour(now.getHours())}
-          </Text>
-          <Text style={styles.subtitle}>
-            {visibleLowEnergyMode
-              ? 'You only need one small step.'
-              : visibleAffirmation
-                ? `${visibleAffirmation}${visibleAffirmationBy ? ` — ${visibleAffirmationBy}` : ''}`
-                : 'Take today one step at a time.'}
-          </Text>
-        </View>
+          <View style={styles.heroCopy}>
+            <Text style={styles.date}>{format(now, 'MMMM d, yyyy').toUpperCase()}</Text>
+            <Text accessibilityRole="header" style={styles.title}>
+              {greetingForHour(now.getHours())}
+            </Text>
+            <Text style={styles.subtitle}>
+              {visibleLowEnergyMode
+                ? 'You only need one small step.'
+                : visibleAffirmation
+                  ? `${visibleAffirmation}${visibleAffirmationBy ? ` — ${visibleAffirmationBy}` : ''}`
+                  : 'Take today one step at a time.'}
+            </Text>
+          </View>
       </BotanicalHero>
 
-      <View style={styles.moodSection}>
+      <Animated.View style={[styles.moodSection, launchMotion.mood]}>
         <Text accessibilityRole="header" style={styles.sectionLabel}>
           How are you right now?
         </Text>
@@ -306,35 +312,37 @@ export default function DashboardScreen() {
             ) : undefined}
           />
         ) : null}
-      </View>
+      </Animated.View>
 
-      {visibleAdvisorSafety ? (
-        <InlineStatus
-          tone="error"
-          message="A saved goal or habit may need support beyond Advisor."
-          action={(
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Find immediate and local support"
-              onPress={() => router.push('/resources')}
-              style={styles.safetyAction}
-            >
-              <Text style={styles.safetyActionText}>Find support</Text>
-            </Pressable>
-          )}
-        />
-      ) : null}
+      <Animated.View style={launchMotion.advisor}>
+        {visibleAdvisorSafety ? (
+          <InlineStatus
+            tone="error"
+            message="A saved goal or habit may need support beyond Advisor."
+            action={(
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Find immediate and local support"
+                onPress={() => router.push('/resources')}
+                style={styles.safetyAction}
+              >
+                <Text style={styles.safetyActionText}>Find support</Text>
+              </Pressable>
+            )}
+          />
+        ) : null}
 
-      {visibleModuleIds.includes('advisor') ? (
-        <AdvisorHomeCard
-          lowEnergy={visibleLowEnergyMode}
-          currentAction={visibleAdvisorActionText}
-          actionStatus={visibleAdvisorAction?.status ?? null}
-          onOpen={() => router.navigate('/advisor')}
-        />
-      ) : null}
+        {visibleModuleIds.includes('advisor') ? (
+          <AdvisorHomeCard
+            lowEnergy={visibleLowEnergyMode}
+            currentAction={visibleAdvisorActionText}
+            actionStatus={visibleAdvisorAction?.status ?? null}
+            onOpen={() => router.navigate('/advisor')}
+          />
+        ) : null}
+      </Animated.View>
 
-      <View style={styles.daySection}>
+      <Animated.View style={[styles.daySection, launchMotion.day]}>
         <SectionHeader
           title="Your day"
           description={visibleLowEnergyMode ? 'Just the next few things.' : undefined}
@@ -377,7 +385,7 @@ export default function DashboardScreen() {
             );
           })}
         </RowGroup>
-      </View>
+      </Animated.View>
     </AppScreen>
   );
 }

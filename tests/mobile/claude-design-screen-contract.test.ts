@@ -8,6 +8,10 @@ const readScreen = (name: string) =>
 const goals = readScreen('goals');
 const habits = readScreen('habits');
 const library = readScreen('library');
+const goalDetails = readFileSync(
+  resolve(process.cwd(), 'mobile/components/GoalDetailModal.tsx'),
+  'utf8'
+);
 
 describe('mobile Claude Design screen contracts', () => {
   it('keeps goals flat with one contextual add action and complete detail wiring', () => {
@@ -18,7 +22,10 @@ describe('mobile Claude Design screen contracts', () => {
     expect(goals).toContain('<GoalDetailModal');
     expect(goals).toContain('onDelete={() => deleteGoal');
     expect(goals).toContain('onUpdated={(updated) =>');
-    expect(goals).toContain('Milestones, reminders and files');
+    expect(goalDetails).toContain('>Reminder</Text>');
+    expect(goalDetails).toContain('>Milestones</Text>');
+    expect(goalDetails).toContain("'Add milestone due date'");
+    expect(goalDetails).toContain('accessibilityLabel="Add file"');
   });
 
   it('keeps habits compact with horizontal filters and behavior-rich text rows', () => {

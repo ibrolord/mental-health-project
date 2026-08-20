@@ -12,7 +12,8 @@ const dashboardLayout = read('mobile/lib/dashboard-layout.ts');
 describe('mobile Advisor Home contracts', () => {
   it('keeps Today to greeting, mood, one Advisor doorway, and a compact customizable day', () => {
     expect(home.match(/<AdvisorHomeCard\b/g)).toHaveLength(1);
-    expect(home).toContain('<BotanicalHero style={styles.hero}>');
+    expect(home).toContain('<BotanicalHero');
+    expect(home).toContain('style={styles.hero}');
     expect(home).not.toContain('<LeafMark');
     expect(home).toContain('<MoodPicker');
     expect(home).toContain('<RowGroup>');
@@ -20,7 +21,7 @@ describe('mobile Advisor Home contracts', () => {
     expect(dashboardLayout).toMatch(/mixed:[\s\S]*?'accountability'/);
 
     const greeting = home.indexOf('{greetingForHour(now.getHours())}');
-    const mood = home.indexOf('<View style={styles.moodSection}>');
+    const mood = home.indexOf('styles.moodSection');
     const advisor = home.indexOf('<AdvisorHomeCard');
     const yourDay = home.indexOf('title="Your day"');
     expect(greeting).toBeGreaterThan(-1);

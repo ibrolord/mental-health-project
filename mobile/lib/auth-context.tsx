@@ -271,7 +271,13 @@ async function migrateLegacyData(session: Session): Promise<void> {
   await AsyncStorage.removeItem(LEGACY_SESSION_KEY);
 }
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({
+  children,
+  onReady,
+}: {
+  children: React.ReactNode;
+  onReady?: () => void;
+}) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [initializationError, setInitializationError] = useState('');
@@ -279,6 +285,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const accountDeletionInProgress = useRef(false);
   const lastOwnerId = useRef<string | null>(null);
   const lastOwnerWasAnonymous = useRef(false);
+
+  useEffect(() => {
+    if (!loading) onReady?.();
+  }, [loading, onReady]);
 
   useEffect(() => {
     let active = true;
