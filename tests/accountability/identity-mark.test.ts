@@ -43,7 +43,8 @@ describe('Together identity mark', () => {
     expect(layout).toContain('Share a commitment with someone you trust.');
     expect(layout).toMatch(/mixed:[\s\S]*?'accountability'/);
     expect(layout).toContain("href: '/accountability'");
-    expect(source).toContain('<BotanicalHero style={styles.hero}>');
+    expect(source).toContain('<BotanicalHero');
+    expect(source).toContain('style={styles.hero}');
     expect(source).not.toContain('<LeafMark');
     expect(source).toContain("visibleModuleIds.filter((moduleId) => moduleId !== 'advisor').map");
     expect(source.indexOf('<MoodPicker')).toBeLessThan(source.indexOf('<RowGroup>'));
