@@ -45,7 +45,7 @@ describe('Together identity mark', () => {
     expect(layout).toContain("href: '/accountability'");
     expect(source).toContain('<BotanicalHero style={styles.hero}>');
     expect(source).not.toContain('<LeafMark');
-    expect(source).toContain('visibleModuleIds.slice(1).map');
+    expect(source).toContain("visibleModuleIds.filter((moduleId) => moduleId !== 'advisor').map");
     expect(source.indexOf('<MoodPicker')).toBeLessThan(source.indexOf('<RowGroup>'));
   });
 });

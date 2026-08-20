@@ -49,16 +49,13 @@ import { clearAdvisorOutcomes } from './advisor-outcome-storage';
 import { clearAdvisorObservationLedger } from './advisor-observation-ledger';
 import { clearAdvisorLifecycleJournal } from './advisor-lifecycle-runtime';
 import { clearContextSelections } from './chat-context-preference';
-import { areRemindersEnabled, clearAllReminders, hasAdvisorReminder } from './notifications';
+import { clearAllReminders } from './notifications';
 import { Colors } from './constants';
-import {
-  clearReflectionDraft,
-  reflectionDraftStorage,
-} from './reflection-draft-storage';
+import { moodDraftStorage } from './mood-draft-storage';
+import { clearReflectionDraft, reflectionDraftStorage } from './reflection-draft-storage';
 import { appleHealthPreference } from './apple-health-preference';
 import {
   ANONYMOUS_PROFILE_DATA_CONFLICT,
-  anonymousProfileDataConflict,
   discardAnonymousProfileSafely,
   getAnonymousProfileDataConflictUserId,
   isAnonymousProfileDataConflict,
@@ -80,6 +77,7 @@ const AUTH_SESSION_TIMEOUT_MS = 12_000;
 const AUTH_INIT_ERROR_MESSAGE =
   'Your private profile could not be started. Check your connection and try again.';
 const MOBILE_AUTH_REDIRECT = 'mhtoolkit://auth/callback';
+let pendingAnonymousMergeSourceId: string | null = null;
 
 async function clearAdvisorOwnerState(ownerKey: string): Promise<void> {
   // Drain any in-flight lifecycle transition before clearing its dependent stores.
@@ -92,26 +90,85 @@ async function clearAdvisorOwnerState(ownerKey: string): Promise<void> {
   ]);
 }
 
-async function assertAnonymousAccountIsEmpty(): Promise<void> {
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) throw sessionError;
-  if (session && !session.user.is_anonymous) {
-    throw new Error('This device is already signed in. Sign out before using another account.');
-  }
-  if (!session) return;
+async function moveAsyncStorageKey(sourceKey: string, targetKey: string): Promise<void> {
+  const sourceValue = await AsyncStorage.getItem(sourceKey);
+  if (sourceValue === null) return;
+  const targetValue = await AsyncStorage.getItem(targetKey);
+  if (targetValue === null) await AsyncStorage.setItem(targetKey, sourceValue);
+  await AsyncStorage.removeItem(sourceKey);
+}
 
-  const [result, remindersEnabled, advisorReminder, reflectionDraft] = await Promise.all([
-    apiRequest<{ hasOwnedData?: boolean }>(
-      '/api/data/switch-status',
-      {},
-      { accessToken: session.access_token }
-    ),
-    areRemindersEnabled(),
-    hasAdvisorReminder(),
-    reflectionDraftStorage.read(session.user.id),
+async function migrateAnonymousLocalState(
+  sourceUserId: string,
+  targetUserId: string
+): Promise<void> {
+  const sourceOwnerKey = `user_id:${sourceUserId}`;
+  const targetOwnerKey = `user_id:${targetUserId}`;
+  const encodedSource = encodeURIComponent(sourceOwnerKey);
+  const encodedTarget = encodeURIComponent(targetOwnerKey);
+  const keyPairs = [
+    [`mhtoolkit.advisor_action.v1:${encodedSource}`, `mhtoolkit.advisor_action.v1:${encodedTarget}`],
+    [`mhtoolkit.advisor_outcomes.v1:${encodedSource}`, `mhtoolkit.advisor_outcomes.v1:${encodedTarget}`],
+    [`mhtoolkit.advisor_observation_ledger.v1:${encodedSource}`, `mhtoolkit.advisor_observation_ledger.v1:${encodedTarget}`],
+    [`mhtoolkit.advisor_lifecycle.v1:${encodedSource}`, `mhtoolkit.advisor_lifecycle.v1:${encodedTarget}`],
+    [`mhtoolkit.advisor.daily-brief.v1.${sourceOwnerKey}`, `mhtoolkit.advisor.daily-brief.v1.${targetOwnerKey}`],
+    [`mhtoolkit.ai_full_context.v3:${encodedSource}`, `mhtoolkit.ai_full_context.v3:${encodedTarget}`],
+    [`mhtoolkit.chat_context.v1:${encodedSource}`, `mhtoolkit.chat_context.v1:${encodedTarget}`],
+    [`mhtoolkit.go_to_actions.v1:${encodedSource}`, `mhtoolkit.go_to_actions.v1:${encodedTarget}`],
+    [`mhtoolkit.dashboard.layout.${sourceOwnerKey}`, `mhtoolkit.dashboard.layout.${targetOwnerKey}`],
+    [`mhtoolkit.dashboard.low-energy.${sourceOwnerKey}`, `mhtoolkit.dashboard.low-energy.${targetOwnerKey}`],
+    [`mhtoolkit.ai_data_sharing_consent.v4:${encodedSource}`, `mhtoolkit.ai_data_sharing_consent.v4:${encodedTarget}`],
+    [`mhtoolkit.apple-health.enabled.${sourceUserId}`, `mhtoolkit.apple-health.enabled.${targetUserId}`],
+  ];
+  await Promise.all(keyPairs.map(([sourceKey, targetKey]) => moveAsyncStorageKey(sourceKey, targetKey)));
+
+  const [moodDraft, reflectionDraft] = await Promise.all([
+    moodDraftStorage.read(sourceUserId),
+    reflectionDraftStorage.read(sourceUserId),
   ]);
-  if (result.hasOwnedData !== false || remindersEnabled || advisorReminder || reflectionDraft) {
-    throw anonymousProfileDataConflict(session.user.id);
+  if (moodDraft && !(await moodDraftStorage.read(targetUserId))) {
+    await moodDraftStorage.write(targetUserId, moodDraft);
+  }
+  if (reflectionDraft && !(await reflectionDraftStorage.read(targetUserId))) {
+    await reflectionDraftStorage.write(targetUserId, reflectionDraft);
+  }
+  await Promise.all([
+    moodDraftStorage.clear(sourceUserId),
+    clearReflectionDraft(sourceUserId),
+  ]);
+}
+
+async function mergeAnonymousSessionIntoCurrentAccount(
+  sourceSession: Session | null
+): Promise<void> {
+  if (!sourceSession?.user.is_anonymous) return;
+
+  const { data: current, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (!current.session || current.session.user.is_anonymous) {
+    throw new Error('The destination account could not be verified.');
+  }
+
+  try {
+    await apiRequest(
+      '/api/data/merge-anonymous',
+      {
+        sourceAnonymousUserId: sourceSession.user.id,
+        sourceAccessToken: sourceSession.access_token,
+      },
+      { accessToken: current.session.access_token }
+    );
+    await migrateAnonymousLocalState(sourceSession.user.id, current.session.user.id);
+    pendingAnonymousMergeSourceId = null;
+  } catch (error) {
+    // Restore the anonymous session so a failed merge never strands the
+    // profile that was being protected by the old sign-in guard.
+    await supabase.auth.setSession({
+      access_token: sourceSession.access_token,
+      refresh_token: sourceSession.refresh_token,
+    });
+    pendingAnonymousMergeSourceId = null;
+    throw error;
   }
 }
 
@@ -265,7 +322,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (
           previousOwnerWasAnonymous &&
           previousOwnerId &&
-          previousOwnerId !== session.user.id
+          previousOwnerId !== session.user.id &&
+          pendingAnonymousMergeSourceId !== previousOwnerId
         ) {
           void Promise.all([
             clearAdvisorOwnerState(`user_id:${previousOwnerId}`),
@@ -347,9 +405,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const sessionId = null;
 
   const signIn = async (email: string, password: string) => {
-    await assertAnonymousAccountIsEmpty();
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const sourceSession = current.session?.user.is_anonymous ? current.session : null;
+    pendingAnonymousMergeSourceId = sourceSession?.user.id ?? null;
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    if (error) {
+      pendingAnonymousMergeSourceId = null;
+      throw error;
+    }
+    await mergeAnonymousSessionIntoCurrentAccount(sourceSession);
   };
 
   const requestPasswordReset = async (email: string): Promise<void> => {
@@ -430,10 +495,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (sessionError) throw sessionError;
     const startingUserId =
       intent === 'upgrade' ? current.session?.user.id : undefined;
+    const sourceSession =
+      intent === 'sign-in' && current.session?.user.is_anonymous
+        ? current.session
+        : null;
+    pendingAnonymousMergeSourceId = sourceSession?.user.id ?? null;
 
     let authorizationUrl: string | null = null;
     if (intent === 'upgrade') {
       if (!current.session?.user.is_anonymous) {
+        pendingAnonymousMergeSourceId = null;
         throw new Error('This device is already signed in to an account.');
       }
       const { data, error } = await supabase.auth.linkIdentity({
@@ -443,10 +514,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           skipBrowserRedirect: true,
         },
       });
-      if (error) throw error;
+      if (error) {
+        pendingAnonymousMergeSourceId = null;
+        throw error;
+      }
       authorizationUrl = data.url;
     } else {
-      await assertAnonymousAccountIsEmpty();
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
@@ -454,11 +527,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           skipBrowserRedirect: true,
         },
       });
-      if (error) throw error;
+      if (error) {
+        pendingAnonymousMergeSourceId = null;
+        throw error;
+      }
       authorizationUrl = data.url;
     }
 
     if (!authorizationUrl) {
+      pendingAnonymousMergeSourceId = null;
       throw new Error(
         `${provider === 'google' ? 'Google' : 'Apple'} sign-in is not available right now.`
       );
@@ -467,12 +544,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authorizationUrl,
       MOBILE_AUTH_REDIRECT
     );
-    if (result.type !== 'success') return false;
+    if (result.type !== 'success') {
+      pendingAnonymousMergeSourceId = null;
+      return false;
+    }
 
-    await applyOAuthSessionFromUrl(result.url);
-    const verifiedUser = await verifyLinkedProvider(provider, startingUserId);
-    setUser(verifiedUser);
-    return true;
+    try {
+      await applyOAuthSessionFromUrl(result.url);
+      const verifiedUser = await verifyLinkedProvider(provider, startingUserId);
+      await mergeAnonymousSessionIntoCurrentAccount(sourceSession);
+      setUser(verifiedUser);
+      return true;
+    } catch (error) {
+      pendingAnonymousMergeSourceId = null;
+      throw error;
+    }
   };
 
   const continueWithApple = async (intent: SocialAuthIntent): Promise<boolean> => {
@@ -480,19 +566,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (sessionError) throw sessionError;
     const startingUserId =
       intent === 'upgrade' ? current.session?.user.id : undefined;
+    const sourceSession =
+      intent === 'sign-in' && current.session?.user.is_anonymous
+        ? current.session
+        : null;
+    pendingAnonymousMergeSourceId = sourceSession?.user.id ?? null;
     if (intent === 'upgrade') {
       if (!current.session?.user.is_anonymous) {
+        pendingAnonymousMergeSourceId = null;
         throw new Error('This device is already signed in to an account.');
       }
     } else {
-      await assertAnonymousAccountIsEmpty();
+      // The anonymous profile is merged after Apple returns the permanent
+      // account, rather than blocking sign-in and forcing the user to delete it.
     }
 
     const rawNonce = Crypto.randomUUID();
-    const hashedNonce = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      rawNonce
-    );
+    let hashedNonce: string;
+    try {
+      hashedNonce = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        rawNonce
+      );
+    } catch (error) {
+      pendingAnonymousMergeSourceId = null;
+      throw error;
+    }
 
     let credential: AppleAuthentication.AppleAuthenticationCredential;
     try {
@@ -504,13 +603,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         nonce: hashedNonce,
       });
     } catch (error) {
-      if (isAppleAuthCancellation(error)) return false;
+      if (isAppleAuthCancellation(error)) {
+        pendingAnonymousMergeSourceId = null;
+        return false;
+      }
+      pendingAnonymousMergeSourceId = null;
       throw new Error(
         'Apple sign-in could not start. Make sure you are signed in to your Apple Account in Settings, then try again.'
       );
     }
 
     if (!credential.identityToken) {
+      pendingAnonymousMergeSourceId = null;
       throw new Error('Apple did not return a valid identity token.');
     }
 
@@ -526,10 +630,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             token: credential.identityToken,
             nonce: rawNonce,
           });
-    if (response.error) throw response.error;
+    if (response.error) {
+      pendingAnonymousMergeSourceId = null;
+      throw response.error;
+    }
 
-    const verifiedUser = await verifyLinkedProvider('apple', startingUserId);
-    setUser(verifiedUser);
+    try {
+      const verifiedUser = await verifyLinkedProvider('apple', startingUserId);
+      await mergeAnonymousSessionIntoCurrentAccount(sourceSession);
+      setUser(verifiedUser);
+    } catch (error) {
+      pendingAnonymousMergeSourceId = null;
+      throw error;
+    }
 
     const profileMetadata = appleProfileMetadata(credential.fullName);
     if (profileMetadata) {

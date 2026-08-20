@@ -17,58 +17,58 @@ const SCREENSHOT_Y = 510;
 
 const screens = [
   {
-    output: '01_dashboard.png',
-    source: 'dashboard.png',
-    title: ['A calmer place', 'to check in.'],
-    body: 'Notice patterns, protect your privacy, and choose one next step.',
+    output: '01_today.png',
+    source: 'today.png',
+    title: ['Start with what', 'matters today.'],
+    body: ['Mood, guidance, and your next useful step', 'in one calm view.'],
   },
   {
-    output: '02_library.png',
+    output: '02_mood.png',
+    source: 'mood.png',
+    title: ['Name the moment', 'without a score.'],
+    body: ['A quick check-in, optional context, and trends', 'you control.'],
+  },
+  {
+    output: '03_together.png',
+    source: 'together.png',
+    title: ['Follow through with', 'someone you trust.'],
+    body: ['Share one commitment, check in, and celebrate', 'the effort together.'],
+  },
+  {
+    output: '04_tools.png',
+    source: 'tools.png',
+    title: ['Choose the right tool', 'for right now.'],
+    body: ['Grounding, planning, reflection, learning,', 'and more in one toolkit.'],
+  },
+  {
+    output: '05_goals.png',
+    source: 'goals.png',
+    title: ['Turn a goal into', 'the next clear step.'],
+    body: ['Add milestones, due dates, reminders, notes,', 'and supporting files.'],
+  },
+  {
+    output: '06_library.png',
     source: 'library.png',
-    title: ['108 resources.', 'One thoughtful library.'],
-    body: 'Books, talks, and real stories with notes, sources, and practical actions.',
+    title: ['Find practical ideas', 'worth using.'],
+    body: ['Explore reviewed books, talks, stories, and', 'action templates.'],
   },
   {
-    output: '03_chat.png',
-    source: 'chat.png',
-    title: ['AI context stays', 'in your hands.'],
-    body: 'Personal context starts off. You choose what each conversation can use.',
-  },
-  {
-    output: '04_assessments.png',
-    source: 'assessments.png',
-    title: ['Screen patterns,', 'not diagnoses.'],
-    body: 'Published-source tools with recall periods, scoring limits, and citations.',
-  },
-  {
-    output: '05_journal.png',
-    source: 'journal.png',
-    title: ['Make space for', 'what matters.'],
-    body: 'Write privately, connect useful ideas, and return on your own terms.',
-  },
-  {
-    output: '06_ground.png',
+    output: '07_grounding.png',
     source: 'ground.png',
-    title: ['Find the next', 'grounding step.'],
-    body: 'Choose a guided technique for panic, numbness, overwhelm, or spiraling thoughts.',
+    title: ['Get steady one guided', 'step at a time.'],
+    body: ['Choose what is happening and begin a focused', 'grounding practice.'],
   },
   {
-    output: '07_focus.png',
+    output: '08_focus.png',
     source: 'focus.png',
-    title: ['One outcome.', 'One focused block.'],
-    body: 'Plan a bounded task, take a real break, and save your session.',
+    title: ['Protect one outcome', 'and one block.'],
+    body: ['Plan the task, set the interval, and choose', 'an optional focus sound.'],
   },
   {
-    output: '08_habits.png',
-    source: 'habits.png',
-    title: ['Build momentum without', 'all-or-nothing rules.'],
-    body: 'Create routines, track streaks, and involve a partner only when you choose.',
-  },
-  {
-    output: '09_meditation.png',
-    source: 'meditation.png',
-    title: ['A practice for', 'this moment.'],
-    body: 'Choose short guided options for stress, sleep, grief, focus, and restlessness.',
+    output: '09_yoga.png',
+    source: 'yoga.png',
+    title: ['Move gently with', 'clear guidance.'],
+    body: ['Choose seated, floor, or restorative sequences', 'with easy exits.'],
   },
 ];
 
@@ -82,17 +82,21 @@ function escapeXml(value) {
 
 function headerSvg(screen) {
   const [firstLine, secondLine] = screen.title.map(escapeXml);
+  const [firstBodyLine, secondBodyLine] = screen.body.map(escapeXml);
   return Buffer.from(`
     <svg width="${WIDTH}" height="${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <rect width="${WIDTH}" height="${HEIGHT}" fill="#f3f0e4"/>
       <circle cx="1175" cy="82" r="130" fill="#edf4ea"/>
       <circle cx="1175" cy="82" r="78" fill="none" stroke="#84ac95" stroke-width="4" opacity="0.7"/>
       <text x="82" y="70" font-family="Avenir Next, Helvetica, sans-serif" font-size="25" font-weight="700" letter-spacing="6" fill="#c65f3d">MHTOOLKIT</text>
-      <text x="82" y="160" font-family="Georgia, serif" font-size="67" font-weight="700" fill="#163a32">
+      <text x="82" y="185" font-family="Georgia, serif" font-size="67" font-weight="700" fill="#163a32">
         <tspan x="82" dy="0">${firstLine}</tspan>
         <tspan x="82" dy="76">${secondLine}</tspan>
       </text>
-      <text x="82" y="382" font-family="Avenir Next, Helvetica, sans-serif" font-size="29" font-weight="500" fill="#587169">${escapeXml(screen.body)}</text>
+      <text x="82" y="368" font-family="Avenir Next, Helvetica, sans-serif" font-size="29" font-weight="500" fill="#587169">
+        <tspan x="82" dy="0">${firstBodyLine}</tspan>
+        <tspan x="82" dy="39">${secondBodyLine}</tspan>
+      </text>
       <rect x="${SCREENSHOT_X - 8}" y="${SCREENSHOT_Y - 8}" width="${SCREENSHOT_WIDTH + 16}" height="${SCREENSHOT_HEIGHT + 16}" rx="58" fill="#bfd0c4"/>
     </svg>
   `);

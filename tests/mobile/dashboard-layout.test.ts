@@ -124,15 +124,11 @@ describe('customizable Today dashboard', () => {
     expect(setDashboardModuleEnabled(minimum, 'focus', false)).toBe(minimum);
   });
 
-  it('reduces visual load without changing the persisted order', () => {
+  it('keeps every selected tool visible without changing the persisted order', () => {
     const layout = applyDashboardPreset('productivity');
     const before = [...layout.moduleIds];
 
-    expect(dashboardModulesForToday(layout, true)).toEqual([
-      'advisor',
-      'planner',
-      'focus',
-    ]);
+    expect(dashboardModulesForToday(layout, true)).toEqual(layout.moduleIds);
     expect(layout.moduleIds).toEqual(before);
   });
 

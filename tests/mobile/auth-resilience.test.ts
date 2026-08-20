@@ -33,7 +33,8 @@ describe('mobile authentication resilience', () => {
   });
 
   it('turns native Apple request failures into actionable copy', () => {
-    expect(authContext).toContain('if (isAppleAuthCancellation(error)) return false');
+    expect(authContext).toContain('if (isAppleAuthCancellation(error))');
+    expect(authContext).toContain('pendingAnonymousMergeSourceId = null;');
     expect(authContext).toContain(
       'Apple sign-in could not start. Make sure you are signed in to your Apple Account in Settings, then try again.'
     );

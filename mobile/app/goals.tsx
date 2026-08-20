@@ -497,43 +497,41 @@ export default function GoalsScreen() {
         </View>
       ) : null}
 
-      {goals.length >= 5 ? (
-        <View style={s.viewPicker}>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityState={{ expanded: frameworkPickerOpen }}
-            accessibilityLabel="Change goal view"
-            onPress={() => setFrameworkPickerOpen((current) => !current)}
-            style={s.viewPickerHeader}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={s.pickerLabel}>VIEW</Text>
-              <Text style={s.viewPickerValue}>{FRAMEWORKS.find((item) => item.id === framework)?.label}</Text>
-            </View>
-            <Feather name={frameworkPickerOpen ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.primary} />
-          </TouchableOpacity>
-          {frameworkPickerOpen ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.frameworkChoices}>
-              {FRAMEWORKS.map((fw) => (
-                <TouchableOpacity
-                  key={fw.id}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: framework === fw.id }}
-                  accessibilityLabel={`${fw.label} goal view`}
-                  style={[s.fwBtn, framework === fw.id && s.fwBtnActive]}
-                  onPress={() => {
-                    setFramework(fw.id);
-                    setActiveSection(null);
-                    setFrameworkPickerOpen(false);
-                  }}
-                >
-                  <Text style={[s.fwBtnText, framework === fw.id && s.fwBtnTextActive]}>{fw.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : null}
-        </View>
-      ) : null}
+      <View style={s.viewPicker}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={{ expanded: frameworkPickerOpen }}
+          accessibilityLabel="Change goal view"
+          onPress={() => setFrameworkPickerOpen((current) => !current)}
+          style={s.viewPickerHeader}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={s.pickerLabel}>VIEW</Text>
+            <Text style={s.viewPickerValue}>{FRAMEWORKS.find((item) => item.id === framework)?.label}</Text>
+          </View>
+          <Feather name={frameworkPickerOpen ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.primary} />
+        </TouchableOpacity>
+        {frameworkPickerOpen ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.frameworkChoices}>
+            {FRAMEWORKS.map((fw) => (
+              <TouchableOpacity
+                key={fw.id}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: framework === fw.id }}
+                accessibilityLabel={`${fw.label} goal view`}
+                style={[s.fwBtn, framework === fw.id && s.fwBtnActive]}
+                onPress={() => {
+                  setFramework(fw.id);
+                  setActiveSection(null);
+                  setFrameworkPickerOpen(false);
+                }}
+              >
+                <Text style={[s.fwBtnText, framework === fw.id && s.fwBtnTextActive]}>{fw.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        ) : null}
+      </View>
 
       {goals.length > 0 && completed > 0 && (
         <View style={s.progressSummary}>

@@ -3,10 +3,13 @@ import { Feather } from '@expo/vector-icons';
 import {
   Alert,
   Pressable,
+  Platform,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format } from 'date-fns';
 import {
   AppButton,
   AppCard,
@@ -64,6 +67,21 @@ function isTargetDate(value: string) {
   return !value.trim() || /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
 }
 
+function dateFromTarget(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number);
+  if (year && month && day) {
+    const candidate = new Date(year, month - 1, day, 12);
+    if (
+      candidate.getFullYear() === year &&
+      candidate.getMonth() === month - 1 &&
+      candidate.getDate() === day
+    ) {
+      return candidate;
+    }
+  }
+  return new Date(Date.now() + 24 * 60 * 60 * 1000);
+}
+
 export default function PlannerScreen() {
   const { context, authLoading } = useDataContext();
   const [items, setItems] = useState<PlanItem[]>([]);
@@ -75,6 +93,8 @@ export default function PlannerScreen() {
   const [reflection, setReflection] = useState('');
   const [nextStep, setNextStep] = useState('');
   const [targetDate, setTargetDate] = useState('');
+  const [targetDateDraft, setTargetDateDraft] = useState<Date | null>(null);
+  const [targetDatePickerOpen, setTargetDatePickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -127,6 +147,8 @@ export default function PlannerScreen() {
     setReflection('');
     setNextStep('');
     setTargetDate('');
+    setTargetDateDraft(null);
+    setTargetDatePickerOpen(false);
     setError('');
   };
 
@@ -312,13 +334,89 @@ export default function PlannerScreen() {
             maxLength={500}
             placeholder="One action you can begin"
           />
-          <AppInput
-            label="Target date (optional)"
-            value={targetDate}
-            onChangeText={setTargetDate}
-            placeholder="YYYY-MM-DD"
-            autoCapitalize="none"
-          />
+          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Target date (optional)</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={targetDate ? `Target date ${targetDate}` : 'Add target date'}
+            onPress={() => {
+              const next = !targetDatePickerOpen;
+              setTargetDateDraft(next ? dateFromTarget(targetDate) : null);
+              setTargetDatePickerOpen(next);
+            }}
+            style={styles.dateButton}
+          >
+            <Feather name="calendar" size={17} color={Colors.primary} />
+            <Text style={styles.dateButtonText}>
+              {targetDate ? format(dateFromTarget(targetDate), 'MMM d, yyyy') : 'Add target date'}
+            </Text>
+            <Feather
+              name={targetDatePickerOpen ? 'chevron-up' : 'chevron-down'}
+              size={17}
+              color={Colors.textSecondary}
+            />
+          </Pressable>
+          {targetDatePickerOpen ? (
+            <DateTimePicker
+              value={targetDateDraft ?? dateFromTarget(targetDate)}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              minimumDate={new Date()}
+              onChange={(event, date) => {
+                if (event.type === 'dismissed') {
+                  setTargetDateDraft(null);
+                  setTargetDatePickerOpen(false);
+                  return;
+                }
+                if (!date) return;
+                if (Platform.OS === 'ios') {
+                  setTargetDateDraft(date);
+                } else {
+                  setTargetDate(format(date, 'yyyy-MM-dd'));
+                  setTargetDateDraft(null);
+                  setTargetDatePickerOpen(false);
+                }
+              }}
+            />
+          ) : null}
+          {targetDatePickerOpen && Platform.OS === 'ios' ? (
+            <View style={styles.dateActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setTargetDateDraft(null);
+                  setTargetDatePickerOpen(false);
+                }}
+                style={styles.dateCancel}
+              >
+                <Text style={styles.dateCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  if (targetDateDraft) setTargetDate(format(targetDateDraft, 'yyyy-MM-dd'));
+                  setTargetDateDraft(null);
+                  setTargetDatePickerOpen(false);
+                }}
+                style={styles.dateConfirm}
+              >
+                <Text style={styles.dateConfirmText}>Use date</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {targetDate ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear target date"
+              onPress={() => {
+                setTargetDate('');
+                setTargetDateDraft(null);
+                setTargetDatePickerOpen(false);
+              }}
+              style={styles.clearDate}
+            >
+              <Text style={styles.clearDateText}>Clear target date</Text>
+            </Pressable>
+          ) : null}
           {error ? <Text style={appUiStyles.error}>{error}</Text> : null}
           <AppButton
             label="Save plan item"
@@ -463,6 +561,24 @@ const styles = StyleSheet.create({
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  dateButton: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dateButtonText: { flex: 1, color: Colors.text, fontSize: 15 },
+  dateActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 8 },
+  dateCancel: { paddingHorizontal: 12, paddingVertical: 9 },
+  dateCancelText: { color: Colors.textSecondary, fontWeight: '700' },
+  dateConfirm: { backgroundColor: Colors.primary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
+  dateConfirmText: { color: Colors.card, fontWeight: '700' },
+  clearDate: { alignSelf: 'flex-start', paddingVertical: 8 },
+  clearDateText: { color: Colors.textSecondary, fontSize: 13 },
   itemHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
   itemIcon: {
     width: 40,

@@ -358,15 +358,15 @@ else
   pass "App/support/privacy copy avoids absolute no-sharing wording"
 fi
 
-if [ -f "$ROOT_DIR/fastlane/screenshots/en-US/01_dashboard.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/02_library.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/03_chat.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/04_assessments.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/05_journal.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/06_ground.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/07_focus.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/08_habits.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/09_meditation.png" ]; then
+if [ -f "$ROOT_DIR/fastlane/screenshots/en-US/01_today.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/02_mood.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/03_together.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/04_tools.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/05_goals.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/06_library.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/07_grounding.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/08_focus.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/09_yoga.png" ]; then
   pass "Fastlane screenshots cover the current nine-feature store set"
 else
   fail "Fastlane screenshots are missing one or more current feature screens"

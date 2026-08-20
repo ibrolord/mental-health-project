@@ -71,6 +71,29 @@ const SLOTS: { id: RoutineSlot; label: string }[] = [
   { id: 'anytime', label: 'Anytime' },
 ];
 
+const HABIT_EMOJI_BY_ICON: Record<string, string> = {
+  activity: '🏃',
+  apple: '🍎',
+  book: '📚',
+  circle: '✨',
+  droplets: '💧',
+  home: '🏠',
+  moon: '🌙',
+  shield: '🛡️',
+  sparkles: '✨',
+  target: '🎯',
+  users: '🤝',
+  wind: '🌬️',
+};
+
+function habitEmoji(habit: Pick<Habit, 'icon' | 'category'>): string {
+  return (
+    HABIT_EMOJI_BY_ICON[habit.icon] ??
+    HABIT_EMOJI_BY_ICON[HABIT_CATEGORIES.find((item) => item.id === habit.category)?.icon ?? ''] ??
+    '✨'
+  );
+}
+
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 function firstParam(value: string | string[] | undefined): string {
@@ -754,10 +777,12 @@ export default function HabitsScreen() {
                     <Feather name="check" size={18} color="#fffef8" />
                   ) : null}
                 </Pressable>
+                <Text accessible={false} style={styles.habitEmoji}>
+                  {habitEmoji(habit)}
+                </Text>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.habitMeta}>
-                    {habit.habit_type === 'reduce' ? 'Reducing' : 'Building'} ·{' '}
-                    {SLOTS.find(({ id }) => id === habit.routine_slot)?.label}
+                    {habit.habit_type === 'reduce' ? 'Reducing' : 'Building'}
                   </Text>
                   <Text style={styles.habitTitle}>{habit.name}</Text>
                 </View>
@@ -1000,6 +1025,12 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
   habitHeader: { flexDirection: 'row', alignItems: 'center', gap: 11 },
+  habitEmoji: {
+    width: 34,
+    textAlign: 'center',
+    fontSize: 24,
+    lineHeight: 30,
+  },
   check: {
     width: 44,
     height: 44,

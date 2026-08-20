@@ -272,9 +272,10 @@ export function setDashboardModuleEnabled(
 
 export function dashboardModulesForToday(
   layout: DashboardLayout,
-  lowEnergy: boolean
+  _lowEnergy: boolean
 ): DashboardModuleId[] {
-  return lowEnergy ? layout.moduleIds.slice(0, 3) : [...layout.moduleIds];
+  // Low-energy mode changes guidance copy, not the user's selected tools.
+  return [...layout.moduleIds];
 }
 
 export function dashboardModuleById(

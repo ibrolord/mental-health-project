@@ -272,12 +272,9 @@ describe('mobile guided reflections', () => {
       'clearReflectionDraft(expectedAnonymousUserId)'
     );
     expect(authContextSource).toContain('clearReflectionDraft(deletedOwnerId)');
-    expect(authContextSource).toContain(
-      'reflectionDraftStorage.read(session.user.id)'
-    );
-    expect(authContextSource).toContain(
-      'result.hasOwnedData !== false || remindersEnabled || advisorReminder || reflectionDraft'
-    );
+    expect(authContextSource).toContain('migrateAnonymousLocalState');
+    expect(authContextSource).toContain('reflectionDraftStorage.read(sourceUserId)');
+    expect(authContextSource).toContain('moodDraftStorage.read(sourceUserId)');
   });
 
   it('deletes temporary exports even after sharing is cancelled or fails', () => {

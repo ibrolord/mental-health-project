@@ -4,11 +4,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format } from 'date-fns';
 import {
   AppButton,
   AppCard,
@@ -183,6 +186,21 @@ function isCalendarDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(date.valueOf()) && date.toISOString().startsWith(value);
+}
+
+function dateFromCalendar(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number);
+  if (year && month && day) {
+    const candidate = new Date(year, month - 1, day, 12);
+    if (
+      candidate.getFullYear() === year &&
+      candidate.getMonth() === month - 1 &&
+      candidate.getDate() === day
+    ) {
+      return candidate;
+    }
+  }
+  return new Date();
 }
 
 function displayDate(value: string): string {
@@ -430,6 +448,8 @@ export default function PlansScreen() {
   const [activityTitle, setActivityTitle] = useState('');
   const [activityDetails, setActivityDetails] = useState('');
   const [activityDate, setActivityDate] = useState(localDateValue);
+  const [activityDateDraft, setActivityDateDraft] = useState<Date | null>(null);
+  const [activityDatePickerOpen, setActivityDatePickerOpen] = useState(false);
   const [activityKind, setActivityKind] = useState<ActivityKind>('self_care');
   const [activityTime, setActivityTime] = useState<TimeOfDay>('anytime');
   const [activityMinutes, setActivityMinutes] = useState('30');
@@ -580,6 +600,8 @@ export default function PlansScreen() {
     setActivityTitle('');
     setActivityDetails('');
     setActivityDate(localDateValue());
+    setActivityDateDraft(null);
+    setActivityDatePickerOpen(false);
     setActivityKind('self_care');
     setActivityTime('anytime');
     setActivityMinutes('30');
@@ -620,6 +642,8 @@ export default function PlansScreen() {
     setActivityTitle(activity.title);
     setActivityDetails(activity.details);
     setActivityDate(activity.plan_date);
+    setActivityDateDraft(null);
+    setActivityDatePickerOpen(false);
     setActivityKind(activity.activity_kind);
     setActivityTime(activity.time_of_day);
     setActivityMinutes(String(activity.planned_minutes));
@@ -1309,14 +1333,84 @@ export default function PlansScreen() {
               </View>
               <View style={styles.splitInputs}>
                 <View style={styles.splitInput}>
-                  <AppInput
-                    label="Date"
-                    value={activityDate}
-                    onChangeText={setActivityDate}
-                    placeholder="YYYY-MM-DD"
-                    autoCapitalize="none"
-                    maxLength={10}
-                  />
+                  <Text style={styles.fieldLabel}>Date</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      activityDate
+                        ? `Activity date ${activityDate}`
+                        : 'Choose activity date'
+                    }
+                    onPress={() => {
+                      const next = !activityDatePickerOpen;
+                      setActivityDateDraft(
+                        next ? dateFromCalendar(activityDate) : null
+                      );
+                      setActivityDatePickerOpen(next);
+                    }}
+                    style={styles.dateButton}
+                  >
+                    <Feather name="calendar" size={16} color={Colors.primary} />
+                    <Text style={styles.dateButtonText}>
+                      {activityDate
+                        ? format(dateFromCalendar(activityDate), 'MMM d, yyyy')
+                        : 'Choose date'}
+                    </Text>
+                    <Feather
+                      name={activityDatePickerOpen ? 'chevron-up' : 'chevron-down'}
+                      size={16}
+                      color={Colors.textSecondary}
+                    />
+                  </Pressable>
+                  {activityDatePickerOpen ? (
+                    <DateTimePicker
+                      value={activityDateDraft ?? dateFromCalendar(activityDate)}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={(event, date) => {
+                        if (event.type === 'dismissed') {
+                          setActivityDateDraft(null);
+                          setActivityDatePickerOpen(false);
+                          return;
+                        }
+                        if (!date) return;
+                        if (Platform.OS === 'ios') {
+                          setActivityDateDraft(date);
+                        } else {
+                          setActivityDate(format(date, 'yyyy-MM-dd'));
+                          setActivityDateDraft(null);
+                          setActivityDatePickerOpen(false);
+                        }
+                      }}
+                    />
+                  ) : null}
+                  {activityDatePickerOpen && Platform.OS === 'ios' ? (
+                    <View style={styles.dateActions}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setActivityDateDraft(null);
+                          setActivityDatePickerOpen(false);
+                        }}
+                        style={styles.dateCancel}
+                      >
+                        <Text style={styles.dateCancelText}>Cancel</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => {
+                          if (activityDateDraft) {
+                            setActivityDate(format(activityDateDraft, 'yyyy-MM-dd'));
+                          }
+                          setActivityDateDraft(null);
+                          setActivityDatePickerOpen(false);
+                        }}
+                        style={styles.dateConfirm}
+                      >
+                        <Text style={styles.dateConfirmText}>Use date</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
                 </View>
                 <View style={styles.splitInput}>
                   <AppInput
@@ -1728,6 +1822,32 @@ const styles = StyleSheet.create({
   },
   splitInputs: { flexDirection: 'row', gap: 10, marginTop: 16 },
   splitInput: { flex: 1 },
+  dateButton: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dateButtonText: { flex: 1, color: Colors.text, fontSize: 14 },
+  dateActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 6,
+  },
+  dateCancel: { paddingHorizontal: 8, paddingVertical: 8 },
+  dateCancelText: { color: Colors.textSecondary, fontWeight: '700' },
+  dateConfirm: {
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  dateConfirmText: { color: Colors.card, fontWeight: '700' },
   firstInput: { marginTop: 16 },
   cardTopline: {
     flexDirection: 'row',

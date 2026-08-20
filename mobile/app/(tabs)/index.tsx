@@ -28,10 +28,7 @@ import {
   type AdvisorActionInstance,
 } from '@/lib/advisor-action-storage';
 import { dashboardPreferences } from '@/lib/dashboard-preferences';
-import {
-  dashboardModuleById,
-  dashboardModulesForToday,
-} from '@/lib/dashboard-layout';
+import { dashboardModuleById } from '@/lib/dashboard-layout';
 import { useDashboardLayout } from '@/lib/use-dashboard-layout';
 
 function greetingForHour(hour: number): string {
@@ -256,10 +253,9 @@ export default function DashboardScreen() {
       ? visibleAdvisorAction.smallerAction
       : visibleAdvisorAction.action
     : null;
-  const visibleModuleIds = dashboardModulesForToday(
-    dashboardLayout,
-    visibleLowEnergyMode
-  );
+  // Low-energy mode changes the guidance and copy, not the user's selected
+  // tools. Hiding modules made the customizable Today page feel unreliable.
+  const visibleModuleIds = dashboardLayout.moduleIds;
   const now = new Date();
 
   return (
@@ -357,7 +353,7 @@ export default function DashboardScreen() {
           )}
         />
         <RowGroup>
-          {visibleModuleIds.slice(1).map((moduleId) => {
+          {visibleModuleIds.filter((moduleId) => moduleId !== 'advisor').map((moduleId) => {
             const module = dashboardModuleById(moduleId);
             if (!module) return null;
             return (

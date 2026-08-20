@@ -61,7 +61,7 @@ describe('anonymous account upgrade journey', () => {
     expect(partnerAccept).toContain('acceptance.promise');
   });
 
-  it('turns anonymous-data conflicts into an explicit keep-or-delete choice', () => {
+  it('preserves anonymous data while offering explicit discard controls', () => {
     expect(anonymousProfileSwitch).toContain("'anonymous_profile_data_conflict'");
     for (const authContext of [webAuth, mobileAuth]) {
       expect(authContext).toContain(
@@ -74,7 +74,8 @@ describe('anonymous account upgrade journey', () => {
     expect(webAuth).toContain(
       'removeCurrentDevicePushSubscription(expectedAnonymousUserId)'
     );
-    expect(mobileAuth).toContain('areRemindersEnabled()');
+    expect(mobileAuth).toContain('mergeAnonymousSessionIntoCurrentAccount');
+    expect(mobileAuth).toContain("'/api/data/merge-anonymous'");
     expect(mobileAuth).toContain('clearAllReminders()');
     expect(webLogin).toContain('Keep data and create an account');
     expect(webLogin).toContain('Delete data and sign in');
