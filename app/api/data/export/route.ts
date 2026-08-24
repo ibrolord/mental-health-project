@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'node:crypto';
+import { open, unlink, type FileHandle } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import {
@@ -42,49 +47,66 @@ async function loadGoalAttachmentRows(userId: string): Promise<QueryResult> {
   return { data: rows, error: null };
 }
 
-function streamExportWithAttachments(
-  payload: Record<string, unknown>,
-  rows: GoalAttachmentExportRow[]
-): NextResponse {
-  const supabaseAdmin = getSupabaseAdmin();
-  const encoder = new TextEncoder();
-  const payloadJson = JSON.stringify(payload);
-  const prefix = `${payloadJson.slice(0, -1)},"goal_attachments":[`;
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        controller.enqueue(encoder.encode(prefix));
-        for (const [index, row] of rows.entries()) {
-          const { data, error } = await supabaseAdmin.storage
-            .from(GOAL_ATTACHMENT_BUCKET)
-            .download(row.storage_path);
-          if (error || !data) {
-            throw new Error(
-              `goal attachment export failed for ${row.storage_path}: ${error?.message ?? 'file missing'}`
-            );
-          }
-          const exportedRow = {
-            ...row,
-            content_encoding: 'base64',
-            content_base64: Buffer.from(await data.arrayBuffer()).toString('base64'),
-          };
-          controller.enqueue(
-            encoder.encode(`${index === 0 ? '' : ','}${JSON.stringify(exportedRow)}`)
-          );
-        }
-        controller.enqueue(encoder.encode(']}'));
-        controller.close();
-      } catch (error) {
-        controller.error(error);
-      }
-    },
-  });
-  return new NextResponse(stream, {
-    headers: {
-      ...corsHeaders(),
-      'Content-Type': 'application/json; charset=utf-8',
-    },
-  });
+async function appendStoredRows<T extends Record<string, unknown> & { storage_path: string }>(
+  file: FileHandle,
+  bucket: string,
+  rows: T[]
+): Promise<void> {
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
+    const { data, error } = await getSupabaseAdmin().storage
+      .from(bucket)
+      .download(row.storage_path);
+    if (error || !data) {
+      throw new Error(
+        `${bucket} export failed for ${row.storage_path}: ${error?.message ?? 'file missing'}`
+      );
+    }
+    const exportedRow = {
+      ...row,
+      content_encoding: 'base64' as const,
+      content_base64: Buffer.from(await data.arrayBuffer()).toString('base64'),
+    };
+    await file.write(`${index === 0 ? '' : ','}${JSON.stringify(exportedRow)}`);
+  }
+}
+
+async function createExportResponse(
+  exportPayload: Record<string, unknown>,
+  goalAttachments: GoalAttachmentExportRow[]
+): Promise<Response> {
+  const path = join(tmpdir(), `mhtoolkit-export-${randomUUID()}.json`);
+  let writeHandle: FileHandle | null = null;
+  try {
+    writeHandle = await open(path, 'wx', 0o600);
+    const basePayload = JSON.stringify(exportPayload);
+    await writeHandle.write(basePayload.slice(0, -1));
+    await writeHandle.write(',"goal_attachments":[');
+    await appendStoredRows(writeHandle, GOAL_ATTACHMENT_BUCKET, goalAttachments);
+    await writeHandle.write(']}');
+    await writeHandle.sync();
+    await writeHandle.close();
+    writeHandle = null;
+
+    const readHandle = await open(path, 'r');
+    const { size } = await readHandle.stat();
+    await unlink(path);
+    const stream = Readable.toWeb(
+      readHandle.createReadStream({ autoClose: true })
+    ) as ReadableStream<Uint8Array>;
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders(),
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': String(size),
+        'Content-Disposition': 'attachment; filename="mhtoolkit-data-export.json"',
+      },
+    });
+  } catch (error) {
+    if (writeHandle) await writeHandle.close().catch(() => {});
+    await unlink(path).catch(() => {});
+    throw error;
+  }
 }
 
 export async function OPTIONS() {
@@ -387,7 +409,6 @@ export async function POST(request: NextRequest) {
     const goalAttachments = (
       requireQuery('goal attachments', goalAttachmentsResult) as GoalAttachmentExportRow[]
     );
-
     const exportPayload = {
         exported_at: new Date().toISOString(),
         user_type: account?.is_anonymous
@@ -477,7 +498,7 @@ export async function POST(request: NextRequest) {
           legacySessionResult
         ),
       };
-    return streamExportWithAttachments(exportPayload, goalAttachments);
+    return await createExportResponse(exportPayload, goalAttachments);
   } catch (error) {
     console.error(
       'Data export API error:',

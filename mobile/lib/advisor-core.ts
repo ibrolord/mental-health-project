@@ -5,6 +5,11 @@ import {
 } from './apple-health-core';
 import { hasExplicitUrgentSafetyLanguage } from './local-safety';
 import type { MoodEmoji } from './types';
+import type {
+  AdvisorLowEnergyEssential,
+  AdvisorPriority,
+  AdvisorProfile,
+} from './advisor-profile';
 
 export type AdvisorSourceKey = 'mood' | 'health' | 'goals' | 'habits';
 
@@ -60,6 +65,7 @@ export type AdvisorContext = {
   nowIso: string;
   intent?: 'general' | 'health-reflection';
   lowEnergyMode?: boolean;
+  profile?: AdvisorProfile | null;
   mood: { emoji: MoodEmoji; localDate: string } | null;
   goals: readonly AdvisorGoal[];
   habits: readonly AdvisorHabit[];
@@ -145,7 +151,7 @@ export type AdvisorRecommendation = {
   observation: string;
   action: string;
   smallerAction: string;
-  route: '/ground' | '/goals' | '/habits' | '/(tabs)/tracker' | '/plans' | '/resources';
+  route: '/ground' | '/goals' | '/habits' | '/(tabs)/tracker' | '/plans' | '/resources' | '/accountability';
   sourceLabels: readonly string[];
   resourceLabel: string;
   observations: readonly string[];
@@ -383,7 +389,13 @@ export function createAdvisorContextSnapshot(context: AdvisorContext): AdvisorCo
         previousPoints: boundedCount(context.momentumProgress.previousPoints),
       }
     : null;
-  return { ...context, goals, habits, momentumProgress };
+  const profile = context.profile
+    ? {
+        ...context.profile,
+        preferredName: sanitizeDisplayText(context.profile.preferredName).slice(0, 24),
+      }
+    : context.profile;
+  return { ...context, goals, habits, momentumProgress, profile };
 }
 
 function safetyRecommendation(): AdvisorRecommendationCandidate {
@@ -655,6 +667,31 @@ function fallbackCandidates(context: AdvisorContext): AdvisorRecommendationCandi
   ];
 }
 
+function relationshipCandidates(): AdvisorRecommendationCandidate[] {
+  return [
+    {
+      id: 'relationship-check-in',
+      kind: 'standard',
+      observation: 'Staying connected is one of the priorities in your Advisor setup.',
+      action: 'Send one honest, low-pressure check-in to someone you trust.',
+      smallerAction: 'Choose one person you would feel comfortable contacting.',
+      route: '/accountability',
+      sourceLabels: ['Your Advisor setup'],
+      resourceLabel: 'Open Together',
+    },
+    {
+      id: 'relationship-check-in:alternate',
+      kind: 'standard',
+      observation: 'Your Advisor setup keeps trusted connection in view.',
+      action: 'Make one small plan to connect with someone this week.',
+      smallerAction: 'Write down who you could reach out to.',
+      route: '/plans',
+      sourceLabels: ['Your Advisor setup'],
+      resourceLabel: 'Open plans',
+    },
+  ];
+}
+
 function habitWeekState(
   context: AdvisorContext,
   habit: AdvisorHabit | null
@@ -704,29 +741,7 @@ function recommendationCandidates(
   const habit = snapshot.habits[0] ?? null;
   const habitState = habitWeekState(snapshot, habit);
   if (context.lowEnergyMode) {
-    return [
-      {
-        id: 'low-energy-grounding',
-        kind: 'standard',
-        observation: 'Low Energy mode is on, so this step stays short and simple.',
-        action: 'Take 90 seconds to notice your breathing and what is around you.',
-        smallerAction: 'Name one thing you can see and one thing you can feel.',
-        route: '/ground',
-        sourceLabels: [],
-        resourceLabel: 'Start grounding',
-      },
-      {
-        id: 'low-energy-grounding:alternate',
-        kind: 'standard',
-        observation: 'Low Energy mode is on, so there is no catch-up target.',
-        action: 'Pause for one minute and slowly name five things around you.',
-        smallerAction: 'Notice one sound near you.',
-        route: '/ground',
-        sourceLabels: [],
-        resourceLabel: 'Start grounding',
-      },
-      ...fallbackCandidates(context),
-    ];
+    return lowEnergyCandidates(context, goal, habit);
   }
   const lowMood = hasCurrentLowMood(context, safeNow);
   const candidates: AdvisorRecommendationCandidate[] = [];
@@ -750,8 +765,116 @@ function recommendationCandidates(
     candidates.push(...healthCandidates(context.health));
   }
   if (goal && goalState === 'active') candidates.push(...goalCandidates(goal, 'active'));
+  if (context.profile?.completedAt && context.profile.priorities.includes('relationships')) {
+    candidates.push(...relationshipCandidates());
+  }
   candidates.push(...fallbackCandidates(context));
-  return candidates;
+  const hardCandidateCount = lowMood || (goal && goalState !== 'active') ? 2 : 0;
+  if (!context.profile?.completedAt || hardCandidateCount >= candidates.length) {
+    return candidates;
+  }
+  return [
+    ...candidates.slice(0, hardCandidateCount),
+    ...prioritizeAdvisorCandidates(candidates.slice(hardCandidateCount), context.profile),
+  ];
+}
+
+function candidatePriorityIndex(
+  candidate: AdvisorRecommendationCandidate,
+  priorities: readonly AdvisorPriority[]
+): number {
+  const sourcePriorities: AdvisorPriority[] = candidate.sourceLabels.includes('Goal')
+    ? ['goals', 'study']
+    : candidate.sourceLabels.includes('Habit')
+      ? ['habits']
+      : candidate.sourceLabels.includes('Mood check-in')
+        ? ['mood']
+        : candidate.sourceLabels.includes('Apple Health summary')
+          ? ['sleep', 'movement']
+          : candidate.id.startsWith('relationship-check-in')
+            ? ['relationships']
+            : [];
+  const matches = sourcePriorities
+    .map((priority) => priorities.indexOf(priority))
+    .filter((index) => index >= 0);
+  return matches.length ? Math.min(...matches) : Number.POSITIVE_INFINITY;
+}
+
+function prioritizeAdvisorCandidates(
+  candidates: readonly AdvisorRecommendationCandidate[],
+  profile: AdvisorProfile
+): AdvisorRecommendationCandidate[] {
+  return candidates
+    .map((candidate, index) => ({ candidate, index, rank: candidatePriorityIndex(candidate, profile.priorities) }))
+    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .map(({ candidate, rank }) => Number.isFinite(rank)
+      ? { ...candidate, sourceLabels: [...candidate.sourceLabels, 'Your Advisor setup'] }
+      : candidate);
+}
+
+function lowEnergyCandidates(
+  context: AdvisorContext,
+  goal: AdvisorGoal | null,
+  habit: AdvisorHabit | null
+): AdvisorRecommendationCandidate[] {
+  const essential = context.profile?.lowEnergyEssentials[0] ?? 'grounding';
+  const sourceLabels = context.profile?.completedAt ? ['Your Advisor setup'] : [];
+  const habitCandidate = habit ? habitCandidates(habit, false)[0] : null;
+  const goalCandidate = goal ? goalCandidates(goal, 'active')[0] : null;
+  const candidates: Record<AdvisorLowEnergyEssential, AdvisorRecommendationCandidate> = {
+    grounding: {
+      id: 'low-energy-grounding', kind: 'standard',
+      observation: 'Low Energy mode is keeping today focused on grounding.',
+      action: 'Take 90 seconds to notice your breathing and what is around you.',
+      smallerAction: 'Name one thing you can see and one thing you can feel.',
+      route: '/ground', sourceLabels, resourceLabel: 'Start grounding',
+    },
+    rest: {
+      id: 'low-energy-rest', kind: 'standard',
+      observation: 'Low Energy mode is keeping today focused on recovery.',
+      action: 'Take a short pause without adding another target.',
+      smallerAction: 'Put the phone down for one minute.',
+      route: '/ground', sourceLabels, resourceLabel: 'Start a pause',
+    },
+    connect: {
+      id: 'low-energy-connect', kind: 'standard',
+      observation: 'Low Energy mode is keeping one trusted connection close.',
+      action: 'Send one short check-in to someone you trust.',
+      smallerAction: 'Choose who you could contact.',
+      route: '/plans', sourceLabels, resourceLabel: 'Open plans',
+    },
+    mood: {
+      id: 'low-energy-mood', kind: 'standard',
+      observation: 'Low Energy mode is keeping today focused on one check-in.',
+      action: 'Choose the mood emoji that feels closest.',
+      smallerAction: 'Open the mood check-in. No note is required.',
+      route: '/(tabs)/tracker', sourceLabels, resourceLabel: 'Check in',
+    },
+    habits: habitCandidate ? {
+      ...habitCandidate,
+      id: 'low-energy-habit',
+      sourceLabels: [...habitCandidate.sourceLabels, ...sourceLabels],
+    } : {
+      id: 'low-energy-habit', kind: 'standard',
+      observation: 'Low Energy mode is keeping habits optional and small.',
+      action: 'Choose the smallest version of one routine.',
+      smallerAction: 'Open your habits without starting yet.',
+      route: '/habits', sourceLabels, resourceLabel: 'Open habits',
+    },
+    goals: goalCandidate ? {
+      ...goalCandidate,
+      id: 'low-energy-goal',
+      sourceLabels: [...goalCandidate.sourceLabels, ...sourceLabels],
+    } : {
+      id: 'low-energy-goal', kind: 'standard',
+      observation: 'Low Energy mode is keeping goals to one next step.',
+      action: 'Choose one visible next step for today.',
+      smallerAction: 'Open your goals without starting yet.',
+      route: '/goals', sourceLabels, resourceLabel: 'Open goals',
+    },
+  };
+  const first = candidates[essential];
+  return [first, { ...first, id: `${first.id}:alternate`, action: first.smallerAction }];
 }
 
 function boundedSignalTitle(value: string, suffix: string): string {
@@ -1291,8 +1414,12 @@ function synthesizeRecommendation(
   recent: readonly AdvisorRecentRecommendation[],
   candidate: AdvisorRecommendationCandidate
 ): AdvisorRecommendation {
-  if (candidate.kind === 'safety' || context.lowEnergyMode) {
+  if (candidate.kind === 'safety') {
     return { ...candidate, observations: [], changeSignal: null };
+  }
+  if (context.lowEnergyMode) {
+    const observation = boundedObservation(candidate.observation);
+    return { ...candidate, observation, observations: [], changeSignal: null };
   }
 
   const now = validDate(context.nowIso) ?? new Date(0);
@@ -1475,7 +1602,9 @@ export function createAdvisorCandidateSet(
   const first = selectAdvisorRecommendation(context, recent, options);
   const candidates = [first];
   const boundedLimit = Math.max(1, Math.min(3, Math.floor(limit)));
-  if (first.kind === 'safety' || boundedLimit === 1) return candidates;
+  if (first.kind === 'safety' || boundedLimit === 1 || hasHardAdvisorPriority(context)) {
+    return candidates;
+  }
 
   while (candidates.length < boundedLimit) {
     const next = selectAdvisorRecommendation(
@@ -1494,4 +1623,19 @@ export function createAdvisorCandidateSet(
     candidates.push(next);
   }
   return candidates;
+}
+
+function hasHardAdvisorPriority(context: AdvisorContext): boolean {
+  if (context.lowEnergyMode) return true;
+  const now = validDate(context.nowIso) ?? new Date(0);
+  if (hasCurrentLowMood(context, now)) return true;
+  const goal = createAdvisorContextSnapshot(context).goals[0] ?? null;
+  if (!goal) return false;
+  const dueAt = validDate(goal.dueAt);
+  return Boolean(
+    dueAt && (
+      localDayOrdinal(dueAt) < localDayOrdinal(now) ||
+      dueSoon(goal, now)
+    )
+  );
 }

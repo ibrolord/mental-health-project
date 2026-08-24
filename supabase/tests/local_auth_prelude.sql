@@ -16,3 +16,7 @@ CREATE OR REPLACE FUNCTION auth.jwt()
 RETURNS JSONB LANGUAGE sql STABLE AS $$
   SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), '')::JSONB, '{}'::JSONB);
 $$;
+
+GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION auth.uid(), auth.jwt()
+  TO anon, authenticated, service_role;

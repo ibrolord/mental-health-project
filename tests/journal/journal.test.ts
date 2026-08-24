@@ -57,6 +57,17 @@ describe('journal helpers', () => {
     );
   });
 
+  it('allows a voice-only draft only when a recording is ready to persist', () => {
+    const emptyDraft = emptyJournalDraft();
+
+    expect(validateJournalDraft(emptyDraft, { hasVoiceRecording: true })).not.toContain(
+      'Write something before saving.'
+    );
+    expect(validateJournalDraft(emptyDraft)).toContain(
+      'Write something before saving.'
+    );
+  });
+
   it('prepares a private book note with normalized nullable fields', () => {
     const prepared = prepareJournalDraft({
       ...emptyJournalDraft(),

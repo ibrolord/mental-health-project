@@ -2,7 +2,7 @@
   "expo": {
     "name": "MHtoolkit",
     "slug": "mhtoolkit",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "mhtoolkit",
@@ -14,7 +14,7 @@
       "usesAppleSignIn": true,
       "bundleIdentifier": "com.mhtoolkit.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "MHtoolkit uses the microphone only for live voice or tap-to-talk sessions you start. Audio is sent to OpenAI or Gemini to transcribe and respond.",
+        "NSMicrophoneUsageDescription": "MHtoolkit uses the microphone for voice sessions and voice journal recordings you start. Voice journal audio is saved privately with your entry and sent for transcription only when you choose transcription.",
         "NSCameraUsageDescription": "MHtoolkit's live voice sessions are audio-only. The bundled WebRTC library references camera APIs, but MHtoolkit never requests, captures, or transmits camera data.",
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
@@ -89,14 +89,14 @@
       [
         "expo-av",
         {
-          "microphonePermission": "MHtoolkit uses the microphone only for live voice or tap-to-talk sessions you start. Audio is sent to OpenAI or Gemini to transcribe and respond."
+          "microphonePermission": "MHtoolkit uses the microphone for voice sessions and voice journal recordings you start. Voice journal audio is saved privately with your entry and sent for transcription only when you choose transcription."
         }
       ],
       "./plugins/audio-only-webrtc",
       [
         "@config-plugins/react-native-webrtc",
         {
-          "microphonePermission": "MHtoolkit uses the microphone only for live voice or tap-to-talk sessions you start. Audio is sent to OpenAI or Gemini to transcribe and respond."
+          "microphonePermission": "MHtoolkit uses the microphone for voice sessions and voice journal recordings you start. Voice journal audio is saved privately with your entry and sent for transcription only when you choose transcription."
         }
       ],
       "expo-font",

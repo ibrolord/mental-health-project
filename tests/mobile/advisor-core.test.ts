@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createAdvisorContextSnapshot,
+  createAdvisorCandidateSet,
   createAdvisorHealthFeatures,
   createAdvisorRecommendation,
   createAdvisorTrendSummary,
@@ -10,6 +11,7 @@ import {
   type AdvisorHealthFeatures,
 } from '../../mobile/lib/advisor-core';
 import { buildAppleHealthSnapshot } from '../../mobile/lib/apple-health-core';
+import type { AdvisorProfile } from '../../mobile/lib/advisor-profile';
 
 function context(overrides: Partial<AdvisorContext> = {}): AdvisorContext {
   return {
@@ -63,6 +65,28 @@ function health(overrides: Partial<AdvisorHealthFeatures> = {}): AdvisorHealthFe
 }
 
 describe('mobile Advisor recommendation engine', () => {
+  it('locks hard priorities before a model can choose another candidate', () => {
+    const lowMood = context({
+      nowIso: '2026-08-13T12:00:00.000Z',
+      mood: { emoji: '😞', localDate: '2026-08-13' },
+      goals: [{ id: 'g', title: 'Submit work', dueAt: '2026-08-13T18:00:00.000Z' }],
+    });
+    expect(createAdvisorCandidateSet(lowMood)).toHaveLength(1);
+  });
+
+  it('turns a relationship priority into an actionable candidate', () => {
+    const profile: AdvisorProfile = {
+      version: 1,
+      preferredName: 'Ada',
+      focus: 'stability' as const,
+      priorities: ['relationships'],
+      supportStyle: 'practical' as const,
+      lowEnergyEssentials: ['connect'],
+      completedAt: '2026-08-13T10:00:00.000Z',
+      updatedAt: '2026-08-13T10:00:00.000Z',
+    };
+    expect(selectAdvisorRecommendation(context({ profile })).id).toBe('relationship-check-in');
+  });
   it('describes one changed area without producing a warning', () => {
     const trend = createAdvisorTrendSummary(
       context({
@@ -564,6 +588,39 @@ describe('mobile Advisor recommendation engine', () => {
       route: '/ground',
       resourceLabel: 'Start grounding',
     });
+  });
+
+  it('keeps personalized goal and habit essentials inside the low-energy family', () => {
+    const profile: AdvisorProfile = {
+      version: 1,
+      preferredName: 'Ada',
+      focus: 'stability' as const,
+      priorities: ['goals'],
+      supportStyle: 'practical' as const,
+      lowEnergyEssentials: ['goals'],
+      completedAt: '2026-08-13T10:00:00.000Z',
+      updatedAt: '2026-08-13T10:00:00.000Z',
+    };
+    const goalContext = context({
+      lowEnergyMode: true,
+      profile,
+      goals: [{ id: 'goal-1', title: 'Finish application', dueAt: null }],
+    });
+    const recent = [
+      { recommendationId: 'low-energy-goal', offeredAt: '2026-08-12T09:00:00.000Z' },
+      { recommendationId: 'low-energy-goal:alternate', offeredAt: '2026-08-12T10:00:00.000Z' },
+    ];
+
+    expect(selectAdvisorRecommendation(goalContext, recent).id).toMatch(/^low-energy-goal/);
+    expect(
+      selectAdvisorRecommendation(
+        context({
+          lowEnergyMode: true,
+          profile: { ...profile, lowEnergyEssentials: ['habits'] },
+          habits: [{ id: 'habit-1', name: 'Stretch', tinyStep: 'Stand up', completedToday: false }],
+        })
+      ).id
+    ).toBe('low-energy-habit');
   });
 
   it('does not treat an older low check-in as today\'s state', () => {

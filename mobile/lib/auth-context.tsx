@@ -45,6 +45,7 @@ import { clearFullContextPreference } from './full-context-preference';
 import { clearGoToActions } from './go-to-actions-storage';
 import { clearAdvisorAction } from './advisor-action-storage';
 import { advisorBriefStorage } from './advisor-brief-storage';
+import { advisorProfileStorage } from './advisor-profile-storage';
 import { clearAdvisorOutcomes } from './advisor-outcome-storage';
 import { clearAdvisorObservationLedger } from './advisor-observation-ledger';
 import { clearAdvisorLifecycleJournal } from './advisor-lifecycle-runtime';
@@ -54,6 +55,10 @@ import { Colors } from './constants';
 import { moodDraftStorage } from './mood-draft-storage';
 import { clearReflectionDraft, reflectionDraftStorage } from './reflection-draft-storage';
 import { appleHealthPreference } from './apple-health-preference';
+import {
+  clearJournalAudioForUser,
+  moveJournalAudioForUser,
+} from './journal-audio';
 import {
   ANONYMOUS_PROFILE_DATA_CONFLICT,
   discardAnonymousProfileSafely,
@@ -87,6 +92,7 @@ async function clearAdvisorOwnerState(ownerKey: string): Promise<void> {
     advisorBriefStorage.clear(ownerKey),
     clearAdvisorOutcomes(ownerKey),
     clearAdvisorObservationLedger(ownerKey),
+    advisorProfileStorage.clear(ownerKey),
   ]);
 }
 
@@ -112,6 +118,7 @@ async function migrateAnonymousLocalState(
     [`mhtoolkit.advisor_observation_ledger.v1:${encodedSource}`, `mhtoolkit.advisor_observation_ledger.v1:${encodedTarget}`],
     [`mhtoolkit.advisor_lifecycle.v1:${encodedSource}`, `mhtoolkit.advisor_lifecycle.v1:${encodedTarget}`],
     [`mhtoolkit.advisor.daily-brief.v1.${sourceOwnerKey}`, `mhtoolkit.advisor.daily-brief.v1.${targetOwnerKey}`],
+    [`mhtoolkit.advisor.profile.v1:${encodedSource}`, `mhtoolkit.advisor.profile.v1:${encodedTarget}`],
     [`mhtoolkit.ai_full_context.v3:${encodedSource}`, `mhtoolkit.ai_full_context.v3:${encodedTarget}`],
     [`mhtoolkit.chat_context.v1:${encodedSource}`, `mhtoolkit.chat_context.v1:${encodedTarget}`],
     [`mhtoolkit.go_to_actions.v1:${encodedSource}`, `mhtoolkit.go_to_actions.v1:${encodedTarget}`],
@@ -135,6 +142,7 @@ async function migrateAnonymousLocalState(
   await Promise.all([
     moodDraftStorage.clear(sourceUserId),
     clearReflectionDraft(sourceUserId),
+    moveJournalAudioForUser(sourceUserId, targetUserId),
   ]);
 }
 
@@ -217,6 +225,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   startAccountUpgrade: (email: string) => Promise<void>;
+  resendAccountUpgrade: (email: string) => Promise<void>;
   completeAccountUpgrade: () => Promise<AccountUpgradeStatus>;
   finishAccountUpgrade: (password: string) => Promise<void>;
   continueWithProvider: (
@@ -239,6 +248,7 @@ const AuthContext = createContext<AuthContextType>({
   signIn: async () => {},
   requestPasswordReset: async () => {},
   startAccountUpgrade: async () => {},
+  resendAccountUpgrade: async () => {},
   completeAccountUpgrade: async () => 'complete',
   finishAccountUpgrade: async () => {},
   continueWithProvider: async () => false,
@@ -459,8 +469,24 @@ export function AuthProvider({
     setUser(data.user);
   };
 
+  const resendAccountUpgrade = async (email: string): Promise<void> => {
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    if (!current.session?.user.is_anonymous || !isAccountUpgradePending(current.session.user)) {
+      throw new Error('Start account setup before requesting another confirmation email.');
+    }
+    const redirectUrl =
+      `https://mhtoolkit.vercel.app/auth/mobile-confirmed?source=mobile&upgrade_user_id=${encodeURIComponent(current.session.user.id)}`;
+    const { error } = await supabase.auth.resend({
+      type: 'email_change',
+      email: email.trim(),
+      options: { emailRedirectTo: redirectUrl },
+    });
+    if (error) throw error;
+  };
+
   const completeAccountUpgrade = async (): Promise<AccountUpgradeStatus> => {
-    const { data, error } = await supabase.auth.refreshSession();
+    const { data, error } = await supabase.auth.getUser();
     if (error) throw error;
     if (isAccountUpgradeComplete(data.user)) {
       setUser(data.user);
@@ -693,6 +719,7 @@ export function AuthProvider({
           offlineSafetyPlanCache.clear(user.id),
           clearReflectionDraft(user.id),
           appleHealthPreference.clear(user.id),
+          clearJournalAudioForUser(user.id),
         ],
         (error) => console.error('Sign-out local cleanup failed:', error)
       );
@@ -729,6 +756,7 @@ export function AuthProvider({
             offlineSafetyPlanCache.clear(expectedAnonymousUserId),
             clearReflectionDraft(expectedAnonymousUserId),
             appleHealthPreference.clear(expectedAnonymousUserId),
+            clearJournalAudioForUser(expectedAnonymousUserId),
           ],
           (error) => console.error('Anonymous-profile local cleanup failed:', error)
         ),
@@ -778,6 +806,7 @@ export function AuthProvider({
           offlineSafetyPlanCache.clear(deletedOwnerId),
           clearReflectionDraft(deletedOwnerId),
           appleHealthPreference.clear(deletedOwnerId),
+          clearJournalAudioForUser(deletedOwnerId),
         ],
         (error) => console.error('Deleted-account local cleanup failed:', error)
       );
@@ -856,6 +885,7 @@ export function AuthProvider({
         signIn,
         requestPasswordReset,
         startAccountUpgrade,
+        resendAccountUpgrade,
         completeAccountUpgrade,
         finishAccountUpgrade,
         continueWithProvider,

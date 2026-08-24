@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import {
   AppScreen,
   InlineStatus,
@@ -10,8 +10,6 @@ import {
   RowGroup,
   SectionHeader,
 } from '@/components/AppUI';
-import { createAdvisorRecommendation } from '@/lib/advisor-core';
-import { loadAmbientAdvisorContext } from '@/lib/advisor-context';
 import { useAuth } from '@/lib/auth-context';
 import {
   createDashboardPreferenceWriter,
@@ -34,11 +32,6 @@ export default function YouScreen() {
   const [preferenceOwnerKey, setPreferenceOwnerKey] = useState<string | null>(null);
   const [preferenceError, setPreferenceError] = useState('');
   const [shareStatus, setShareStatus] = useState('');
-  const [advisorSummary, setAdvisorSummary] = useState<{
-    ownerKey: string;
-    text: string;
-  } | null>(null);
-  const advisorRequestRef = useRef(0);
   const preferenceWriterRef = useRef(
     createDashboardPreferenceWriter(dashboardPreferences)
   );
@@ -64,41 +57,6 @@ export default function YouScreen() {
       });
     return () => { active = false; };
   }, [ownerKey]);
-
-  useFocusEffect(
-    useCallback(() => {
-      const request = ++advisorRequestRef.current;
-      const expectedOwnerKey = ownerKey;
-      setAdvisorSummary((current) =>
-        current?.ownerKey === expectedOwnerKey ? current : null
-      );
-      if (!expectedOwnerKey || !ownerValue) return undefined;
-
-      void loadAmbientAdvisorContext({
-        ownerKey: expectedOwnerKey,
-        queryColumn: isAuthenticated ? 'user_id' : 'session_id',
-        queryValue: ownerValue,
-        userId: user?.id ?? null,
-      })
-        .then((context) => {
-          if (
-            request !== advisorRequestRef.current ||
-            ownerKeyRef.current !== expectedOwnerKey
-          ) {
-            return;
-          }
-          setAdvisorSummary({
-            ownerKey: expectedOwnerKey,
-            text: createAdvisorRecommendation(context).observation,
-          });
-        })
-        .catch(() => undefined);
-
-      return () => {
-        advisorRequestRef.current += 1;
-      };
-    }, [isAuthenticated, ownerKey, ownerValue, user?.id])
-  );
 
   const updateLowEnergyMode = async (enabled: boolean) => {
     if (!ownerKey || preferenceOwnerKey !== ownerKey) return;
@@ -146,13 +104,15 @@ export default function YouScreen() {
           <ListRow title="Settings and privacy" description="Account, reminders, export, and deletion" icon="settings" onPress={() => router.push('/settings')} />
           <ListRow
             title="Advisor"
-            description={
-              advisorSummary?.ownerKey === ownerKey
-                ? advisorSummary.text
-                : 'See what matters and get one practical next step'
-            }
+            description="See what matters and get one practical next step"
             icon="compass"
             onPress={() => router.navigate('/advisor')}
+          />
+          <ListRow
+            title="Personalize Advisor"
+            description="Name, priorities, advice style, and low-energy essentials"
+            icon="sliders"
+            onPress={() => router.push('/advisor-setup' as never)}
           />
           <ListRow title="Together & sharing" description="Commitments, check-ins, and partner privacy" icon="heart" onPress={() => router.push('/accountability')} />
         </RowGroup>
@@ -171,8 +131,8 @@ export default function YouScreen() {
               value={lowEnergyMode}
               disabled={!ownerKey || preferenceOwnerKey !== ownerKey}
               onValueChange={(enabled) => void updateLowEnergyMode(enabled)}
-              trackColor={{ false: Colors.border, true: Colors.primaryLight }}
-              thumbColor={lowEnergyMode ? Colors.primary : Colors.card}
+              trackColor={{ false: Colors.border, true: Colors.primary }}
+              thumbColor={Colors.onPrimary}
             />
           </View>
         </RowGroup>

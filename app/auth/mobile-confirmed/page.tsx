@@ -268,7 +268,7 @@ export default function MobileAccountConfirmationPage() {
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
               {source === 'web'
                 ? 'Your account is ready and your saved data stayed with it.'
-                : 'Return to MHtoolkit and tap “I Confirmed My Email” to create your password.'}
+                : 'Return to MHtoolkit to create your password.'}
             </p>
             {source === 'web' && (
               <Link
@@ -277,6 +277,14 @@ export default function MobileAccountConfirmationPage() {
               >
                 Continue to MHtoolkit
               </Link>
+            )}
+            {source === 'mobile' && (
+              <a
+                href="mhtoolkit://auth/signup"
+                className="mt-6 inline-flex rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground"
+              >
+                Return to MHtoolkit
+              </a>
             )}
             {completionNote && (
               <p role="status" className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-foreground">

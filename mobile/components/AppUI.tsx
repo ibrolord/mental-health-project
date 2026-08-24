@@ -34,7 +34,9 @@ export function AppScreen({
   contentStyle?: StyleProp<ViewStyle>;
 }) {
   const content = (
-    <View style={[styles.content, contentStyle]}>{children}</View>
+    <View style={[scroll ? styles.scrollInner : styles.content, contentStyle]}>
+      {children}
+    </View>
   );
 
   return (
@@ -43,6 +45,7 @@ export function AppScreen({
         <ScrollView
           style={styles.screen}
           contentContainerStyle={styles.scrollContent}
+          automaticallyAdjustKeyboardInsets
           keyboardShouldPersistTaps="handled"
           scrollEnabled={scrollEnabled}
           showsVerticalScrollIndicator={false}
@@ -567,6 +570,13 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
   screen: { flex: 1, backgroundColor: Colors.background },
   scrollContent: { flexGrow: 1 },
+  // A ScrollView child must size to its contents. Using flex: 1 here traps
+  // longer forms behind the tab bar instead of making them reachable by scroll.
+  scrollInner: {
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: 44,
+  },
   content: {
     flex: 1,
     paddingHorizontal: Spacing.md,

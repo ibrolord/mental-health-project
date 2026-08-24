@@ -124,11 +124,23 @@ describe('customizable Today dashboard', () => {
     expect(setDashboardModuleEnabled(minimum, 'focus', false)).toBe(minimum);
   });
 
-  it('keeps every selected tool visible without changing the persisted order', () => {
+  it('uses a presentation-only low-energy subset without changing persisted order', () => {
     const layout = applyDashboardPreset('productivity');
     const before = [...layout.moduleIds];
 
-    expect(dashboardModulesForToday(layout, true)).toEqual(layout.moduleIds);
+    expect(dashboardModulesForToday(layout, false, ['goals'])).toEqual(layout.moduleIds);
+    expect(dashboardModulesForToday(layout, true, ['goals', 'habits'])).toEqual([
+      'advisor',
+      'goals',
+      'habits',
+    ]);
+    expect(dashboardModulesForToday(layout, true, [])).toEqual(layout.moduleIds);
+    expect(dashboardModulesForToday(layout, true, ['grounding', 'mood', 'goals'])).toEqual([
+      'advisor',
+      'grounding',
+      'mood',
+      'goals',
+    ]);
     expect(layout.moduleIds).toEqual(before);
   });
 

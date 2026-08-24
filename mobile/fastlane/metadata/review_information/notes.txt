@@ -1,7 +1,7 @@
 No login is required for the core review path. MHtoolkit creates a private anonymous session. Together accountability features require a permanent account because two verified accounts are needed.
 
 BUILD UNDER REVIEW
-Version 1.0.5, build 59
+Version 1.0.6, build 62
 Bundle ID: com.mhtoolkit.app
 
 SUGGESTED REVIEW PATH
@@ -9,7 +9,7 @@ SUGGESTED REVIEW PATH
 2. Save a mood check-in, return to Today, and reopen Mood to confirm history.
 3. Open Assess. PHQ-9, GAD-7, and CBI show recall periods, limitations, non-diagnostic wording, and published sources. A positive PHQ-9 self-harm response immediately shows safety guidance and crisis actions.
 4. Add a goal and habit. Goals support milestones, due dates, notes, reminders, attachments, and Focus handoff. Duplicate active entries and repeated taps are guarded.
-5. Review Library, Journal, Life Planner, Focus, Meditation, Ground Me, Mind Games, routines, and affirmations.
+5. Review Library, Journal, Life Planner, Focus, Meditation, Ground Me, Mind Games, routines, and affirmations. Journal supports private voice recordings with editable transcription, playback, replacement, and deletion.
 6. Open AI Chat. Sending first displays AI data-sharing consent. Personal context is off by default and selectable by category. Explicit crisis language receives a deterministic safety response.
 7. Open Settings to revoke AI consent, export or delete data, delete a permanent account, contact support, and open crisis resources.
 8. On iPhone, optionally set up read-only Apple Health access. Mood shows permitted sleep, movement, workout, mindfulness, and State of Mind summaries. Raw HealthKit samples remain on device. An aggregate can be sent to AI only after a per-request preview and confirmation.
@@ -18,7 +18,7 @@ MEDICAL AND PRIVACY BOUNDARIES
 MHtoolkit supports self-management and reflection. It does not diagnose, treat, or replace a doctor or licensed professional. Partners receive only user-enabled activity counts and fixed-format celebrations; database authorization prevents access to raw private content. AI consent can be revoked in Settings.
 
 iPAD COMPATIBILITY
-The app is iPhone-only and requires fullscreen, and runs in iPhone compatibility mode on iPad. Build 59 uses expo-notifications 0.32.17 with Expo's iOS serializer thread-safety fix and omits expo-device. The signed IPA was verified as iPhone-only and includes the notification native module.
+The app is iPhone-only and requires fullscreen, and runs in iPhone compatibility mode on iPad. This release uses expo-notifications 0.32.17 with Expo's iOS serializer thread-safety fix and omits expo-device. The signed IPA must be verified as iPhone-only and include the notification native module before submission.
 
 Support: bolajiag10@gmail.com
 Support URL: https://mhtoolkit.vercel.app/support

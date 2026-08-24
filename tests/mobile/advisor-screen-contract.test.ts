@@ -36,7 +36,7 @@ describe('mobile Advisor detail and context contracts', () => {
     expect(startFlow).toContain('setAdvisorActionFollowUp(');
     expect(advisor).toContain("label: 'Done'");
     expect(advisor).toContain("label: 'Remind me'");
-    expect(advisor).toContain('If that feels like too much');
+    expect(advisor).toContain('Make it smaller');
     expect(advisor).toContain('Try something else');
     expect(advisor).toContain('Share with Together');
     expect(advisor).toContain('Talk this through');
@@ -112,7 +112,8 @@ describe('mobile Advisor detail and context contracts', () => {
 
   it('shows provenance and a calm no-history state', () => {
     expect(advisor).toContain("`Based on ${Array.from(");
-    expect(advisor).toContain('General guidance · no personal context used');
+    expect(advisor).toContain('This step is general guidance');
+    expect(advisor).toContain('This step uses your Advisor preferences');
     expect(advisor).toContain('No personal pattern was used for this suggestion.');
     expect(advisor).toContain('Start a step and it will show up here.');
     expect(advisor).not.toContain('Personal guidance, not a clinical assessment.');
@@ -163,7 +164,9 @@ describe('mobile Advisor detail and context contracts', () => {
       advisor.indexOf('\n  return (', advisor.indexOf('const refreshWithAppleHealth'))
     );
     expect(healthRefresh).toContain('activeAdvisorAction ||');
-    expect(advisor).toContain('APPLE_HEALTH_AI_ENABLED &&\n              !activeAdvisorAction &&');
+    expect(advisor).toContain(
+      'APPLE_HEALTH_AI_ENABLED &&\n              context?.profile?.completedAt &&\n              !activeAdvisorAction &&'
+    );
     expect(healthRefresh.indexOf('ensureAiDataSharingConsent(expectedOwner)')).toBeLessThan(
       healthRefresh.indexOf('confirmAppleHealthAiShare(summary)')
     );
@@ -175,11 +178,25 @@ describe('mobile Advisor detail and context contracts', () => {
     );
   });
 
-  it('caches a generated brief against the post-offer context and reuses cached briefs', () => {
-    const loadFlow = advisor.slice(
-      advisor.indexOf('const localDate ='),
-      advisor.indexOf('setContext(context);')
+  it('finishes personalization before consent, model calls, or brief caching', () => {
+    const start = advisor.indexOf('const localDate =');
+    const loadFlow = advisor.slice(start, advisor.indexOf('.catch(() => {', start));
+    expect(loadFlow).toContain('if (!context.profile?.completedAt) {');
+    expect(loadFlow).toContain("router.push('/advisor-setup' as never)");
+    expect(loadFlow.indexOf('if (!context.profile?.completedAt) {')).toBeLessThan(
+      loadFlow.indexOf('const fingerprint =')
     );
+    expect(loadFlow.indexOf('if (!context.profile?.completedAt) {')).toBeLessThan(
+      loadFlow.indexOf('selectModelBackedRecommendation(')
+    );
+    expect(loadFlow.indexOf("router.push('/advisor-setup' as never)")).toBeLessThan(
+      loadFlow.indexOf('selectModelBackedRecommendation(')
+    );
+  });
+
+  it('caches a generated brief against the post-offer context and reuses cached briefs', () => {
+    const start = advisor.indexOf('const fingerprint =');
+    const loadFlow = advisor.slice(start, advisor.indexOf('.catch(() => {', start));
     expect(loadFlow).toContain('if (!cached) {');
     expect(loadFlow.indexOf('recordAdvisorOffered(expectedOwner')).toBeLessThan(
       loadFlow.indexOf('updatedOutcomes = await loadAdvisorOutcomes(expectedOwner)')

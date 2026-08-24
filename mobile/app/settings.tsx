@@ -43,6 +43,7 @@ import { clearReflectionDraft } from '@/lib/reflection-draft-storage';
 import { supabase } from '@/lib/supabase';
 import { AppleHealthSettingsCard } from '@/components/AppleHealthSettingsCard';
 import { appleHealthPreference } from '@/lib/apple-health-preference';
+import { clearJournalAudioForUser } from '@/lib/journal-audio';
 import {
   AppScreen,
   InlineStatus,
@@ -359,6 +360,7 @@ export default function SettingsScreen() {
                 offlineSafetyPlanCache.clear(expectedOwnerId),
                 clearReflectionDraft(expectedOwnerId),
                 appleHealthPreference.clear(expectedOwnerId),
+                clearJournalAudioForUser(expectedOwnerId),
               ]);
               setDataGeneration((current) => current + 1);
               const cleanupFailed = cleanup.some((item) => item.status === 'rejected');

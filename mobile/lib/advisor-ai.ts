@@ -83,6 +83,13 @@ export async function requestModelAdvisorRecommendation(
         recommendationId: item.recommendationId,
         helpful: item.helpful ?? null,
       })),
+    profile: context.profile?.completedAt
+      ? {
+          preferredName: context.profile.preferredName,
+          priorities: context.profile.priorities,
+          supportStyle: context.profile.supportStyle,
+        }
+      : null,
   }, {
     timeoutMs: ADVISOR_MODEL_TIMEOUT_MS,
   });

@@ -7,15 +7,16 @@ advisory not listed here.
 
 ## Current status
 
-Audit date: 2026-08-10
+Audit date: 2026-08-24
 
 - 0 critical
-- 11 high
+- 8 high
 - 0 moderate
 - 0 low
 
-The eleven package-level findings reduce to three advisories in two transitive
-build-tool packages.
+The eight package-level findings reduce to two advisories in one transitive
+build-tool package. npm's suggested Expo 57 upgrade is a major framework
+migration and does not provide a patched `image-size` release.
 
 ## `image-size`
 

@@ -104,6 +104,7 @@ const SOURCE_LABELS: Record<string, string> = {
   Habit: 'Habit',
   Habits: 'Habits',
   'Apple Health summary': 'Apple Health summary',
+  'Your Advisor setup': 'Your priorities',
 };
 
 function outcomeStatus(outcome: AdvisorOutcome): string {
@@ -183,6 +184,13 @@ function deterministicBrief(
     signals: createAdvisorBriefSignals(context, appleHealthSummary).slice(0, 2),
     usedAppleHealth: Boolean(appleHealthSummary),
   };
+}
+
+function prefersSmallerStep(context: AdvisorContext): boolean {
+  const style = context.profile?.supportStyle;
+  if (style === 'gentle') return true;
+  if (style === 'practical') return context.lowEnergyMode === true;
+  return false;
 }
 
 async function selectModelBackedRecommendation(
@@ -297,6 +305,7 @@ export default function AdvisorScreen() {
     ownerKey: string;
     action: string;
   } | null>(null);
+  const promptedOwnerRef = useRef<string | null>(null);
   const [context, setContext] = useState<AdvisorContext | null>(null);
   const [recommendation, setRecommendation] = useState<AdvisorRecommendation | null>(null);
   const [brief, setBrief] = useState<AdvisorDailyBrief | null>(null);
@@ -382,6 +391,38 @@ export default function AdvisorScreen() {
             reconciledOutcomes = await loadAdvisorOutcomes(expectedOwner);
           }
           const localDate = format(new Date(context.nowIso), 'yyyy-MM-dd');
+          const deterministicSelection = selectAdvisorRecommendation(
+            context,
+            reconciledOutcomes
+          );
+          if (deterministicSelection.kind === 'safety') {
+            setContext(context);
+            setRecommendation(deterministicSelection);
+            setBrief(deterministicBrief(context, deterministicSelection, null));
+            setAdvisorModel(null);
+            setOutcomes(reconciledOutcomes);
+            setActiveAdvisorAction(null);
+            setUseSmallerStep(false);
+            setStateOwnerKey(expectedOwner);
+            return;
+          }
+          if (!context.profile?.completedAt) {
+            setContext(context);
+            setRecommendation(deterministicSelection);
+            setBrief(deterministicBrief(context, deterministicSelection, null));
+            setAdvisorModel(null);
+            setOutcomes(reconciledOutcomes);
+            setActiveAdvisorAction(storedAction);
+            setUseSmallerStep(prefersSmallerStep(context));
+            setStateOwnerKey(expectedOwner);
+            if (expectedOwner && promptedOwnerRef.current !== expectedOwner) {
+              promptedOwnerRef.current = expectedOwner;
+              setTimeout(() => {
+                if (ownerRef.current === expectedOwner) router.push('/advisor-setup' as never);
+              }, 0);
+            }
+            return;
+          }
           const fingerprint = createAdvisorBriefFingerprint(context, reconciledOutcomes);
           const cached = expectedOwner
             ? await advisorBriefStorage.read(
@@ -390,14 +431,10 @@ export default function AdvisorScreen() {
                 fingerprint
               ).catch(() => null)
             : null;
-          const deterministicSelection = selectAdvisorRecommendation(
-            context,
-            reconciledOutcomes
-          );
           const storedRecommendation = storedAction
             ? recommendationForAction(storedAction)
             : null;
-          const generated = storedRecommendation && deterministicSelection.kind !== 'safety'
+          const generated = storedRecommendation
             ? {
                 recommendation: storedRecommendation,
                 model: null,
@@ -472,7 +509,9 @@ export default function AdvisorScreen() {
           setAdvisorModel(generated.model);
           setOutcomes(updatedOutcomes);
           setActiveAdvisorAction(storedAction);
-          setUseSmallerStep(storedAction?.useSmallerStep ?? false);
+          setUseSmallerStep(
+            storedAction?.useSmallerStep ?? prefersSmallerStep(context)
+          );
           setStateOwnerKey(expectedOwner);
         })
         .catch(() => {
@@ -489,7 +528,7 @@ export default function AdvisorScreen() {
       return () => {
         if (request === requestRef.current) requestRef.current += 1;
       };
-    }, [ownerKey, queryColumn, queryValue, user?.id])
+    }, [ownerKey, queryColumn, queryValue, router, user?.id])
   );
 
   useEffect(() => {
@@ -546,7 +585,14 @@ export default function AdvisorScreen() {
             )
           )
         ).join(' · ')}`
-      : 'General guidance · no personal context used'}`
+      : context?.profile?.completedAt
+        ? 'This step uses your Advisor preferences'
+        : 'This step is general guidance'}`
+    : '';
+  const personalizedHeadline = brief
+    ? context?.profile?.preferredName
+      ? `${context.profile.preferredName}, ${brief.headline.charAt(0).toLocaleLowerCase()}${brief.headline.slice(1)}`
+      : brief.headline
     : '';
   const visibleOutcomes = outcomes
     .filter((outcome) => outcome.startedAt || outcome.completedAt || outcome.helpful !== null)
@@ -592,6 +638,7 @@ export default function AdvisorScreen() {
     if (
       !context ||
       !recommendation ||
+      !context.profile?.completedAt ||
       activeAdvisorAction ||
       !ownerKey ||
       !user?.id ||
@@ -665,7 +712,7 @@ export default function AdvisorScreen() {
       setBrief(generated.brief);
       setAdvisorModel(generated.model);
       setOutcomes(updatedOutcomes);
-      if (!activeAdvisorAction) setUseSmallerStep(false);
+      if (!activeAdvisorAction) setUseSmallerStep(prefersSmallerStep(context));
       setStatus('Today’s brief now includes the Health summary you approved.');
       void refreshReminders().catch(() => undefined);
     } catch {
@@ -803,7 +850,7 @@ export default function AdvisorScreen() {
       setBrief(nextBrief);
       setAdvisorModel(null);
       setOutcomes(updatedOutcomes);
-      setUseSmallerStep(false);
+      setUseSmallerStep(prefersSmallerStep(context));
     } catch {
       if (ownerRef.current === expectedOwner) {
         setError('Another step could not be loaded. Please try again.');
@@ -1096,9 +1143,17 @@ export default function AdvisorScreen() {
                 <View style={styles.briefHeadingCopy}>
                   <Text style={styles.eyebrow}>TODAY’S BRIEF</Text>
                   <Text accessibilityRole="header" style={styles.briefHeadline}>
-                    {brief.headline}
+                    {personalizedHeadline}
                   </Text>
                 </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Tune Advisor"
+                  onPress={() => router.push('/advisor-setup' as never)}
+                  style={({ pressed }) => [styles.tuneButton, pressed && styles.pressed]}
+                >
+                  <Text style={styles.tuneButtonText}>Tune</Text>
+                </Pressable>
                 {brief.usedAppleHealth ? (
                   <Text style={styles.healthBadge}>Health included</Text>
                 ) : null}
@@ -1120,6 +1175,7 @@ export default function AdvisorScreen() {
               <Text style={styles.cadenceLine}>{cadenceLine}</Text>
               {Platform.OS === 'ios' &&
               APPLE_HEALTH_AI_ENABLED &&
+              context?.profile?.completedAt &&
               !activeAdvisorAction &&
               user?.id &&
               recommendation.kind === 'standard' ? (
@@ -1171,7 +1227,7 @@ export default function AdvisorScreen() {
                 ]}
               >
                 <Text style={styles.smallerLabel}>
-                  {useSmallerStep ? 'Back to the original' : 'If that feels like too much'}
+                  {useSmallerStep ? 'Use original step' : 'Make it smaller'}
                 </Text>
                 <Text style={styles.smallerAction}>
                   {useSmallerStep
@@ -1187,6 +1243,18 @@ export default function AdvisorScreen() {
               </Text>
             ) : null}
           </AppCard>
+          {followUpState === 'planned_due' ? null : <AppButton
+            label={recommendation.kind === 'safety'
+              ? 'Find support'
+              : followUpState === 'needs_recovery'
+                ? useSmallerStep ? 'Continue smaller step' : 'Continue step'
+              : actionIsStarted
+                ? 'Continue'
+                : 'Start'}
+            icon="arrow-right"
+            loading={busy}
+            onPress={() => void startRecommendation()}
+          />}
           {followUpState === 'planned_due' ? (
             <AppCard style={styles.checkInCard}>
               <Text style={styles.eyebrow}>PLANNED CHECK-IN</Text>
@@ -1339,18 +1407,6 @@ export default function AdvisorScreen() {
           ) : null}
 
           {status ? <InlineStatus tone="success" message={status} /> : null}
-          {followUpState === 'planned_due' ? null : <AppButton
-            label={recommendation.kind === 'safety'
-              ? 'Find support'
-              : followUpState === 'needs_recovery'
-                ? useSmallerStep ? 'Continue smaller step' : 'Continue step'
-              : actionIsStarted
-                ? 'Continue'
-                : 'Start'}
-            icon="arrow-right"
-            loading={busy}
-            onPress={() => void startRecommendation()}
-          />}
           <DisclosureCard
             title="Why this step?"
             description="What informed this suggestion"
@@ -1527,6 +1583,12 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   briefHeadingCopy: { flex: 1 },
+  tuneButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.sm,
+  },
+  tuneButtonText: { color: Colors.primary, ...Typography.bodySmall, fontWeight: '800' },
   briefHeadline: {
     color: Colors.text,
     fontFamily: 'Georgia',
@@ -1624,10 +1686,14 @@ const styles = StyleSheet.create({
   smallerStep: {
     minHeight: 44,
     justifyContent: 'center',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.borderStrong,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: Colors.borderStrong,
+    borderRadius: Radius.lg,
     marginTop: Spacing.md,
-    paddingTop: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.card,
   },
   smallerLabel: { color: Colors.primary, ...Typography.label },
   smallerAction: {

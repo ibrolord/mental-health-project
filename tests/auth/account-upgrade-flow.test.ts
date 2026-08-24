@@ -37,11 +37,16 @@ describe('anonymous account upgrade journey', () => {
     expect(mobileAuth).toContain('password,');
     expect(mobileAuth).toContain('[ACCOUNT_UPGRADE_COMPLETION_FLAG]: true');
     expect(mobileSignup).toContain("type SignupStep = 'email' | 'confirmation' | 'password'");
-    expect(mobileSignup).toContain('I Confirmed My Email');
+    expect(mobileSignup).toContain('Resend email');
+    expect(mobileSignup).toContain('Use a different email');
+    expect(mobileSignup).toContain("AppState.addEventListener('change'");
     expect(mobileSignup).toContain('Finish Account Setup');
+    expect(mobileAuth).toContain('supabase.auth.getUser()');
+    expect(mobileAuth).toContain("type: 'email_change'");
     expect(confirmation).toContain("confirmationSource === 'web'");
     expect(confirmation).toContain('supabase.auth.verifyOtp');
     expect(confirmation).toContain('token_hash: tokenHash');
+    expect(confirmation).toContain('mhtoolkit://auth/signup');
     expect(mobileSupabase).toContain("flowType: 'implicit'");
   });
 

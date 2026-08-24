@@ -92,7 +92,7 @@ Build 42 artifact:
 - Apple processing observation: no build-42 issue email was present after the
   stated 5-10 minute window; direct TestFlight status remains to be verified.
 
-## iOS 1.0.5 Apple Health update
+## iOS 1.0.6 Apple Health update
 
 - [x] Integration is opt-in, read-only, and limited to six disclosed categories.
 - [x] Raw samples are processed in memory and excluded from every network path.
@@ -121,7 +121,7 @@ Build 42 artifact:
 - [ ] `HEALTH_AI_ENABLED=true` is set on the production backend and
   `EXPO_PUBLIC_HEALTH_AI_ENABLED=true` is baked into iOS only after those
   provider and App Store privacy gates pass; both default to disabled.
-- [ ] A new signed 1.0.5 artifact is uploaded, processed, selected, and submitted.
+- [ ] A new signed 1.0.6 artifact is uploaded, processed, selected, and submitted.
 
 This section tracks new source work only. It is not included in the already
 submitted 1.0.2 build 44.

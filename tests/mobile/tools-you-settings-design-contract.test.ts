@@ -25,9 +25,9 @@ describe('Tools, You, and Settings redesign contracts', () => {
     expect(you.match(/<RowGroup>/g)?.length).toBeGreaterThanOrEqual(3);
     expect(you).not.toContain('styles.accountCard');
     expect(you).not.toContain('Radius.');
-    expect(you).toContain('loadAmbientAdvisorContext');
     expect(you).toContain('ownerKeyRef.current !== expectedOwnerKey');
-    expect(you).toContain('advisorSummary?.ownerKey === ownerKey');
+    expect(you).toContain('title="Personalize Advisor"');
+    expect(you).toContain("router.push('/advisor-setup' as never)");
   });
 
   it('uses row groups without a decorative Settings header icon or local card stack', () => {

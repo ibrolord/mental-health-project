@@ -33,6 +33,7 @@ describe('mobile mood check-in draft', () => {
       emotions: ['calm'] as const,
       customEmotions: ['Quietly hopeful'],
       support: 'keep-going' as const,
+      customSupport: null,
       visibleTags: ['sleep'],
       detailsOpen: true,
     };
@@ -53,7 +54,8 @@ describe('mobile mood check-in draft', () => {
         note: 'x'.repeat(700),
         emotions: ['joyful', 'sad', 'joyful'],
         customEmotions: ['Calm', 'Ready'],
-        support: 'rest',
+      support: 'rest',
+      customSupport: 'Take a shower',
         visibleTags: ['sleep', 'mood-support:rest', 42],
         detailsOpen: true,
       })
@@ -61,8 +63,9 @@ describe('mobile mood check-in draft', () => {
       mood: '😄',
       note: 'x'.repeat(500),
       emotions: ['joyful'],
-      customEmotions: ['Ready'],
+      customEmotions: ['Calm', 'Ready'],
       support: null,
+      customSupport: 'Take a shower',
       visibleTags: ['sleep'],
       detailsOpen: true,
     });
@@ -77,6 +80,7 @@ describe('mobile mood check-in draft', () => {
       emotions: [],
       customEmotions: [],
       support: null,
+      customSupport: null,
       visibleTags: [],
       detailsOpen: false,
     };
@@ -117,6 +121,7 @@ describe('mobile mood check-in draft', () => {
       emotions: [],
       customEmotions: [],
       support: null,
+      customSupport: null,
       visibleTags: [],
       detailsOpen: false,
     });
@@ -148,6 +153,7 @@ describe('mobile mood check-in draft', () => {
       emotions: [],
       customEmotions: [],
       support: null,
+      customSupport: null,
       visibleTags: [],
       detailsOpen: false,
     });

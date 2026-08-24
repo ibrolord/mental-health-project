@@ -153,4 +153,5 @@ describe('transactional data deletion route', () => {
       p_user_id: 'anonymous-1',
     });
   });
+
 });

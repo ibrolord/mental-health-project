@@ -1,11 +1,11 @@
-# App Review Notes - Version 1.0.5
+# App Review Notes - Version 1.0.6
 
-Last updated: August 20, 2026
+Last updated: August 24, 2026
 
 ## Build Under Review
 
-- Version: 1.0.5
-- iOS build: 59
+- Version: 1.0.6
+- iOS build: 62
 - Bundle ID: `com.mhtoolkit.app`
 - Support URL: https://mhtoolkit.vercel.app/support
 - Support email: bolajiag10@gmail.com
@@ -109,6 +109,11 @@ model-generated answer.
   OpenAI as a fallback. The transcript is then handled like a chat message.
   AI response text is sent to Google Gemini for generated spoken playback, with
   OpenAI and then the operating-system speech service used as fallbacks.
+- Voice journal recordings are stored in a private, owner-scoped Supabase
+  Storage bucket when the user saves the journal entry. The original audio can
+  be played, replaced, deleted, and exported with the account. A recording is
+  sent through the backend for transcription only after AI data-sharing
+  consent; the resulting transcript remains editable journal text.
 - Optional chat context can include recent mood patterns, mood notes,
   assessment names and scores, goals and reflections, habit names and streaks,
   journal entries, private library notes, life-planner items, and focus

@@ -272,10 +272,25 @@ export function setDashboardModuleEnabled(
 
 export function dashboardModulesForToday(
   layout: DashboardLayout,
-  _lowEnergy: boolean
+  lowEnergy: boolean,
+  essentials: readonly string[] = []
 ): DashboardModuleId[] {
-  // Low-energy mode changes guidance copy, not the user's selected tools.
-  return [...layout.moduleIds];
+  if (!lowEnergy) return [...layout.moduleIds];
+  if (essentials.length === 0) return [...layout.moduleIds];
+  const essentialModules: DashboardModuleId[] = essentials.flatMap((essential) => {
+    if (essential === 'grounding') return ['grounding'];
+    if (essential === 'rest') return ['meditation'];
+    if (essential === 'connect') return ['accountability'];
+    if (essential === 'mood') return ['mood'];
+    if (essential === 'habits') return ['habits'];
+    if (essential === 'goals') return ['goals'];
+    return [];
+  });
+  const selected = essentialModules
+    .filter((id, index) => essentialModules.indexOf(id) === index)
+    .slice(0, 3);
+  const advisor = layout.moduleIds.includes('advisor') ? ['advisor' as const] : [];
+  return [...advisor, ...selected];
 }
 
 export function dashboardModuleById(

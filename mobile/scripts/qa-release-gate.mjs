@@ -13,8 +13,8 @@ export const MOBILE_ROOT = path.resolve(SCRIPT_DIR, '..');
 export const REPO_ROOT = path.resolve(MOBILE_ROOT, '..');
 export const CHECKLIST_PATH = path.join(MOBILE_ROOT, 'qa', 'ios-release-checklist.json');
 export const RUNS_ROOT = path.join(MOBILE_ROOT, 'qa', 'runs');
-export const EXPECTED_INVENTORY = Object.freeze({ routes: 37, routeChecks: 735, workflows: 117, total: 852 });
-export const EXPECTED_CHECKLIST_SHA256 = 'e768c857d57b571b21f98255463ba2d2244292de123e8d929c582de55f34e8d2';
+export const EXPECTED_INVENTORY = Object.freeze({ routes: 38, routeChecks: 759, workflows: 121, total: 880 });
+export const EXPECTED_CHECKLIST_SHA256 = '3cdfbde2e956b3044547342d3093103405a01e7988215458f7230ed75c4563cd';
 const REQUIRED_ROUTE_CONTROLS = Object.freeze({
   dashboard: ['support', 'safety-support', 'open-advisor', 'open-together'],
   advisor: [
@@ -38,9 +38,10 @@ const REQUIRED_ROUTE_CONTROLS = Object.freeze({
   'ai-chat': ['back', 'individual-context-toggles', 'local-safety-region', 'local-safety-country'],
   assessment: ['about-collapse', 'safety-region', 'country-support', 'safety-plan'],
   login: ['existing-account-notice', 'forgot-password'],
-  signup: ['existing-email-signin', 'existing-email-reset', 'linked-provider-signin'],
+  signup: ['existing-email-signin', 'existing-email-reset', 'linked-provider-signin', 'resend-email', 'use-different-email', 'foreground-confirmation-recheck'],
   'forgot-password': ['send-reset', 'privacy-neutral-success', 'back-to-login'],
-  goals: ['open-details', 'reminder', 'add-milestone', 'milestone-due-date', 'edit-milestone-due-date', 'clear-milestone-due-date', 'add-file', 'discard-unsaved'],
+  goals: ['project-all', 'project-today', 'create-project', 'project-filter', 'add-project-tag', 'move-quadrant', 'open-details', 'reminder', 'add-milestone', 'milestone-due-date', 'edit-milestone-due-date', 'clear-milestone-due-date', 'add-file', 'discard-unsaved'],
+  'mood-tracker': ['custom-emotion', 'custom-support'],
   voice: ['start-live', 'interrupt-ai', 'local-safety-spoken', 'safety-country'],
 });
 

@@ -157,4 +157,5 @@ describe('data export owner binding', () => {
     expect(byTable.accountability_rewards.filter).toEqual({ method: 'eq', column: 'owner_id', value: 'owner-1' });
     expect(byTable.accountability_blocks.filter).toEqual({ method: 'eq', column: 'blocker_id', value: 'owner-1' });
   });
+
 });

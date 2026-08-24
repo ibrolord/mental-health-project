@@ -62,6 +62,8 @@ export async function createModelAdvisorRecommendation(
 Rules:
 - Use only the supplied facts. Do not infer a condition, cause, diagnosis, or risk level.
 - Prefer one realistic action that fits the current mood and recent feedback.
+- When an Advisor profile is supplied, prefer candidates matching its ordered priorities unless a same-day low mood or urgent deadline already determines the first candidate.
+- The support style changes tone and action size, never the underlying facts or safety rules.
 - Copy one to three observations verbatim from the selected candidate. Do not rewrite them.
 - Do not change or invent candidate IDs, actions, routes, or resources.
 - Select up to three signal IDs that most directly explain today's priority. Use only supplied signal IDs.

@@ -127,7 +127,9 @@ describe('goal details UI wiring', () => {
     expect(exportRoute).toContain("content_encoding: 'base64'");
     expect(exportRoute).toContain('content_base64:');
     expect(exportRoute).toContain('.range(from, from + ATTACHMENT_PAGE_SIZE - 1)');
-    expect(exportRoute).toContain('new ReadableStream<Uint8Array>');
+    expect(exportRoute).toContain('appendStoredRows');
+    expect(exportRoute).toContain("open(path, 'wx', 0o600)");
+    expect(exportRoute).not.toContain('new ReadableStream<Uint8Array>');
     expect(attachmentCleanup).toContain('.range(from, from + STORAGE_PAGE_SIZE - 1)');
     expect(attachmentCleanup).toContain('.list(prefix, {');
     expect(attachmentCleanup).toContain('else prefixes.push(path)');

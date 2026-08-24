@@ -26,6 +26,7 @@ import {
   getMoodMetadataLabels,
   getMoodSupportOptions,
   MAX_MOOD_EMOTIONS,
+  normalizeCustomMoodSupport,
   parseMoodMetadata,
   reconcileMoodTagsForMood,
   toggleMoodEmotion,
@@ -75,6 +76,10 @@ export default function TrackerScreen() {
   const [customEmotionOpen, setCustomEmotionOpen] = useState(false);
   const [customEmotionMessage, setCustomEmotionMessage] = useState('');
   const [newSupport, setNewSupport] = useState<MoodSupport | null>(null);
+  const [customSupport, setCustomSupport] = useState<string | null>(null);
+  const [customSupportInput, setCustomSupportInput] = useState('');
+  const [customSupportOpen, setCustomSupportOpen] = useState(false);
+  const [customSupportMessage, setCustomSupportMessage] = useState('');
   const [visibleTags, setVisibleTags] = useState<string[]>([]);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
@@ -189,6 +194,10 @@ export default function TrackerScreen() {
     setCustomEmotionOpen(false);
     setCustomEmotionMessage('');
     setNewSupport(null);
+    setCustomSupport(null);
+    setCustomSupportInput('');
+    setCustomSupportOpen(false);
+    setCustomSupportMessage('');
     setVisibleTags([]);
     setDetailsOpen(false);
     setSaveStatus(null);
@@ -209,6 +218,7 @@ export default function TrackerScreen() {
         setNewEmotions(draft.emotions);
         setCustomEmotions(draft.customEmotions);
         setNewSupport(draft.support);
+        setCustomSupport(draft.customSupport);
         setVisibleTags(draft.visibleTags);
         setDetailsOpen(draft.detailsOpen);
         setDraftRestored(true);
@@ -252,6 +262,7 @@ export default function TrackerScreen() {
         setNewEmotions(metadata.emotions);
         setCustomEmotions(metadata.customEmotions);
         setNewSupport(metadata.support);
+        setCustomSupport(metadata.customSupport ?? null);
         setVisibleTags(metadata.visibleTags);
         setDetailsOpen(false);
       }
@@ -280,6 +291,7 @@ export default function TrackerScreen() {
       emotions: newEmotions,
       customEmotions,
       support: newSupport,
+      customSupport,
       visibleTags,
       detailsOpen,
     };
@@ -293,6 +305,7 @@ export default function TrackerScreen() {
     return () => clearTimeout(timeout);
   }, [
     customEmotions,
+    customSupport,
     detailsOpen,
     detailsDirty,
     draftHydratedOwnerKey,
@@ -313,6 +326,7 @@ export default function TrackerScreen() {
     emotions,
     custom,
     support,
+    customSupport: nextCustomSupport,
     message,
     updateContext,
   }: {
@@ -321,6 +335,7 @@ export default function TrackerScreen() {
     emotions: MoodEmotion[];
     custom: string[];
     support: MoodSupport | null;
+    customSupport: string | null;
     message: string;
     updateContext: boolean;
   }): Promise<boolean> => {
@@ -359,6 +374,7 @@ export default function TrackerScreen() {
                 emotions,
                 customEmotions: custom,
                 support,
+                customSupport: nextCustomSupport,
                 visibleTags,
               }),
             }
@@ -404,6 +420,7 @@ export default function TrackerScreen() {
           emotions: newEmotions,
           customEmotions,
           support: newSupport,
+          customSupport,
           visibleTags,
         }),
         mood
@@ -413,6 +430,7 @@ export default function TrackerScreen() {
     setNewEmotions(reconciled.emotions);
     setCustomEmotions(reconciled.customEmotions);
     setNewSupport(reconciled.support);
+    setCustomSupport(reconciled.customSupport ?? null);
     setDetailsOpen(false);
     void persistMood({
       mood,
@@ -420,6 +438,7 @@ export default function TrackerScreen() {
       emotions: reconciled.emotions,
       custom: reconciled.customEmotions,
       support: reconciled.support,
+      customSupport: reconciled.customSupport ?? null,
       message: 'Check-in saved.',
       updateContext: true,
     });
@@ -428,7 +447,7 @@ export default function TrackerScreen() {
   const selectEmotion = (emotion: MoodEmotion) => {
     if (saving) return;
     setNewEmotions((current) =>
-      toggleMoodEmotion(current, emotion, customEmotions.length)
+      toggleMoodEmotion(current, emotion, customEmotions.length, customEmotions)
     );
     setDetailsDirty(true);
   };
@@ -438,7 +457,10 @@ export default function TrackerScreen() {
     const next = addCustomMoodEmotion(
       customEmotions,
       customEmotionInput,
-      newEmotions.length
+      newEmotions.length,
+      newEmotions.map((emotion) =>
+        emotionOptions.find((option) => option.id === emotion)?.label ?? emotion
+      )
     );
     if (next === customEmotions) {
       setCustomEmotionMessage(
@@ -455,6 +477,21 @@ export default function TrackerScreen() {
     setDetailsDirty(true);
   };
 
+  const addCustomSupport = () => {
+    if (saving) return;
+    const next = normalizeCustomMoodSupport(customSupportInput);
+    if (!next) {
+      setCustomSupportMessage('Add a short action that would help.');
+      return;
+    }
+    setCustomSupport(next);
+    setNewSupport(null);
+    setCustomSupportInput('');
+    setCustomSupportMessage('');
+    setCustomSupportOpen(false);
+    setDetailsDirty(true);
+  };
+
   const handleAdd = async () => {
     if (!newMood) return;
     const saved = await persistMood({
@@ -463,6 +500,7 @@ export default function TrackerScreen() {
       emotions: newEmotions,
       custom: customEmotions,
       support: newSupport,
+      customSupport,
       message: 'Details saved.',
       updateContext: true,
     });
@@ -503,6 +541,10 @@ export default function TrackerScreen() {
     setCustomEmotionOpen(false);
     setCustomEmotionMessage('');
     setNewSupport(null);
+    setCustomSupport(null);
+    setCustomSupportInput('');
+    setCustomSupportOpen(false);
+    setCustomSupportMessage('');
     setVisibleTags([]);
     setDetailsOpen(false);
     setDraftRestored(false);
@@ -721,11 +763,67 @@ export default function TrackerScreen() {
                             setNewSupport((current) =>
                               current === support.id ? null : support.id
                             );
+                            setCustomSupport(null);
                             setDetailsDirty(true);
                           }}
                         />
                       ))}
+                      {customSupport ? (
+                        <ChoiceChip
+                          label={customSupport}
+                          accessibilityLabel={`Remove ${customSupport}`}
+                          selected
+                          icon="x"
+                          disabled={saving}
+                          onPress={() => {
+                            setCustomSupport(null);
+                            setDetailsDirty(true);
+                          }}
+                        />
+                      ) : null}
+                      <ChoiceChip
+                        label="Add your own action"
+                        selected={customSupportOpen}
+                        icon="plus"
+                        disabled={saving}
+                        onPress={() => {
+                          setCustomSupportMessage('');
+                          setCustomSupportOpen((current) => !current);
+                        }}
+                      />
                     </View>
+                    {customSupportOpen ? (
+                      <View style={s.customEmotionForm}>
+                        <View style={s.customEmotionInput}>
+                          <AppInput
+                            accessibilityLabel="Custom helpful action"
+                            placeholder="What might help?"
+                            value={customSupportInput}
+                            editable={!saving}
+                            maxLength={48}
+                            returnKeyType="done"
+                            onSubmitEditing={addCustomSupport}
+                            onChangeText={(value) => {
+                              setCustomSupportInput(value);
+                              setCustomSupportMessage('');
+                            }}
+                          />
+                        </View>
+                        <AppButton
+                          label="Add"
+                          icon="plus"
+                          variant="secondary"
+                          onPress={addCustomSupport}
+                          disabled={saving || !customSupportInput.trim()}
+                          style={s.customEmotionButton}
+                        />
+                      </View>
+                    ) : null}
+                    {customSupportMessage ? (
+                      <Text accessibilityRole="alert" style={s.detailMessage}>
+                        {customSupportMessage}
+                      </Text>
+                    ) : null}
                   </View>
 
                   <AppInput

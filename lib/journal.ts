@@ -26,6 +26,7 @@ export interface JournalEntry {
   linked_media_type: JournalMediaType | null;
   tags: string[];
   is_favorite: boolean;
+  has_voice_recording: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -116,12 +117,15 @@ export function normalizeJournalTags(value: string): string[] {
   return tags;
 }
 
-export function validateJournalDraft(draft: JournalDraft): string[] {
+export function validateJournalDraft(
+  draft: JournalDraft,
+  options: { hasVoiceRecording?: boolean } = {}
+): string[] {
   const errors: string[] = [];
   const content = draft.content.trim();
   const expectedMediaType = mediaTypeForEntryKind(draft.entryKind);
 
-  if (!content) {
+  if (!content && !options.hasVoiceRecording) {
     errors.push('Write something before saving.');
   } else if (content.length > JOURNAL_LIMITS.content) {
     errors.push(`Keep the entry under ${JOURNAL_LIMITS.content.toLocaleString()} characters.`);

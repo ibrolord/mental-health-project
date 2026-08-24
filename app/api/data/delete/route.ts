@@ -77,12 +77,14 @@ export async function POST(request: NextRequest) {
     if (auth.userId) {
       const attachmentCleanup = await removeGoalAttachmentObjectsForUser(auth.userId);
       if (attachmentCleanup.error) {
-        console.error('Goal attachment cleanup failed:', attachmentCleanup.error);
+        console.error('Private storage cleanup failed:', {
+          goalAttachments: attachmentCleanup.error,
+        });
         return NextResponse.json(
           {
             deleted: true,
             cleanupPending: true,
-            error: 'Your records were deleted, but attached file cleanup is still pending. Please retry.',
+            error: 'Your records were deleted, but private file cleanup is still pending. Please retry.',
           },
           { status: 500, headers: corsHeaders() }
         );

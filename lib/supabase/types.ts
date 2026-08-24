@@ -512,6 +512,7 @@ export interface Database {
           linked_media_type: LibraryMediaType | null;
           tags: string[];
           is_favorite: boolean;
+          has_voice_recording: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -527,6 +528,7 @@ export interface Database {
           linked_media_type?: LibraryMediaType | null;
           tags?: string[];
           is_favorite?: boolean;
+          has_voice_recording?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -542,6 +544,7 @@ export interface Database {
           linked_media_type?: LibraryMediaType | null;
           tags?: string[];
           is_favorite?: boolean;
+          has_voice_recording?: boolean;
           created_at?: string;
           updated_at?: string;
         };

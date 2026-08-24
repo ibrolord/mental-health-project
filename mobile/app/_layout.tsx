@@ -199,6 +199,7 @@ export default function RootLayout() {
           <Stack.Screen name="voice" options={stackScreenOptions('AI Voice')} />
           <Stack.Screen name="dashboard-layout" options={stackScreenOptions('Customize Today')} />
           <Stack.Screen name="dashboard-tools" options={stackScreenOptions('Add Tools', '/dashboard-layout' as Href)} />
+          <Stack.Screen name="advisor-setup" options={stackScreenOptions('Tune Advisor', '/advisor' as Href)} />
           </Stack>
         </AuthProvider>
       </ErrorBoundary>

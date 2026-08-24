@@ -14,6 +14,7 @@ trap cleanup EXIT
 cleanup
 psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${DATABASE} TEMPLATE template0" >/dev/null
 psql "$TEST_URL" -v ON_ERROR_STOP=1 -f "$ROOT/supabase/tests/local_auth_prelude.sql" >/dev/null
+psql "$TEST_URL" -v ON_ERROR_STOP=1 -f "$ROOT/supabase/tests/local_storage_prelude.sql" >/dev/null
 
 for migration in "$ROOT"/supabase/migrations/*.sql; do
   if [[ "$(basename "$migration")" == "20260716190633_secure_anonymous_auth.sql" ]]; then

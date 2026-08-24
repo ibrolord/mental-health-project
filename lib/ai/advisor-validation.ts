@@ -47,6 +47,13 @@ export const advisorModelRequestSchema = z.object({
     recommendationId: boundedText(160),
     helpful: z.boolean().nullable(),
   }).strict()).max(5),
+  profile: z.object({
+    preferredName: z.string().trim().max(24),
+    priorities: z.array(z.enum([
+      'sleep', 'movement', 'mood', 'habits', 'goals', 'study', 'relationships',
+    ])).min(1).max(3),
+    supportStyle: z.enum(['direct', 'gentle', 'practical']),
+  }).strict().nullable().optional(),
 }).strict().superRefine((value, context) => {
   const ids = value.candidates.map((candidate) => candidate.id);
   if (new Set(ids).size !== ids.length) {

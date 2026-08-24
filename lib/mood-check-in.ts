@@ -3,6 +3,7 @@ import type { MoodEmoji } from './supabase/types';
 export const MOOD_EMOTION_PREFIX = 'mood-emotion:';
 export const MOOD_CUSTOM_EMOTION_PREFIX = 'mood-custom-emotion:';
 export const MOOD_SUPPORT_PREFIX = 'mood-support:';
+export const MOOD_CUSTOM_SUPPORT_PREFIX = 'mood-custom-support:';
 export const MAX_MOOD_EMOTIONS = 3;
 
 export interface OwnerGeneration {
@@ -135,6 +136,7 @@ export interface MoodDraft {
   emotions: MoodEmotion[];
   customEmotions: string[];
   support: MoodSupport | null;
+  customSupport: string | null;
   note: string;
   visibleTags: string[];
 }
@@ -143,14 +145,15 @@ export interface MoodMetadata {
   emotions: MoodEmotion[];
   customEmotions: string[];
   support: MoodSupport | null;
+  customSupport: string | null;
   visibleTags: string[];
 }
 
 const emotionIds = new Set<string>(MOOD_EMOTIONS.map(({ id }) => id));
-const emotionLabels = new Set(
-  MOOD_EMOTIONS.map(({ label }) => label.toLocaleLowerCase())
-);
 const supportIds = new Set<string>(MOOD_SUPPORTS.map(({ id }) => id));
+const emotionLabels = new Map<MoodEmotion, string>(
+  MOOD_EMOTIONS.map(({ id, label }) => [id, label])
+);
 
 export function normalizeCustomMoodEmotion(value: string): string {
   return value.trim().replace(/\s+/g, ' ').slice(0, 32);
@@ -159,19 +162,24 @@ export function normalizeCustomMoodEmotion(value: string): string {
 export function addCustomMoodEmotion(
   current: string[],
   value: string,
-  occupiedSlots = 0
+  occupiedSlots = 0,
+  selectedLabels: readonly string[] = []
 ): string[] {
   const normalized = normalizeCustomMoodEmotion(value);
   const normalizedKey = normalized.toLocaleLowerCase();
   if (
     !normalized ||
-    emotionLabels.has(normalizedKey) ||
+    selectedLabels.some((label) => label.toLocaleLowerCase() === normalizedKey) ||
     current.some((item) => item.toLocaleLowerCase() === normalizedKey) ||
     current.length + occupiedSlots >= MAX_MOOD_EMOTIONS
   ) {
     return current;
   }
   return [...current, normalized];
+}
+
+export function normalizeCustomMoodSupport(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').slice(0, 48);
 }
 
 export function parseMoodMetadata(
@@ -181,6 +189,7 @@ export function parseMoodMetadata(
   let customEmotions: string[] = [];
   const visibleTags: string[] = [];
   let support: MoodSupport | null = null;
+  let customSupport: string | null = null;
 
   for (const tag of tags ?? []) {
     if (tag.startsWith(MOOD_EMOTION_PREFIX)) {
@@ -200,12 +209,10 @@ export function parseMoodMetadata(
       const normalized = normalizeCustomMoodEmotion(
         tag.slice(MOOD_CUSTOM_EMOTION_PREFIX.length)
       );
-      const normalizedKey = normalized.toLocaleLowerCase();
       if (
         !normalized ||
-        emotionLabels.has(normalizedKey) ||
         customEmotions.some(
-          (item) => item.toLocaleLowerCase() === normalizedKey
+          (item) => item.toLocaleLowerCase() === normalized.toLocaleLowerCase()
         )
       ) {
         visibleTags.push(tag);
@@ -227,13 +234,28 @@ export function parseMoodMetadata(
       continue;
     }
 
+    if (tag.startsWith(MOOD_CUSTOM_SUPPORT_PREFIX)) {
+      const normalized = normalizeCustomMoodSupport(
+        tag.slice(MOOD_CUSTOM_SUPPORT_PREFIX.length)
+      );
+      if (support === null && customSupport === null && normalized) {
+        customSupport = normalized;
+      } else {
+        visibleTags.push(tag);
+      }
+      continue;
+    }
+
     visibleTags.push(tag);
   }
 
   return {
     emotions: [...new Set(emotions)],
-    customEmotions,
+    customEmotions: customEmotions.filter((emotion) => !emotions.some(
+      (selected) => emotionLabels.get(selected)?.toLocaleLowerCase() === emotion.toLocaleLowerCase()
+    )),
     support,
+    customSupport,
     visibleTags,
   };
 }
@@ -241,7 +263,7 @@ export function parseMoodMetadata(
 export function composeMoodTags(
   draft: Pick<
     MoodDraft,
-    'emotions' | 'customEmotions' | 'support' | 'visibleTags'
+    'emotions' | 'customEmotions' | 'support' | 'customSupport' | 'visibleTags'
   >
 ): string[] {
   const tags = [...new Set(draft.visibleTags.map((tag) => tag.trim()).filter(Boolean))];
@@ -253,7 +275,8 @@ export function composeMoodTags(
     customEmotions = addCustomMoodEmotion(
       customEmotions,
       customEmotion,
-      emotions.length
+      emotions.length,
+      emotions.map((emotion) => emotionLabels.get(emotion) ?? emotion)
     );
   }
   tags.push(
@@ -261,18 +284,26 @@ export function composeMoodTags(
       (emotion) => `${MOOD_CUSTOM_EMOTION_PREFIX}${emotion}`
     )
   );
-  if (draft.support) tags.push(`${MOOD_SUPPORT_PREFIX}${draft.support}`);
+  const customSupport = normalizeCustomMoodSupport(draft.customSupport ?? '');
+  if (customSupport) {
+    tags.push(`${MOOD_CUSTOM_SUPPORT_PREFIX}${customSupport}`);
+  } else if (draft.support) {
+    tags.push(`${MOOD_SUPPORT_PREFIX}${draft.support}`);
+  }
   return tags;
 }
 
 export function toggleMoodEmotion(
   current: MoodEmotion[],
   emotion: MoodEmotion,
-  occupiedSlots = 0
+  occupiedSlots = 0,
+  customLabels: readonly string[] = []
 ): MoodEmotion[] {
   if (current.includes(emotion)) {
     return current.filter((item) => item !== emotion);
   }
+  const label = emotionLabels.get(emotion)?.toLocaleLowerCase();
+  if (label && customLabels.some((item) => item.toLocaleLowerCase() === label)) return current;
   if (current.length + occupiedSlots >= MAX_MOOD_EMOTIONS) return current;
   return [...current, emotion];
 }
@@ -288,6 +319,7 @@ export function moodDraftFromEntry(entry: {
     emotions: metadata.emotions,
     customEmotions: metadata.customEmotions,
     support: metadata.support,
+    customSupport: metadata.customSupport,
     note: entry?.note ?? '',
     visibleTags: metadata.visibleTags,
   };
@@ -299,6 +331,7 @@ export function serializeMoodDraft(draft: MoodDraft): string {
     emotions: draft.emotions,
     customEmotions: draft.customEmotions,
     support: draft.support,
+    customSupport: draft.customSupport,
     note: draft.note.trim(),
     visibleTags: draft.visibleTags,
   });
@@ -315,7 +348,9 @@ export function getMoodMetadataLabels(
     ? MOOD_SUPPORTS.find(({ id }) => id === metadata.support)?.label
     : null;
   const labels = [...emotionLabels, ...metadata.customEmotions];
-  return supportLabel ? [...labels, supportLabel] : labels;
+  if (supportLabel) labels.push(supportLabel);
+  if (metadata.customSupport) labels.push(metadata.customSupport);
+  return labels;
 }
 
 export function getMoodExportLabels(

@@ -181,6 +181,7 @@ export function createAdvisorBriefFingerprint(
     date: localDateKey(context.nowIso),
     intent: context.intent,
     lowEnergyMode: context.lowEnergyMode,
+    profile: context.profile,
     mood: context.mood,
     goals: context.goals,
     habits: context.habits,

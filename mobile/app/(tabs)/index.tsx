@@ -28,8 +28,9 @@ import {
   type AdvisorActionInstance,
 } from '@/lib/advisor-action-storage';
 import { dashboardPreferences } from '@/lib/dashboard-preferences';
-import { dashboardModuleById } from '@/lib/dashboard-layout';
+import { dashboardModuleById, dashboardModulesForToday } from '@/lib/dashboard-layout';
 import { useDashboardLayout } from '@/lib/use-dashboard-layout';
+import { useAdvisorProfile } from '@/lib/use-advisor-profile';
 import { useLaunchMotion } from '@/components/LaunchExperience';
 
 function greetingForHour(hour: number): string {
@@ -68,6 +69,7 @@ export default function DashboardScreen() {
   ownerKeyRef.current = ownerKey;
   const canSaveMood = Boolean(queryValue && user?.id);
   const { layout: dashboardLayout } = useDashboardLayout(ownerKey);
+  const { profile: advisorProfile } = useAdvisorProfile(ownerKey);
 
   useFocusEffect(
     useCallback(() => {
@@ -255,9 +257,11 @@ export default function DashboardScreen() {
       ? visibleAdvisorAction.smallerAction
       : visibleAdvisorAction.action
     : null;
-  // Low-energy mode changes the guidance and copy, not the user's selected
-  // tools. Hiding modules made the customizable Today page feel unreliable.
-  const visibleModuleIds = dashboardLayout.moduleIds;
+  const visibleModuleIds = dashboardModulesForToday(
+    dashboardLayout,
+    visibleLowEnergyMode,
+    advisorProfile.completedAt ? advisorProfile.lowEnergyEssentials : []
+  );
   const now = new Date();
 
   return (

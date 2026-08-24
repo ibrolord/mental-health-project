@@ -15,6 +15,7 @@ export interface MoodCheckInDraft {
   emotions: MoodEmotion[];
   customEmotions: string[];
   support: MoodSupport | null;
+  customSupport: string | null;
   visibleTags: string[];
   detailsOpen: boolean;
 }
@@ -46,6 +47,7 @@ export function emptyMoodCheckInDraft(): MoodCheckInDraft {
     emotions: [],
     customEmotions: [],
     support: null,
+    customSupport: null,
     visibleTags: [],
     detailsOpen: false,
   };
@@ -57,7 +59,8 @@ export function hasMoodCheckInDraft(draft: MoodCheckInDraft): boolean {
       draft.note.trim() ||
       draft.emotions.length ||
       draft.customEmotions.length ||
-      draft.support
+      draft.support ||
+      draft.customSupport
   );
 }
 
@@ -100,13 +103,17 @@ export function parseMoodCheckInDraft(value: unknown): MoodCheckInDraft | null {
     allowedSupports.has(raw.support as MoodSupport)
       ? (raw.support as MoodSupport)
       : null;
+  const customSupport = typeof raw.customSupport === 'string'
+    ? raw.customSupport.trim().replace(/\s+/g, ' ').slice(0, 48) || null
+    : null;
 
   return {
     mood,
     note: typeof raw.note === 'string' ? raw.note.slice(0, 500) : '',
     emotions,
     customEmotions,
-    support,
+    support: customSupport ? null : support,
+    customSupport,
     visibleTags: parseMoodMetadata(
       Array.isArray(raw.visibleTags)
         ? raw.visibleTags.filter((tag): tag is string => typeof tag === 'string')

@@ -72,4 +72,5 @@ describe('account deletion owner binding', () => {
     expect(response.status).toBe(409);
     expect(mocks.deleteUser).not.toHaveBeenCalled();
   });
+
 });

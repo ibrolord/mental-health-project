@@ -33,6 +33,7 @@ describe('mood check-in metadata', () => {
       emotions: ['anxious', 'tired'],
       customEmotions: [],
       support: 'rest',
+      customSupport: null,
       visibleTags: ['sleep', 'work'],
     });
     expect(
@@ -102,6 +103,7 @@ describe('mood check-in metadata', () => {
       emotions: ['anxious'],
       customEmotions: ['Wired but hopeful'],
       support: null,
+      customSupport: null,
       visibleTags: [],
     });
     expect(tags).toEqual([
@@ -115,6 +117,27 @@ describe('mood check-in metadata', () => {
       'Anxious',
       'Wired but hopeful',
     ]);
+  });
+
+  it('round-trips a custom next action separately from preset support', () => {
+    const tags = composeMoodTags({
+      emotions: ['tired'],
+      customEmotions: [],
+      support: 'rest',
+      customSupport: 'Take a warm shower',
+      visibleTags: ['sleep'],
+    });
+
+    expect(tags).toEqual([
+      'sleep',
+      'mood-emotion:tired',
+      'mood-custom-support:Take a warm shower',
+    ]);
+    expect(parseMoodMetadata(tags)).toMatchObject({
+      support: null,
+      customSupport: 'Take a warm shower',
+    });
+    expect(getMoodMetadataLabels(tags)).toContain('Take a warm shower');
   });
 
   it('offers emotion words that match positive, neutral, and lower moods', () => {

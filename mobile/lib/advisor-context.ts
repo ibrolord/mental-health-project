@@ -20,6 +20,7 @@ import {
   parseStoredReminderTimes,
 } from './notifications-core';
 import type { MoodEmoji } from './types';
+import { advisorProfileStorage } from './advisor-profile-storage';
 
 export type AdvisorContextOwner = {
   ownerKey: string | null;
@@ -367,6 +368,10 @@ async function loadLowEnergyMode(owner: AdvisorContextOwner): Promise<boolean> {
     : false;
 }
 
+async function loadAdvisorProfile(owner: AdvisorContextOwner): Promise<AdvisorContext['profile']> {
+  return owner.ownerKey ? advisorProfileStorage.read(owner.ownerKey) : null;
+}
+
 export async function loadAmbientAdvisorContext(
   owner: AdvisorContextOwner,
   now = new Date()
@@ -386,6 +391,7 @@ export async function loadAmbientAdvisorContext(
     healthResult,
     lowEnergyResult,
     notificationResult,
+    profileResult,
   ] = await Promise.allSettled([
     loadLatestMood(owner),
     loadPendingGoal(owner),
@@ -397,13 +403,19 @@ export async function loadAmbientAdvisorContext(
     loadAuthorizedHealth(owner),
     loadLowEnergyMode(owner),
     loadNotificationContext(),
+    loadAdvisorProfile(owner),
   ]);
+
+  if (profileResult.status === 'rejected') {
+    throw new Error('Advisor setup could not be loaded.');
+  }
 
   return createAdvisorContextSnapshot({
     nowIso: now.toISOString(),
     intent: 'general',
     lowEnergyMode:
       lowEnergyResult.status === 'fulfilled' ? lowEnergyResult.value : false,
+    profile: profileResult.value,
     mood: moodResult.status === 'fulfilled' ? moodResult.value : null,
     goals: goalResult.status === 'fulfilled' ? goalResult.value : [],
     habits: habitResult.status === 'fulfilled' ? habitResult.value : [],

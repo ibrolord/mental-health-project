@@ -14,7 +14,13 @@ import {
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Crypto from 'expo-crypto';
 import { format } from 'date-fns';
+import {
+  JournalAudioPlaybackButton,
+  JournalVoiceRecorder,
+} from '@/components/JournalVoiceRecorder';
 import { Colors } from '@/lib/constants';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import {
@@ -24,8 +30,17 @@ import {
   prepareJournalDraft,
   type JournalDraft,
   type JournalEntry,
+  type PreparedJournalDraft,
   validateJournalDraft,
 } from '@/lib/journal';
+import {
+  deleteJournalAudioRecording,
+  loadJournalAudioRecordings,
+  stageJournalAudioRecording,
+  type JournalAudioDraft,
+  type JournalAudioRecording,
+  validateJournalAudio,
+} from '@/lib/journal-audio';
 import { supabase } from '@/lib/supabase';
 
 type JournalFilter = 'all' | 'favorites' | 'library_notes';
@@ -63,6 +78,12 @@ export default function JournalScreen() {
   const { context, authLoading } = useDataContext();
   const notesAccessoryId = `journal-notes-${useId().replace(/:/g, '')}`;
   const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [audioByEntry, setAudioByEntry] = useState<
+    Record<string, JournalAudioRecording>
+  >({});
+  const [draftRecording, setDraftRecording] = useState<JournalAudioDraft | null>(
+    null
+  );
   const [draft, setDraft] = useState<JournalDraft>(emptyJournalDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(true);
@@ -114,6 +135,13 @@ export default function JournalScreen() {
     ownerGenerationRef.current += 1;
     ownerIdentityRef.current = { userId: context.user_id };
     setEntries([]);
+    setAudioByEntry({});
+    setDraftRecording((current) => {
+      if (current?.uri) {
+        void FileSystem.deleteAsync(current.uri, { idempotent: true }).catch(() => {});
+      }
+      return null;
+    });
     setLoadedOwnerId(null);
     setDraft(emptyJournalDraft());
     setDraftOwnerId(null);
@@ -200,11 +228,14 @@ export default function JournalScreen() {
     const loadEntries = async () => {
       setLoading(true);
       setLoadedOwnerId(null);
-      const { data, error: loadError } = await supabase
-        .from('journal_entries')
-        .select('*')
-        .eq('user_id', ownerId)
-        .order('created_at', { ascending: false });
+      const [entriesResult, localAudio] = await Promise.all([
+        supabase
+          .from('journal_entries')
+          .select('*')
+          .eq('user_id', ownerId)
+          .order('created_at', { ascending: false }),
+        loadJournalAudioRecordings(ownerId),
+      ]);
 
       if (
         !active ||
@@ -213,10 +244,11 @@ export default function JournalScreen() {
       ) {
         return;
       }
-      if (loadError) {
+      if (entriesResult.error) {
         setError('Your journal could not be loaded. Please try again.');
       } else {
-        setEntries((data ?? []) as JournalEntry[]);
+        setEntries((entriesResult.data ?? []) as JournalEntry[]);
+        setAudioByEntry(localAudio);
         setLoadedOwnerId(ownerId);
       }
       setDraftOwnerId((current) => current ?? ownerId);
@@ -280,6 +312,12 @@ export default function JournalScreen() {
   }, [highlightedEntryId, visibleEntries]);
 
   const resetEditor = () => {
+    setDraftRecording((current) => {
+      if (current?.uri) {
+        void FileSystem.deleteAsync(current.uri, { idempotent: true }).catch(() => {});
+      }
+      return null;
+    });
     setDraft(emptyJournalDraft());
     setEditingId(null);
     setPromptIdeasOpen(false);
@@ -293,7 +331,8 @@ export default function JournalScreen() {
         draft.content.trim() ||
         draft.tags.trim() ||
         draft.prompt.trim() ||
-        draft.isFavorite
+        draft.isFavorite ||
+        draftRecording
     );
     const close = () => {
       resetEditor();
@@ -313,6 +352,89 @@ export default function JournalScreen() {
     );
   };
 
+  const saveEntryWithAudio = async (
+    userId: string,
+    entryId: string,
+    audio: JournalAudioDraft,
+    existing: JournalAudioRecording | null,
+    prepared: PreparedJournalDraft
+  ): Promise<{ entry: JournalEntry; audio: JournalAudioRecording }> => {
+    const validationError = validateJournalAudio(audio);
+    if (validationError) throw new Error(validationError);
+    const staged = await stageJournalAudioRecording({
+      userId,
+      journalEntryId: entryId,
+      draft: audio,
+    });
+    try {
+      const now = new Date().toISOString();
+      const payload = { ...prepared, has_voice_recording: true, updated_at: now };
+      const result = await supabase
+        .from('journal_entries')
+        .upsert({ id: entryId, user_id: userId, ...payload })
+        .select()
+        .single();
+      if (result.error || !result.data) throw result.error ?? new Error('Entry save failed');
+      try {
+        await staged.commit();
+      } catch (error) {
+        await supabase
+          .from('journal_entries')
+          .update({
+            has_voice_recording: Boolean(existing),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', entryId)
+          .eq('user_id', userId);
+        throw error;
+      }
+      return { entry: result.data as JournalEntry, audio: staged.recording };
+    } catch (error) {
+      await staged.discard();
+      throw error;
+    }
+  };
+
+  const deleteSavedRecording = async () => {
+    const userId = context.user_id;
+    const entryId = editingId;
+    const existing = entryId ? audioByEntry[entryId] : null;
+    if (!userId || !entryId || !existing) return;
+    const ownerGeneration = ownerGenerationRef.current;
+    const { error: entryError } = await supabase
+      .from('journal_entries')
+      .update({ has_voice_recording: false, updated_at: new Date().toISOString() })
+      .eq('id', entryId)
+      .eq('user_id', userId);
+    if (entryError) {
+      setError('The voice recording could not be deleted.');
+      return;
+    }
+    if (
+      currentOwnerIdRef.current !== userId ||
+      ownerGenerationRef.current !== ownerGeneration
+    ) {
+      return;
+    }
+    try {
+      await deleteJournalAudioRecording(userId, entryId);
+    } catch {
+      // Do not tell the server the recording is gone while the local file remains.
+      await supabase
+        .from('journal_entries')
+        .update({ has_voice_recording: true, updated_at: new Date().toISOString() })
+        .eq('id', entryId)
+        .eq('user_id', userId);
+      setError('The voice recording could not be deleted. Please try again.');
+      return;
+    }
+    setAudioByEntry((current) => {
+      const next = { ...current };
+      delete next[entryId];
+      return next;
+    });
+  };
+
   const saveEntry = async () => {
     const userId = context.user_id;
     if (!userId) {
@@ -328,7 +450,12 @@ export default function JournalScreen() {
       return;
     }
 
-    const errors = validateJournalDraft(draft);
+    const targetEditingId = editingId;
+    const existingAudio = targetEditingId
+      ? audioByEntry[targetEditingId] ?? null
+      : null;
+    const hasVoiceRecording = Boolean(draftRecording || existingAudio);
+    const errors = validateJournalDraft(draft, { hasVoiceRecording });
     if (errors.length > 0) {
       setError(errors[0]);
       return;
@@ -337,21 +464,59 @@ export default function JournalScreen() {
     setSaving(true);
     setError('');
     const ownerGeneration = ownerGenerationRef.current;
-    const prepared = prepareJournalDraft(draft);
-    const now = new Date().toISOString();
-    const result = editingId
-      ? await supabase
-          .from('journal_entries')
-          .update({ ...prepared, updated_at: now })
-          .eq('id', editingId)
-          .eq('user_id', userId)
-          .select()
-          .single()
-      : await supabase
-          .from('journal_entries')
-          .insert({ ...prepared, user_id: userId })
-          .select()
-          .single();
+    const basePrepared = prepareJournalDraft(draft);
+    const prepared: PreparedJournalDraft = {
+      ...basePrepared,
+      title:
+        draft.title.trim() || draft.content.trim()
+          ? basePrepared.title
+          : 'Voice journal',
+    };
+    let savedEntry: JournalEntry;
+    let savedAudio: JournalAudioRecording | null = null;
+    try {
+      if (draftRecording) {
+        const saved = await saveEntryWithAudio(
+          userId,
+          targetEditingId ?? Crypto.randomUUID(),
+          draftRecording,
+          existingAudio,
+          prepared
+        );
+        savedEntry = saved.entry;
+        savedAudio = saved.audio;
+      } else {
+        const now = new Date().toISOString();
+        const result = targetEditingId
+          ? await supabase
+              .from('journal_entries')
+              .update({ ...prepared, updated_at: now })
+              .eq('id', targetEditingId)
+              .eq('user_id', userId)
+              .select()
+              .single()
+          : await supabase
+              .from('journal_entries')
+              .insert({ ...prepared, user_id: userId, has_voice_recording: false })
+              .select()
+              .single();
+        if (result.error || !result.data) throw result.error;
+        savedEntry = result.data as JournalEntry;
+      }
+    } catch {
+      if (
+        currentOwnerIdRef.current === userId &&
+        ownerGenerationRef.current === ownerGeneration
+      ) {
+        setSaving(false);
+        setError(
+          draftRecording
+            ? 'The voice entry was not saved. Your recording is still here so you can try again.'
+            : 'This entry could not be saved. Your existing entries were not changed.'
+        );
+      }
+      return;
+    }
 
     if (
       currentOwnerIdRef.current !== userId ||
@@ -359,23 +524,33 @@ export default function JournalScreen() {
     ) {
       return;
     }
-    setSaving(false);
-    if (result.error || !result.data) {
-      setError('This entry could not be saved. Your existing entries were not changed.');
-      return;
+    if (draftRecording && savedAudio) {
+      setAudioByEntry((current) => ({
+        ...current,
+        [savedEntry.id]: savedAudio!,
+      }));
+      await FileSystem.deleteAsync(draftRecording.uri, { idempotent: true }).catch(
+        () => {}
+      );
+      setDraftRecording(null);
     }
-
-    const savedEntry = result.data as JournalEntry;
     setEntries((current) =>
-      editingId
-        ? current.map((entry) => (entry.id === editingId ? savedEntry : entry))
+      targetEditingId
+        ? current.map((entry) => (entry.id === targetEditingId ? savedEntry : entry))
         : [savedEntry, ...current]
     );
+    setSaving(false);
     resetEditor();
     setEditorOpen(false);
   };
 
   const editEntry = (entry: JournalEntry) => {
+    setDraftRecording((current) => {
+      if (current?.uri) {
+        void FileSystem.deleteAsync(current.uri, { idempotent: true }).catch(() => {});
+      }
+      return null;
+    });
     setDraft({
       title: entry.title,
       content: entry.content,
@@ -404,6 +579,7 @@ export default function JournalScreen() {
   const deleteEntry = (entry: JournalEntry) => {
     const ownerId = context.user_id;
     const ownerGeneration = ownerGenerationRef.current;
+    const audio = audioByEntry[entry.id] ?? null;
     if (!ownerId) return;
     Alert.alert(
       'Delete entry?',
@@ -436,6 +612,20 @@ export default function JournalScreen() {
               return;
             }
             setEntries((current) => current.filter(({ id }) => id !== entry.id));
+            setAudioByEntry((current) => {
+              const next = { ...current };
+              delete next[entry.id];
+              return next;
+            });
+            if (audio) {
+              try {
+                await deleteJournalAudioRecording(ownerId, entry.id);
+              } catch {
+                setError(
+                  'The entry was deleted, but its local recording could not be removed. Sign out or delete profile data to retry cleanup.'
+                );
+              }
+            }
             if (editingId === entry.id) {
               resetEditor();
               setEditorOpen(false);
@@ -565,6 +755,34 @@ export default function JournalScreen() {
               {draft.content.length.toLocaleString()} / {JOURNAL_LIMITS.content.toLocaleString()}
             </Text>
           </View>
+          <JournalVoiceRecorder
+            userId={context.user_id!}
+            draftRecording={draftRecording}
+            savedRecording={editingId ? audioByEntry[editingId] ?? null : null}
+            disabled={saving}
+            canDeleteSavedRecording={Boolean(
+              editingId
+                ? entries.find((entry) => entry.id === editingId)?.content.trim()
+                : false
+            )}
+            onDraftRecordingChange={setDraftRecording}
+            onTranscript={(transcript) => {
+              setDraft((current) => ({
+                ...current,
+                content: current.content.trim()
+                  ? current.content.includes(transcript)
+                    ? current.content
+                    : `${current.content.trimEnd()}\n\n${transcript}`.slice(
+                        0,
+                        JOURNAL_LIMITS.content
+                      )
+                  : transcript.slice(0, JOURNAL_LIMITS.content),
+              }));
+              setError('');
+            }}
+            onDeleteSavedRecording={deleteSavedRecording}
+            onError={setError}
+          />
           <TextInput
             style={s.textArea}
             accessibilityLabel="Journal notes"
@@ -732,6 +950,12 @@ export default function JournalScreen() {
             <Text style={s.entryPreview} numberOfLines={5}>
               {entry.content}
             </Text>
+            {audioByEntry[entry.id] ? (
+              <JournalAudioPlaybackButton
+                recording={audioByEntry[entry.id]}
+                onError={setError}
+              />
+            ) : null}
             {entry.tags.length > 0 ? (
               <View style={s.tagsRow}>
                 {entry.tags.map((tag) => (

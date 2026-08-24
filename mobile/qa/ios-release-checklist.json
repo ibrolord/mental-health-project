@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-08-15.2",
+  "checklistVersion": "2026-08-24.2",
   "platform": "ios",
-  "expectedInventory": { "routes": 37, "routeChecks": 735, "workflows": 117, "total": 852 },
+  "expectedInventory": { "routes": 38, "routeChecks": 759, "workflows": 121, "total": 880 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -141,12 +141,20 @@
       "controls": ["support", "start", "make-smaller", "schedule-check-in", "accountability-done", "accountability-partly", "accountability-not-yet", "recovery-reason", "recovery-make-smaller", "recovery-check-in-later", "weekly-review", "helpful-yes", "helpful-no", "helpful-skip", "why-this-step", "try-another", "share-with-together", "talk-this-through", "recent-steps", "safety-support", "include-apple-health"]
     },
     {
+      "id": "advisor-setup",
+      "path": "/advisor-setup",
+      "source": "app/advisor-setup.tsx",
+      "kind": "stack",
+      "identityRequirements": ["saved-anonymous", "email-owner"],
+      "controls": ["preferred-name", "focus-options", "priority-options", "advice-style", "low-energy-essentials", "save", "balanced-default"]
+    },
+    {
       "id": "mood-tracker",
       "path": "/tracker",
       "source": "app/(tabs)/tracker.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["open-close-entry", "five-mood-options", "details-collapse", "emotion-options", "custom-emotion", "suggested-action", "note", "save", "save-double-tap", "history-collapse", "all-filter", "tag-filter", "refresh-after-save", "health-collapse", "health-settings-link", "health-refresh", "sleep-open-close", "sleep-wake-date", "sleep-five-times", "sleep-awakenings", "sleep-awake-minutes", "sleep-nap-minutes", "sleep-notes", "sleep-save", "sleep-delete"]
+      "controls": ["open-close-entry", "five-mood-options", "details-collapse", "emotion-options", "custom-emotion", "suggested-action", "custom-support", "note", "save", "save-double-tap", "history-collapse", "all-filter", "tag-filter", "refresh-after-save", "health-collapse", "health-settings-link", "health-refresh", "sleep-open-close", "sleep-wake-date", "sleep-five-times", "sleep-awakenings", "sleep-awake-minutes", "sleep-nap-minutes", "sleep-notes", "sleep-save", "sleep-delete"]
     },
     {
       "id": "ai-chat",
@@ -202,7 +210,7 @@
       "source": "app/auth/signup.tsx",
       "kind": "modal",
       "identityRequirements": ["fresh-anonymous", "email-owner", "google-owner", "apple-owner"],
-      "controls": ["email", "submit-email", "existing-email-signin", "existing-email-reset", "linked-provider-signin", "confirmation-return", "password", "password-confirmation", "save-password", "google", "apple", "switch-to-login", "return-to-app"]
+      "controls": ["email", "submit-email", "existing-email-signin", "existing-email-reset", "linked-provider-signin", "confirmation-return", "resend-email", "use-different-email", "foreground-confirmation-recheck", "password", "password-confirmation", "save-password", "google", "apple", "switch-to-login", "return-to-app"]
     },
     {
       "id": "forgot-password",
@@ -242,7 +250,7 @@
       "source": "app/goals.tsx",
       "kind": "stack",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["framework-tabs", "add-main", "add-section", "keyboard-submit", "double-submit", "toggle-complete", "delete", "library-prefill", "open-details", "due-date", "clear-due-date", "reminder", "notes", "add-milestone", "milestone-due-date", "edit-milestone-due-date", "clear-milestone-due-date", "toggle-milestone", "delete-milestone", "add-file", "open-file", "delete-file", "save-details", "discard-unsaved"]
+      "controls": ["framework-tabs", "project-all", "project-today", "create-project", "project-filter", "add-project-tag", "move-quadrant", "add-main", "add-section", "keyboard-submit", "double-submit", "toggle-complete", "delete", "library-prefill", "open-details", "due-date", "clear-due-date", "reminder", "notes", "add-milestone", "milestone-due-date", "edit-milestone-due-date", "clear-milestone-due-date", "toggle-milestone", "delete-milestone", "add-file", "open-file", "delete-file", "save-details", "discard-unsaved"]
     },
     {
       "id": "grounding",
@@ -454,7 +462,9 @@
     { "id": "auth.provider-disabled", "area": "auth", "kind": "manual", "title": "Disabled or unavailable social providers fail closed without hiding another available provider" },
     { "id": "auth.keychain", "area": "auth", "kind": "manual", "title": "Signed-build Keychain persistence works across relaunch, update, logout, and account deletion" },
     { "id": "data.mood-unique", "area": "data", "kind": "manual", "title": "Rapid and repeated mood saves do not create duplicate daily records" },
+    { "id": "data.mood-custom-details", "area": "data", "kind": "manual", "title": "Custom emotion and custom helpful-action labels save once, reject duplicates, restore after relaunch, and remain editable" },
     { "id": "data.goal-unique", "area": "data", "kind": "manual", "title": "Button, keyboard, retry, and rapid goal submissions remain unique" },
+    { "id": "data.goal-organization", "area": "data", "kind": "manual", "title": "All, Today, and custom project views persist through reloads; tags organize goals; and Eisenhower moves preserve unsaved details" },
     { "id": "data.habit-unique", "area": "data", "kind": "manual", "title": "Habit creation, templates, logs, streaks, XP, rewards, and retries remain consistent" },
     { "id": "data.journal-crud", "area": "data", "kind": "manual", "title": "Journal create, edit, search, filter, favorite, and delete persist after relaunch" },
     { "id": "data.planner-crud", "area": "data", "kind": "manual", "title": "Planner create, validate, filter, pause, resume, complete, and delete persist" },
@@ -498,6 +508,7 @@
     { "id": "together.revoke-block", "area": "together", "kind": "manual", "title": "Ending or blocking a connection immediately removes partner access while retaining the owner's private records" },
     { "id": "together.owner-isolation", "area": "privacy", "kind": "manual", "title": "Owner, partner, outsider, and revoked-partner identities cannot read or mutate another connection's Together records" },
     { "id": "advisor.planned-vs-active", "area": "advisor", "kind": "manual", "title": "Scheduling a check-in creates a planned step without claiming it started; starting it changes Today and Advisor to current-step language" },
+    { "id": "advisor.personalization", "area": "advisor", "kind": "manual", "title": "First use requires setup before consent or model access; name, focus, priorities, style, and low-energy essentials persist and deterministically shape the brief" },
     { "id": "advisor.follow-up-persistence", "area": "advisor", "kind": "manual", "title": "A scheduled Advisor check-in survives notification delivery, dismissal, force quit, relaunch, and foreground reconciliation until the user records an outcome" },
     { "id": "advisor.recovery-loop", "area": "advisor", "kind": "manual", "title": "Done, Partly, and Not yet record distinct outcomes; barrier selection offers make-smaller, check-in-later, and choose-another recovery without shame or duplicate records" },
     { "id": "advisor.foreground-reconcile", "area": "advisor", "kind": "manual", "title": "Returning from background reconciles the native reminder mirror while retaining the durable follow-up and showing a due check-in when appropriate" },
@@ -530,6 +541,7 @@
     { "id": "regression.mood-save", "area": "regression", "kind": "manual", "title": "Mood entry visibly saves, appears in history, and remains after relaunch" },
     { "id": "regression.goal-duplicates", "area": "regression", "kind": "manual", "title": "Rapid goal adds and retry paths do not create duplicates" },
     { "id": "regression.account-creation", "area": "regression", "kind": "manual", "title": "Account creation, confirmation, password setup, and return to app complete visibly" },
+    { "id": "regression.account-confirmation-recovery", "area": "regression", "kind": "manual", "title": "Resend, edit email, foreground confirmation recheck, deep-link return, and anonymous continuation recover without duplicate accounts or data loss" },
     { "id": "regression.accountability", "area": "regression", "kind": "manual", "title": "Invite, accept, scopes, counts, celebration, reward, and revoke work across two accounts" },
     { "id": "regression.ai-chat", "area": "regression", "kind": "manual", "title": "AI chat sends and receives on the exact production artifact" },
     { "id": "wellbeing.yoga-directional-art", "area": "wellbeing", "kind": "manual", "title": "Every yoga instruction matches its visible pose, side, neutral alignment, and direction-specific description" },

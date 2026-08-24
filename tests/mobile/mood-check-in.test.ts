@@ -28,6 +28,7 @@ describe('mobile mood check-in metadata', () => {
       emotions: ['anxious'],
       customEmotions: ['Wired but hopeful'],
       support: 'rest',
+      customSupport: null,
       visibleTags: ['sleep', 'work'],
     });
     expect(composeMoodTags(metadata)).toEqual([
@@ -50,6 +51,7 @@ describe('mobile mood check-in metadata', () => {
       emotions: [],
       customEmotions: [],
       support: null,
+      customSupport: null,
       visibleTags: ['family'],
     });
   });
@@ -63,7 +65,36 @@ describe('mobile mood check-in metadata', () => {
     expect(emotions).toEqual(['calm', 'content']);
     expect(emotions.length + custom.length).toBe(MAX_MOOD_EMOTIONS);
     expect(addCustomMoodEmotion(custom, 'wired but hopeful', emotions.length)).toBe(custom);
-    expect(addCustomMoodEmotion([], 'Calm')).toEqual([]);
+    expect(addCustomMoodEmotion([], 'Calm')).toEqual(['Calm']);
+    expect(addCustomMoodEmotion([], 'Calm', 0, ['Calm'])).toEqual([]);
+    expect(toggleMoodEmotion([], 'calm', 1, ['Calm'])).toEqual([]);
+    expect(composeMoodTags({
+      emotions: ['calm'],
+      customEmotions: ['Calm'],
+      support: null,
+      customSupport: null,
+      visibleTags: [],
+    })).toEqual(['mood-emotion:calm']);
+  });
+
+  it('stores a custom helpful action without exposing its metadata tag', () => {
+    const metadata = parseMoodMetadata([
+      'work',
+      'mood-custom-support:Take a shower',
+    ]);
+
+    expect(metadata).toEqual({
+      emotions: [],
+      customEmotions: [],
+      support: null,
+      customSupport: 'Take a shower',
+      visibleTags: ['work'],
+    });
+    expect(composeMoodTags(metadata)).toEqual([
+      'work',
+      'mood-custom-support:Take a shower',
+    ]);
+    expect(getMoodMetadataLabels(composeMoodTags(metadata))).toEqual(['Take a shower']);
   });
 
   it('balances emotion language across positive, neutral, and lower moods', () => {

@@ -1,5 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
+  AppState,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -30,6 +32,7 @@ export default function SignupScreen() {
     accountUpgradePending,
     pendingAccountUpgradeEmail,
     startAccountUpgrade,
+    resendAccountUpgrade,
     completeAccountUpgrade,
     finishAccountUpgrade,
   } = useAuth();
@@ -45,6 +48,7 @@ export default function SignupScreen() {
   const [step, setStep] = useState<SignupStep>(
     accountUpgradePending ? 'confirmation' : 'email'
   );
+  const [resendSeconds, setResendSeconds] = useState(accountUpgradePending ? 0 : 60);
 
   const returnTo =
     params.returnTo === '/partner' || params.returnTo === '/accountability'
@@ -66,6 +70,7 @@ export default function SignupScreen() {
     setLoading(true);
     try {
       await startAccountUpgrade(normalizeEmail(email));
+      setResendSeconds(60);
       setStep('confirmation');
     } catch (signupError) {
       setExistingEmailAccount(isExistingAccountError(signupError));
@@ -76,7 +81,7 @@ export default function SignupScreen() {
     }
   };
 
-  const finishUpgrade = async () => {
+  const finishUpgrade = async (silent = false) => {
     if (submissionRef.current) return;
     submissionRef.current = true;
     setError('');
@@ -89,7 +94,44 @@ export default function SignupScreen() {
         returnToApp();
       }
     } catch (upgradeError) {
-      setError(upgradeError instanceof Error ? upgradeError.message : 'Account setup is not complete yet.');
+      if (!silent) {
+        setError(upgradeError instanceof Error ? upgradeError.message : 'Account setup is not complete yet.');
+      }
+    } finally {
+      submissionRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (step !== 'confirmation' || resendSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setResendSeconds((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendSeconds, step]);
+
+  useEffect(() => {
+    if (step !== 'confirmation') return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void finishUpgrade(true);
+    });
+    return () => subscription.remove();
+    // The handler intentionally uses the latest account-upgrade closure for this step.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  const resendConfirmation = async () => {
+    if (submissionRef.current || resendSeconds > 0) return;
+    submissionRef.current = true;
+    setLoading(true);
+    setError('');
+    try {
+      await resendAccountUpgrade(normalizeEmail(email));
+      setResendSeconds(60);
+      AccessibilityInfo.announceForAccessibility('Confirmation email resent.');
+    } catch (resendError) {
+      setError(signupErrorMessage(resendError));
     } finally {
       submissionRef.current = false;
       setLoading(false);
@@ -129,12 +171,12 @@ export default function SignupScreen() {
 
   if (step === 'confirmation') {
     return (
-      <View style={s.confirmationContainer}>
-        <Text style={s.confirmationIcon}>✉️</Text>
-        <Text style={s.title}>Check your email</Text>
+      <ScrollView style={s.flex} contentContainerStyle={s.confirmationContainer}>
+        <Text accessible={false} importantForAccessibility="no" style={s.confirmationIcon}>✉️</Text>
+        <Text accessibilityRole="header" style={s.title}>Check your email</Text>
         <Text style={s.confirmationText}>
-          Open the link sent to <Text style={s.email}>{normalizeEmail(email)}</Text>.
-          When your email is confirmed, return here to create your password.
+          We sent a link to <Text style={s.email}>{normalizeEmail(email)}</Text>.
+          Open it, then come back here.
         </Text>
         {error ? (
           <View style={s.errorBox} accessibilityRole="alert">
@@ -143,16 +185,39 @@ export default function SignupScreen() {
         ) : null}
 
         <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={{ disabled: loading, busy: loading }}
           style={[s.btn, loading && s.disabled]}
-          onPress={finishUpgrade}
+          onPress={() => void finishUpgrade()}
           disabled={loading}
         >
-          <Text style={s.btnText}>{loading ? 'Checking...' : 'I Confirmed My Email'}</Text>
+          <Text style={s.btnText}>{loading ? 'Checking…' : 'Continue'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.linkButton} onPress={returnToApp}>
-          <Text style={s.link}>Continue anonymously for now</Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={{ disabled: loading || resendSeconds > 0 }}
+          style={s.linkButton}
+          onPress={() => void resendConfirmation()}
+          disabled={loading || resendSeconds > 0}
+        >
+          <Text style={[s.link, (loading || resendSeconds > 0) && s.linkDisabled]}>
+            {resendSeconds > 0 ? `Resend in ${resendSeconds}s` : 'Resend email'}
+          </Text>
         </TouchableOpacity>
-      </View>
+        <TouchableOpacity
+          accessibilityRole="button"
+          style={s.linkButton}
+          onPress={() => {
+            setError('');
+            setStep('email');
+          }}
+        >
+          <Text style={s.link}>Use a different email</Text>
+        </TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" style={s.linkButton} onPress={returnToApp}>
+          <Text style={s.link}>Continue without an account</Text>
+        </TouchableOpacity>
+      </ScrollView>
     );
   }
 
@@ -350,10 +415,10 @@ const s = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   container: { flexGrow: 1, padding: 24, justifyContent: 'center' },
   confirmationContainer: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: Colors.background,
     padding: 24,
-    justifyContent: 'center',
+    paddingTop: 72,
   },
   confirmationIcon: { fontSize: 42, textAlign: 'center', marginBottom: 14 },
   confirmationText: {
@@ -426,4 +491,5 @@ const s = StyleSheet.create({
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   linkButton: { paddingVertical: 10, marginTop: 4 },
   link: { color: Colors.primary, textAlign: 'center', fontSize: 15, fontWeight: '500' },
+  linkDisabled: { color: Colors.textSecondary },
 });

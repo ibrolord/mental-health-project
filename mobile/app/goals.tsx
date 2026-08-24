@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   AccessibilityInfo,
+  Alert,
   View,
   Text,
   ScrollView,
@@ -38,6 +39,16 @@ import {
   frameworkMomentumCopy,
   frameworkProgress,
 } from '@/lib/goals/frameworks';
+import {
+  ALL_GOALS_VIEW,
+  TODAY_GOALS_VIEW,
+  collectGoalProjects,
+  filterGoalsByProject,
+  goalProjectFromView,
+  goalProjectView,
+  normalizeGoalProject,
+  type GoalProjectView,
+} from '@/lib/goals/organization';
 
 interface Goal extends GoalDetailRecord {
   date: string;
@@ -79,6 +90,8 @@ export default function GoalsScreen() {
   const ownerKey = query ? `${query.column}:${query.value}` : 'no-owner';
   const [framework, setFramework] = useState<FrameworkType>('simple');
   const [frameworkPickerOpen, setFrameworkPickerOpen] = useState(false);
+  const [projectView, setProjectView] = useState<GoalProjectView>(ALL_GOALS_VIEW);
+  const [draftProjects, setDraftProjects] = useState<string[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -159,6 +172,8 @@ export default function GoalsScreen() {
     setGoals([]);
     setGoalError(null);
     setGoalStatusChange(null);
+    setProjectView(ALL_GOALS_VIEW);
+    setDraftProjects([]);
     goalIdsByKeyRef.current = new Map();
     setLoading(ownerKey !== 'no-owner');
   }, [ownerKey]);
@@ -224,6 +239,7 @@ export default function GoalsScreen() {
       eisenhower_quadrant: quadrant || null,
     };
     const identityKey = goalIdentityKey(identity);
+    const selectedProject = goalProjectFromView(projectView);
 
     const saved = await runGoalInsertRef.current(async () => {
       if (goalIdsByKeyRef.current.has(identityKey)) {
@@ -241,6 +257,7 @@ export default function GoalsScreen() {
             framework,
             priority: priority || null,
             eisenhower_quadrant: quadrant || null,
+            tags: selectedProject ? [selectedProject] : [],
             date,
           } as any)
           .select()
@@ -265,6 +282,11 @@ export default function GoalsScreen() {
         });
         setActiveSection(null);
         setLibrarySourceTitle('');
+        if (selectedProject) {
+          setDraftProjects((current) => current.filter(
+            (project) => project.toLocaleLowerCase() !== selectedProject.toLocaleLowerCase()
+          ));
+        }
         refreshReminderContent();
         return true;
       } catch {
@@ -380,7 +402,56 @@ export default function GoalsScreen() {
     return true;
   };
 
-  const frameworkGoals = goals.filter((g) => g.framework === framework);
+  const moveGoalToQuadrant = async (quadrant: string) => {
+    if (!query || !selectedGoal || selectedGoal.framework !== 'eisenhower') return false;
+    if (selectedGoal.eisenhower_quadrant === quadrant) return true;
+    const generation = ownerGenerationRef.current;
+    const expectedColumn = query.column;
+    const expectedValue = query.value;
+    const identityKey = goalIdentityKey(selectedGoal);
+    const ids = goalIdsByKeyRef.current.get(identityKey) ?? [selectedGoal.id];
+    const destinationKey = goalIdentityKey({
+      ...selectedGoal,
+      eisenhower_quadrant: quadrant,
+    });
+    const destinationIds = goalIdsByKeyRef.current.get(destinationKey) ?? [];
+    if (destinationIds.some((id) => !ids.includes(id))) {
+      setGoalError('That goal is already in the selected quadrant.');
+      return false;
+    }
+
+    setGoalError(null);
+    const { error } = await supabase
+      .from('goals')
+      .update({ eisenhower_quadrant: quadrant } as any)
+      .in('id', ids)
+      .eq(query.column, query.value);
+    if (
+      generation !== ownerGenerationRef.current ||
+      query.column !== expectedColumn ||
+      query.value !== expectedValue
+    ) {
+      return false;
+    }
+    if (error) {
+      setGoalError('Could not move that goal. Please try again.');
+      return false;
+    }
+    setSelectedGoal(null);
+    await loadGoals();
+    AccessibilityInfo.announceForAccessibility('Goal moved to a new quadrant.');
+    return true;
+  };
+
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const allFrameworkGoals = goals.filter((g) => g.framework === framework);
+  const frameworkGoals = filterGoalsByProject(allFrameworkGoals, projectView, today);
+  const projectOptions = collectGoalProjects(goals);
+  for (const draftProject of draftProjects) {
+    if (!projectOptions.some((project) => project.toLocaleLowerCase() === draftProject.toLocaleLowerCase())) {
+      projectOptions.push(draftProject);
+    }
+  }
   const completed = frameworkGoals.filter((g) => g.status === 'completed').length;
   const progress = frameworkProgress(completed, frameworkGoals.length);
   const frameworkMeta = GOAL_FRAMEWORKS.find((item) => item.id === framework) ?? GOAL_FRAMEWORKS[0];
@@ -413,6 +484,31 @@ export default function GoalsScreen() {
       return;
     }
     setActiveSection(defaultComposerSection());
+  };
+
+  const createProjectView = () => {
+    Alert.prompt(
+      'New project',
+      'Name a project such as School, Work, or Health.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Create',
+          onPress: (value?: string) => {
+            const project = normalizeGoalProject(value ?? '');
+            if (!project) return;
+            setDraftProjects((current) => [
+              ...current.filter((item) => item.toLocaleLowerCase() !== project.toLocaleLowerCase()),
+              project,
+            ]);
+            setProjectView(goalProjectView(project));
+            setActiveSection((current) => current ?? defaultComposerSection());
+            AccessibilityInfo.announceForAccessibility(`${project} project selected. Add a goal to save it.`);
+          },
+        },
+      ],
+      'plain-text'
+    );
   };
 
   const submitComposer = (content: string) => {
@@ -562,6 +658,41 @@ export default function GoalsScreen() {
             ))}
           </ScrollView>
         ) : null}
+      </View>
+
+      <View style={s.projectViews}>
+        <View style={s.projectHeading}>
+          <View>
+            <Text style={s.projectTitle}>Projects</Text>
+            <Text style={s.projectDescription}>Filter this goal view without changing its method.</Text>
+          </View>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Create a project"
+            onPress={createProjectView}
+            style={s.projectAdd}
+          >
+            <Feather name="plus" size={16} color={Colors.primary} />
+            <Text style={s.projectAddText}>Project</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.projectChips}>
+          {[
+            { id: ALL_GOALS_VIEW as GoalProjectView, label: 'All' },
+            { id: TODAY_GOALS_VIEW as GoalProjectView, label: 'Today' },
+            ...projectOptions.map((project) => ({ id: goalProjectView(project), label: project })),
+          ].map((option) => (
+            <TouchableOpacity
+              key={option.id}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: projectView === option.id }}
+              onPress={() => setProjectView(option.id)}
+              style={[s.projectChip, projectView === option.id && s.projectChipActive]}
+            >
+              <Text style={[s.projectChipText, projectView === option.id && s.projectChipTextActive]}>{option.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {frameworkGoals.length > 0 && completed > 0 && (
@@ -768,6 +899,7 @@ export default function GoalsScreen() {
       userId={context.user_id ?? null}
       onClose={() => setSelectedGoal(null)}
       onDelete={() => deleteGoal(selectedGoal?.id ?? '')}
+      onMoveQuadrant={selectedGoal?.framework === 'eisenhower' ? moveGoalToQuadrant : undefined}
       onStartFocus={selectedGoal?.status === 'pending' ? () => {
         const goalId = selectedGoal.id;
         setSelectedGoal(null);
@@ -799,6 +931,17 @@ const s = StyleSheet.create({
   viewPickerHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, paddingVertical: 8 },
   viewPickerValue: { color: Colors.text, fontSize: 15, fontWeight: '700' },
   viewPickerDescription: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 3 },
+  projectViews: { marginBottom: 16 },
+  projectHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 },
+  projectTitle: { color: Colors.text, fontSize: 14, fontWeight: '800' },
+  projectDescription: { color: Colors.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 2 },
+  projectAdd: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10 },
+  projectAddText: { color: Colors.primary, fontSize: 12, fontWeight: '800' },
+  projectChips: { gap: 8 },
+  projectChip: { minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: Colors.borderStrong, borderRadius: 999, paddingHorizontal: 14, backgroundColor: Colors.card },
+  projectChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  projectChipText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
+  projectChipTextActive: { color: Colors.onPrimary },
   frameworkChoices: { paddingTop: 10 },
   fwBtn: { minHeight: 44, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 14, marginRight: 8, backgroundColor: Colors.card },
   fwBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },

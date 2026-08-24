@@ -22,6 +22,7 @@ import * as Crypto from 'expo-crypto';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/lib/constants';
+import type { FrameworkType } from '@/lib/types';
 import {
   areRemindersEnabled,
   getNotificationPreferences,
@@ -40,6 +41,8 @@ import {
   enqueueGoalAttachmentCleanup,
   flushGoalAttachmentCleanup,
 } from '@/lib/goals/attachment-cleanup';
+import { EISENHOWER_QUADRANTS } from '@/lib/goals/frameworks';
+import { normalizeGoalProject, normalizeGoalTags } from '@/lib/goals/organization';
 
 export type GoalDetailRecord = {
   id: string;
@@ -47,6 +50,9 @@ export type GoalDetailRecord = {
   notes: string | null;
   due_at: string | null;
   reminder_at: string | null;
+  framework?: FrameworkType;
+  eisenhower_quadrant?: string | null;
+  tags?: string[] | null;
 };
 
 type GoalMilestone = {
@@ -73,6 +79,7 @@ type Props = {
   onDelete: () => Promise<boolean>;
   onUpdated: (goal: GoalDetailRecord) => void;
   onStartFocus?: () => void;
+  onMoveQuadrant?: (quadrant: string) => Promise<boolean>;
 };
 
 const REMINDER_OPTIONS: { id: GoalReminderPreset; label: string }[] = [
@@ -98,15 +105,18 @@ function mimeTypeFor(name: string, provided: string | null | undefined): string 
             : 'application/octet-stream';
 }
 
-export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUpdated, onStartFocus }: Props) {
+export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUpdated, onStartFocus, onMoveQuadrant }: Props) {
   const activeGoalKeyRef = useRef<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
-  const savedDraftRef = useRef({ notes: '', dueAt: null as string | null, reminderPreset: 'off' as GoalReminderPreset });
+  const savedDraftRef = useRef({ notes: '', dueAt: null as string | null, reminderPreset: 'off' as GoalReminderPreset, tags: [] as string[] });
   const [notes, setNotes] = useState('');
   const [dueAt, setDueAt] = useState<Date | null>(null);
   const [dueAtDraft, setDueAtDraft] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [reminderPreset, setReminderPreset] = useState<GoalReminderPreset>('off');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [movingQuadrant, setMovingQuadrant] = useState(false);
   const [milestones, setMilestones] = useState<GoalMilestone[]>([]);
   const [attachments, setAttachments] = useState<GoalAttachment[]>([]);
   const [milestoneInput, setMilestoneInput] = useState('');
@@ -182,6 +192,9 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
       setDueAtDraft(null);
       setShowDatePicker(false);
       setReminderPreset('off');
+      setTags([]);
+      setTagInput('');
+      setMovingQuadrant(false);
       setMilestones([]);
       setAttachments([]);
       setMilestoneInput('');
@@ -201,16 +214,21 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
     const initialNotes = goal.notes ?? '';
     const initialDueAt = goal.due_at ? new Date(goal.due_at) : null;
     const initialReminderPreset = inferReminderPreset(goal.due_at, goal.reminder_at);
+    const initialTags = normalizeGoalTags(goal.tags ?? []);
     activeGoalKeyRef.current = requestKey;
     savedDraftRef.current = {
       notes: initialNotes,
       dueAt: initialDueAt?.toISOString() ?? null,
       reminderPreset: initialReminderPreset,
+      tags: initialTags,
     };
     setNotes(initialNotes);
     setDueAt(initialDueAt);
     setDueAtDraft(null);
     setReminderPreset(initialReminderPreset);
+    setTags(initialTags);
+    setTagInput('');
+    setMovingQuadrant(false);
     setMilestones([]);
     setAttachments([]);
     setMilestoneInput('');
@@ -244,6 +262,8 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
     notes.trim() !== savedDraftRef.current.notes.trim()
     || (dueAt?.toISOString() ?? null) !== savedDraftRef.current.dueAt
     || reminderPreset !== savedDraftRef.current.reminderPreset
+    || tags.join('\u0000') !== savedDraftRef.current.tags.join('\u0000')
+    || tagInput.trim().length > 0
     || milestoneInput.trim().length > 0
     || milestoneDueAt !== null
     || editingMilestoneDueId !== null
@@ -256,7 +276,8 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
     || uploading
     || attachmentMutationCount > 0
     || Boolean(updatingMilestoneDueId)
-    || milestoneMutationCount > 0;
+    || milestoneMutationCount > 0
+    || movingQuadrant;
 
   const requestClose = () => {
     if (mutationInProgress) return;
@@ -312,10 +333,11 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
             notes: notes.trim() || null,
             due_at: dueAtIso,
             reminder_at: reminderAt,
+            tags: normalizeGoalTags(tags),
           } as any)
           .eq('id', goal.id)
           .eq('user_id', userId)
-          .select('id, content, notes, due_at, reminder_at')
+          .select('id, content, notes, due_at, reminder_at, framework, eisenhower_quadrant, tags')
           .single();
         data = result.data as GoalDetailRecord | null;
         updateFailed = Boolean(result.error);
@@ -334,6 +356,7 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
         notes: savedNotes,
         dueAt: savedGoal.due_at ? new Date(savedGoal.due_at).toISOString() : null,
         reminderPreset: inferReminderPreset(savedGoal.due_at, savedGoal.reminder_at),
+        tags: normalizeGoalTags(savedGoal.tags ?? []),
       };
       try {
         if (reminderAt) {
@@ -357,6 +380,39 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const addProjectTag = () => {
+    const project = normalizeGoalProject(tagInput);
+    if (!project) return;
+    const nextTags = normalizeGoalTags([...tags, project]);
+    if (nextTags.length === tags.length) {
+      setError('That project is already on this goal.');
+      return;
+    }
+    setTags(nextTags);
+    setTagInput('');
+    AccessibilityInfo.announceForAccessibility(`${project} project added.`);
+  };
+
+  const moveQuadrant = async (quadrant: string) => {
+    if (!onMoveQuadrant || movingQuadrant || quadrant === goal.eisenhower_quadrant) return;
+    if (hasUnsavedChanges()) {
+      Alert.alert(
+        'Save changes before moving',
+        'Save your notes, dates, tags, or milestone draft, then choose the quadrant again.',
+        [{ text: 'Keep editing', style: 'cancel' }]
+      );
+      return;
+    }
+    setMovingQuadrant(true);
+    setError(null);
+    try {
+      const moved = await onMoveQuadrant(quadrant);
+      if (!moved) setError('Could not move that goal. Please try again.');
+    } finally {
+      setMovingQuadrant(false);
     }
   };
 
@@ -704,6 +760,73 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
             </TouchableOpacity>
           ) : null}
 
+          {goal.framework === 'eisenhower' && onMoveQuadrant ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Priority quadrant</Text>
+              <Text style={styles.sectionSummary}>Move this goal as its urgency or importance changes.</Text>
+              <View style={styles.quadrantGrid}>
+                {EISENHOWER_QUADRANTS.map((quadrant) => {
+                  const selected = goal.eisenhower_quadrant === quadrant.id;
+                  return (
+                    <TouchableOpacity
+                      key={quadrant.id}
+                      accessibilityRole="radio"
+                      accessibilityLabel={`Priority quadrant: ${quadrant.label}`}
+                      accessibilityState={{ selected, disabled: movingQuadrant }}
+                      disabled={movingQuadrant}
+                      onPress={() => void moveQuadrant(quadrant.id)}
+                      style={[styles.quadrantChoice, selected && styles.quadrantChoiceActive]}
+                    >
+                      <Text style={[styles.quadrantChoiceText, selected && styles.quadrantChoiceTextActive]}>{quadrant.label}</Text>
+                      <Text style={[styles.quadrantChoiceDescription, selected && styles.quadrantChoiceDescriptionActive]}>{quadrant.description}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Projects</Text>
+            <Text style={styles.sectionSummary}>Use tags to keep related goals together.</Text>
+            {tags.length > 0 ? (
+              <View style={styles.tagRow}>
+                {tags.map((tag) => (
+                  <TouchableOpacity
+                    key={tag}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${tag} project`}
+                    onPress={() => setTags((current) => current.filter((item) => item !== tag))}
+                    style={styles.tagChip}
+                  >
+                    <Text style={styles.tagChipText}>{tag}</Text>
+                    <Feather name="x" size={14} color={Colors.primary} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null}
+            <View style={styles.addRow}>
+              <TextInput
+                accessibilityLabel="New project name"
+                style={styles.addInput}
+                value={tagInput}
+                onChangeText={(value) => setTagInput(value.slice(0, 32))}
+                onSubmitEditing={addProjectTag}
+                placeholder="School, Work, Health…"
+                placeholderTextColor={Colors.textSecondary}
+              />
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Add project to goal"
+                disabled={!tagInput.trim() || tags.length >= 8}
+                onPress={addProjectTag}
+                style={[styles.addButton, (!tagInput.trim() || tags.length >= 8) && styles.chipDisabled]}
+              >
+                <Feather name="plus" size={21} color={Colors.onPrimary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Due date</Text>
             <TouchableOpacity
@@ -757,11 +880,14 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
               </TouchableOpacity>
             ) : null}
             <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Reminder</Text>
+            {!dueAt ? <Text style={styles.reminderHint}>Add a due date to set a reminder.</Text> : null}
             <View style={styles.chipRow}>
               {REMINDER_OPTIONS.map((option) => (
                 <TouchableOpacity
                   key={option.id}
                   accessibilityRole="radio"
+                  accessibilityLabel={`Reminder: ${option.label}`}
+                  accessibilityHint={!dueAt && option.id !== 'off' ? 'Add a due date first' : undefined}
                   accessibilityState={{ selected: reminderPreset === option.id, disabled: !dueAt && option.id !== 'off' }}
                   disabled={!dueAt && option.id !== 'off'}
                   onPress={() => setReminderPreset(option.id)}
@@ -801,7 +927,7 @@ export function GoalDetailModal({ visible, goal, userId, onClose, onDelete, onUp
               {milestones.length > 0 ? <Text style={styles.count}>{completedMilestones}/{milestones.length}</Text> : null}
             </View>
             <View style={styles.addRow}>
-              <TextInput style={styles.addInput} value={milestoneInput} onChangeText={(value) => setMilestoneInput(value.slice(0, 500))} onSubmitEditing={() => void addMilestone()} placeholder="Add the next step…" placeholderTextColor={Colors.textSecondary} />
+              <TextInput accessibilityLabel="New milestone" style={styles.addInput} value={milestoneInput} onChangeText={(value) => setMilestoneInput(value.slice(0, 500))} onSubmitEditing={() => void addMilestone()} placeholder="Add the next step…" placeholderTextColor={Colors.textSecondary} />
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Add milestone" disabled={!milestoneInput.trim() || addingMilestone} onPress={() => void addMilestone()} style={[styles.addButton, (!milestoneInput.trim() || addingMilestone) && styles.chipDisabled]}>{addingMilestone ? <ActivityIndicator color="#fff" /> : <Feather name="plus" size={21} color="#fff" />}</TouchableOpacity>
             </View>
             <TouchableOpacity
@@ -993,9 +1119,20 @@ const styles = StyleSheet.create({
   count: { color: Colors.textSecondary, fontSize: 12 },
   dateButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: Colors.border, borderRadius: 12, padding: 13, marginTop: 12 },
   dateButtonText: { color: Colors.text, fontSize: 15, fontWeight: '600' },
+  quadrantGrid: { gap: 8, marginTop: 12 },
+  quadrantChoice: { minHeight: 58, justifyContent: 'center', borderWidth: 1, borderColor: Colors.borderStrong, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 9 },
+  quadrantChoiceActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  quadrantChoiceText: { color: Colors.text, fontSize: 14, fontWeight: '800' },
+  quadrantChoiceTextActive: { color: Colors.onPrimary },
+  quadrantChoiceDescription: { color: Colors.textSecondary, fontSize: 11, lineHeight: 15, marginTop: 2 },
+  quadrantChoiceDescriptionActive: { color: Colors.primaryLight },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12, marginBottom: 10 },
+  tagChip: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: Colors.borderStrong, borderRadius: 999, paddingHorizontal: 12 },
+  tagChipText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
   clearButton: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center' },
   clearLink: { color: '#b45309', fontSize: 13, fontWeight: '600' },
   fieldLabel: { color: Colors.text, fontSize: 14, fontWeight: '600' },
+  reminderHint: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 4 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 9 },
   chip: { minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: 22, paddingHorizontal: 12, paddingVertical: 8 },
   chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
