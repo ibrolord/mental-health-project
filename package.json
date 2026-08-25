@@ -1,9 +1,10 @@
 {
-  "name": "mentalhealthproject",
+  "name": "mhtoolkit-web",
   "version": "1.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "scripts": {
+    "brand:generate": "node scripts/generate-brand-assets.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

@@ -31,12 +31,28 @@ export const metadata: Metadata = {
     type: "website",
     url: "/",
     siteName: "MHtoolkit",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "MHtoolkit - private tools for steadier days",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Notice how you're doing. Without the noise.",
     description:
       "A private 30-second mental-wellness check-in. Try it for seven days, with no signup required.",
+    images: ["/og-image.png"],
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.png", type: "image/png", sizes: "48x48" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
   },
 };
 
