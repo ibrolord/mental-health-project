@@ -358,18 +358,32 @@ else
   pass "App/support/privacy copy avoids absolute no-sharing wording"
 fi
 
-if [ -f "$ROOT_DIR/fastlane/screenshots/en-US/01_today.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/02_mood.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/03_together.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/04_tools.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/05_goals.png" ] &&
+if [ -f "$ROOT_DIR/fastlane/screenshots/en-US/00_daily_support.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/01_mood.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/02_together.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/03_tools.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/04_goals.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/05_grounding.png" ] &&
   [ -f "$ROOT_DIR/fastlane/screenshots/en-US/06_library.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/07_grounding.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/08_focus.png" ] &&
-  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/09_yoga.png" ]; then
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/07_focus.png" ] &&
+  [ -f "$ROOT_DIR/fastlane/screenshots/en-US/08_yoga.png" ]; then
   pass "Fastlane screenshots cover the current nine-feature store set"
 else
   fail "Fastlane screenshots are missing one or more current feature screens"
+fi
+
+if [ "$SOURCE_ONLY" -eq 1 ]; then
+  REVIEW_BUILD_LINE="Version $SOURCE_VERSION, build assigned by EAS at production build time"
+else
+  REVIEW_BUILD_LINE="Version $SOURCE_VERSION, build $EXPECTED_BUILD"
+fi
+
+if grep -Fq "What's new in $SOURCE_VERSION:" "$ROOT_DIR/fastlane/metadata/en-US/release_notes.txt" &&
+  grep -Fq "What's new in $SOURCE_VERSION:" "$ROOT_DIR/fastlane/metadata/en-CA/release_notes.txt" &&
+  grep -Fxq "$REVIEW_BUILD_LINE" "$ROOT_DIR/fastlane/metadata/review_information/notes.txt"; then
+  pass "App Store release and review metadata match source version $SOURCE_VERSION"
+else
+  fail "App Store release or review metadata does not match source version $SOURCE_VERSION"
 fi
 
 promo_chars="$(wc -m < "$ROOT_DIR/fastlane/metadata/en-US/promotional_text.txt" | tr -d ' ')"

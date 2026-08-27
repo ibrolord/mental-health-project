@@ -1,12 +1,13 @@
 app_identifier("com.mhtoolkit.app")
 username("princebolajibreeze@gmail.com")
 app(6760159800)
+app_version("1.0.7")
 
 # Skip binary upload - we already uploaded via EAS
 skip_binary_upload(true)
 
-# Skip metadata - already uploaded
-skip_metadata(true)
+# Upload the versioned release notes and review information with the screenshots.
+skip_metadata(false)
 
 # Just upload screenshots
 skip_screenshots(false)

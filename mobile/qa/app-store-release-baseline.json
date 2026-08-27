@@ -1,6 +1,6 @@
 {
-  "lastApprovedVersion": "1.0.4",
-  "candidateVersion": "1.0.6",
-  "verifiedAt": "2026-08-24",
-  "evidence": "Apple rejected another 1.0.5 upload because that marketing-version train had already been submitted. The replacement candidate therefore uses the higher 1.0.6 train."
+  "lastApprovedVersion": "1.0.6",
+  "candidateVersion": "1.0.7",
+  "verifiedAt": "2026-08-27",
+  "evidence": "Apple's public lookup API reports MHtoolkit 1.0.6 released on 2026-08-27. The 1.0.7 candidate opens a new version so the approved App Store screenshot set can be replaced with mission-led mental-health and accountability imagery."
 }

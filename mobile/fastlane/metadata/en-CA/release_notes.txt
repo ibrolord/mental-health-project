@@ -1,8 +1,4 @@
-What's new in 1.0.6:
+What's new in 1.0.7:
 
-- A calmer, clearer iPhone experience with redesigned Today, Mood, Talk, Tools, and You areas.
-- Together makes accountability easier to find, with private invitations, shared commitments, check-ins, streaks, celebrations, and clear sharing controls.
-- Mood check-ins are faster and more expressive, with emoji choices, feeling labels, helpful next steps, and recent patterns.
-- Goals now support milestones, due dates, notes, reminders, and attachments.
-- Optional, read-only Apple Health summaries can add sleep, movement, workout, mindfulness, and State of Mind context to AI requests or a Visit Brief you explicitly share. Raw samples stay on your device.
-- Improved navigation, accessibility, privacy controls, notifications, and reliability throughout the app.
+- Refreshed App Store presentation makes daily check-ins, accountability, grounding, goals, and the wider toolkit easier to discover.
+- Reliability and release-readiness improvements for the iPhone experience.

@@ -1,7 +1,7 @@
 No login is required for the core review path. MHtoolkit creates a private anonymous session. Together accountability features require a permanent account because two verified accounts are needed.
 
 BUILD UNDER REVIEW
-Version 1.0.6, build 64
+Version 1.0.7, build assigned by EAS at production build time
 Bundle ID: com.mhtoolkit.app
 
 SUGGESTED REVIEW PATH

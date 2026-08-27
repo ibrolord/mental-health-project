@@ -21,31 +21,31 @@ const display = Newsreader({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://mhtoolkit.vercel.app"),
-  title: "MHtoolkit - The 7-Day Private Check-In",
+  title: "MHtoolkit - Daily Mental-Health Support",
   description:
-    "A private 30-second mental-wellness check-in. No signup required. Notice patterns over seven days.",
+    "Check in, understand your patterns, build routines, and stay accountable with free, open-source daily mental-health support.",
   openGraph: {
-    title: "Notice how you're doing. Without the noise.",
+    title: "Daily mental-health support that meets you where you are.",
     description:
-      "A private 30-second mental-wellness check-in. Try it for seven days, with no signup required.",
+      "MHtoolkit helps students and early-career adults check in, build routines, find useful next steps, and stay accountable.",
     type: "website",
     url: "/",
     siteName: "MHtoolkit",
     images: [
       {
-        url: "/og-image.png",
+        url: "/launch-hero-2026-1200x630.png",
         width: 1200,
         height: 630,
-        alt: "MHtoolkit - private tools for steadier days",
+        alt: "Young adults using MHtoolkit for check-ins, journaling, and accountability",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Notice how you're doing. Without the noise.",
+    title: "Daily mental-health support that meets you where you are.",
     description:
-      "A private 30-second mental-wellness check-in. Try it for seven days, with no signup required.",
-    images: ["/og-image.png"],
+      "Check in, understand your patterns, build routines, and stay accountable with MHtoolkit.",
+    images: ["/launch-hero-2026-1200x630.png"],
   },
   icons: {
     icon: [
