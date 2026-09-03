@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -54,6 +54,47 @@ function extractSqlAllowedValues(
   );
 }
 
+interface ConstraintDefinition {
+  migrationName: string;
+  source: string;
+  values: Set<string>;
+}
+
+function readConstraintDefinitions(
+  constraintName: string,
+  columnName: string
+): ConstraintDefinition[] {
+  const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations');
+  const definitionPattern = new RegExp(
+    `CONSTRAINT\\s+${constraintName}\\s+CHECK\\s*\\(`
+  );
+  const migrationNames = readdirSync(migrationsDirectory)
+    .filter((name) => name.endsWith('.sql'))
+    .sort();
+
+  return migrationNames.flatMap((migrationName) => {
+    const source = readFileSync(resolve(migrationsDirectory, migrationName), 'utf8');
+    if (!definitionPattern.test(source)) return [];
+
+    return [{
+      migrationName,
+      source,
+      values: extractSqlAllowedValues(source, constraintName, columnName),
+    }];
+  });
+}
+
+function readLatestConstraintMigration(
+  constraintName: string,
+  columnName: string
+): string {
+  const definitions = readConstraintDefinitions(constraintName, columnName);
+  const latest = definitions[definitions.length - 1];
+  if (latest) return latest.source;
+
+  throw new Error(`Unable to find a migration defining ${constraintName}`);
+}
+
 function sorted(values: Iterable<string>): string[] {
   return Array.from(values).sort();
 }
@@ -101,6 +142,23 @@ describe('campaign attribution taxonomy', () => {
       campaign: 'other',
       content: 'other',
     });
+  });
+
+  it('keeps unknown iOS campaign labels measurable as other', () => {
+    const mobileSource = readFileSync(
+      resolve(process.cwd(), 'mobile/lib/acquisition.ts'),
+      'utf8'
+    );
+    const databaseValues = extractSqlAllowedValues(
+      readLatestConstraintMigration('acquisition_content_allowed', 'content'),
+      'acquisition_content_allowed',
+      'content'
+    );
+
+    expect(mobileSource).toContain(
+      "return allowed.has(normalized) ? normalized : 'other';"
+    );
+    expect(databaseValues.has('other')).toBe(true);
   });
 
   it('fails closed when stored attribution is invalid', () => {
@@ -166,20 +224,6 @@ describe('campaign attribution taxonomy', () => {
       resolve(process.cwd(), 'lib/acquisition-taxonomy.ts'),
       'utf8'
     );
-    const baseDatabaseMigration = readFileSync(
-      resolve(
-        process.cwd(),
-        'supabase/migrations/20260719124506_privacy_preserving_growth_metrics.sql'
-      ),
-      'utf8'
-    );
-    const contentDatabaseMigration = readFileSync(
-      resolve(
-        process.cwd(),
-        'supabase/migrations/20260719182000_allow_partner_attribution_content.sql'
-      ),
-      'utf8'
-    );
     const campaignUrls = campaignCsv
       .trim()
       .split(/\r?\n/)
@@ -191,7 +235,10 @@ describe('campaign attribution taxonomy', () => {
         queryParam: 'utm_source',
         constraintName: 'acquisition_source_allowed',
         columnName: 'source',
-        migration: baseDatabaseMigration,
+        migration: readLatestConstraintMigration(
+          'acquisition_source_allowed',
+          'source'
+        ),
         maxLength: 32,
       },
       {
@@ -199,7 +246,10 @@ describe('campaign attribution taxonomy', () => {
         queryParam: 'utm_medium',
         constraintName: 'acquisition_medium_allowed',
         columnName: 'medium',
-        migration: baseDatabaseMigration,
+        migration: readLatestConstraintMigration(
+          'acquisition_medium_allowed',
+          'medium'
+        ),
         maxLength: 32,
       },
       {
@@ -207,7 +257,10 @@ describe('campaign attribution taxonomy', () => {
         queryParam: 'utm_campaign',
         constraintName: 'acquisition_campaign_allowed',
         columnName: 'campaign',
-        migration: baseDatabaseMigration,
+        migration: readLatestConstraintMigration(
+          'acquisition_campaign_allowed',
+          'campaign'
+        ),
         maxLength: 48,
       },
       {
@@ -215,7 +268,10 @@ describe('campaign attribution taxonomy', () => {
         queryParam: 'utm_content',
         constraintName: 'acquisition_content_allowed',
         columnName: 'content',
-        migration: contentDatabaseMigration,
+        migration: readLatestConstraintMigration(
+          'acquisition_content_allowed',
+          'content'
+        ),
         maxLength: 48,
       },
     ] as const;
@@ -251,6 +307,32 @@ describe('campaign attribution taxonomy', () => {
       for (const value of databaseValues) {
         expect(value).toMatch(/^[a-z0-9][a-z0-9_-]*$/);
         expect(value.length).toBeLessThanOrEqual(dimension.maxLength);
+      }
+    }
+  });
+
+  it('never removes a previously accepted database attribution label', () => {
+    const dimensions = [
+      ['acquisition_source_allowed', 'source'],
+      ['acquisition_medium_allowed', 'medium'],
+      ['acquisition_campaign_allowed', 'campaign'],
+      ['acquisition_content_allowed', 'content'],
+    ] as const;
+
+    for (const [constraintName, columnName] of dimensions) {
+      const definitions = readConstraintDefinitions(constraintName, columnName);
+      expect(definitions.length).toBeGreaterThan(0);
+
+      for (let index = 1; index < definitions.length; index += 1) {
+        const previous = definitions[index - 1];
+        const current = definitions[index];
+
+        for (const value of previous.values) {
+          expect(
+            current.values.has(value),
+            `${current.migrationName} removed ${constraintName} value ${value}`
+          ).toBe(true);
+        }
       }
     }
   });
@@ -309,25 +391,27 @@ describe('campaign attribution taxonomy', () => {
       expect(canonicalUrls.has(row[4])).toBe(true);
     }
 
-    const firstWaveEmailAttempts = rows.filter(
+    const july19EmailAttempts = rows.filter(
       (row) =>
         row[0].startsWith('2026-07-19') &&
         row[1] === 'email' &&
         row[6] !== 'draft_prepared_not_sent'
     );
-    const bounced = firstWaveEmailAttempts.filter((row) =>
+    const bounced = july19EmailAttempts.filter((row) =>
       row[6].startsWith('bounced_')
     );
-    const withoutObservedBounce = firstWaveEmailAttempts.filter(
+    const withoutObservedBounce = july19EmailAttempts.filter(
       (row) => !row[6].startsWith('bounced_')
     );
     const founderPosts = rows.filter(
       (row) => ['linkedin', 'x'].includes(row[1]) && row[3] === 'Founder network'
     );
 
-    expect(firstWaveEmailAttempts).toHaveLength(40);
+    // The private ledger contains the original 40 attempts plus five later,
+    // separately reconciled same-day sends. It is intentionally gitignored.
+    expect(july19EmailAttempts).toHaveLength(45);
     expect(bounced).toHaveLength(3);
-    expect(withoutObservedBounce).toHaveLength(37);
+    expect(withoutObservedBounce).toHaveLength(42);
     expect(founderPosts).toHaveLength(2);
   });
 

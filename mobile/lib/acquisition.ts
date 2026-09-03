@@ -18,6 +18,12 @@ const SOURCES = new Set([
   'x',
   'instagram',
   'newsletter',
+  'reddit',
+  'unicef_hub',
+  'emhic',
+  'lova_africa',
+  'project_helping',
+  'government',
 ]);
 const MEDIUMS = new Set([
   'direct',
@@ -29,6 +35,9 @@ const MEDIUMS = new Set([
   'social',
   'qr',
   'newsletter',
+  'resource_directory',
+  'partnership',
+  'reply',
 ]);
 const CAMPAIGNS = new Set([
   'seven_day_check_in',
@@ -76,6 +85,25 @@ const CONTENT = new Set([
   'waterloo_health_promotion',
   'western_wellness',
   'windsor_student_experience',
+  'lvct_health',
+  'csvr',
+  'camfed',
+  'ird_global',
+  'aku_brain_mind',
+  'stand_out_mental_health',
+  'jakes_gerwel_fellowship',
+  'refugee_consortium_kenya',
+  'chiromo_hospital_group',
+  'iosapps_app_shelf_august_2026',
+  'therapists_monthly_promo_august_2026',
+  'adolescent_mental_health_hub',
+  'digital_mental_health_directory',
+  'african_youth_wellness',
+  'community_request',
+  // Legacy compatibility only; no canonical campaign link uses this label.
+  'explicit_tool_request',
+  'mental_health_tools_directory',
+  'public_health_pilot',
 ]);
 
 interface CampaignAttribution {

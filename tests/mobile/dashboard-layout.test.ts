@@ -145,14 +145,14 @@ describe('customizable Today dashboard', () => {
   });
 
   it('keeps catalog ids and routes unique with compact copy', () => {
-    expect(new Set(DASHBOARD_MODULES.map((module) => module.id)).size).toBe(
+    expect(new Set(DASHBOARD_MODULES.map((dashboardModule) => dashboardModule.id)).size).toBe(
       DASHBOARD_MODULES.length
     );
-    expect(new Set(DASHBOARD_MODULES.map((module) => module.href)).size).toBe(
+    expect(new Set(DASHBOARD_MODULES.map((dashboardModule) => dashboardModule.href)).size).toBe(
       DASHBOARD_MODULES.length
     );
-    for (const module of DASHBOARD_MODULES) {
-      expect(module.description.length).toBeLessThanOrEqual(52);
+    for (const dashboardModule of DASHBOARD_MODULES) {
+      expect(dashboardModule.description.length).toBeLessThanOrEqual(52);
     }
   });
 
