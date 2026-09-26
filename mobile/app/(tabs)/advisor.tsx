@@ -60,13 +60,14 @@ import {
 } from '@/lib/advisor-outcome-storage';
 import {
   completeAdvisorLifecycle,
-  reconcileAdvisorLifecycle,
   recoverAdvisorLifecycle,
   replaceAdvisorLifecycle,
   startAdvisorLifecycle,
 } from '@/lib/advisor-lifecycle-runtime';
 import { evaluateAdvisorChangeSignals } from '@/lib/advisor-observation-ledger';
 import { checkAdvisorTargetCompletion } from '@/lib/advisor-target-completion-runtime';
+import { refreshToolCompletions } from '@/lib/tool-completion-runtime';
+import { TOOL_COMPLETION_LABELS, type ToolCompletion } from '@/lib/tool-completion-storage';
 import { useAuth } from '@/lib/auth-context';
 import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import { appleHealthPreference } from '@/lib/apple-health-preference';
@@ -306,6 +307,7 @@ export default function AdvisorScreen() {
     action: string;
   } | null>(null);
   const promptedOwnerRef = useRef<string | null>(null);
+  const dismissedCompletionRef = useRef<{ ownerKey: string; id: string } | null>(null);
   const [context, setContext] = useState<AdvisorContext | null>(null);
   const [recommendation, setRecommendation] = useState<AdvisorRecommendation | null>(null);
   const [brief, setBrief] = useState<AdvisorDailyBrief | null>(null);
@@ -313,6 +315,7 @@ export default function AdvisorScreen() {
   const [outcomes, setOutcomes] = useState<AdvisorOutcome[]>([]);
   const [activeAdvisorAction, setActiveAdvisorAction] =
     useState<AdvisorActionInstance | null>(null);
+  const [toolCompletion, setToolCompletion] = useState<ToolCompletion | null>(null);
   const [stateOwnerKey, setStateOwnerKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -337,6 +340,7 @@ export default function AdvisorScreen() {
       setAdvisorModel(null);
       setOutcomes([]);
       setActiveAdvisorAction(null);
+      setToolCompletion(null);
       setStateOwnerKey(null);
       setLoading(true);
       setBusy(false);
@@ -344,8 +348,8 @@ export default function AdvisorScreen() {
       setStatus('');
       setUseSmallerStep(false);
 
-      void reconcileAdvisorLifecycle(expectedOwner)
-        .then(() => Promise.all([
+      void refreshToolCompletions(expectedOwner)
+        .then((completionState) => Promise.all([
           loadAmbientAdvisorContext({
             ownerKey: expectedOwner,
             queryColumn,
@@ -353,17 +357,18 @@ export default function AdvisorScreen() {
             userId: user?.id ?? null,
           }),
           loadAdvisorOutcomes(expectedOwner),
-          loadAdvisorAction(expectedOwner),
+          completionState,
         ]))
-        .then(async ([context, localOutcomes, loadedAction]) => {
+        .then(async ([context, localOutcomes, completionState]) => {
           if (request !== requestRef.current || ownerRef.current !== expectedOwner) return;
-          let storedAction = loadedAction;
+          let storedAction = completionState.action;
           if (storedAction?.reminderAt) {
             const reminderIsFuture =
               new Date(storedAction.reminderAt).getTime() > Date.now();
             const reminderExists = reminderIsFuture
               ? await hasAdvisorReminder().catch(() => false)
               : false;
+            if (request !== requestRef.current || ownerRef.current !== expectedOwner) return;
             if (!reminderExists) {
               const reconciled = await setAdvisorActionReminder(
                 expectedOwner,
@@ -385,11 +390,12 @@ export default function AdvisorScreen() {
                 new Date(context.nowIso)
               ).catch(() => false)
             : false;
+          if (request !== requestRef.current || ownerRef.current !== expectedOwner) return;
           if (storedAction && targetCompleted) {
-            await completeAdvisorLifecycle(expectedOwner, storedAction);
-            storedAction = null;
+            storedAction = await completeAdvisorLifecycle(expectedOwner, storedAction);
             reconciledOutcomes = await loadAdvisorOutcomes(expectedOwner);
           }
+          if (request !== requestRef.current || ownerRef.current !== expectedOwner) return;
           const localDate = format(new Date(context.nowIso), 'yyyy-MM-dd');
           const deterministicSelection = selectAdvisorRecommendation(
             context,
@@ -403,6 +409,19 @@ export default function AdvisorScreen() {
             setOutcomes(reconciledOutcomes);
             setActiveAdvisorAction(null);
             setUseSmallerStep(false);
+            setStateOwnerKey(expectedOwner);
+            return;
+          }
+          const completedTool = completionState.completion;
+          if (
+            !storedAction && completedTool &&
+            !(dismissedCompletionRef.current?.ownerKey === expectedOwner &&
+              dismissedCompletionRef.current.id === completedTool.id)
+          ) {
+            setContext(context);
+            setRecommendation(deterministicSelection);
+            setOutcomes(reconciledOutcomes);
+            setToolCompletion(completedTool);
             setStateOwnerKey(expectedOwner);
             return;
           }
@@ -560,6 +579,10 @@ export default function AdvisorScreen() {
   const currentAdvisorAction = recommendation?.kind === 'safety'
     ? null
     : activeAdvisorAction;
+  const visibleToolCompletion = stateOwnerKey === ownerKey &&
+    recommendation?.kind !== 'safety' && !currentAdvisorAction
+    ? toolCompletion
+    : null;
   const actionIsPlanned = currentAdvisorAction?.status === 'accepted';
   const actionIsStarted = currentAdvisorAction?.status === 'in_progress'
     || currentAdvisorAction?.status === 'needs_recovery';
@@ -567,11 +590,13 @@ export default function AdvisorScreen() {
     ? currentAdvisorAction.useSmallerStep
       ? currentAdvisorAction.smallerAction
       : currentAdvisorAction.action
-    : recommendation
-      ? useSmallerStep
-      ? recommendation.smallerAction
-        : recommendation.action
-    : '';
+    : visibleToolCompletion
+      ? TOOL_COMPLETION_LABELS[visibleToolCompletion.kind]
+      : recommendation
+        ? useSmallerStep
+          ? recommendation.smallerAction
+          : recommendation.action
+        : '';
   const originalAction = currentAdvisorAction?.action ?? recommendation?.action ?? '';
   const smallerAction = currentAdvisorAction?.smallerAction ?? recommendation?.smallerAction ?? '';
   const activeSourceLabels = currentAdvisorAction?.sourceLabels ?? recommendation?.sourceLabels ?? [];
@@ -735,6 +760,14 @@ export default function AdvisorScreen() {
     }
   }, [activeAction, ownerKey, stateOwnerKey]);
 
+  const openAdvisorAction = (action: AdvisorActionInstance) => {
+    if (action.route === '/ground') {
+      router.push({ pathname: '/ground', params: { sourceStepId: action.id } });
+    } else {
+      router.push(action.route as never);
+    }
+  };
+
   const startRecommendation = async () => {
     if (!recommendation || !ownerKey || busy || stateOwnerKey !== ownerKey) return;
     const expectedOwner = ownerKey;
@@ -748,7 +781,7 @@ export default function AdvisorScreen() {
         return;
       }
       if (activeAdvisorAction?.status === 'in_progress') {
-        router.push(activeAdvisorAction.route as never);
+        openAdvisorAction(activeAdvisorAction);
         return;
       }
       const accepted = activeAdvisorAction
@@ -757,12 +790,14 @@ export default function AdvisorScreen() {
             useSmallerStep,
           });
       if (!accepted.action) throw new Error('Advisor action was not saved.');
+      if (ownerRef.current !== expectedOwner) return;
       let actionToStart = accepted.action;
       if (
         actionToStart.status === 'accepted' &&
         advisorFollowUpState(actionToStart, new Date()) === 'planned_due'
       ) {
         await cancelAdvisorReminder();
+        if (ownerRef.current !== expectedOwner) return;
         const resetFollowUp = await setAdvisorActionFollowUp(
           expectedOwner,
           actionToStart.id,
@@ -772,10 +807,11 @@ export default function AdvisorScreen() {
         if (!resetFollowUp.action) throw new Error('Advisor check-in state was not cleared.');
         actionToStart = resetFollowUp.action;
       }
+      if (ownerRef.current !== expectedOwner) return;
       const started = await startAdvisorLifecycle(expectedOwner, actionToStart);
       if (ownerRef.current !== expectedOwner) return;
       setActiveAdvisorAction(started ?? actionToStart);
-      router.push(actionToStart.route as never);
+      openAdvisorAction(started ?? actionToStart);
     } catch {
       if (ownerRef.current === expectedOwner) {
         setError('This step could not be started. Please try again.');
@@ -791,8 +827,17 @@ export default function AdvisorScreen() {
     if (!context || !recommendation || !ownerKey || busy || stateOwnerKey !== ownerKey) {
       return;
     }
+    if (toolCompletion && !context.profile?.completedAt) {
+      router.push('/advisor-setup' as never);
+      return;
+    }
     const expectedOwner = ownerKey;
-    const currentRecommendation = recommendation;
+    const completedRecommendationId = toolCompletion?.sourceStepId
+      ? outcomes.find((outcome) => outcome.actionId === toolCompletion.sourceStepId)?.recommendationId
+      : null;
+    const currentRecommendation = completedRecommendationId
+      ? { ...recommendation, id: completedRecommendationId }
+      : recommendation;
     setBusy(true);
     setError('');
     setStatus('');
@@ -805,9 +850,13 @@ export default function AdvisorScreen() {
         ...outcomes,
       ];
       const options = {
-          preserveToday: false,
-          excludeRecommendationId: currentRecommendation.id,
-          candidateFamily: currentRecommendation.id.split(':')[0],
+        preserveToday: false,
+        excludeRecommendationId: toolCompletion && !completedRecommendationId
+          ? undefined
+          : currentRecommendation.id,
+        candidateFamily: toolCompletion && !completedRecommendationId
+          ? undefined
+          : currentRecommendation.id.split(':')[0],
       };
       const selected = selectAdvisorRecommendation(
         context,
@@ -846,6 +895,11 @@ export default function AdvisorScreen() {
         recommendation: nextRecommendation,
         brief: nextBrief,
       }).catch(() => undefined);
+      if (ownerRef.current !== expectedOwner) return;
+      if (toolCompletion) {
+        dismissedCompletionRef.current = { ownerKey: expectedOwner, id: toolCompletion.id };
+      }
+      setToolCompletion(null);
       setRecommendation(nextRecommendation);
       setBrief(nextBrief);
       setAdvisorModel(null);
@@ -1116,6 +1170,43 @@ export default function AdvisorScreen() {
     });
   };
 
+  const helpfulnessFeedback = pendingFeedback ? (
+    <AppCard quiet style={styles.feedbackCard}>
+      <Text accessibilityRole="header" style={styles.feedbackTitle}>
+        Did your last step help?
+      </Text>
+      <View style={styles.feedbackActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Yes, my last Advisor step helped"
+          disabled={busy}
+          onPress={() => void answerHelpfulness(true)}
+          style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.feedbackButtonText}>Yes</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="My last Advisor step did not help"
+          disabled={busy}
+          onPress={() => void answerHelpfulness(false)}
+          style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.feedbackButtonText}>Not for me</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Skip Advisor feedback"
+          disabled={busy}
+          onPress={() => void answerHelpfulness(null)}
+          style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.feedbackButtonText}>Skip</Text>
+        </Pressable>
+      </View>
+    </AppCard>
+  ) : null;
+
   return (
     <AppScreen>
       <BotanicalHero style={styles.hero}>
@@ -1135,7 +1226,29 @@ export default function AdvisorScreen() {
       {loading ? <InlineStatus tone="info" message="Loading your current recommendation…" /> : null}
       {error ? <InlineStatus tone="error" message={error} /> : null}
 
-      {!loading && recommendation && stateOwnerKey === ownerKey ? (
+      {!loading && visibleToolCompletion ? (
+        <>
+          <AppCard style={styles.currentCard} tone="tinted">
+            <Text style={styles.eyebrow}>COMPLETED TODAY</Text>
+            <Text accessibilityRole="header" style={styles.action}>
+              {TOOL_COMPLETION_LABELS[visibleToolCompletion.kind]}
+            </Text>
+            <Text style={styles.checkInBody}>
+              You can leave it here, or choose another step when you’re ready.
+            </Text>
+            <AppButton
+              label="Choose another step"
+              icon="arrow-right"
+              loading={busy}
+              onPress={() => void generateAnotherRecommendation()}
+            />
+          </AppCard>
+          {helpfulnessFeedback}
+          {status ? <InlineStatus tone="success" message={status} /> : null}
+        </>
+      ) : null}
+
+      {!loading && !visibleToolCompletion && recommendation && stateOwnerKey === ownerKey ? (
         <>
           {brief ? (
             <AppCard style={styles.briefCard}>
@@ -1369,42 +1482,7 @@ export default function AdvisorScreen() {
             </DisclosureCard>
           ) : null}
 
-          {pendingFeedback ? (
-            <AppCard quiet style={styles.feedbackCard}>
-              <Text accessibilityRole="header" style={styles.feedbackTitle}>
-                Did your last step help?
-              </Text>
-              <View style={styles.feedbackActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Yes, my last Advisor step helped"
-                  disabled={busy}
-                  onPress={() => void answerHelpfulness(true)}
-                  style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
-                >
-                  <Text style={styles.feedbackButtonText}>Yes</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="My last Advisor step did not help"
-                  disabled={busy}
-                  onPress={() => void answerHelpfulness(false)}
-                  style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
-                >
-                  <Text style={styles.feedbackButtonText}>Not for me</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Skip Advisor feedback"
-                  disabled={busy}
-                  onPress={() => void answerHelpfulness(null)}
-                  style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
-                >
-                  <Text style={styles.feedbackButtonText}>Skip</Text>
-                </Pressable>
-              </View>
-            </AppCard>
-          ) : null}
+          {helpfulnessFeedback}
 
           {status ? <InlineStatus tone="success" message={status} /> : null}
           <DisclosureCard

@@ -452,8 +452,10 @@ describe('Advisor outcome storage', () => {
       auth.indexOf('// Avoid calling another auth method')
     );
     expect(signOut).toContain('clearAdvisorOwnerState(ownerKey)');
-    expect(discard).toContain('clearAdvisorOwnerState(ownerKey)');
-    expect(deletion).toContain('clearAdvisorOwnerState(deletedOwnerKey)');
+    expect(discard).toContain('clearAdvisorOwnerState(ownerKey, true)');
+    expect(discard).toContain('withToolCompletionDataDeletion(ownerKey,');
+    expect(deletion).toContain('clearAdvisorOwnerState(deletedOwnerKey, true)');
+    expect(deletion).toContain('withToolCompletionDataDeletion(`user_id:${deletedOwnerId}`,');
     expect(expiredSession).toContain('clearAdvisorOwnerState(`user_id:${previousOwnerId}`)');
     expect(auth).toContain('previousOwnerWasAnonymous');
     expect(auth).toContain("console.error('Abandoned anonymous Advisor cleanup failed:'");

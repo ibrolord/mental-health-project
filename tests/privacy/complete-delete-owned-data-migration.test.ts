@@ -1,16 +1,9 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { latestLifecycleMigration } from './latest-lifecycle-migration';
 
 import { OWNED_DATA_SOURCES } from '../../lib/data/owned-data-inventory';
 
-const migration = readFileSync(
-  resolve(
-    process.cwd(),
-    'supabase/migrations/20260812200303_restore_complete_owned_data_deletion.sql'
-  ),
-  'utf8'
-);
+const migration = latestLifecycleMigration();
 
 describe('complete owned-data deletion migration', () => {
   it('preserves every registered owned-data deletion after accountability cleanup', () => {

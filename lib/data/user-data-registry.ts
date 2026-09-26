@@ -22,6 +22,7 @@ export const USER_DATA_REGISTRY = {
   user_book_favorites: { owner: 'user-or-session', export: true, delete: true, partner: 'none', ai: 'never' },
   user_library_items: { owner: 'user', export: true, delete: true, partner: 'aggregate-only', ai: 'explicit-context-only' },
   practice_progress: { owner: 'user', export: true, delete: true, partner: 'none', ai: 'never' },
+  tool_completions: { owner: 'user-or-session', export: true, delete: true, partner: 'none', ai: 'never' },
   partner_invites: { owner: 'user', export: true, delete: true, partner: 'relationship-record', ai: 'never' },
   partner_links: { owner: 'relationship', export: true, delete: true, partner: 'relationship-record', ai: 'never' },
   partner_celebrations: { owner: 'relationship', export: true, delete: true, partner: 'relationship-record', ai: 'never' },

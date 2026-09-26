@@ -23,6 +23,8 @@ import {
 } from '@/components/JournalVoiceRecorder';
 import { Colors } from '@/lib/constants';
 import { useDataContext } from '@/lib/hooks/use-data-context';
+import { useToolCompletion } from '@/lib/hooks/use-tool-completion';
+import { ToolCompletionRetry } from '@/components/ToolCompletionRetry';
 import {
   emptyJournalDraft,
   JOURNAL_LIMITS,
@@ -66,6 +68,12 @@ function libraryEntryLabel(entry: JournalEntry): 'Book' | 'Video' | 'Story' {
 }
 
 export default function JournalScreen() {
+  const { context } = useDataContext();
+  return <JournalContent key={context.user_id ?? 'signed-out'} />;
+}
+
+function JournalContent() {
+  const completion = useToolCompletion('journal');
   const params = useLocalSearchParams<{
     prompt?: string | string[];
     item?: string | string[];
@@ -90,6 +98,7 @@ export default function JournalScreen() {
   const [promptIdeasOpen, setPromptIdeasOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const saveInFlightRef = useRef(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<JournalFilter>('all');
   const [error, setError] = useState('');
@@ -436,6 +445,7 @@ export default function JournalScreen() {
   };
 
   const saveEntry = async () => {
+    if (saveInFlightRef.current) return;
     const userId = context.user_id;
     if (!userId) {
       setError('Your private profile is still loading. Please try again.');
@@ -461,6 +471,9 @@ export default function JournalScreen() {
       return;
     }
 
+    const completionSession = targetEditingId ? null : completion.start('journal');
+    if (!targetEditingId && !completionSession) return;
+    saveInFlightRef.current = true;
     setSaving(true);
     setError('');
     const ownerGeneration = ownerGenerationRef.current;
@@ -504,6 +517,7 @@ export default function JournalScreen() {
         savedEntry = result.data as JournalEntry;
       }
     } catch {
+      saveInFlightRef.current = false;
       if (
         currentOwnerIdRef.current === userId &&
         ownerGenerationRef.current === ownerGeneration
@@ -524,6 +538,11 @@ export default function JournalScreen() {
     ) {
       return;
     }
+    if (completionSession) {
+      void completion.complete(completionSession, {
+        id: savedEntry.id,
+      });
+    }
     if (draftRecording && savedAudio) {
       setAudioByEntry((current) => ({
         ...current,
@@ -540,6 +559,7 @@ export default function JournalScreen() {
         : [savedEntry, ...current]
     );
     setSaving(false);
+    saveInFlightRef.current = false;
     resetEditor();
     setEditorOpen(false);
   };
@@ -649,6 +669,12 @@ export default function JournalScreen() {
           Capture what matters, connect reading to action, and return to your own words.
         </Text>
       </View>
+
+      {completion.error ? (
+        <Text accessibilityLiveRegion="polite" style={s.errorText}>{completion.error}</Text>
+      ) : null}
+
+      <ToolCompletionRetry completion={completion} />
 
       <View style={s.actionRow}>
         <TouchableOpacity

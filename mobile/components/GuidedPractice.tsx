@@ -60,8 +60,23 @@ export function GuidedPractice<TStep extends GuidedStep>({
   const announcedStepRef = useRef<number | null>(null);
   const timerRef = useRef(timer);
   const onPauseRef = useRef(onPause);
+  const onCompleteRef = useRef(onComplete);
+  const completionAnnouncedRef = useRef(false);
+  const completedStepsRef = useRef(new Set<number>());
   timerRef.current = timer;
-  onPauseRef.current = onPause;
+  onPauseRef.current = onPause
+    ? (paused) => {
+        // Persist only the contiguous completed prefix. A manual jump must not
+        // become evidence of completed earlier steps after an app restart.
+        let firstUnfinished = 0;
+        while (completedStepsRef.current.has(firstUnfinished)) firstUnfinished += 1;
+        const checkpoint = firstUnfinished < paused.stepIndex
+          ? { ...paused, stepIndex: firstUnfinished, elapsed: 0 }
+          : paused;
+        return onPause(checkpoint);
+      }
+    : undefined;
+  onCompleteRef.current = onComplete;
   const activeStep = steps[timer.stepIndex] ?? steps[0];
 
   useEffect(() => {
@@ -70,6 +85,9 @@ export function GuidedPractice<TStep extends GuidedStep>({
     setTimer(restored);
     setPauseNotice('');
     announcedStepRef.current = null;
+    completedStepsRef.current = new Set(
+      Array.from({ length: Math.max(0, Math.min(initialTimer.stepIndex, steps.length)) }, (_, index) => index)
+    );
   }, [initialTimer, steps]);
 
   useEffect(() => {
@@ -93,6 +111,10 @@ export function GuidedPractice<TStep extends GuidedStep>({
           stepDurations,
           elapsedSeconds
         );
+        const finishedBefore = next.complete ? next.stepIndex + 1 : next.stepIndex;
+        for (let index = current.stepIndex; index < finishedBefore; index += 1) {
+          completedStepsRef.current.add(index);
+        }
         timerRef.current = next;
         return next;
       });
@@ -138,11 +160,16 @@ export function GuidedPractice<TStep extends GuidedStep>({
   }, [activeStep, timer.running, timer.stepIndex]);
 
   useEffect(() => {
-    if (timer.complete) {
+    if (!timer.complete) {
+      completionAnnouncedRef.current = false;
+    } else if (!completionAnnouncedRef.current) {
+      completionAnnouncedRef.current = true;
       AccessibilityInfo.announceForAccessibility('Practice complete.');
-      onComplete?.();
+      if (steps.every((_step, index) => completedStepsRef.current.has(index))) {
+        onCompleteRef.current?.();
+      }
     }
-  }, [onComplete, timer.complete]);
+  }, [steps, timer.complete]);
 
   if (!activeStep) return null;
 
@@ -153,7 +180,10 @@ export function GuidedPractice<TStep extends GuidedStep>({
       if (onBeforeStart && !(await onBeforeStart(timerRef.current))) return;
       setPauseNotice('');
       const current = timerRef.current;
-      if (current.complete) announcedStepRef.current = null;
+      if (current.complete) {
+        announcedStepRef.current = null;
+        completedStepsRef.current.clear();
+      }
       const next = current.complete
         ? resetGuidedTimer(true)
         : { ...current, running: true };
@@ -170,7 +200,7 @@ export function GuidedPractice<TStep extends GuidedStep>({
     const paused = { ...current, running: false };
     timerRef.current = paused;
     setTimer(paused);
-    void onPause?.(paused);
+    void onPauseRef.current?.(paused);
   };
 
   const reset = async () => {
@@ -180,6 +210,7 @@ export function GuidedPractice<TStep extends GuidedStep>({
       if (onBeforeReset && !(await onBeforeReset(timerRef.current))) return;
       setPauseNotice('');
       announcedStepRef.current = null;
+      completedStepsRef.current.clear();
       timerRef.current = IDLE_GUIDED_TIMER;
       setTimer(IDLE_GUIDED_TIMER);
     } finally {
@@ -305,7 +336,7 @@ export function GuidedPractice<TStep extends GuidedStep>({
                 announcedStepRef.current = null;
                 timerRef.current = paused;
                 setTimer(paused);
-                void onPause?.(paused);
+                void onPauseRef.current?.(paused);
               }}
             />
           ))}

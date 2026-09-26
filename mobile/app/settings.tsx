@@ -39,6 +39,7 @@ import { advisorBriefStorage } from '@/lib/advisor-brief-storage';
 import { clearAdvisorOutcomes } from '@/lib/advisor-outcome-storage';
 import { clearAdvisorObservationLedger } from '@/lib/advisor-observation-ledger';
 import { clearAdvisorLifecycleJournal } from '@/lib/advisor-lifecycle-runtime';
+import { loadToolCompletions, withToolCompletionDataDeletion } from '@/lib/tool-completion-runtime';
 import { clearReflectionDraft } from '@/lib/reflection-draft-storage';
 import { supabase } from '@/lib/supabase';
 import { AppleHealthSettingsCard } from '@/components/AppleHealthSettingsCard';
@@ -302,7 +303,9 @@ export default function SettingsScreen() {
         { expectedUserId: expectedOwnerId },
         { accessToken }
       );
-      const data = JSON.stringify(exportData, null, 2);
+      const localToolCompletions = await loadToolCompletions(`user_id:${expectedOwnerId}`);
+      await captureOwnerSession(expectedOwnerId);
+      const data = JSON.stringify({ ...exportData, local_tool_completions: localToolCompletions }, null, 2);
       if (!FileSystem.cacheDirectory) {
         throw new Error('A private export location is unavailable.');
       }
@@ -338,12 +341,14 @@ export default function SettingsScreen() {
             setLoading(true);
             try {
               const accessToken = await captureOwnerSession(expectedOwnerId);
-              const result = await apiRequest(
-                '/api/data/delete',
-                { expectedUserId: expectedOwnerId },
-                { accessToken }
-              );
-              if (!result?.deleted) throw new Error(result?.error || 'Deletion failed');
+              await withToolCompletionDataDeletion(`user_id:${expectedOwnerId}`, async () => {
+                const result = await apiRequest(
+                  '/api/data/delete',
+                  { expectedUserId: expectedOwnerId },
+                  { accessToken }
+                );
+                if (!result?.deleted) throw new Error(result?.error || 'Deletion failed');
+              });
               // Drain the recovery journal before clearing stores it could recreate.
               await clearAdvisorLifecycleJournal(consentSubjectId);
               const cleanup = await Promise.allSettled([
