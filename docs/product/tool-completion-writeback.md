@@ -23,12 +23,12 @@ Export includes the remote ledger and the current profile's local mirror, includ
 
 ## Deployment order
 
-1. Apply `supabase/migrations/20260926013753_add_tool_completions.sql` through the normal database release process. The new API export fails closed when this table is absent; deploy the migration before the API.
+1. Apply `supabase/migrations/20260926115248_add_tool_completions.sql` through the normal database release process. The new API export fails closed when this table is absent; deploy the migration before the API.
 2. Deploy and verify the API export/deletion behavior against disposable identities.
 3. Build the native candidate from the reviewed commit and run the current `mobile/qa/ios-release-checklist.json` against that exact installed artifact.
 4. Pin the completed run SHA-256 outside its mutable file and pass `npm run qa:ios:verify -- --run <path> --expected-run-sha256 <hash>` before claiming the artifact is ready for submission.
 
-No live migration, native upload or App Store submission was performed during implementation.
+The migration was applied to the live `mentalhealthproj` Supabase project on 2026-09-26. Its filename matches the migration version recorded by Supabase. Native upload and App Store submission remain pending.
 
 ## Verification
 
