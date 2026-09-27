@@ -27,6 +27,8 @@ import {
   loadAdvisorAction,
   type AdvisorActionInstance,
 } from '@/lib/advisor-action-storage';
+import { refreshToolCompletions } from '@/lib/tool-completion-runtime';
+import { TOOL_COMPLETION_LABELS, type ToolCompletion } from '@/lib/tool-completion-storage';
 import { dashboardPreferences } from '@/lib/dashboard-preferences';
 import { dashboardModuleById, dashboardModulesForToday } from '@/lib/dashboard-layout';
 import { useDashboardLayout } from '@/lib/use-dashboard-layout';
@@ -58,6 +60,7 @@ export default function DashboardScreen() {
   const [safetyOwnerKey, setSafetyOwnerKey] = useState<string | null>(null);
   const [showAdvisorSafety, setShowAdvisorSafety] = useState(false);
   const [advisorAction, setAdvisorAction] = useState<AdvisorActionInstance | null>(null);
+  const [toolCompletion, setToolCompletion] = useState<ToolCompletion | null>(null);
   const [advisorActionOwnerKey, setAdvisorActionOwnerKey] = useState<string | null>(null);
   const launchMotion = useLaunchMotion();
 
@@ -113,13 +116,18 @@ export default function DashboardScreen() {
   useEffect(() => {
     const expectedOwnerKey = ownerKey;
     setAdvisorAction(null);
+    setToolCompletion(null);
     setAdvisorActionOwnerKey(null);
     if (!expectedOwnerKey) return;
 
     let active = true;
-    void loadAdvisorAction(expectedOwnerKey).then((loadedAction) => {
+    void refreshToolCompletions(expectedOwnerKey).catch(async () => ({
+      action: await loadAdvisorAction(expectedOwnerKey).catch(() => null),
+      completion: null,
+    })).then(({ action, completion }) => {
       if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
-      setAdvisorAction(loadedAction);
+      setAdvisorAction(action);
+      setToolCompletion(completion);
       setAdvisorActionOwnerKey(expectedOwnerKey);
     });
 
@@ -252,6 +260,7 @@ export default function DashboardScreen() {
   const visibleLowEnergyMode = lowEnergyOwnerKey === ownerKey && lowEnergyMode;
   const visibleAdvisorSafety = safetyOwnerKey === ownerKey && showAdvisorSafety;
   const visibleAdvisorAction = advisorActionOwnerKey === ownerKey ? advisorAction : null;
+  const visibleToolCompletion = advisorActionOwnerKey === ownerKey ? toolCompletion : null;
   const visibleAdvisorActionText = visibleAdvisorAction
     ? visibleAdvisorAction.useSmallerStep
       ? visibleAdvisorAction.smallerAction
@@ -341,6 +350,7 @@ export default function DashboardScreen() {
             lowEnergy={visibleLowEnergyMode}
             currentAction={visibleAdvisorActionText}
             actionStatus={visibleAdvisorAction?.status ?? null}
+            completionLabel={visibleToolCompletion ? TOOL_COMPLETION_LABELS[visibleToolCompletion.kind] : null}
             onOpen={() => router.navigate('/advisor')}
           />
         ) : null}

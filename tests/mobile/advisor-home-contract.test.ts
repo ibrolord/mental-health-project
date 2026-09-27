@@ -34,6 +34,8 @@ describe('mobile Advisor Home contracts', () => {
     expect(card).toContain('YOUR ADVISOR');
     expect(card).toContain('Open Advisor');
     expect(home).toContain('loadAdvisorAction(expectedOwnerKey)');
+    expect(home).toContain('refreshToolCompletions(expectedOwnerKey)');
+    expect(home).toContain('completionLabel={visibleToolCompletion');
     expect(home).toContain('currentAction={visibleAdvisorActionText}');
     expect(home).toContain('actionStatus={visibleAdvisorAction?.status ?? null}');
     expect(card).toContain("actionStatus === 'accepted'");

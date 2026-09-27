@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   }>,
   verifyAuth: vi.fn(),
   recordServerPrivacyEvent: vi.fn(),
+  completionRows: [] as unknown[],
+  completionError: null as { message: string } | null,
+  completionRanges: [] as Array<[number, number]>,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -38,8 +41,8 @@ function emptyQuery(table: string) {
   const record: (typeof mocks.queries)[number] = { table };
   mocks.queries.push(record);
   const query = {
-    data: [],
-    error: null,
+    data: [] as unknown[],
+    error: null as { message: string } | null,
     select: vi.fn((selected: string) => {
       record.selected = selected;
       return query;
@@ -57,7 +60,14 @@ function emptyQuery(table: string) {
       return query;
     }),
     order: vi.fn(() => query),
-    range: vi.fn(() => query),
+    range: vi.fn((from: number, to: number) => {
+      if (table === 'tool_completions') {
+        mocks.completionRanges.push([from, to]);
+        query.data = mocks.completionRows.slice(from, to + 1);
+        query.error = mocks.completionError;
+      }
+      return query;
+    }),
   };
   return query;
 }
@@ -75,6 +85,9 @@ describe('data export owner binding', () => {
     mocks.privacyPlatformFromRequest.mockReset();
     mocks.privacyPlatformFromRequest.mockReturnValue('web');
     mocks.queries.length = 0;
+    mocks.completionRows = [];
+    mocks.completionError = null;
+    mocks.completionRanges = [];
     mocks.from.mockReset();
     mocks.from.mockImplementation((table: string) => emptyQuery(table));
     mocks.getUserById.mockReset();
@@ -156,6 +169,49 @@ describe('data export owner binding', () => {
     expect(byTable.accountability_priority_suggestions.filter).toEqual({ method: 'eq', column: 'suggested_by', value: 'owner-1' });
     expect(byTable.accountability_rewards.filter).toEqual({ method: 'eq', column: 'owner_id', value: 'owner-1' });
     expect(byTable.accountability_blocks.filter).toEqual({ method: 'eq', column: 'blocker_id', value: 'owner-1' });
+  });
+
+  it.each([false, true])('exports completion history for the verified auth owner (anonymous=%s)', async (isAnonymous) => {
+    mocks.verifyAuth.mockResolvedValue({ valid: true, userId: 'owner-1', isAnonymous });
+    mocks.completionRows = Array.from({ length: 1001 }, (_, index) => ({
+      id: `completion-${index}`,
+      user_id: 'owner-1',
+      kind: 'grounding',
+      item_id: 'five-senses',
+    }));
+    const response = await POST(new NextRequest('https://mhtoolkit.test/api/data/export', {
+      method: 'POST', body: JSON.stringify({ expectedUserId: 'owner-1' }),
+    }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).tool_completions).toEqual(mocks.completionRows);
+    expect(mocks.completionRanges).toEqual([[0, 999], [1000, 1999]]);
+    for (const query of mocks.queries.filter(({ table }) => table === 'tool_completions')) {
+      expect(query.filter).toEqual({ method: 'eq', column: 'user_id', value: 'owner-1' });
+    }
+  });
+
+  it('exports legacy completion rows only for the server-verified session owner', async () => {
+    mocks.verifyAuth.mockResolvedValue({ valid: true, sessionId: 'verified-legacy-session' });
+    mocks.completionRows = [{ id: 'legacy-completion', session_id: 'verified-legacy-session' }];
+    const response = await POST(new NextRequest('https://mhtoolkit.test/api/data/export', {
+      method: 'POST', body: JSON.stringify({ sessionId: 'untrusted-session' }),
+    }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).tool_completions).toEqual(mocks.completionRows);
+    expect(mocks.queries.find(({ table }) => table === 'tool_completions')?.filter).toEqual({
+      method: 'eq', column: 'session_id', value: 'verified-legacy-session',
+    });
+  });
+
+  it('does not produce a partial export when completion history cannot be loaded', async () => {
+    mocks.completionError = { message: 'completion query failed' };
+    const response = await POST(new NextRequest('https://mhtoolkit.test/api/data/export', {
+      method: 'POST', body: JSON.stringify({ expectedUserId: 'owner-1' }),
+    }));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'A complete export could not be generated. No partial file was created.',
+    });
   });
 
 });

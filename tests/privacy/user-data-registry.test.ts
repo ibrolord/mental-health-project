@@ -2,18 +2,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { USER_DATA_REGISTRY } from '../../lib/data/user-data-registry';
+import { latestLifecycleMigration } from './latest-lifecycle-migration';
 
 const exportRoute = readFileSync(
   resolve(process.cwd(), 'app/api/data/export/route.ts'),
   'utf8'
 );
-const lifecycleMigration = readFileSync(
-  resolve(
-    process.cwd(),
-    'supabase/migrations/20260812200303_restore_complete_owned_data_deletion.sql'
-  ),
-  'utf8'
-);
+const lifecycleMigration = latestLifecycleMigration();
 
 describe('user-data lifecycle registry', () => {
   it('requires every classified table in complete export and deletion paths', () => {
@@ -44,6 +39,7 @@ describe('user-data lifecycle registry', () => {
       'partner_support_preferences',
       'privacy_events',
       'operational_events',
+      'tool_completions',
     ] as const) {
       expect(USER_DATA_REGISTRY[table].partner).toBe('none');
       expect(USER_DATA_REGISTRY[table].ai).toBe('never');

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import {
   Pressable,
@@ -26,8 +26,50 @@ import {
   type MathDifficulty,
   type MathProblem,
   type MindGame,
+  type MindGameId,
 } from '@/lib/wellbeing/games';
 import { Colors } from '@/lib/constants';
+import { useDataContext } from '@/lib/hooks/use-data-context';
+import { useToolCompletion } from '@/lib/hooks/use-tool-completion';
+import { ToolCompletionRetry } from '@/components/ToolCompletionRetry';
+import type { ToolCompletionSession } from '@/lib/tool-completion-runtime';
+
+function useGameCompletion(itemId: MindGameId, completed = false) {
+  const { start: startCompletion, complete: recordCompletion, error, canRetry, retry, retrying } = useToolCompletion('game');
+  const sessionRef = useRef<ToolCompletionSession | null>(null);
+  const finishedRef = useRef(false);
+  const start = useCallback(() => {
+    if (finishedRef.current) return false;
+    sessionRef.current ??= startCompletion(itemId);
+    return Boolean(sessionRef.current);
+  }, [startCompletion, itemId]);
+  const finish = useCallback(() => {
+    if (!sessionRef.current || finishedRef.current) return;
+    finishedRef.current = true;
+    void recordCompletion(sessionRef.current);
+  }, [recordCompletion]);
+  useEffect(() => {
+    if (completed) finish();
+  }, [completed, finish]);
+  const reset = () => {
+    sessionRef.current = null;
+    finishedRef.current = false;
+  };
+  return { start, finish, reset, error, canRetry, retry, retrying };
+}
+
+function CompletionNotice({ completion }: { completion: ReturnType<typeof useGameCompletion> }) {
+  return (
+    <>
+      {completion.error ? (
+        <Text accessibilityLiveRegion="polite" style={[appUiStyles.error, { marginTop: 12 }]}>
+          {completion.error}
+        </Text>
+      ) : null}
+      <ToolCompletionRetry completion={completion} />
+    </>
+  );
+}
 
 function useCountdown(initial: number) {
   const [seconds, setSeconds] = useState(initial);
@@ -59,6 +101,7 @@ function useCountdown(initial: number) {
 }
 
 function SensoryOrient() {
+  const completion = useGameCompletion('sensory-orient');
   const steps = [
     ['see', 5],
     ['feel', 4],
@@ -74,9 +117,11 @@ function SensoryOrient() {
 
   const add = () => {
     if (!active || !entry.trim()) return;
+    if (!completion.start()) return;
     const nextItems = [...items, entry.trim()];
     setEntry('');
     if (nextItems.length >= active[1]) {
+      if (step === steps.length - 1) completion.finish();
       setItems([]);
       setStep((current) => current + 1);
     } else {
@@ -96,6 +141,7 @@ function SensoryOrient() {
             label="Start again"
             icon="rotate-ccw"
             onPress={() => {
+              completion.reset();
               setStep(0);
               setItems([]);
               setEntry('');
@@ -130,6 +176,7 @@ function SensoryOrient() {
           />
         </>
       )}
+      <CompletionNotice completion={completion} />
     </AppCard>
   );
 }
@@ -144,6 +191,7 @@ const COLOR_ROUNDS = [
 
 function ColorSwitch() {
   const timer = useCountdown(60);
+  const completion = useGameCompletion('color-switch', timer.seconds === 0);
   const [round, setRound] = useState(0);
   const [score, setScore] = useState(0);
   const [attempts, setAttempts] = useState(0);
@@ -159,6 +207,7 @@ function ColorSwitch() {
   };
 
   const reset = () => {
+    completion.reset();
     timer.reset();
     setRound(0);
     setScore(0);
@@ -194,16 +243,24 @@ function ColorSwitch() {
         <AppButton
           label={timer.running ? 'Pause' : timer.seconds === 60 ? 'Start' : 'Continue'}
           icon={timer.running ? 'pause' : 'play'}
-          onPress={timer.running ? timer.pause : timer.start}
+          disabled={timer.seconds === 0}
+          onPress={timer.running ? timer.pause : () => { if (completion.start()) timer.start(); }}
           style={{ flex: 1 }}
         />
         <AppButton label="Reset" icon="rotate-ccw" variant="quiet" onPress={reset} />
       </View>
+      {timer.seconds === 0 ? <Text style={[appUiStyles.muted, { marginTop: 12 }]}>Practice complete.</Text> : null}
+      <CompletionNotice completion={completion} />
     </AppCard>
   );
 }
 
 function SequenceHold() {
+  const completion = useGameCompletion('sequence-hold');
+  const [checkedRounds, setCheckedRounds] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const [roundReady, setRoundReady] = useState(false);
+  const roundAnsweredRef = useRef(true);
   const [length, setLength] = useState(3);
   const [sequence, setSequence] = useState(() => createDigitSequence(3));
   const [visible, setVisible] = useState(false);
@@ -220,16 +277,26 @@ function SequenceHold() {
   );
 
   const show = () => {
+    if (!completion.start()) return;
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     const next = createDigitSequence(length);
     setSequence(next);
     setAnswer('');
     setStatus('');
+    roundAnsweredRef.current = false;
+    setRoundReady(false);
     setVisible(true);
-    hideTimerRef.current = setTimeout(() => setVisible(false), 1800);
+    hideTimerRef.current = setTimeout(() => {
+      setVisible(false);
+      setRoundReady(true);
+    }, 1800);
   };
 
   const submit = () => {
+    if (visible || !roundReady || roundAnsweredRef.current || finished) return;
+    roundAnsweredRef.current = true;
+    setRoundReady(false);
+    setCheckedRounds((count) => count + 1);
     const correct = answer.replace(/\D/g, '') === sequence.join('');
     setStatus(correct ? 'Correct.' : `The sequence was ${sequence.join(' ')}`);
     if (correct) {
@@ -239,6 +306,29 @@ function SequenceHold() {
       setLength((value) => Math.max(3, value - 1));
     }
   };
+
+  if (finished) return (
+    <AppCard>
+      <Text style={styles.gameTitle}>Practice complete.</Text>
+      <Text style={[appUiStyles.muted, { marginTop: 12 }]}>{checkedRounds} rounds practiced.</Text>
+      <AppButton
+        label="Start again"
+        onPress={() => {
+          completion.reset();
+          setFinished(false);
+          setCheckedRounds(0);
+          setRoundReady(false);
+          roundAnsweredRef.current = true;
+          setLength(3);
+          setScore(0);
+          setAnswer('');
+          setStatus('');
+        }}
+        style={{ marginTop: 16 }}
+      />
+      <CompletionNotice completion={completion} />
+    </AppCard>
+  );
 
   return (
     <AppCard>
@@ -270,7 +360,7 @@ function SequenceHold() {
           <AppButton
             label="Check"
             variant="secondary"
-            disabled={answer.replace(/\D/g, '').length !== sequence.length}
+            disabled={!roundReady || answer.replace(/\D/g, '').length !== sequence.length}
             onPress={submit}
           />
         </>
@@ -278,12 +368,24 @@ function SequenceHold() {
       {status ? (
         <Text style={[appUiStyles.muted, { marginTop: 12 }]}>{status}</Text>
       ) : null}
+      <AppButton
+        label="Finish practice"
+        variant="secondary"
+        disabled={visible || checkedRounds === 0}
+        onPress={() => {
+          completion.finish();
+          setFinished(true);
+        }}
+        style={{ marginTop: 16 }}
+      />
+      <CompletionNotice completion={completion} />
     </AppCard>
   );
 }
 
 function VisualSweep() {
   const timer = useCountdown(60);
+  const completion = useGameCompletion('visual-sweep', timer.seconds === 0);
   const [grid, setGrid] = useState(() =>
     shuffledVisualGrid(25, 'target', 'distractor')
   );
@@ -335,7 +437,8 @@ function VisualSweep() {
         <AppButton
           label={timer.running ? 'Pause' : timer.seconds === 60 ? 'Start' : 'Continue'}
           icon={timer.running ? 'pause' : 'play'}
-          onPress={timer.running ? timer.pause : timer.start}
+          disabled={timer.seconds === 0}
+          onPress={timer.running ? timer.pause : () => { if (completion.start()) timer.start(); }}
           style={{ flex: 1 }}
         />
         <AppButton
@@ -343,6 +446,7 @@ function VisualSweep() {
           icon="rotate-ccw"
           variant="quiet"
           onPress={() => {
+            completion.reset();
             timer.reset();
             setScore(0);
             setMisses(0);
@@ -350,6 +454,8 @@ function VisualSweep() {
           }}
         />
       </View>
+      {timer.seconds === 0 ? <Text style={[appUiStyles.muted, { marginTop: 12 }]}>Practice complete.</Text> : null}
+      <CompletionNotice completion={completion} />
     </AppCard>
   );
 }
@@ -364,6 +470,7 @@ const CATEGORIES = [
 
 function CategorySprint() {
   const timer = useCountdown(60);
+  const completion = useGameCompletion('category-sprint', timer.seconds === 0);
   const [categoryIndex, setCategoryIndex] = useState(0);
   const [entry, setEntry] = useState('');
   const [items, setItems] = useState<string[]>([]);
@@ -376,6 +483,7 @@ function CategorySprint() {
   };
 
   const reset = () => {
+    completion.reset();
     timer.reset();
     setEntry('');
     setItems([]);
@@ -418,11 +526,14 @@ function CategorySprint() {
         <AppButton
           label={timer.running ? 'Pause' : timer.seconds === 60 ? 'Start' : 'Continue'}
           icon={timer.running ? 'pause' : 'play'}
-          onPress={timer.running ? timer.pause : timer.start}
+          disabled={timer.seconds === 0}
+          onPress={timer.running ? timer.pause : () => { if (completion.start()) timer.start(); }}
           style={{ flex: 1 }}
         />
         <AppButton label="New round" icon="rotate-ccw" variant="quiet" onPress={reset} />
       </View>
+      {timer.seconds === 0 ? <Text style={[appUiStyles.muted, { marginTop: 12 }]}>Practice complete.</Text> : null}
+      <CompletionNotice completion={completion} />
     </AppCard>
   );
 }
@@ -445,6 +556,8 @@ const MATH_OPERATOR_LABELS: Record<MathProblem['operator'], string> = {
 };
 
 function NumberFlow() {
+  const completion = useGameCompletion('number-flow');
+  const submittedProblemRef = useRef<MathProblem | null>(null);
   const [difficulty, setDifficulty] = useState<MathDifficulty>('easy');
   const [problem, setProblem] = useState(() => createMathProblem('easy'));
   const [answer, setAnswer] = useState('');
@@ -456,6 +569,7 @@ function NumberFlow() {
   const complete = round >= 10;
 
   const restart = (nextDifficulty = difficulty) => {
+    completion.reset();
     setDifficulty(nextDifficulty);
     setProblem(createMathProblem(nextDifficulty));
     setAnswer('');
@@ -465,7 +579,9 @@ function NumberFlow() {
   };
 
   const check = () => {
-    if (complete || !answer.trim()) return;
+    if (complete || !answer.trim() || submittedProblemRef.current === problem) return;
+    if (!completion.start()) return;
+    submittedProblemRef.current = problem;
     const isCorrect = scoreMathAnswer(problem, answer);
     setCorrect((value) => value + (isCorrect ? 1 : 0));
     setFeedback(
@@ -474,6 +590,7 @@ function NumberFlow() {
         : `${problem.left} ${problem.operator} ${problem.right} = ${problem.answer}`
     );
     setRound((value) => value + 1);
+    if (round === 9) completion.finish();
     setAnswer('');
     setProblem(createMathProblem(difficulty));
   };
@@ -599,6 +716,7 @@ function NumberFlow() {
           </Text>
         </View>
       )}
+      <CompletionNotice completion={completion} />
     </AppCard>
   );
 }
@@ -613,6 +731,11 @@ function GameRunner({ game }: { game: MindGame }) {
 }
 
 export default function MindGamesScreen() {
+  const { context } = useDataContext();
+  return <MindGamesContent key={context.user_id ?? 'signed-out'} />;
+}
+
+function MindGamesContent() {
   const [selected, setSelected] = useState<MindGame | null>(null);
 
   return (

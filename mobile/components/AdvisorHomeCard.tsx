@@ -7,6 +7,7 @@ type AdvisorHomeCardProps = {
   lowEnergy: boolean;
   currentAction?: string | null;
   actionStatus?: AdvisorActionStatus | null;
+  completionLabel?: string | null;
   onOpen: () => void;
 };
 
@@ -14,6 +15,7 @@ export function AdvisorHomeCard({
   lowEnergy,
   currentAction = null,
   actionStatus = null,
+  completionLabel = null,
   onOpen,
 }: AdvisorHomeCardProps) {
   const { fontScale, width } = useWindowDimensions();
@@ -38,12 +40,16 @@ export function AdvisorHomeCard({
               : actionStatus === 'needs_recovery'
                 ? 'Ready to pick back up.'
                 : 'Your current step.'
-            : lowEnergy
-              ? 'Start with less.'
-              : 'Your next step is ready.'}
+            : completionLabel
+              ? completionLabel
+              : lowEnergy
+                ? 'Start with less.'
+                : 'Your next step is ready.'}
         </Text>
         <Text style={styles.description}>
-          {currentAction ?? 'Open Advisor to see what fits today.'}
+          {currentAction ?? (completionLabel
+            ? 'You made time for yourself today.'
+            : 'Open Advisor to see what fits today.')}
         </Text>
         <Pressable
           accessibilityRole="button"

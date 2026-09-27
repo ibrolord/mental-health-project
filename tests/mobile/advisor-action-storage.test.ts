@@ -37,6 +37,28 @@ const RECOMMENDATION: AdvisorRecommendation = {
 const NOW = new Date('2026-08-15T14:00:00.000Z');
 
 describe('Advisor active action storage', () => {
+  it('round-trips a Together action without dropping a legitimate engine route', async () => {
+    const { adapter } = memoryStorage();
+    const storage = createAdvisorActionStorage(adapter, () => NOW);
+    const accepted = await storage.acceptAdvisorAction('owner', {
+      ...RECOMMENDATION,
+      id: 'accountability:check-in',
+      route: '/accountability',
+    });
+    expect(await storage.loadAdvisorAction('owner')).toEqual(accepted.action);
+    expect((await storage.startAdvisorAction('owner', accepted.action!.id)).action?.route)
+      .toBe('/accountability');
+  });
+
+  it('rejects an unknown persisted route while preserving the route allowlist', async () => {
+    const { adapter, values } = memoryStorage();
+    const storage = createAdvisorActionStorage(adapter, () => NOW);
+    const { action } = await storage.acceptAdvisorAction('owner', RECOMMENDATION);
+    values.set(advisorActionStorageKey('owner'), JSON.stringify({ ...action, route: '/unsafe' }));
+    expect(await storage.loadAdvisorAction('owner')).toBeNull();
+    expect(values.has(advisorActionStorageKey('owner'))).toBe(false);
+  });
+
   it('persists one owner-isolated action through accepted and in-progress states', async () => {
     const { adapter } = memoryStorage();
     const storage = createAdvisorActionStorage(adapter, () => NOW);

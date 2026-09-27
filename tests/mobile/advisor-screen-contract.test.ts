@@ -50,7 +50,7 @@ describe('mobile Advisor detail and context contracts', () => {
     expect(advisor).toContain('loadAdvisorOutcomes');
     expect(advisor).toContain('loadAdvisorAction(expectedOwner)');
     expect(advisor).toContain('acceptAdvisorAction(expectedOwner');
-    expect(advisor).toContain('reconcileAdvisorLifecycle(expectedOwner)');
+    expect(advisor).toContain('refreshToolCompletions(expectedOwner)');
     expect(advisor).toContain('startAdvisorLifecycle(expectedOwner, actionToStart)');
     expect(advisor).toContain('completeAdvisorLifecycle(expectedOwner, completed)');
     expect(advisor).toContain('recoverAdvisorLifecycle(');
@@ -101,7 +101,7 @@ describe('mobile Advisor detail and context contracts', () => {
   });
 
   it('uses one filled action and demotes fallbacks into text actions', () => {
-    expect(advisor.match(/<AppButton\b/g)).toHaveLength(2);
+    expect(advisor.match(/<AppButton\b/g)).toHaveLength(3);
     expect(advisor).toContain('!loading && error ? (');
     expect(advisor).toContain('<ActionRow');
     expect(advisor).toContain('styles.smallerStep');
@@ -130,7 +130,7 @@ describe('mobile Advisor detail and context contracts', () => {
     expect(tryAnother).toContain('const nextBrief = generated.brief;');
     expect(tryAnother).toContain('setAdvisorModel(null);');
     expect(tryAnother).toContain(
-      "candidateFamily: currentRecommendation.id.split(':')[0]"
+      "currentRecommendation.id.split(':')[0]"
     );
     expect(tryAnother).toContain('preserveToday: false');
     expect(tryAnother).not.toContain('selectModelBackedRecommendation(');

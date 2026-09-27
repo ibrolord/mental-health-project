@@ -53,6 +53,7 @@ const VALID_ROUTES = new Set<AdvisorRecommendation['route']>([
   '/(tabs)/tracker',
   '/plans',
   '/resources',
+  '/accountability',
 ]);
 
 export function advisorActionStorageKey(ownerKey: string): string {

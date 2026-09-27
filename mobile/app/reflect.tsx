@@ -20,6 +20,8 @@ import {
 } from '@/components/AppUI';
 import { Colors } from '@/lib/constants';
 import { useDataContext } from '@/lib/hooks/use-data-context';
+import { useToolCompletion } from '@/lib/hooks/use-tool-completion';
+import { ToolCompletionRetry } from '@/components/ToolCompletionRetry';
 import { emptyJournalDraft, prepareJournalDraft } from '@/lib/journal';
 import {
   completedReflectionSteps,
@@ -66,6 +68,12 @@ function draftStatusCopy(state: DraftState): string | null {
 }
 
 export default function ReflectScreen() {
+  const { context } = useDataContext();
+  return <ReflectContent key={context.user_id ?? 'signed-out'} />;
+}
+
+function ReflectContent() {
+  const completion = useToolCompletion('reflection');
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
   const { context, authLoading } = useDataContext();
@@ -74,6 +82,7 @@ export default function ReflectScreen() {
   const [responses, setResponses] = useState<Record<string, string>>({});
   const [showMore, setShowMore] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const saveInFlightRef = useRef(false);
   const [draftState, setDraftState] = useState<DraftState>('loading');
   const [draftReady, setDraftReady] = useState(false);
   const [stateOwnerId, setStateOwnerId] = useState<string | null>(null);
@@ -432,6 +441,7 @@ export default function ReflectScreen() {
   };
 
   const saveReflection = async () => {
+    if (saveInFlightRef.current || saveState === 'saved') return;
     const ownerId = context.user_id;
     if (!activeTemplate || !ownerId || authLoading) {
       setSaveState('error');
@@ -456,6 +466,9 @@ export default function ReflectScreen() {
       tags: ['guided reflection', ...activeTemplate.tags].join(', '),
     });
     const ownerGeneration = ownerGenerationRef.current;
+    const completionSession = completion.start(activeTemplate.id);
+    if (!completionSession) return;
+    saveInFlightRef.current = true;
 
     setSaveState('saving');
     setError('');
@@ -477,6 +490,9 @@ export default function ReflectScreen() {
         setError('This reflection could not be saved. Your responses are still here.');
         return;
       }
+      void completion.complete(completionSession, {
+        id: result.data.id,
+      });
 
       try {
         latestDraftRef.current = null;
@@ -508,6 +524,8 @@ export default function ReflectScreen() {
       }
       setSaveState('error');
       setError('This reflection could not be saved. Your responses are still here.');
+    } finally {
+      saveInFlightRef.current = false;
     }
   };
 
@@ -519,7 +537,8 @@ export default function ReflectScreen() {
         responses={responses}
         saveState={saveState}
         draftState={draftState}
-        error={error}
+        error={[error, completion.error].filter(Boolean).join(' ')}
+        completion={completion}
         onDiscard={discardDraft}
         onChooseAnother={resetReflection}
         onOpenJournal={() => router.push('/journal')}
@@ -589,7 +608,12 @@ export default function ReflectScreen() {
           {catalogueStatus}
         </Text>
       ) : null}
-      {error ? <Text style={[appUiStyles.error, styles.error]}>{error}</Text> : null}
+      {error || completion.error ? (
+        <Text accessibilityLiveRegion="polite" style={[appUiStyles.error, styles.error]}>
+          {[error, completion.error].filter(Boolean).join(' ')}
+        </Text>
+      ) : null}
+      <ToolCompletionRetry completion={completion} />
     </AppScreen>
   );
 }
@@ -646,6 +670,7 @@ function ReflectionRunner({
   saveState,
   draftState,
   error,
+  completion,
   onDiscard,
   onChooseAnother,
   onOpenJournal,
@@ -659,6 +684,7 @@ function ReflectionRunner({
   saveState: SaveState;
   draftState: DraftState;
   error: string;
+  completion: ReturnType<typeof useToolCompletion>;
   onDiscard: () => void;
   onChooseAnother: () => void;
   onOpenJournal: () => void;
@@ -679,6 +705,7 @@ function ReflectionRunner({
             Open it now or start another reflection.
           </Text>
           {error ? <Text style={[appUiStyles.error, styles.error]}>{error}</Text> : null}
+          <ToolCompletionRetry completion={completion} />
           <AppButton
             label="Open journal"
             icon="book-open"
@@ -777,6 +804,7 @@ function ReflectionRunner({
           </Text>
         ) : null}
         {error ? <Text style={[appUiStyles.error, styles.error]}>{error}</Text> : null}
+          <ToolCompletionRetry completion={completion} />
 
         <View style={styles.actionRow}>
           <AppButton

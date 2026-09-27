@@ -53,6 +53,7 @@ export const OWNED_DATA_SOURCES: readonly OwnedDataSource[] = [
   ownedByUser('acquisition_attribution'),
   ownedByUser('ai_response_reports'),
   ownedByUser('practice_progress'),
+  ownedByUser('tool_completions'),
   ownedByUser('user_library_items'),
   ownedByUser('journal_entries'),
   ownedByUser('user_affirmation_history'),

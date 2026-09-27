@@ -21,6 +21,9 @@ import {
 import { Colors } from '@/lib/constants';
 import { IDLE_GUIDED_TIMER, type GuidedTimerState } from '@/lib/guided-timer';
 import { useDataContext } from '@/lib/hooks/use-data-context';
+import { useToolCompletion } from '@/lib/hooks/use-tool-completion';
+import { ToolCompletionRetry } from '@/components/ToolCompletionRetry';
+import type { ToolCompletionSession } from '@/lib/tool-completion-runtime';
 import {
   PracticeProgressConflictError,
   clearPausedPracticeProgress,
@@ -34,7 +37,14 @@ import {
 import { supabase } from '@/lib/supabase';
 
 export default function MeditateScreen() {
+  const { context } = useDataContext();
+  return <MeditateContent key={context.user_id ?? 'signed-out'} />;
+}
+
+function MeditateContent() {
   const { context, authLoading } = useDataContext();
+  const completion = useToolCompletion('meditation');
+  const completionSessionRef = useRef<ToolCompletionSession | null>(null);
   const [issue, setIssue] = useState<MeditationIssue | 'all'>('all');
   const [selected, setSelected] = useState<MeditationPractice | null>(null);
   const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(null);
@@ -217,6 +227,7 @@ export default function MeditateScreen() {
   const choosePractice = (practice: MeditationPractice) => {
     const ownerId = context.user_id;
     if (!ownerId || progressOwnerId !== ownerId) return;
+    completionSessionRef.current = null;
     const current = progressRef.current;
     setInitialTimer(
       current?.practice_id === practice.id
@@ -244,6 +255,7 @@ export default function MeditateScreen() {
             variant="quiet"
             disabled={progressBusy || progressConflict}
             onPress={() => {
+              completionSessionRef.current = null;
               setSelected(null);
               setSelectedOwnerId(null);
             }}
@@ -268,13 +280,28 @@ export default function MeditateScreen() {
             startLabel="Begin practice"
             initialTimer={initialTimer}
             persistenceBusy={progressBusy || progressConflict || progressLoading}
-            persistenceMessage={progressMessage}
-            onBeforeStart={() => clearStored(selectedOwnerId)}
-            onBeforeReset={() => clearStored(selectedOwnerId)}
+            persistenceMessage={[progressMessage, completion.error].filter(Boolean).join(' ')}
+            onBeforeStart={async (timer) => {
+              if (!(await clearStored(selectedOwnerId))) return false;
+              if (!completionSessionRef.current || timer.complete) {
+                completionSessionRef.current = completion.start(selectedPractice.id);
+              }
+              return Boolean(completionSessionRef.current);
+            }}
+            onBeforeReset={async () => {
+              if (!(await clearStored(selectedOwnerId))) return false;
+              completionSessionRef.current = null;
+              return true;
+            }}
             onPause={(timer) =>
               persistPaused(timer, selectedPractice.id, selectedOwnerId)
             }
+            onComplete={() => {
+              const session = completionSessionRef.current;
+              if (session) void completion.complete(session);
+            }}
           />
+          <ToolCompletionRetry completion={completion} />
           <OptionalSoundscape title="Background sound" compact />
         </>
       ) : (

@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { latestLifecycleMigration } from '../privacy/latest-lifecycle-migration';
 import { OWNED_DATA_SOURCES } from '../../lib/data/owned-data-inventory';
 import {
   anonymousProfileDataConflict,
@@ -77,13 +76,7 @@ describe('anonymous profile switch safety', () => {
   });
 
   it('keeps the switch inventory aligned with every user-owned deletion table', () => {
-    const migration = readFileSync(
-      resolve(
-        process.cwd(),
-        'supabase/migrations/20260811081540_expand_goal_details.sql'
-      ),
-      'utf8'
-    );
+    const migration = latestLifecycleMigration();
 
     for (const { table } of OWNED_DATA_SOURCES) {
       expect(migration).toContain(`DELETE FROM public.${table}`);

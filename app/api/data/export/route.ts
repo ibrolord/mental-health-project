@@ -47,6 +47,26 @@ async function loadGoalAttachmentRows(userId: string): Promise<QueryResult> {
   return { data: rows, error: null };
 }
 
+async function loadToolCompletionRows(
+  ownerColumn: 'user_id' | 'session_id',
+  ownerValue: string
+): Promise<QueryResult> {
+  const rows: unknown[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await getSupabaseAdmin()
+      .from('tool_completions')
+      .select('*')
+      .eq(ownerColumn, ownerValue)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) return { data: null, error };
+    rows.push(...(data ?? []));
+    if ((data ?? []).length < pageSize) break;
+  }
+  return { data: rows, error: null };
+}
+
 async function appendStoredRows<T extends Record<string, unknown> & { storage_path: string }>(
   file: FileHandle,
   bucket: string,
@@ -161,6 +181,7 @@ export async function POST(request: NextRequest) {
       bookFavoritesResult,
       libraryItemsResult,
       practiceProgressResult,
+      toolCompletionsResult,
       partnerInvitesResult,
       partnerLinksResult,
       partnerCelebrationsResult,
@@ -230,6 +251,7 @@ export async function POST(request: NextRequest) {
             .select('*')
             .eq('user_id', auth.userId)
         : Promise.resolve({ data: [], error: null }),
+      loadToolCompletionRows(ownerColumn, ownerValue),
       auth.userId
         ? supabaseAdmin
             .from('partner_invites')
@@ -436,6 +458,7 @@ export async function POST(request: NextRequest) {
           'practice progress',
           practiceProgressResult
         ),
+        tool_completions: requireQuery('tool completions', toolCompletionsResult),
         partner_invites: requireQuery('partner invites', partnerInvitesResult),
         partner_links: requireQuery('partner links', partnerLinksResult),
         partner_celebrations: requireQuery(
