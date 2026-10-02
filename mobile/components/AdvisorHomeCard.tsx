@@ -13,6 +13,7 @@ type AdvisorHomeCardProps = {
   onSetup?: () => void;
   onSkip?: () => void;
   completed?: boolean;
+  completionLabel?: string | null;
   onOpen: () => void;
 };
 
@@ -26,6 +27,7 @@ export function AdvisorHomeCard({
   onSetup,
   onSkip,
   completed = false,
+  completionLabel = null,
   onOpen,
 }: AdvisorHomeCardProps) {
   const { fontScale, width } = useWindowDimensions();
@@ -50,17 +52,21 @@ export function AdvisorHomeCard({
               : actionStatus === 'needs_recovery'
                 ? 'Ready to pick back up.'
                 : 'Your current step.'
-            : lowEnergy
-              ? 'Start with less.'
-              : 'One step at a time.'}
+            : completionLabel
+              ? completionLabel
+              : lowEnergy
+                ? 'Start with less.'
+                : 'One step at a time.'}
         </Text>
         <Text style={styles.description}>
           {offerSetup ? 'What would you like support with? Choose a starting point, or explore at your own pace.'
-            : currentAction ?? (loading ? 'Finding a next step...' : 'Open Advisor when you want help choosing what comes next.')}
+            : currentAction ?? (completionLabel
+            ? completed ? completionLabel : 'You made time for yourself today.'
+            : loading ? 'Finding a next step...' : 'Open Advisor when you want help choosing what comes next.')}
         </Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={offerSetup ? 'Choose my focus' : onStart ? (actionStatus === 'in_progress' ? 'Continue my step' : 'Start my step') : 'Open Advisor'}
+          accessibilityLabel={offerSetup ? 'Choose my focus' : completed ? 'Reflect with Advisor' : onStart ? (actionStatus === 'in_progress' ? 'Continue my step' : 'Start my step') : 'Open Advisor'}
           accessibilityHint={offerSetup ? 'Optional setup with your focus and preferred name' : onStart ? 'Open the tool for this step' : 'Review your current suggestion'}
           disabled={loading}
           accessibilityState={{ disabled: loading, busy: loading }}

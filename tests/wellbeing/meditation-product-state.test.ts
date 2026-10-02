@@ -14,7 +14,7 @@ describe('meditation paused-resume wiring', () => {
     expect(guidedPractice).toContain('const restored = { ...initialTimer, running: false }');
     expect(guidedPractice).toContain('onBeforeStart');
     expect(mobileMeditation).toContain(
-      'onBeforeStart={() => clearStored(selectedOwnerId)}'
+      'if (!(await clearStored(selectedOwnerId))) return false;'
     );
   });
 

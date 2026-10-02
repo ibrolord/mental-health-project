@@ -53,6 +53,25 @@ function brief(overrides: Partial<StoredAdvisorBrief> = {}): StoredAdvisorBrief 
 }
 
 describe('Advisor daily brief storage', () => {
+  it('round-trips a Together brief with the legitimate accountability route', async () => {
+    const { storage } = memoryStorage();
+    const briefs = createAdvisorBriefStorage(storage);
+    const together = brief();
+    together.recommendation.route = '/accountability';
+    await briefs.write(together);
+    expect(await briefs.read(together.ownerKey, together.localDate, together.fingerprint))
+      .toEqual(together);
+  });
+
+  it('rejects unknown routes before writing a brief', async () => {
+    const { storage, values } = memoryStorage();
+    const briefs = createAdvisorBriefStorage(storage);
+    const invalid = brief();
+    (invalid.recommendation as { route: string }).route = '/unsafe';
+    await expect(briefs.write(invalid)).rejects.toThrow('Advisor brief is invalid.');
+    expect(values.size).toBe(0);
+  });
+
   it('returns a brief only for the same owner, day, and context fingerprint', async () => {
     const { storage } = memoryStorage();
     const briefs = createAdvisorBriefStorage(storage);

@@ -8,7 +8,8 @@ describe('Advisor loop screen wiring', () => {
     const flow = source.slice(source.indexOf('const loop = createAdvisorLoopRefresh'), source.indexOf('const currentAdvisorAction ='));
     expect(flow).toContain('loadAmbientAdvisorContext(');
     expect(flow).toContain('loadAdvisorOutcomes(expectedOwner)');
-    expect(flow).toContain('loadAdvisorAction(expectedOwner)');
+    expect(flow).toContain('refreshToolCompletions(expectedOwner)');
+    expect(flow).toContain('let storedAction = completionState.action');
     expect(flow).toContain('checkAdvisorTargetCompletion(');
     expect(flow).toContain("loop.setAppActive(state === 'active')");
     expect(flow).toContain('loop.dispose()');

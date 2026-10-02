@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -18,9 +18,20 @@ import {
   type GroundingNeed,
 } from '@/lib/grounding';
 import { Colors } from '@/lib/constants';
+import { useDataContext } from '@/lib/hooks/use-data-context';
+import { useToolCompletion } from '@/lib/hooks/use-tool-completion';
+import { ToolCompletionRetry } from '@/components/ToolCompletionRetry';
+import type { ToolCompletionSession } from '@/lib/tool-completion-runtime';
 
 export default function GroundScreen() {
+  const { context } = useDataContext();
+  return <GroundContent key={context.user_id ?? 'signed-out'} />;
+}
+
+function GroundContent() {
   const router = useRouter();
+  const completion = useToolCompletion('grounding');
+  const completionSessionRef = useRef<ToolCompletionSession | null>(null);
   const [selectedNeed, setSelectedNeed] = useState<GroundingNeed | null>(null);
   const [showWhy, setShowWhy] = useState(false);
   const path = selectedNeed ? groundingPathFor(selectedNeed) : null;
@@ -45,6 +56,7 @@ export default function GroundScreen() {
               key={need.id}
               accessibilityRole="button"
               onPress={() => {
+                completionSessionRef.current = null;
                 setSelectedNeed(need.id);
                 setShowWhy(false);
               }}
@@ -86,7 +98,10 @@ export default function GroundScreen() {
             label="Choose a different path"
             icon="arrow-left"
             variant="quiet"
-            onPress={() => setSelectedNeed(null)}
+            onPress={() => {
+              completionSessionRef.current = null;
+              setSelectedNeed(null);
+            }}
             style={styles.backButton}
           />
 
@@ -111,7 +126,27 @@ export default function GroundScreen() {
             {showWhy ? <Text style={appUiStyles.muted}>{path.why}</Text> : null}
           </AppCard>
 
-          <GuidedPractice steps={path.steps} startLabel="Start grounding" />
+          <GuidedPractice
+            key={path.id}
+            steps={path.steps}
+            startLabel="Start grounding"
+            persistenceMessage={completion.error}
+            onBeforeStart={async (timer) => {
+              if (!completionSessionRef.current || timer.complete) {
+                completionSessionRef.current = completion.start(path.id);
+              }
+              return Boolean(completionSessionRef.current);
+            }}
+            onBeforeReset={async () => {
+              completionSessionRef.current = null;
+              return true;
+            }}
+            onComplete={() => {
+              const session = completionSessionRef.current;
+              if (session) void completion.complete(session);
+            }}
+          />
+          <ToolCompletionRetry completion={completion} />
           <OptionalSoundscape title="Background sound" compact />
         </>
       )}

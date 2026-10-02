@@ -57,7 +57,7 @@ async function migrateAndFinalize(
   target = TARGET_OWNER
 ) {
   const finalize = await storage.migrateOwner(source, target);
-  await finalize();
+  expect(await finalize()).toBe('complete');
 }
 
 function deferred() {
@@ -470,7 +470,7 @@ describe('durable provisional Advisor profile copies', () => {
     h.seed(SOURCE_OWNER, sourceProfile());
     const finalize = await h.storage.migrateOwner(SOURCE_OWNER, TARGET_OWNER);
     await h.storage.clear(TARGET_OWNER);
-    await finalize();
+    expect(await finalize()).toBe('retry-required');
     expect(await h.storage.read(SOURCE_OWNER)).toEqual(sourceProfile());
     expect(h.values.has(advisorProfileStorageKey(TARGET_OWNER))).toBe(false);
     expect(h.memory.removeItem).not.toHaveBeenCalledWith(advisorProfileStorageKey(SOURCE_OWNER));
@@ -500,9 +500,9 @@ describe('durable provisional Advisor profile copies', () => {
     await h.storage.write(SOURCE_OWNER, newer);
     const finalize = await h.storage.migrateOwner(SOURCE_OWNER, TARGET_OWNER);
     const before = new Map(h.values);
-    await oldFinalize();
+    expect(await oldFinalize()).toBe('retry-required');
     expect(h.values).toEqual(before);
-    await finalize();
+    expect(await finalize()).toBe('complete');
     expect(await h.storage.read(TARGET_OWNER)).toEqual(newer);
     expect(h.values.has(advisorProfileStorageKey(SOURCE_OWNER))).toBe(false);
   });
@@ -589,11 +589,13 @@ describe('serialized Advisor profile migration', () => {
     delayed.release();
     const finalize = await migration;
     await saving;
-    await finalize();
+    expect(await finalize()).toBe('retry-required');
     expect(await h.storage.read(SOURCE_OWNER)).toEqual(newer);
-    expect((await h.storage.read(TARGET_OWNER)).personalPlan).toEqual(PLAN);
+    expect((await h.storage.read(TARGET_OWNER)).personalPlan).toEqual(newer.personalPlan);
     expect(observed).toHaveBeenCalledExactlyOnceWith(newer);
     expect(h.memory.removeItem).not.toHaveBeenCalled();
+    expect(await finalize()).toBe('complete');
+    expect(h.values.has(advisorProfileStorageKey(SOURCE_OWNER))).toBe(false);
   });
 
   it.each([SOURCE_OWNER, TARGET_OWNER])('waits for an earlier pending save on %s before reading either owner', async (owner) => {
@@ -653,7 +655,7 @@ describe('serialized Advisor profile migration', () => {
     expect(h.values.get(advisorProfileStorageKey(SOURCE_OWNER))).toBe(originalRaw);
     const observed = vi.fn();
     h.storage.subscribe(SOURCE_OWNER, observed);
-    await finalize();
+    expect(await finalize()).toBe('retry-required');
     expect(await h.storage.read(SOURCE_OWNER)).toEqual(source);
     expect(observed).not.toHaveBeenCalled();
   });
@@ -664,8 +666,9 @@ describe('serialized Advisor profile migration', () => {
     const finalize = await h.storage.migrateOwner(SOURCE_OWNER, TARGET_OWNER);
     const newer = { ...sourceProfile(), preferredName: 'Externally updated' };
     h.seed(SOURCE_OWNER, newer);
-    await finalize();
+    expect(await finalize()).toBe('retry-required');
     expect(await h.storage.read(SOURCE_OWNER)).toEqual(newer);
+    expect(await h.storage.read(TARGET_OWNER)).toEqual(newer);
     expect(h.memory.removeItem).not.toHaveBeenCalled();
   });
 
@@ -678,10 +681,10 @@ describe('serialized Advisor profile migration', () => {
     h.storage.subscribe(SOURCE_OWNER, sourceObserved);
     h.storage.subscribe(TARGET_OWNER, () => { saving = h.storage.write(SOURCE_OWNER, newer); });
     const finalize = await h.storage.migrateOwner(SOURCE_OWNER, TARGET_OWNER);
-    await finalize();
+    expect(await finalize()).toBe('retry-required');
     await saving;
     expect(await h.storage.read(SOURCE_OWNER)).toEqual(newer);
-    expect(sourceObserved).toHaveBeenCalledExactlyOnceWith(newer);
+    expect(sourceObserved.mock.calls).toEqual([[newer], [newer]]);
   });
 
   it('does not block an unrelated owner while both migrating owners are reserved', async () => {
@@ -729,6 +732,42 @@ function authMigration(
     'clearReflectionDraft', 'moveJournalAudioForUser', `${compiled}\nreturn migrateAnonymousLocalState;`)(
     memory, storage, draftStorage, draftStorage, vi.fn(async () => {}), moveAudio,
   ) as (sourceUserId: string, targetUserId: string) => Promise<void>;
+}
+
+// Exercise the enclosing auth success/recovery boundary, with no real sessions or requests.
+function authMerge(h: ReturnType<typeof harness>, moveAudio: () => Promise<void>) {
+  const source = readFileSync(path.resolve('mobile/lib/auth-context.tsx'), 'utf8');
+  const ast = ts.createSourceFile('auth-context.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const declaration = ast.statements.find((node) => ts.isFunctionDeclaration(node) &&
+    node.name?.text === 'mergeAnonymousSessionIntoCurrentAccount');
+  expect(declaration).toBeDefined();
+  const compiled = ts.transpileModule(declaration!.getText(ast), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const sourceSession = { user: { id: 'anonymous/source', is_anonymous: true },
+    access_token: 'test-source-access', refresh_token: 'test-source-refresh' };
+  const destination = { user: { id: 'account/target', is_anonymous: false },
+    access_token: 'test-target-access' };
+  const setSession = vi.fn(async (_tokens: { access_token: string; refresh_token: string }) => ({ error: null }));
+  const supabase = { auth: {
+    getSession: vi.fn(async () => ({ data: { session: destination }, error: null })),
+    setSession,
+  } };
+  const apiRequest = vi.fn(async () => {});
+  const completionsMigrated = vi.fn();
+  const migrateToolCompletions = vi.fn(async (_source: string, _target: string, mergeProfile: () => Promise<void>) => {
+    await mergeProfile();
+    completionsMigrated();
+  });
+  const auth = new Function('supabase', 'apiRequest', 'migrateToolCompletions', 'migrateAnonymousLocalState',
+    'sourceSession', `let pendingAnonymousMergeSourceId = sourceSession.user.id;
+      ${compiled}
+      return {
+        merge: () => mergeAnonymousSessionIntoCurrentAccount(sourceSession),
+        pending: () => pendingAnonymousMergeSourceId,
+      };`)(supabase, apiRequest, migrateToolCompletions, authMigration(h.memory, h.storage, moveAudio), sourceSession
+  ) as { merge: () => Promise<void>; pending: () => string | null };
+  return { ...auth, setSession, apiRequest, migrateToolCompletions, completionsMigrated };
 }
 
 describe('anonymous auth profile migration integration', () => {
@@ -835,9 +874,10 @@ describe('anonymous auth profile migration integration', () => {
     expect(observed).toHaveBeenCalledExactlyOnceWith(null);
   });
 
-  it('retains a newer source answer saved while later stores are migrating', async () => {
+  it.each([false, true])('finishes with the latest answer saved during migration (legacy target: %s)', async (hasTarget) => {
     const h = harness();
     h.seed(SOURCE_OWNER, sourceProfile());
+    if (hasTarget) h.seed(TARGET_OWNER, legacyTarget());
     const started = deferred();
     const release = deferred();
     const observed = vi.fn();
@@ -851,8 +891,189 @@ describe('anonymous auth profile migration integration', () => {
     await h.storage.write(SOURCE_OWNER, newer);
     release.resolve();
     await migration;
-    expect(await h.storage.read(SOURCE_OWNER)).toEqual(newer);
+    expect(await h.storage.read(TARGET_OWNER)).toEqual(hasTarget
+      ? { ...legacyTarget(), personalPlan: newer.personalPlan } : newer);
+    expect(h.values.has(advisorProfileStorageKey(SOURCE_OWNER))).toBe(false);
+    expect(JSON.parse(h.values.get(advisorProfileStorageKey(TARGET_OWNER))!))
+      .not.toHaveProperty('_ownerMigration');
+    expect(observed.mock.calls).toEqual([[newer], [null]]);
+  });
+
+  it.each([false, true])('keeps auth and completion migration pending until refresh is durable (legacy: %s)', async (hasTarget) => {
+    const h = harness();
+    h.seed(SOURCE_OWNER, sourceProfile());
+    if (hasTarget) h.seed(TARGET_OWNER, legacyTarget());
+    const refreshing = deferred();
+    const release = deferred();
+    const newer = { ...sourceProfile(), preferredName: 'Updated while signing in',
+      personalPlan: { ...PLAN, action: 'Latest answer during this attempt' } };
+    const auth = authMerge(h, async () => {
+      await h.storage.write(SOURCE_OWNER, newer);
+      h.memory.setItem.mockImplementationOnce(async (key, value) => {
+        expect(key).toBe(advisorProfileStorageKey(TARGET_OWNER));
+        refreshing.resolve();
+        await release.promise;
+        h.values.set(key, value);
+      });
+    });
+    const completed = vi.fn();
+    const migration = auth.merge().then(completed);
+    await refreshing.promise;
+    expect(completed).not.toHaveBeenCalled();
+    expect(auth.pending()).toBe('anonymous/source');
+    expect(auth.completionsMigrated).not.toHaveBeenCalled();
     expect((await h.storage.read(TARGET_OWNER)).personalPlan).toEqual(PLAN);
-    expect(observed).toHaveBeenCalledExactlyOnceWith(newer);
+    expect(await h.storage.read(SOURCE_OWNER)).toEqual(newer);
+    release.resolve();
+    await migration;
+    expect(completed).toHaveBeenCalledOnce();
+    expect(auth.pending()).toBeNull();
+    expect(auth.completionsMigrated).toHaveBeenCalledOnce();
+    expect(auth.migrateToolCompletions).toHaveBeenCalledExactlyOnceWith(SOURCE_OWNER, TARGET_OWNER, expect.any(Function));
+    expect(auth.apiRequest).toHaveBeenCalledOnce();
+    expect(auth.setSession).not.toHaveBeenCalled();
+    expect(await h.storage.read(TARGET_OWNER)).toEqual(hasTarget
+      ? { ...legacyTarget(), personalPlan: newer.personalPlan } : newer);
+    expect(h.values.has(advisorProfileStorageKey(SOURCE_OWNER))).toBe(false);
+    expect(JSON.parse(h.values.get(advisorProfileStorageKey(TARGET_OWNER))!)).not.toHaveProperty('_ownerMigration');
+  });
+
+  it('bounds repeated source edits and restores anonymous auth instead of reporting completion', async () => {
+    const h = harness();
+    h.seed(SOURCE_OWNER, sourceProfile());
+    let updates = 0;
+    const saves: Promise<AdvisorProfile>[] = [];
+    const unsubscribe = h.storage.subscribe(TARGET_OWNER, () => {
+      updates += 1;
+      saves.push(h.storage.write(SOURCE_OWNER, { ...sourceProfile(),
+        personalPlan: { ...PLAN, action: `Concurrent answer ${updates}` } }));
+    });
+    const auth = authMerge(h, async () => {});
+    const restoring = deferred();
+    const release = deferred();
+    auth.setSession.mockImplementationOnce(async () => {
+      restoring.resolve();
+      await release.promise;
+      return { error: null };
+    });
+    const rejected = expect(auth.merge()).rejects.toThrow('Please try signing in again');
+    await restoring.promise;
+    expect(auth.pending()).toBe('anonymous/source');
+    expect(auth.completionsMigrated).not.toHaveBeenCalled();
+    release.resolve();
+    await rejected;
+    await Promise.all(saves);
+    expect(updates).toBe(3); // Initial copy plus two bounded refresh/check attempts.
+    expect(auth.apiRequest).toHaveBeenCalledOnce();
+    expect(auth.setSession).toHaveBeenCalledExactlyOnceWith({
+      access_token: 'test-source-access', refresh_token: 'test-source-refresh',
+    });
+    expect((await h.storage.read(SOURCE_OWNER)).personalPlan?.action).toBe('Concurrent answer 3');
+    expect((await h.storage.read(TARGET_OWNER)).personalPlan?.action).toBe('Concurrent answer 2');
+    expect(JSON.parse(h.values.get(advisorProfileStorageKey(TARGET_OWNER))!)).toHaveProperty('_ownerMigration');
+    expect(auth.pending()).toBeNull();
+    unsubscribe();
+    await authMerge(h, async () => {}).merge();
+    expect((await h.storage.read(TARGET_OWNER)).personalPlan?.action).toBe('Concurrent answer 3');
+    expect(h.values.has(advisorProfileStorageKey(SOURCE_OWNER))).toBe(false);
+  });
+
+  it.each(['identical save', 'new answer', 'empty plan'] as const)(
+    'does not restore source answers over an explicit target %s during the attempt', async (change) => {
+      const h = harness();
+      h.seed(SOURCE_OWNER, sourceProfile());
+      h.seed(TARGET_OWNER, legacyTarget());
+      const expected = { ...legacyTarget(), personalPlan: change === 'empty plan' ? EMPTY_PLAN :
+        change === 'new answer' ? { ...PLAN, action: 'My explicit target answer' } : PLAN };
+      const auth = authMerge(h, async () => {
+        await h.storage.write(SOURCE_OWNER, { ...sourceProfile(),
+          personalPlan: { ...PLAN, action: 'Newer anonymous answer' } });
+        await h.storage.write(TARGET_OWNER, expected);
+      });
+      await auth.merge();
+      expect(await h.storage.read(TARGET_OWNER)).toEqual(expected);
+      expect(h.memory.setItem).toHaveBeenCalledTimes(3); // Copy and the two explicit saves only.
+      expect(h.values.has(advisorProfileStorageKey(SOURCE_OWNER))).toBe(false);
+      expect(auth.completionsMigrated).toHaveBeenCalledOnce();
+      expect(auth.setSession).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['cleared', 'foreign migration', 'changed provisional copy'] as const)(
+    'fails closed when the target is %s during the attempt', async (change) => {
+      const h = harness();
+      h.seed(SOURCE_OWNER, sourceProfile());
+      const newer = { ...sourceProfile(), personalPlan: { ...PLAN, action: 'Keep my newer answer' } };
+      let expectedTarget: string | undefined;
+      const auth = authMerge(h, async () => {
+        await h.storage.write(SOURCE_OWNER, newer);
+        if (change === 'cleared') await h.storage.clear(TARGET_OWNER);
+        else h.seed(TARGET_OWNER, { ...legacyTarget(), _ownerMigration: { version: 1,
+          sourceOwnerKey: change === 'foreign migration' ? 'user_id:unrelated' : SOURCE_OWNER, scope: 'profile' } });
+        expectedTarget = h.values.get(advisorProfileStorageKey(TARGET_OWNER));
+      });
+      await expect(auth.merge()).rejects.toThrow('Please try signing in again');
+      expect(await h.storage.read(SOURCE_OWNER)).toEqual(newer);
+      expect(h.values.get(advisorProfileStorageKey(TARGET_OWNER))).toBe(expectedTarget);
+      expect(auth.completionsMigrated).not.toHaveBeenCalled();
+      expect(auth.setSession).toHaveBeenCalledOnce();
+    }
+  );
+
+  it.each(['save', 'clear'] as const)('respects a target %s queued by the refresh notification', async (change) => {
+    const h = harness();
+    h.seed(SOURCE_OWNER, sourceProfile());
+    const newer = { ...sourceProfile(), personalPlan: { ...PLAN, action: 'Refreshed source answer' } };
+    const explicitTarget = { ...legacyTarget(), personalPlan: EMPTY_PLAN };
+    let targetChange!: Promise<unknown>;
+    h.storage.subscribe(TARGET_OWNER, (profile) => {
+      if (profile?.personalPlan?.action === newer.personalPlan.action) {
+        targetChange = change === 'clear' ? h.storage.clear(TARGET_OWNER) :
+          h.storage.write(TARGET_OWNER, explicitTarget);
+      }
+    });
+    const auth = authMerge(h, async () => { await h.storage.write(SOURCE_OWNER, newer); });
+    if (change === 'clear') {
+      await expect(auth.merge()).rejects.toThrow('Please try signing in again');
+      expect(await h.storage.read(SOURCE_OWNER)).toEqual(newer);
+      expect(h.values.has(advisorProfileStorageKey(TARGET_OWNER))).toBe(false);
+      expect(auth.completionsMigrated).not.toHaveBeenCalled();
+    } else {
+      await auth.merge();
+      expect(await h.storage.read(TARGET_OWNER)).toEqual(explicitTarget);
+      expect(h.values.has(advisorProfileStorageKey(SOURCE_OWNER))).toBe(false);
+      expect(auth.completionsMigrated).toHaveBeenCalledOnce();
+    }
+    await targetChange;
+  });
+
+  it.each([false, true])('does not complete auth when a refresh fails (committed: %s)', async (committed) => {
+    const h = harness();
+    h.seed(SOURCE_OWNER, sourceProfile());
+    const newer = { ...sourceProfile(), personalPlan: { ...PLAN, action: 'Retry this answer safely' } };
+    const auth = authMerge(h, async () => {
+      await h.storage.write(SOURCE_OWNER, newer);
+      h.memory.setItem.mockImplementationOnce(async (key, value) => {
+        if (committed) h.values.set(key, value);
+        throw new Error('refresh failed');
+      });
+    });
+    await expect(auth.merge()).rejects.toThrow('refresh failed');
+    expect(await h.storage.read(SOURCE_OWNER)).toEqual(newer);
+    expect(auth.completionsMigrated).not.toHaveBeenCalled();
+    expect(auth.setSession).toHaveBeenCalledOnce();
+    await authMerge(h, async () => {}).merge();
+    expect(await h.storage.read(TARGET_OWNER)).toEqual(newer);
+    expect(h.values.has(advisorProfileStorageKey(SOURCE_OWNER))).toBe(false);
+  });
+
+  it('requires another attempt when an initially absent source is saved during migration', async () => {
+    const h = harness();
+    const auth = authMerge(h, async () => { await h.storage.write(SOURCE_OWNER, sourceProfile()); });
+    await expect(auth.merge()).rejects.toThrow('Please try signing in again');
+    expect(await h.storage.read(SOURCE_OWNER)).toEqual(sourceProfile());
+    expect(h.values.has(advisorProfileStorageKey(TARGET_OWNER))).toBe(false);
+    expect(auth.completionsMigrated).not.toHaveBeenCalled();
+    expect(auth.setSession).toHaveBeenCalledOnce();
   });
 });

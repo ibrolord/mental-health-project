@@ -16,6 +16,7 @@ type ProvisionalMigration = {
 };
 
 type Storage = Pick<typeof AsyncStorage, 'getItem' | 'setItem' | 'removeItem'>;
+type MigrationFinalization = 'complete' | 'retry-required';
 
 function key(ownerKey: string): string {
   return `${PREFIX}${encodeURIComponent(ownerKey)}`;
@@ -118,8 +119,8 @@ export function createAdvisorProfileStorage(storage: Storage) {
     async clear(ownerKey: string): Promise<void> {
       return mutate([ownerKey], () => remove(ownerKey));
     },
-    async migrateOwner(sourceOwnerKey: string, targetOwnerKey: string): Promise<() => Promise<void>> {
-      if (sourceOwnerKey === targetOwnerKey) return async () => {};
+    async migrateOwner(sourceOwnerKey: string, targetOwnerKey: string): Promise<() => Promise<MigrationFinalization>> {
+      if (sourceOwnerKey === targetOwnerKey) return async () => 'complete';
       return mutate([sourceOwnerKey, targetOwnerKey], async () => {
         const sourceRaw = await storage.getItem(key(sourceOwnerKey));
         const targetRaw = await storage.getItem(key(targetOwnerKey));
@@ -133,12 +134,14 @@ export function createAdvisorProfileStorage(storage: Storage) {
             await storage.setItem(key(targetOwnerKey), serialize(normalized));
             publishedCopies.delete(targetOwnerKey);
           }
-          return async () => {};
+          return () => mutate([sourceOwnerKey, targetOwnerKey], async () =>
+            await storage.getItem(key(sourceOwnerKey)) === null ? 'complete' : 'retry-required');
         }
         if (pending && pending.sourceOwnerKey !== sourceOwnerKey) {
           throw new Error('Another Advisor profile migration is still pending.');
         }
-        const sourceRevision = revisions.get(sourceOwnerKey);
+        let sourceRevision = revisions.get(sourceOwnerKey);
+        let sourceSnapshot = sourceRaw;
         const source = parseMigrationProfile(sourceRaw);
         const scope = pending?.scope ?? (target === null ? 'profile' :
           !Object.prototype.hasOwnProperty.call(target, 'personalPlan') &&
@@ -159,17 +162,38 @@ export function createAdvisorProfileStorage(storage: Storage) {
             publishedCopies.set(targetOwnerKey, copiedRaw);
           }
         }
+        let finalized = false;
         // The caller finalizes only after all local stores migrate successfully.
         return () => mutate([sourceOwnerKey, targetOwnerKey], async () => {
-          if (revisions.get(sourceOwnerKey) !== sourceRevision) return;
-          if (await storage.getItem(key(sourceOwnerKey)) !== sourceRaw) return;
+          if (finalized) return 'complete';
+          const currentSourceRaw = await storage.getItem(key(sourceOwnerKey));
           const currentTargetRaw = await storage.getItem(key(targetOwnerKey));
           // A cleared destination is not a safe copy. Never delete the only profile.
-          if (currentTargetRaw === null) return;
+          if (currentSourceRaw === null || currentTargetRaw === null) return 'retry-required';
           const currentTarget = parseMigrationProfile(currentTargetRaw);
           const currentPending = provisionalMigration(currentTarget);
           if (currentPending && (currentPending.sourceOwnerKey !== sourceOwnerKey ||
-              currentTargetRaw !== copiedRaw)) return;
+              currentTargetRaw !== copiedRaw)) return 'retry-required';
+          const currentSourceRevision = revisions.get(sourceOwnerKey);
+          if (currentSourceRevision !== sourceRevision || currentSourceRaw !== sourceSnapshot) {
+            const latestSource = parseMigrationProfile(currentSourceRaw);
+            // Refresh only our unchanged provisional copy. An explicit target save
+            // has no marker and stays authoritative, even when its plan is empty.
+            if (currentPending) {
+              const normalized = normalizeAdvisorProfile(currentPending.scope === 'profile' ? latestSource : {
+                ...currentTarget,
+                personalPlan: normalizeAdvisorProfile(latestSource).personalPlan,
+              });
+              const refreshedRaw = serialize(normalized, currentPending);
+              if (refreshedRaw !== currentTargetRaw) await persist(targetOwnerKey, normalized, currentPending);
+              copiedRaw = refreshedRaw;
+            }
+            sourceSnapshot = currentSourceRaw;
+            sourceRevision = currentSourceRevision;
+            // Notifications can queue another source save. Recheck under the owner
+            // locks on a bounded caller retry instead of declaring success here.
+            return 'retry-required';
+          }
           await remove(sourceOwnerKey);
           // Remove the source first: failure or interruption leaves provenance intact
           // so a retained, edited source can still refresh the copy on the next retry.
@@ -177,6 +201,8 @@ export function createAdvisorProfileStorage(storage: Storage) {
             await storage.setItem(key(targetOwnerKey), serialize(normalizeAdvisorProfile(currentTarget)));
           }
           publishedCopies.delete(targetOwnerKey);
+          finalized = true;
+          return 'complete';
         });
       });
     },

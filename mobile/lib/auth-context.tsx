@@ -49,6 +49,10 @@ import { advisorProfileStorage } from './advisor-profile-storage';
 import { clearAdvisorOutcomes } from './advisor-outcome-storage';
 import { clearAdvisorObservationLedger } from './advisor-observation-ledger';
 import { clearAdvisorLifecycleJournal } from './advisor-lifecycle-runtime';
+import {
+  clearToolCompletions, migrateToolCompletions, suspendToolCompletions,
+  withToolCompletionDataDeletion,
+} from './tool-completion-runtime';
 import { clearContextSelections } from './chat-context-preference';
 import { clearAllReminders } from './notifications';
 import { Colors } from './constants';
@@ -84,7 +88,10 @@ const AUTH_INIT_ERROR_MESSAGE =
 const MOBILE_AUTH_REDIRECT = 'mhtoolkit://auth/callback';
 let pendingAnonymousMergeSourceId: string | null = null;
 
-async function clearAdvisorOwnerState(ownerKey: string): Promise<void> {
+async function clearAdvisorOwnerState(ownerKey: string, eraseCompletions = false): Promise<void> {
+  // Completion retries must settle before their dependent Advisor stores are erased.
+  if (eraseCompletions) await clearToolCompletions(ownerKey);
+  else await suspendToolCompletions(ownerKey);
   // Drain any in-flight lifecycle transition before clearing its dependent stores.
   await clearAdvisorLifecycleJournal(ownerKey);
   await Promise.all([
@@ -144,7 +151,12 @@ async function migrateAnonymousLocalState(
     clearReflectionDraft(sourceUserId),
     moveJournalAudioForUser(sourceUserId, targetUserId),
   ]);
-  await finalizeProfileMigration();
+  // A source save during the other migrations refreshes only a safe provisional
+  // copy. Allow one recheck, without rerunning server merge or other local moves.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (await finalizeProfileMigration() === 'complete') return;
+  }
+  throw new Error('Advisor setup changed during sign-in. Please try signing in again.');
 }
 
 async function mergeAnonymousSessionIntoCurrentAccount(
@@ -159,15 +171,22 @@ async function mergeAnonymousSessionIntoCurrentAccount(
   }
 
   try {
-    await apiRequest(
-      '/api/data/merge-anonymous',
-      {
-        sourceAnonymousUserId: sourceSession.user.id,
-        sourceAccessToken: sourceSession.access_token,
-      },
-      { accessToken: current.session.access_token }
+    const destination = current.session;
+    await migrateToolCompletions(
+      `user_id:${sourceSession.user.id}`,
+      `user_id:${destination.user.id}`,
+      async () => {
+        await apiRequest(
+          '/api/data/merge-anonymous',
+          {
+            sourceAnonymousUserId: sourceSession.user.id,
+            sourceAccessToken: sourceSession.access_token,
+          },
+          { accessToken: destination.access_token }
+        );
+        await migrateAnonymousLocalState(sourceSession.user.id, destination.user.id);
+      }
     );
-    await migrateAnonymousLocalState(sourceSession.user.id, current.session.user.id);
     pendingAnonymousMergeSourceId = null;
   } catch (error) {
     // Restore the anonymous session so a failed merge never strands the
@@ -751,7 +770,7 @@ export function AuthProvider({
             resetAiDataSharingConsent(ownerKey),
             clearFullContextPreference(ownerKey),
             clearGoToActions(ownerKey),
-            clearAdvisorOwnerState(ownerKey),
+            clearAdvisorOwnerState(ownerKey, true),
             clearContextSelections(ownerKey),
             clearAllReminders(),
             offlineSafetyPlanCache.clear(expectedAnonymousUserId),
@@ -762,11 +781,11 @@ export function AuthProvider({
           (error) => console.error('Anonymous-profile local cleanup failed:', error)
         ),
       deleteRemoteData: () =>
-        apiRequest(
+        withToolCompletionDataDeletion(ownerKey, () => apiRequest(
           '/api/data/delete',
           { expectedAnonymousUserId },
           { accessToken }
-        ),
+        )),
       localCleanupError:
         'This device could not clear local reminders or settings. No data was deleted; restart MHtoolkit and try again.',
     });
@@ -783,11 +802,11 @@ export function AuthProvider({
     if (!current.session || current.session.user.id !== deletedOwnerId) {
       throw new Error('The account changed before deletion. No account was deleted.');
     }
-    const result = await apiRequest(
+    const result = await withToolCompletionDataDeletion(`user_id:${deletedOwnerId}`, () => apiRequest(
       '/api/account/delete',
       { expectedUserId: deletedOwnerId },
       { accessToken: current.session.access_token }
-    );
+    ));
     if (!result?.deleted) {
       throw new Error(result?.error || 'Failed to delete account');
     }
@@ -801,7 +820,7 @@ export function AuthProvider({
           resetAiDataSharingConsent(deletedOwnerKey),
           clearFullContextPreference(deletedOwnerKey),
           clearGoToActions(deletedOwnerKey),
-          clearAdvisorOwnerState(deletedOwnerKey),
+          clearAdvisorOwnerState(deletedOwnerKey, true),
           clearContextSelections(deletedOwnerKey),
           clearAllReminders(),
           offlineSafetyPlanCache.clear(deletedOwnerId),

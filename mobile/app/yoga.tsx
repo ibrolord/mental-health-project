@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import {
   Image,
@@ -19,6 +19,10 @@ import {
 import { GuidedPractice } from '@/components/GuidedPractice';
 import { OptionalSoundscape } from '@/components/OptionalSoundscape';
 import { Colors } from '@/lib/constants';
+import { useDataContext } from '@/lib/hooks/use-data-context';
+import { useToolCompletion } from '@/lib/hooks/use-tool-completion';
+import { ToolCompletionRetry } from '@/components/ToolCompletionRetry';
+import type { ToolCompletionSession } from '@/lib/tool-completion-runtime';
 import {
   YOGA_POSES,
   YOGA_PRACTICES,
@@ -53,6 +57,13 @@ function settingLabel(setting: YogaPractice['setting']): string {
 }
 
 export default function YogaScreen() {
+  const { context } = useDataContext();
+  return <YogaContent key={context.user_id ?? 'signed-out'} />;
+}
+
+function YogaContent() {
+  const completion = useToolCompletion('yoga');
+  const completionSessionRef = useRef<ToolCompletionSession | null>(null);
   const [selected, setSelected] = useState<YogaPractice | null>(null);
 
   return (
@@ -70,7 +81,10 @@ export default function YogaScreen() {
             label="Choose another sequence"
             icon="arrow-left"
             variant="quiet"
-            onPress={() => setSelected(null)}
+            onPress={() => {
+              completionSessionRef.current = null;
+              setSelected(null);
+            }}
             style={styles.backButton}
           />
           <AppCard quiet>
@@ -103,8 +117,24 @@ export default function YogaScreen() {
           </AppCard>
 
           <GuidedPractice
+            key={selected.id}
             steps={selected.steps}
             startLabel="Begin sequence"
+            persistenceMessage={completion.error}
+            onBeforeStart={async (timer) => {
+              if (!completionSessionRef.current || timer.complete) {
+                completionSessionRef.current = completion.start(selected.id);
+              }
+              return Boolean(completionSessionRef.current);
+            }}
+            onBeforeReset={async () => {
+              completionSessionRef.current = null;
+              return true;
+            }}
+            onComplete={() => {
+              const session = completionSessionRef.current;
+              if (session) void completion.complete(session);
+            }}
             renderStepVisual={(step) => {
               const pose = YOGA_POSES[step.poseId];
               return (
@@ -127,6 +157,7 @@ export default function YogaScreen() {
             }}
           />
 
+          <ToolCompletionRetry completion={completion} />
           <OptionalSoundscape
             title="Background sound"
             options={['off', 'rain', 'ocean']}
@@ -147,7 +178,10 @@ export default function YogaScreen() {
                   key={practice.id}
                   accessibilityRole="button"
                   accessibilityLabel={`${practice.title}, ${minutesLabel(yogaPracticeDurationSeconds(practice))}, ${settingLabel(practice.setting)}`}
-                  onPress={() => setSelected(practice)}
+                  onPress={() => {
+                    completionSessionRef.current = null;
+                    setSelected(practice);
+                  }}
                   style={({ pressed }) => [styles.practiceCard, pressed && styles.pressed]}
                 >
                   <Image

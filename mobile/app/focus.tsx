@@ -17,6 +17,9 @@ import {
   type SoundscapeId,
 } from '@/components/OptionalSoundscape';
 import { useDataContext } from '@/lib/hooks/use-data-context';
+import { useToolCompletion } from '@/lib/hooks/use-tool-completion';
+import { ToolCompletionRetry } from '@/components/ToolCompletionRetry';
+import type { ToolCompletionSession } from '@/lib/tool-completion-runtime';
 import { supabase } from '@/lib/supabase';
 import {
   advanceFocusClockBy,
@@ -53,6 +56,18 @@ function safeNumber(value: string, fallback: number, min: number, max: number) {
 }
 
 export default function FocusScreen() {
+  const { context } = useDataContext();
+  return <FocusContent key={context.user_id ?? 'signed-out'} />;
+}
+
+function FocusContent() {
+  const completion = useToolCompletion('focus');
+  const { complete: recordCompletion } = completion;
+  const completionSessionRef = useRef<ToolCompletionSession | null>(null);
+  const completedAtRef = useRef<string | null>(null);
+  const [finalizing, setFinalizing] = useState(false);
+  const [sessionSaved, setSessionSaved] = useState(false);
+  const [finalizeAttempt, setFinalizeAttempt] = useState(0);
   const router = useRouter();
   const params = useLocalSearchParams<{
     source?: string | string[];
@@ -68,6 +83,7 @@ export default function FocusScreen() {
   const [config, setConfig] = useState<ActiveConfig | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const startInFlightRef = useRef(false);
   const [error, setError] = useState('');
   const [completedThisWeek, setCompletedThisWeek] = useState(0);
   const finalizeRef = useRef<string | null>(null);
@@ -257,37 +273,61 @@ export default function FocusScreen() {
   useEffect(() => {
     if (!clock.complete || !sessionId || finalizeRef.current === sessionId) return;
     const ownerId = context.user_id;
-    if (!ownerId) return;
+    const completionSession = completionSessionRef.current;
+    if (!ownerId || !completionSession) return;
     finalizeRef.current = sessionId;
-    void supabase
-      .from('focus_sessions')
-      .update({
-        status: 'complete',
-        completed_cycles: completedFocusCycles(clock),
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', sessionId)
-      .eq('user_id', ownerId)
-      .then(({ error: updateError }) => {
-        if (ownerRef.current !== ownerId) return;
-        if (updateError) {
+    completedAtRef.current ??= new Date().toISOString();
+    const completedAt = completedAtRef.current;
+    setFinalizing(true);
+    setError('');
+    void (async () => {
+      try {
+        const { data, error: updateError } = await supabase
+          .from('focus_sessions')
+          .update({
+            status: 'complete',
+            completed_cycles: completedFocusCycles(clock),
+            completed_at: completedAt,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', sessionId)
+          .eq('user_id', ownerId)
+          .select('id, completed_at')
+          .single();
+        if (ownerRef.current !== ownerId || sessionIdRef.current !== sessionId) return;
+        if (updateError || !data || data.id !== sessionId) {
+          throw updateError ?? new Error('The completed session was not returned.');
+        }
+        setSessionSaved(true);
+        setCompletedThisWeek((current) => current + 1);
+        await recordCompletion(completionSession, {
+          id: data.id,
+          completedAt: data.completed_at,
+        });
+      } catch {
+        if (ownerRef.current === ownerId && sessionIdRef.current === sessionId) {
           finalizeRef.current = null;
           setError('The timer finished, but the session was not saved.');
-        } else {
-          setCompletedThisWeek((current) => current + 1);
         }
-      });
-  }, [clock, context.user_id, sessionId]);
+      } finally {
+        if (ownerRef.current === ownerId && sessionIdRef.current === sessionId) {
+          setFinalizing(false);
+        }
+      }
+    })();
+  }, [clock, recordCompletion, context.user_id, finalizeAttempt, sessionId]);
 
   const start = async () => {
     const ownerId = context.user_id;
-    if (!ownerId || !task.trim() || starting) return;
+    if (!ownerId || !task.trim() || startInFlightRef.current) return;
     const nextConfig = {
       focusMinutes: safeNumber(focusMinutes, 25, 5, 120),
       breakMinutes: safeNumber(breakMinutes, 5, 1, 30),
       plannedCycles: safeNumber(cycles, 1, 1, 12),
     };
+    const completionSession = completion.start('focus');
+    if (!completionSession) return;
+    startInFlightRef.current = true;
 
     setStarting(true);
     setError('');
@@ -295,6 +335,7 @@ export default function FocusScreen() {
       const { data, error: createError } = await supabase
         .from('focus_sessions')
         .insert({
+          id: completionSession.id,
           user_id: ownerId,
           task_label: task.trim(),
           focus_minutes: nextConfig.focusMinutes,
@@ -304,7 +345,7 @@ export default function FocusScreen() {
           sound_mode:
             soundModeRef.current === 'off' ? 'none' : soundModeRef.current,
           status: 'running',
-          started_at: new Date().toISOString(),
+          started_at: completionSession.startedAt,
         })
         .select('id')
         .single();
@@ -315,6 +356,9 @@ export default function FocusScreen() {
       }
 
       setConfig(nextConfig);
+      completionSessionRef.current = completionSession;
+      completedAtRef.current = null;
+      setSessionSaved(false);
       setPrefilledFromGoals(false);
       setSessionId(data.id as string);
       sessionIdRef.current = data.id as string;
@@ -322,7 +366,10 @@ export default function FocusScreen() {
       finalizeRef.current = null;
       lastTickAtRef.current = Date.now();
       setClock({ ...createFocusClock(nextConfig.focusMinutes, nextConfig.plannedCycles), running: true });
+    } catch {
+      if (ownerRef.current === ownerId) setError('This focus session could not start.');
     } finally {
+      startInFlightRef.current = false;
       if (ownerRef.current === ownerId) setStarting(false);
     }
   };
@@ -353,6 +400,8 @@ export default function FocusScreen() {
     setConfig(null);
     setSessionId(null);
     sessionIdRef.current = null;
+    completionSessionRef.current = null;
+    completedAtRef.current = null;
     soundSyncGenerationRef.current += 1;
     finalizeRef.current = null;
     lastTickAtRef.current = null;
@@ -441,10 +490,13 @@ export default function FocusScreen() {
               <View style={styles.complete}>
                 <Feather name="check-circle" size={21} color={Colors.success} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.completeTitle}>Session complete</Text>
+                  <Text style={styles.completeTitle}>
+                    {sessionSaved ? 'Session complete' : 'Timer finished'}
+                  </Text>
                   <Text style={appUiStyles.muted}>
                     {completedFocusCycles(clock)} focused{' '}
-                    {completedFocusCycles(clock) === 1 ? 'cycle' : 'cycles'} saved.
+                    {completedFocusCycles(clock) === 1 ? 'cycle' : 'cycles'}
+                    {sessionSaved ? ' saved.' : finalizing ? ' — saving...' : ' — not yet saved.'}
                   </Text>
                 </View>
               </View>
@@ -465,19 +517,32 @@ export default function FocusScreen() {
               </View>
             )}
             {clock.complete ? (
+              <>
+              {!sessionSaved && !finalizing ? (
+                <AppButton
+                  label="Retry saving session"
+                  variant="secondary"
+                  onPress={() => setFinalizeAttempt((attempt) => attempt + 1)}
+                  style={{ marginTop: 16 }}
+                />
+              ) : null}
               <AppButton
                 label="Plan another block"
                 icon="rotate-ccw"
+                disabled={finalizing || !sessionSaved}
                 onPress={() => {
                   setClock(EMPTY_CLOCK);
                   setConfig(null);
                   setSessionId(null);
                   sessionIdRef.current = null;
+                  completionSessionRef.current = null;
+                  completedAtRef.current = null;
                   soundSyncGenerationRef.current += 1;
                   lastTickAtRef.current = null;
                 }}
                 style={{ marginTop: 16 }}
               />
+              </>
             ) : null}
           </>
         ) : (
@@ -544,9 +609,6 @@ export default function FocusScreen() {
                 />
               ))}
             </View>
-            {error ? (
-              <Text style={[appUiStyles.error, { marginTop: 13 }]}>{error}</Text>
-            ) : null}
             <AppButton
               label="Begin focus block"
               icon="play"
@@ -557,6 +619,12 @@ export default function FocusScreen() {
             />
           </>
         )}
+        {error || completion.error ? (
+          <Text accessibilityLiveRegion="polite" style={[appUiStyles.error, { marginTop: 13 }]}>
+            {[error, completion.error].filter(Boolean).join(' ')}
+          </Text>
+        ) : null}
+        <ToolCompletionRetry completion={completion} />
       </AppCard>
 
       <OptionalSoundscape

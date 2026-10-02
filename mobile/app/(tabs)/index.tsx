@@ -25,6 +25,8 @@ import { loadTodayAdvisor } from '@/lib/today-advisor';
 import { startAdvisorStep } from '@/lib/advisor-start-runtime';
 import { prefersSmallerStep } from '@/lib/advisor-step-sizing';
 import { dismissAdvisorWelcomeForSession, finishAdvisorWelcome, shouldOfferAdvisorSetup, todayGreeting } from '@/lib/advisor-onboarding';
+import { refreshToolCompletions } from '@/lib/tool-completion-runtime';
+import { TOOL_COMPLETION_LABELS, type ToolCompletion } from '@/lib/tool-completion-storage';
 import { dashboardPreferences } from '@/lib/dashboard-preferences';
 import { dashboardModuleById, dashboardModulesForToday } from '@/lib/dashboard-layout';
 import { useDashboardLayout } from '@/lib/use-dashboard-layout';
@@ -54,6 +56,7 @@ export default function DashboardScreen() {
   const advisorBusyRef = useRef(false);
   const [advisorError, setAdvisorError] = useState('');
   const [advisorRefresh, setAdvisorRefresh] = useState(0);
+  const [toolCompletion, setToolCompletion] = useState<ToolCompletion | null>(null);
   const launchMotion = useLaunchMotion();
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
@@ -108,21 +111,27 @@ export default function DashboardScreen() {
   useEffect(() => {
     const expectedOwnerKey = ownerKey;
     setTodayAdvisor(null);
+    setToolCompletion(null);
     setAdvisorOwnerKey(null);
     setAdvisorError('');
     setAdvisorLoading(Boolean(expectedOwnerKey && profileReady));
     if (!expectedOwnerKey || !profileReady) return;
 
     let active = true;
-    void loadTodayAdvisor({
-      ownerKey: expectedOwnerKey,
-      queryColumn,
-      queryValue: queryValue ?? null,
-      userId: user?.id ?? null,
-    })
-      .then((loaded) => {
+    // Reconcile completed tools and retry pending sync before reading the next step.
+    void refreshToolCompletions(expectedOwnerKey)
+      .catch(() => ({ completion: null }))
+      .then(async ({ completion }) => {
+        if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
+        const loaded = await loadTodayAdvisor({
+          ownerKey: expectedOwnerKey,
+          queryColumn,
+          queryValue: queryValue ?? null,
+          userId: user?.id ?? null,
+        });
         if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
         setTodayAdvisor(loaded);
+        setToolCompletion(completion);
         setAdvisorOwnerKey(expectedOwnerKey);
       })
       .catch(() => {
@@ -232,16 +241,18 @@ export default function DashboardScreen() {
   const visibleAffirmation = moodOwnerKey === ownerKey ? affirmation : '';
   const visibleAffirmationBy = moodOwnerKey === ownerKey ? affirmationBy : '';
   const visibleLowEnergyMode = lowEnergyOwnerKey === ownerKey && lowEnergyMode;
-  const visibleAdvisor = advisorOwnerKey === ownerKey ? todayAdvisor : null;
+  const visibleAdvisor = ownerKey && advisorOwnerKey === ownerKey ? todayAdvisor : null;
   const visibleAdvisorSafety = visibleAdvisor?.recommendation.kind === 'safety';
   const visibleAdvisorAction = visibleAdvisor?.action ?? null;
+  const visibleToolCompletion = visibleAdvisor && !visibleAdvisorSafety && !visibleAdvisorAction
+    ? toolCompletion : null;
   const useSmallerStep = visibleAdvisorAction?.useSmallerStep ??
     (visibleAdvisor ? prefersSmallerStep(visibleAdvisor.context) : visibleLowEnergyMode);
   const visibleAdvisorActionText = visibleAdvisorAction
     ? visibleAdvisorAction.useSmallerStep
       ? visibleAdvisorAction.smallerAction
       : visibleAdvisorAction.action
-    : visibleAdvisor
+    : visibleAdvisor && !visibleToolCompletion
       ? useSmallerStep ? visibleAdvisor.recommendation.smallerAction : visibleAdvisor.recommendation.action
       : null;
   const offerSetup = profileReady && shouldOfferAdvisorSetup(advisorProfile, ownerKey) && !visibleLowEnergyMode;
@@ -271,7 +282,11 @@ export default function DashboardScreen() {
         visibleAdvisorAction, useSmallerStep, () => ownerKeyRef.current === expectedOwner);
       if (!started) return;
       setAdvisorRefresh((value) => value + 1);
-      router.push(started.route as never);
+      if (started.action && started.route === '/ground') {
+        router.push({ pathname: '/ground', params: { sourceStepId: started.action.id } });
+      } else {
+        router.push(started.route as never);
+      }
     } catch {
       if (ownerKeyRef.current === expectedOwner) setAdvisorError('This step could not be started. Please try again.');
     } finally {
@@ -365,13 +380,14 @@ export default function DashboardScreen() {
             lowEnergy={visibleLowEnergyMode}
             currentAction={visibleAdvisorActionText}
             actionStatus={visibleAdvisorAction?.status ?? null}
-            completed={visibleAdvisor?.targetCompleted ?? false}
+            completed={Boolean(visibleAdvisor?.targetCompleted || visibleToolCompletion)}
             loading={advisorBusy || (!offerSetup && advisorLoading)}
             offerSetup={offerSetup}
             onSetup={() => router.push({ pathname: '/advisor-setup', params: { mode: 'welcome', returnTo: 'today' } })}
             onSkip={() => void skipSetup()}
-            onStart={visibleAdvisor && !visibleAdvisor.targetCompleted && visibleAdvisorAction?.status !== 'needs_recovery'
+            onStart={visibleAdvisor && !visibleAdvisor.targetCompleted && !visibleToolCompletion && visibleAdvisorAction?.status !== 'needs_recovery'
               ? () => void startNextStep() : undefined}
+            completionLabel={visibleToolCompletion ? TOOL_COMPLETION_LABELS[visibleToolCompletion.kind] : null}
             onOpen={() => router.navigate('/advisor')}
           />
         ) : null}

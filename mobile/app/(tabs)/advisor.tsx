@@ -27,7 +27,6 @@ import {
   acceptAdvisorAction,
   clearAdvisorAction,
   deferAdvisorActionFollowUp,
-  loadAdvisorAction,
   resizeAdvisorAction,
   setAdvisorActionFollowUp,
   setAdvisorActionReminder,
@@ -61,12 +60,13 @@ import {
 } from '@/lib/advisor-outcome-storage';
 import {
   completeAdvisorLifecycle,
-  reconcileAdvisorLifecycle,
   recoverAdvisorLifecycle,
   replaceAdvisorLifecycle,
 } from '@/lib/advisor-lifecycle-runtime';
 import { evaluateAdvisorChangeSignals } from '@/lib/advisor-observation-ledger';
 import { checkAdvisorTargetCompletion } from '@/lib/advisor-target-completion-runtime';
+import { refreshToolCompletions } from '@/lib/tool-completion-runtime';
+import { TOOL_COMPLETION_LABELS, type ToolCompletion } from '@/lib/tool-completion-storage';
 import { useAuth } from '@/lib/auth-context';
 import { ensureAiDataSharingConsent, hasAiDataSharingConsent } from '@/lib/ai-consent';
 import { appleHealthPreference } from '@/lib/apple-health-preference';
@@ -324,6 +324,7 @@ export default function AdvisorScreen() {
     ownerKey: string;
     action: string;
   } | null>(null);
+  const dismissedCompletionRef = useRef<{ ownerKey: string; id: string } | null>(null);
   const [context, setContext] = useState<AdvisorContext | null>(null);
   const [recommendation, setRecommendation] = useState<AdvisorRecommendation | null>(null);
   const [brief, setBrief] = useState<AdvisorDailyBrief | null>(null);
@@ -331,6 +332,7 @@ export default function AdvisorScreen() {
   const [outcomes, setOutcomes] = useState<AdvisorOutcome[]>([]);
   const [activeAdvisorAction, setActiveAdvisorAction] =
     useState<AdvisorActionInstance | null>(null);
+  const [toolCompletion, setToolCompletion] = useState<ToolCompletion | null>(null);
   const [stateOwnerKey, setStateOwnerKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -354,6 +356,7 @@ export default function AdvisorScreen() {
       setAdvisorModel(null);
       setOutcomes([]);
       setActiveAdvisorAction(null);
+      setToolCompletion(null);
       setStateOwnerKey(null);
       setLoading(true);
       setBusy(false);
@@ -368,9 +371,7 @@ export default function AdvisorScreen() {
         load: async ({ isCurrent, allowConsent }) => {
           setNowTick(Date.now());
           setError('');
-          await reconcileAdvisorLifecycle(expectedOwner);
-          if (!isCurrent()) return;
-          const [context, localOutcomes, loadedAction] = await Promise.all([
+          const [context, localOutcomes] = await Promise.all([
             loadAmbientAdvisorContext({
               ownerKey: expectedOwner,
               queryColumn,
@@ -378,10 +379,39 @@ export default function AdvisorScreen() {
               userId: user?.id ?? null,
             }),
             loadAdvisorOutcomes(expectedOwner),
-            loadAdvisorAction(expectedOwner),
           ]);
           if (!isCurrent()) return;
-          let storedAction = loadedAction;
+          const safetySelection = selectAdvisorRecommendation(
+            context, localOutcomes, advisorLoopSelectionOptions(localOutcomes, context.nowIso)
+          );
+          if (safetySelection.kind === 'safety') {
+            // Publish support before entering any serialized lifecycle or notification work.
+            setContext(context);
+            setRecommendation(safetySelection);
+            setBrief(deterministicBrief(context, safetySelection, null));
+            setAdvisorModel(null);
+            setOutcomes(localOutcomes);
+            setActiveAdvisorAction(null);
+            setToolCompletion(null);
+            setUseSmallerStep(false);
+            setStateOwnerKey(expectedOwner);
+            setLoading(false);
+            try {
+              const { action: previousAction } = await refreshToolCompletions(expectedOwner);
+              if (!isCurrent()) return;
+              if (previousAction?.reminderAt || previousAction?.followUpAt) {
+                if (previousAction.reminderAt) await cancelAdvisorReminder();
+                if (!isCurrent()) return;
+                await setAdvisorActionFollowUp(expectedOwner, previousAction.id, null, null);
+              }
+            } catch {
+              if (isCurrent()) setError('Support is available. An earlier reminder could not be cleared; we will retry when you return.');
+            }
+            return;
+          }
+          const completionState = await refreshToolCompletions(expectedOwner);
+          if (!isCurrent()) return;
+          let storedAction = completionState.action;
           if (storedAction?.reminderAt) {
             const reminderIsFuture =
               new Date(storedAction.reminderAt).getTime() > Date.now();
@@ -399,7 +429,8 @@ export default function AdvisorScreen() {
             }
           }
           if (!isCurrent()) return;
-          let reconciledOutcomes = localOutcomes;
+          let reconciledOutcomes = await loadAdvisorOutcomes(expectedOwner);
+          if (!isCurrent()) return;
           const targetCompleted = storedAction
             ? await checkAdvisorTargetCompletion(
                 storedAction,
@@ -413,8 +444,7 @@ export default function AdvisorScreen() {
             : false;
           if (!isCurrent()) return;
           if (storedAction && targetCompleted) {
-            await completeAdvisorLifecycle(expectedOwner, storedAction);
-            storedAction = null;
+            storedAction = await completeAdvisorLifecycle(expectedOwner, storedAction);
             reconciledOutcomes = await loadAdvisorOutcomes(expectedOwner);
           }
           if (!isCurrent()) return;
@@ -425,23 +455,23 @@ export default function AdvisorScreen() {
             reconciledOutcomes,
             selectionOptions
           );
-          if (deterministicSelection.kind === 'safety') {
-            if (storedAction?.reminderAt || storedAction?.followUpAt) {
-              if (storedAction.reminderAt) await cancelAdvisorReminder();
-              if (!isCurrent()) return;
-              await setAdvisorActionFollowUp(expectedOwner, storedAction.id, null, null);
-              if (!isCurrent()) return;
-            }
+          const completedTool = completionState.completion;
+          if (
+            !storedAction && completedTool &&
+            !(dismissedCompletionRef.current?.ownerKey === expectedOwner &&
+              dismissedCompletionRef.current.id === completedTool.id)
+          ) {
             setContext(context);
             setRecommendation(deterministicSelection);
-            setBrief(deterministicBrief(context, deterministicSelection, null));
+            setBrief(null);
             setAdvisorModel(null);
-            setOutcomes(reconciledOutcomes);
             setActiveAdvisorAction(null);
-            setUseSmallerStep(false);
+            setOutcomes(reconciledOutcomes);
+            setToolCompletion(completedTool);
             setStateOwnerKey(expectedOwner);
             return;
           }
+          setToolCompletion(null);
           if (!context.profile?.completedAt) {
             setContext(context);
             setRecommendation(deterministicSelection);
@@ -559,6 +589,10 @@ export default function AdvisorScreen() {
   const currentAdvisorAction = recommendation?.kind === 'safety'
     ? null
     : activeAdvisorAction;
+  const visibleToolCompletion = stateOwnerKey === ownerKey &&
+    recommendation?.kind !== 'safety' && !currentAdvisorAction
+    ? toolCompletion
+    : null;
   const actionIsPlanned = currentAdvisorAction?.status === 'accepted';
   const actionIsStarted = currentAdvisorAction?.status === 'in_progress'
     || currentAdvisorAction?.status === 'needs_recovery';
@@ -566,11 +600,13 @@ export default function AdvisorScreen() {
     ? currentAdvisorAction.useSmallerStep
       ? currentAdvisorAction.smallerAction
       : currentAdvisorAction.action
-    : recommendation
-      ? useSmallerStep
-      ? recommendation.smallerAction
-        : recommendation.action
-    : '';
+    : visibleToolCompletion
+      ? TOOL_COMPLETION_LABELS[visibleToolCompletion.kind]
+      : recommendation
+        ? useSmallerStep
+          ? recommendation.smallerAction
+          : recommendation.action
+        : '';
   const originalAction = currentAdvisorAction?.action ?? recommendation?.action ?? '';
   const smallerAction = currentAdvisorAction?.smallerAction ?? recommendation?.smallerAction ?? '';
   const activeSourceLabels = currentAdvisorAction?.sourceLabels ?? recommendation?.sourceLabels ?? [];
@@ -752,6 +788,14 @@ export default function AdvisorScreen() {
     }
   }, [activeAction, ownerKey, stateOwnerKey]);
 
+  const openAdvisorAction = (action: AdvisorActionInstance) => {
+    if (action.route === '/ground') {
+      router.push({ pathname: '/ground', params: { sourceStepId: action.id } });
+    } else {
+      router.push(action.route as never);
+    }
+  };
+
   const startRecommendation = async () => {
     if (!recommendation || !ownerKey || busy || stateOwnerKey !== ownerKey) return;
     const expectedOwner = ownerKey;
@@ -766,7 +810,8 @@ export default function AdvisorScreen() {
         useSmallerStep, operation.isCurrent);
       if (!started) return;
       setActiveAdvisorAction(started.action);
-      router.push(started.route as never);
+      if (started.action) openAdvisorAction(started.action);
+      else router.push(started.route as never);
     } catch {
       if (operation.isCurrent()) {
         setError('This step could not be started. Please try again.');
@@ -783,10 +828,19 @@ export default function AdvisorScreen() {
     if (!context || !recommendation || !ownerKey || busy || stateOwnerKey !== ownerKey) {
       return;
     }
+    if (toolCompletion && !context.profile?.completedAt) {
+      router.push('/advisor-setup' as never);
+      return;
+    }
     const expectedOwner = ownerKey;
-    const currentRecommendation = recommendation;
     const operation = beginMutation(expectedOwner);
     if (!operation) return;
+    const completedRecommendationId = toolCompletion?.sourceStepId
+      ? outcomes.find((outcome) => outcome.actionId === toolCompletion.sourceStepId)?.recommendationId
+      : null;
+    const currentRecommendation = completedRecommendationId
+      ? { ...recommendation, id: completedRecommendationId }
+      : recommendation;
     setBusy(true);
     setError('');
     setStatus('');
@@ -799,9 +853,13 @@ export default function AdvisorScreen() {
         ...outcomes,
       ];
       const options = {
-          preserveToday: false,
-          excludeRecommendationId: currentRecommendation.id,
-          candidateFamily: currentRecommendation.id.split(':')[0],
+        preserveToday: false,
+        excludeRecommendationId: toolCompletion && !completedRecommendationId
+          ? undefined
+          : currentRecommendation.id,
+        candidateFamily: toolCompletion && !completedRecommendationId
+          ? undefined
+          : currentRecommendation.id.split(':')[0],
       };
       const selected = selectAdvisorRecommendation(
         context,
@@ -842,6 +900,10 @@ export default function AdvisorScreen() {
         brief: nextBrief,
       }).catch(() => undefined);
       if (!operation.isCurrent()) return;
+      if (toolCompletion) {
+        dismissedCompletionRef.current = { ownerKey: expectedOwner, id: toolCompletion.id };
+      }
+      setToolCompletion(null);
       setRecommendation(nextRecommendation);
       setBrief(nextBrief);
       setAdvisorModel(null);
@@ -1185,6 +1247,43 @@ export default function AdvisorScreen() {
     });
   };
 
+  const helpfulnessFeedback = pendingFeedback ? (
+    <AppCard quiet style={styles.feedbackCard}>
+      <Text accessibilityRole="header" style={styles.feedbackTitle}>
+        Did your last step help?
+      </Text>
+      <View style={styles.feedbackActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Yes, my last Advisor step helped"
+          disabled={busy}
+          onPress={() => void answerHelpfulness(true)}
+          style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.feedbackButtonText}>Yes</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="My last Advisor step did not help"
+          disabled={busy}
+          onPress={() => void answerHelpfulness(false)}
+          style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.feedbackButtonText}>Not for me</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Skip Advisor feedback"
+          disabled={busy}
+          onPress={() => void answerHelpfulness(null)}
+          style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.feedbackButtonText}>Skip</Text>
+        </Pressable>
+      </View>
+    </AppCard>
+  ) : null;
+
   return (
     <AppScreen>
       <BotanicalHero style={styles.hero}>
@@ -1204,7 +1303,29 @@ export default function AdvisorScreen() {
       {loading ? <InlineStatus tone="info" message="Loading your current recommendation…" /> : null}
       {error ? <InlineStatus tone="error" message={error} /> : null}
 
-      {!loading && recommendation && stateOwnerKey === ownerKey ? (
+      {!loading && visibleToolCompletion ? (
+        <>
+          <AppCard style={styles.currentCard} tone="tinted">
+            <Text style={styles.eyebrow}>COMPLETED TODAY</Text>
+            <Text accessibilityRole="header" style={styles.action}>
+              {TOOL_COMPLETION_LABELS[visibleToolCompletion.kind]}
+            </Text>
+            <Text style={styles.checkInBody}>
+              You can leave it here, or choose another step when you’re ready.
+            </Text>
+            <AppButton
+              label="Choose another step"
+              icon="arrow-right"
+              loading={busy}
+              onPress={() => void generateAnotherRecommendation()}
+            />
+          </AppCard>
+          {helpfulnessFeedback}
+          {status ? <InlineStatus tone="success" message={status} /> : null}
+        </>
+      ) : null}
+
+      {!loading && !visibleToolCompletion && recommendation && stateOwnerKey === ownerKey ? (
         <>
           {brief ? (
             <AppCard style={styles.briefCard}>
@@ -1441,42 +1562,7 @@ export default function AdvisorScreen() {
             </DisclosureCard>
           ) : null}
 
-          {pendingFeedback ? (
-            <AppCard quiet style={styles.feedbackCard}>
-              <Text accessibilityRole="header" style={styles.feedbackTitle}>
-                Did your last step help?
-              </Text>
-              <View style={styles.feedbackActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Yes, my last Advisor step helped"
-                  disabled={busy}
-                  onPress={() => void answerHelpfulness(true)}
-                  style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
-                >
-                  <Text style={styles.feedbackButtonText}>Yes</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="My last Advisor step did not help"
-                  disabled={busy}
-                  onPress={() => void answerHelpfulness(false)}
-                  style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
-                >
-                  <Text style={styles.feedbackButtonText}>Not for me</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Skip Advisor feedback"
-                  disabled={busy}
-                  onPress={() => void answerHelpfulness(null)}
-                  style={({ pressed }) => [styles.feedbackButton, pressed && styles.pressed]}
-                >
-                  <Text style={styles.feedbackButtonText}>Skip</Text>
-                </Pressable>
-              </View>
-            </AppCard>
-          ) : null}
+          {helpfulnessFeedback}
 
           {status ? <InlineStatus tone="success" message={status} /> : null}
           <DisclosureCard

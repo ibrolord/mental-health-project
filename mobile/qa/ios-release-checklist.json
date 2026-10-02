@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-09-27.4",
+  "checklistVersion": "2026-10-02.1",
   "platform": "ios",
-  "expectedInventory": { "routes": 38, "routeChecks": 786, "workflows": 129, "total": 915 },
+  "expectedInventory": { "routes": 38, "routeChecks": 796, "workflows": 133, "total": 929 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -67,6 +67,10 @@
       "advisor.recovery-loop": { "identityRequirements": ["saved-anonymous"] },
       "advisor.foreground-reconcile": { "identityRequirements": ["saved-anonymous"] },
       "advisor.target-completion": { "identityRequirements": ["saved-anonymous"] },
+      "advisor.tool-completion": { "identityRequirements": ["saved-anonymous"] },
+      "data.tool-completion-boundaries": { "identityRequirements": ["saved-anonymous"] },
+      "data.tool-completion-offline": { "identityRequirements": ["saved-anonymous"] },
+      "privacy.tool-completion-lifecycle": { "identityRequirements": ["saved-anonymous", "email-owner"] },
       "advisor.weekly-review": { "identityRequirements": ["saved-anonymous"] },
       "advisor.notification-optout": { "identityRequirements": ["saved-anonymous"] },
       "privacy.export": { "identityRequirements": ["email-owner"] },
@@ -138,7 +142,7 @@
       "source": "app/(tabs)/advisor.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous", "email-owner"],
-      "controls": ["support", "start", "make-smaller", "schedule-check-in", "accountability-done", "accountability-partly", "accountability-not-yet", "recovery-reason", "recovery-make-smaller", "recovery-check-in-later", "weekly-review", "helpful-yes", "helpful-no", "helpful-skip", "why-this-step", "try-another", "share-with-together", "talk-this-through", "recent-steps", "safety-support", "include-apple-health"]
+      "controls": ["support", "start", "make-smaller", "schedule-check-in", "accountability-done", "accountability-partly", "accountability-not-yet", "recovery-reason", "recovery-make-smaller", "recovery-check-in-later", "weekly-review", "helpful-yes", "helpful-no", "helpful-skip", "why-this-step", "try-another", "choose-another-step", "share-with-together", "talk-this-through", "recent-steps", "safety-support", "include-apple-health"]
     },
     {
       "id": "advisor-setup",
@@ -242,7 +246,7 @@
       "source": "app/focus.tsx",
       "kind": "stack",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["task", "focus-minutes", "break-minutes", "cycles", "presets", "soundscape", "begin", "pause", "continue", "stop", "plan-another"]
+      "controls": ["task", "focus-minutes", "break-minutes", "cycles", "presets", "soundscape", "begin", "pause", "continue", "stop", "retry-save", "plan-another", "retry-completion"]
     },
     {
       "id": "goals",
@@ -258,7 +262,7 @@
       "source": "app/ground.tsx",
       "kind": "stack",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["panic", "detached", "flashback", "overwhelmed", "spiraling", "unsure", "why-this", "choose-another", "support-resources", "optional-sound"]
+      "controls": ["panic", "detached", "flashback", "overwhelmed", "spiraling", "unsure", "why-this", "choose-another", "support-resources", "optional-sound", "retry-completion"]
     },
     {
       "id": "habits",
@@ -274,7 +278,7 @@
       "source": "app/journal.tsx",
       "kind": "stack",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["new-close", "title", "entry", "tags", "favorite", "context-toggle", "save", "double-submit", "search", "filters", "edit", "delete", "library-prefill"]
+      "controls": ["new-close", "title", "entry", "tags", "favorite", "context-toggle", "save", "double-submit", "search", "filters", "edit", "delete", "library-prefill", "retry-completion"]
     },
     {
       "id": "guided-reflection",
@@ -282,7 +286,7 @@
       "source": "app/reflect.tsx",
       "kind": "stack",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["template-select", "more-templates", "restore-encrypted-draft", "response-input", "previous-step", "next-step", "save-to-journal", "open-journal", "start-another", "weekly-pattern-deep-link"]
+      "controls": ["template-select", "more-templates", "restore-encrypted-draft", "response-input", "previous-step", "next-step", "save-to-journal", "open-journal", "start-another", "weekly-pattern-deep-link", "retry-completion"]
     },
     {
       "id": "saved",
@@ -306,7 +310,7 @@
       "source": "app/meditate.tsx",
       "kind": "stack",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["all-filter", "issue-filters", "open-practice", "start", "pause", "resume", "resume-after-relaunch", "version-conflict", "reset", "sound", "choose-another"]
+      "controls": ["all-filter", "issue-filters", "open-practice", "start", "pause", "resume", "resume-after-relaunch", "version-conflict", "reset", "sound", "choose-another", "retry-completion"]
     },
     {
       "id": "yoga",
@@ -314,7 +318,7 @@
       "source": "app/yoga.tsx",
       "kind": "stack",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["sequence-select", "chair-practice", "floor-practice", "pose-images", "start", "pause", "resume", "reset", "step-navigation", "choose-another", "sound", "safety-copy"]
+      "controls": ["sequence-select", "chair-practice", "floor-practice", "pose-images", "start", "pause", "resume", "reset", "step-navigation", "choose-another", "sound", "safety-copy", "retry-completion"]
     },
     {
       "id": "mind-games",
@@ -322,7 +326,7 @@
       "source": "app/mind-games.tsx",
       "kind": "stack",
       "identityRequirements": ["fresh-anonymous"],
-      "controls": ["open-each-game", "color-switch", "paced-counting", "category-fluency", "memory-sequence", "sensory-scan", "number-flow", "number-difficulty", "number-answer", "start", "pause", "reset", "new-round", "exit-game"]
+      "controls": ["open-each-game", "color-switch", "paced-counting", "category-fluency", "memory-sequence", "sensory-scan", "number-flow", "number-difficulty", "number-answer", "start", "pause", "reset", "new-round", "finish-sequence", "exit-game", "retry-completion"]
     },
     {
       "id": "accountability",
@@ -520,6 +524,10 @@
     { "id": "advisor.follow-up-persistence", "area": "advisor", "kind": "manual", "title": "A scheduled Advisor check-in survives notification delivery, dismissal, force quit, relaunch, and foreground reconciliation until the user records an outcome" },
     { "id": "advisor.recovery-loop", "area": "advisor", "kind": "manual", "title": "Done, Partly, and Not yet record distinct outcomes; barrier selection offers make-smaller, check-in-later, and choose-another recovery without shame or duplicate records" },
     { "id": "advisor.foreground-reconcile", "area": "advisor", "kind": "manual", "title": "Returning from background reconciles the native reminder mirror while retaining the durable follow-up and showing a due check-in when appropriate" },
+    {"id": "advisor.tool-completion", "area": "advisor", "kind": "manual", "title": "Start the Advisor grounding step, finish it, return to Today and Advisor, and relaunch; the exact step closes once and another step appears only after Choose another step; active steps and safety guidance retain priority"},
+    {"id": "data.tool-completion-boundaries", "area": "data", "kind": "manual", "title": "Finish grounding, meditation, yoga, every game, a new journal entry, reflection, and focus; each records once, while browsing, edits, pause, reset, cancellation, skipped practice steps and failed saves do not; retries and a new run remain usable"},
+    {"id": "data.tool-completion-offline", "area": "data", "kind": "manual", "title": "Complete an offline-capable practice offline, return to Today, relaunch, reconnect and refresh; one acknowledgement and one remote completion survive the retry"},
+    {"id": "privacy.tool-completion-lifecycle", "area": "privacy", "kind": "manual", "title": "Verify owner isolation, anonymous upgrade during upload, export including pending completions, sign-out cleanup, and saved-data/account deletion during upload or app termination without resurrection"},
     { "id": "advisor.target-completion", "area": "advisor", "kind": "manual", "title": "Completing the linked goal or today's linked habit closes the matching Advisor step once; unrelated records and Together commitments never close it" },
     { "id": "advisor.weekly-review", "area": "advisor", "kind": "manual", "title": "The seven-day review reports separate started, done, partly, and reset counts without a composite wellbeing score and updates after each resolution" },
     { "id": "advisor.notification-optout", "area": "notification", "kind": "manual", "title": "Advisor check-ins remain explicitly scheduled and category-controlled; disabling the category cancels pending native reminders without deleting recorded action history" },

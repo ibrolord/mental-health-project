@@ -99,6 +99,16 @@ function sorted(values: Iterable<string>): string[] {
   return Array.from(values).sort();
 }
 
+function isCanonicalDirectLink(name: string, url: string): boolean {
+  if (name === 'canonical_website') {
+    return url === 'https://mhtoolkit.vercel.app/';
+  }
+  if (name === 'ios_app_store') {
+    return /^https:\/\/apps\.apple\.com\/(?:[a-z]{2}\/)?app\/mhtoolkit\/id6760159800$/.test(url);
+  }
+  return false;
+}
+
 describe('campaign attribution taxonomy', () => {
   it('uses the direct challenge defaults without campaign parameters', () => {
     const params = new URLSearchParams();
@@ -183,7 +193,42 @@ describe('campaign attribution taxonomy', () => {
     });
   });
 
-  it('keeps every published campaign link inside the taxonomy', () => {
+  it('limits direct links to the canonical website and MHtoolkit App Store routes', () => {
+    expect(
+      isCanonicalDirectLink('canonical_website', 'https://mhtoolkit.vercel.app/')
+    ).toBe(true);
+    for (const locale of ['', 'ca/', 'us/', 'gb/']) {
+      expect(
+        isCanonicalDirectLink(
+          'ios_app_store',
+          `https://apps.apple.com/${locale}app/mhtoolkit/id6760159800`
+        )
+      ).toBe(true);
+    }
+
+    for (const url of [
+      'https://example.org/',
+      'https://mhtoolkit.vercel.app.evil.example/',
+      'https://mhtoolkit.vercel.app/redirect',
+      'https://mhtoolkit.vercel.app/?utm_source=community',
+      'https://apps.apple.com.evil.example/ca/app/mhtoolkit/id6760159800',
+      'https://apps.apple.com@evil.example/ca/app/mhtoolkit/id6760159800',
+      'http://apps.apple.com/ca/app/mhtoolkit/id6760159800',
+      'https://apps.apple.com/ca/app/another-app/id6760159800',
+      'https://apps.apple.com/ca/app/mhtoolkit/id1234567890',
+      'https://apps.apple.com/ca/app/mhtoolkit/id6760159800/redirect',
+      'https://apps.apple.com/ca/app/mhtoolkit/id6760159800?utm_source=community',
+      'https://apps.apple.com/ca/app/mhtoolkit/id6760159800#recipient',
+    ]) {
+      expect(isCanonicalDirectLink('canonical_website', url)).toBe(false);
+      expect(isCanonicalDirectLink('ios_app_store', url)).toBe(false);
+    }
+    expect(
+      isCanonicalDirectLink('community_email', 'https://mhtoolkit.vercel.app/')
+    ).toBe(false);
+  });
+
+  it('keeps published links either explicitly direct or inside the campaign taxonomy', () => {
     const csv = readFileSync(
       resolve(process.cwd(), 'docs/launch/campaign-links.csv'),
       'utf8'
@@ -192,6 +237,8 @@ describe('campaign attribution taxonomy', () => {
 
     expect(rows.length).toBeGreaterThan(0);
 
+    const directNames: string[] = [];
+    let campaignCount = 0;
     for (const row of rows) {
       const columns = row.split(',');
       expect(columns).toHaveLength(4);
@@ -199,7 +246,26 @@ describe('campaign attribution taxonomy', () => {
       const url = new URL(columns[3]);
       const attribution = campaignFromSearchParams(url.searchParams);
 
+      if (['canonical_website', 'ios_app_store'].includes(columns[0])) {
+        expect(isCanonicalDirectLink(columns[0], columns[3])).toBe(true);
+        expect(isCampaignLink(url.searchParams)).toBe(false);
+        expect(url.search).toBe('');
+        directNames.push(columns[0]);
+        continue;
+      }
+
+      campaignCount += 1;
       expect(url.origin).toBe('https://mhtoolkit.vercel.app');
+      expect(url.pathname).toBe('/');
+      expect(url.username).toBe('');
+      expect(url.password).toBe('');
+      expect(url.hash).toBe('');
+      expect([...url.searchParams.keys()].sort()).toEqual([
+        'utm_campaign',
+        'utm_content',
+        'utm_medium',
+        'utm_source',
+      ]);
       expect(isCampaignLink(url.searchParams)).toBe(true);
       expect(attribution).toEqual({
         source: url.searchParams.get('utm_source'),
@@ -209,6 +275,8 @@ describe('campaign attribution taxonomy', () => {
       });
       expect(Object.values(attribution)).not.toContain('other');
     }
+    expect(directNames.sort()).toEqual(['canonical_website', 'ios_app_store']);
+    expect(campaignCount).toBeGreaterThan(0);
   });
 
   it('keeps published attribution labels aligned across web, mobile, and SQL', () => {
@@ -364,7 +432,11 @@ describe('campaign attribution taxonomy', () => {
     }
   });
 
-  it.skipIf(!hasOutreachLog)('keeps every outreach link canonical and reconciles the first wave', () => {
+  it.skipIf(!hasOutreachLog)('keeps every outreach link canonical and reconciles the first wave', async () => {
+    // The verifier is also gitignored; clean clones must not import it eagerly.
+    const verifierPath = resolve(process.cwd(), 'scripts/verify-outreach-ledger.mjs');
+    const { parseCsv }: { parseCsv: (source: string) => string[][] } =
+      await import(verifierPath);
     const canonicalCsv = readFileSync(
       resolve(process.cwd(), 'docs/launch/campaign-links.csv'),
       'utf8'
@@ -380,14 +452,10 @@ describe('campaign attribution taxonomy', () => {
       resolve(process.cwd(), 'docs/launch/outreach-log.csv'),
       'utf8'
     );
-    const rows = outreachCsv
-      .trim()
-      .split(/\r?\n/)
-      .slice(1)
-      .map((row) => row.split(','));
+    const rows: string[][] = parseCsv(outreachCsv).slice(1);
 
     for (const row of rows) {
-      expect(row).toHaveLength(9);
+      expect(row.length).toBe(9);
       expect(canonicalUrls.has(row[4])).toBe(true);
     }
 
@@ -404,15 +472,18 @@ describe('campaign attribution taxonomy', () => {
       (row) => !row[6].startsWith('bounced_')
     );
     const founderPosts = rows.filter(
-      (row) => ['linkedin', 'x'].includes(row[1]) && row[3] === 'Founder network'
+      (row) =>
+        row[0].startsWith('2026-07-19') &&
+        ['linkedin', 'x'].includes(row[1]) &&
+        row[3] === 'Founder network'
     );
 
     // The private ledger contains the original 40 attempts plus five later,
     // separately reconciled same-day sends. It is intentionally gitignored.
-    expect(july19EmailAttempts).toHaveLength(45);
-    expect(bounced).toHaveLength(3);
-    expect(withoutObservedBounce).toHaveLength(42);
-    expect(founderPosts).toHaveLength(2);
+    expect(july19EmailAttempts.length).toBe(45);
+    expect(bounced.length).toBe(3);
+    expect(withoutObservedBounce.length).toBe(42);
+    expect(founderPosts.length).toBe(2);
   });
 
   it.skipIf(!hasShareKit)('keeps every partner share-kit link canonical and channel matched', () => {

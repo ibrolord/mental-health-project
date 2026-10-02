@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdvisorContext } from '../../mobile/lib/advisor-core';
 import type { AdvisorActionInstance } from '../../mobile/lib/advisor-action-storage';
+import type { AdvisorOutcome } from '../../mobile/lib/advisor-outcome-storage';
+import { selectAdvisorRecommendation } from '../../mobile/lib/advisor-core';
+import { advisorLoopSelectionOptions } from '../../mobile/lib/advisor-loop-selection';
+import { completeAdvisorProfile, defaultAdvisorProfile } from '../../mobile/lib/advisor-profile';
 
 const mocks = vi.hoisted(() => ({
   context: vi.fn(), action: vi.fn(), outcomes: vi.fn(), cache: vi.fn(), completed: vi.fn(),
@@ -70,5 +74,59 @@ describe('Today Advisor read model', () => {
     expect(result.recommendation.kind).toBe('safety');
     expect(result.action).toBeNull();
     expect(mocks.cache).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('matches Advisor after a negatively rated plan and an unavailable newer offer (cached: %s)', async (cached) => {
+    const personalContext: AdvisorContext = {
+      ...context,
+      profile: completeAdvisorProfile({
+        ...defaultAdvisorProfile(context.nowIso),
+        personalPlan: {
+          action: 'Read one page.', motivation: 'Make time for learning.', cue: 'After breakfast.',
+          obstacle: 'time', obstacleDetail: '',
+        },
+      }, context.nowIso),
+    };
+    const plan = selectAdvisorRecommendation(personalContext);
+    expect(plan.id).toMatch(/^personal-plan:/);
+    const completed: AdvisorOutcome = {
+      recommendationId: plan.id, offeredAt: '2026-09-27T09:00:00.000Z',
+      startedAt: '2026-09-27T09:01:00.000Z', completedAt: '2026-09-27T09:05:00.000Z',
+      resolution: 'completed', resolvedAt: '2026-09-27T09:05:00.000Z',
+      helpful: false, feedbackAt: '2026-09-27T09:06:00.000Z',
+    };
+    const unavailable: AdvisorOutcome = {
+      recommendationId: 'goal:removed', offeredAt: '2026-09-27T10:00:00.000Z',
+      startedAt: null, completedAt: null, helpful: null, feedbackAt: null,
+    };
+    const outcomes = [unavailable, completed];
+    const expected = selectAdvisorRecommendation(personalContext, outcomes,
+      advisorLoopSelectionOptions(outcomes, personalContext.nowIso));
+    // Without the loop exclusions, the preserve-today shortcut revives the plan.
+    expect(selectAdvisorRecommendation(personalContext, outcomes).id).toBe(plan.id);
+    expect(expected.id).not.toBe(plan.id);
+    mocks.context.mockResolvedValue(personalContext);
+    mocks.outcomes.mockResolvedValue(outcomes);
+    if (cached) mocks.cache.mockResolvedValue({ recommendation: plan });
+    expect((await loadTodayAdvisor(owner)).recommendation).toEqual(expected);
+  });
+
+  it('does not let an older cached suggestion replace a newly authored personal plan', async () => {
+    const older = selectAdvisorRecommendation(context);
+    const personalContext: AdvisorContext = {
+      ...context,
+      profile: completeAdvisorProfile({
+        ...defaultAdvisorProfile(context.nowIso),
+        personalPlan: {
+          action: 'Read one page.', motivation: 'Make time for learning.', cue: 'After breakfast.',
+          obstacle: 'time', obstacleDetail: '',
+        },
+      }, context.nowIso),
+    };
+    mocks.context.mockResolvedValue(personalContext);
+    mocks.cache.mockResolvedValue({ recommendation: older });
+    const result = await loadTodayAdvisor(owner);
+    expect(result.recommendation.id).toMatch(/^personal-plan:/);
+    expect(result.recommendation).toEqual(selectAdvisorRecommendation(personalContext));
   });
 });
