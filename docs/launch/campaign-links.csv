@@ -1,4 +1,6 @@
 name,audience,owner,url
+ios_app_store,Primary download CTA for iPhone audiences; direct App Store link without campaign-level install attribution,Bolaji,https://apps.apple.com/ca/app/mhtoolkit/id6760159800
+canonical_website,Directories requiring a clean official website; direct traffic without directory-specific attribution,Bolaji,https://mhtoolkit.vercel.app/
 founder_linkedin,founder network,Bolaji,https://mhtoolkit.vercel.app/?utm_source=linkedin&utm_medium=organic&utm_campaign=seven_day_check_in&utm_content=founder_note
 founder_x,founder network,Bolaji,https://mhtoolkit.vercel.app/?utm_source=x&utm_medium=organic&utm_campaign=seven_day_check_in&utm_content=founder_note
 founder_email,direct contacts,Bolaji,https://mhtoolkit.vercel.app/?utm_source=founder&utm_medium=email&utm_campaign=seven_day_check_in&utm_content=founder_note

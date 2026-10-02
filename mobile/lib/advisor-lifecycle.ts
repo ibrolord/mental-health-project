@@ -160,7 +160,12 @@ export function createAdvisorLifecycleCoordinator(
       actionId: pending.actionId,
     };
     if (pending.operation === 'start') {
-      await dependencies.startAction(ownerKey, pending.actionId, pending.startedAt);
+      // A recovery attempt needs a new check-in, while the outcome keeps its original start.
+      const started = await dependencies.startAction(ownerKey, pending.actionId, pending.createdAt);
+      if (!started.action || started.action.id !== pending.actionId) {
+        await storage.removeItem(advisorLifecycleStorageKey(ownerKey));
+        return null;
+      }
       await dependencies.recordOffered(ownerKey, reference, pending.createdAt);
       await dependencies.markStarted(
         ownerKey,
@@ -216,6 +221,8 @@ export function createAdvisorLifecycleCoordinator(
   ): Promise<AdvisorActionInstance | null> {
     return serialize(ownerKey, async () => {
       await reconcileUnlocked(ownerKey);
+      const current = await dependencies.loadAction(ownerKey);
+      if (!current || current.id !== pending.actionId) return null;
       const operation: PendingAdvisorLifecycle = { version: 1, ...pending };
       await storage.setItem(
         advisorLifecycleStorageKey(ownerKey),

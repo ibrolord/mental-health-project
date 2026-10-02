@@ -10,6 +10,12 @@ import type {
   AdvisorPriority,
   AdvisorProfile,
 } from './advisor-profile';
+import {
+  COMMITMENT_ACTIONS,
+  normalizePersonalPlan,
+  obstacleResponse,
+  personalPlanKey,
+} from './onboarding-journey';
 
 export type AdvisorSourceKey = 'mood' | 'health' | 'goals' | 'habits';
 
@@ -161,7 +167,7 @@ export type AdvisorRecommendation = {
 type AdvisorRecommendationCandidate = Omit<
   AdvisorRecommendation,
   'observations' | 'changeSignal'
->;
+> & { observations?: readonly string[] };
 
 export type AdvisorRecentRecommendation =
   | string
@@ -330,7 +336,7 @@ function isUnsafeActionText(value: string): boolean {
   );
 }
 
-function sanitizeDisplayText(value: string): string {
+function sanitizeDisplayText(value: string, limit = 80): string {
   const normalized = value
     .normalize('NFKC')
     .replace(
@@ -339,7 +345,7 @@ function sanitizeDisplayText(value: string): string {
     )
     .replace(/\s+/g, ' ')
     .trim();
-  return Array.from(normalized).slice(0, 80).join('');
+  return Array.from(normalized).slice(0, limit).join('');
 }
 
 function quotedActionTitle(value: string): string {
@@ -594,7 +600,87 @@ function healthCandidates(_health: AdvisorHealthFeatures): AdvisorRecommendation
   ];
 }
 
+function personalPlanCandidate(profile: AdvisorProfile | null | undefined): AdvisorRecommendationCandidate | null {
+  if (!profile?.completedAt || !profile.personalPlan) return null;
+  const plan = normalizePersonalPlan(profile.personalPlan);
+  const action = sanitizeDisplayText(plan.action, 120);
+  if (!action) return null;
+  const motivation = sanitizeDisplayText(plan.motivation, 180);
+  const cue = sanitizeDisplayText(plan.cue, 100);
+  const observations = [
+    motivation ? `You chose this because: ${motivation}` : 'This is the small step you chose in your personal plan.',
+    ...(cue ? [`Your cue: ${cue}`] : []),
+    obstacleResponse(plan),
+  ].map(boundedObservation);
+  const priorityRoutes: Record<AdvisorPriority, AdvisorRecommendation['route']> = {
+    mood: '/(tabs)/tracker', habits: '/habits', goals: '/goals', study: '/goals',
+    relationships: '/accountability', sleep: '/ground', movement: '/ground',
+  };
+  const resourceLabels: Record<AdvisorRecommendation['route'], string> = {
+    '/ground': 'Open grounding',
+    '/goals': 'Open goals',
+    '/habits': 'Open habits',
+    '/(tabs)/tracker': 'Open mood tracker',
+    '/plans': 'Open plans',
+    '/resources': 'Find support',
+    '/accountability': 'Open Together',
+  };
+  const route = action === 'Notice five things around me'
+    ? '/ground'
+    : COMMITMENT_ACTIONS.steady.includes(action)
+      ? '/(tabs)/tracker'
+      : COMMITMENT_ACTIONS.routine.includes(action)
+        ? '/habits'
+        : COMMITMENT_ACTIONS['follow-through'].includes(action)
+          ? '/goals'
+          : priorityRoutes[profile.priorities[0]] ?? '/plans';
+  return {
+    id: personalPlanKey(plan),
+    kind: 'standard',
+    observation: observations[0],
+    observations,
+    action,
+    smallerAction: `Start with the easiest part of: ${action}`,
+    route,
+    sourceLabels: ['Your personal plan'],
+    resourceLabel: resourceLabels[route],
+  };
+}
+
 function fallbackCandidates(context: AdvisorContext): AdvisorRecommendationCandidate[] {
+  const priority = context.profile?.completedAt ? context.profile.priorities[0] : null;
+  if (priority === 'habits' || priority === 'goals') {
+    const habit = priority === 'habits';
+    const first: AdvisorRecommendationCandidate = {
+      id: habit ? 'setup-first-habit' : 'setup-first-goal',
+      kind: 'standard',
+      observation: habit ? 'You chose to build a manageable routine.' : 'You chose to follow through on what matters.',
+      action: habit
+        ? 'Choose one habit and make its first step small enough for two minutes.'
+        : 'Spend two minutes naming one goal and its smallest next step.',
+      smallerAction: habit ? 'Write down one habit you want to make easier.' : 'Write down one thing you want to move forward.',
+      route: habit ? '/habits' : '/goals',
+      sourceLabels: ['Your Advisor setup'],
+      resourceLabel: habit ? 'Choose a habit' : 'Choose a goal',
+    };
+    return [first, { ...first, id: `${first.id}:alternate`,
+      action: habit ? 'Choose a time or an existing routine to attach one small habit to.' : 'Pick one goal and write what finishing it would look like.',
+      smallerAction: habit ? 'Name one moment in your day for a small habit.' : 'Write one sentence about why this goal matters.' }];
+  }
+  if (context.profile?.completedAt && context.mood && priority === 'mood') {
+    const first: AdvisorRecommendationCandidate = {
+      id: 'setup-steady-pause',
+      kind: 'standard',
+      observation: 'You chose to make space to feel steadier.',
+      action: 'Take 90 seconds to notice what is around you.',
+      smallerAction: 'Notice one thing you can see and one thing you can feel.',
+      route: '/ground',
+      sourceLabels: ['Your Advisor setup'],
+      resourceLabel: 'Start grounding',
+    };
+    return [first, { ...first, id: `${first.id}:alternate`,
+      action: 'Pause for one minute and name five things you can see.', smallerAction: 'Notice one color around you.' }];
+  }
   if (!context.mood) {
     if (context.sourceAvailability?.mood === 'unavailable') {
       return [
@@ -713,7 +799,10 @@ function habitWeekState(
 }
 
 export function hasUnsafeAdvisorContext(context: AdvisorContext): boolean {
+  const plan = context.profile?.personalPlan;
   return (
+    Boolean(plan && [plan.action, plan.motivation, plan.cue, plan.obstacleDetail]
+      .some((text) => typeof text === 'string' && isUnsafeActionText(text))) ||
     context.goals.some((goal) => isUnsafeActionText(goal.title)) ||
     context.habits.some(
       (habit) =>
@@ -745,7 +834,15 @@ function recommendationCandidates(
   }
   const lowMood = hasCurrentLowMood(context, safeNow);
   const candidates: AdvisorRecommendationCandidate[] = [];
-  if (lowMood) candidates.push(...lowMoodCandidates(context, goal));
+  if (lowMood) {
+    // A low check-in can mean doing less, not abandoning the user's chosen focus.
+    const routineFirst = context.profile?.completedAt && context.profile.priorities[0] === 'habits';
+    if (!goal && routineFirst && habit) candidates.push(...habitCandidates(habit, true));
+    else if (!goal && context.profile?.completedAt && ['habits', 'goals'].includes(context.profile.priorities[0])) {
+      candidates.push(...fallbackCandidates(context));
+    } else candidates.push(...lowMoodCandidates(context, goal));
+  }
+  let hardCandidateCount = candidates.length;
   const goalDueAt = goal ? validDate(goal.dueAt) : null;
   const goalState = goalDueAt
     ? localDayOrdinal(goalDueAt) < localDayOrdinal(safeNow)
@@ -756,7 +853,13 @@ function recommendationCandidates(
     : 'active';
   if (goal && !lowMood && goalState !== 'active') {
     candidates.push(...goalCandidates(goal, goalState));
+    hardCandidateCount = candidates.length;
   }
+  // Keep the local plan out of protected tiers, including their retry/history paths.
+  const personalPlan = !lowMood && goalState === 'active'
+    ? personalPlanCandidate(context.profile)
+    : null;
+  if (personalPlan) candidates.push(personalPlan);
   if (habit) candidates.push(...habitCandidates(habit, habitState === 'stalled'));
   if (
     context.health &&
@@ -769,7 +872,6 @@ function recommendationCandidates(
     candidates.push(...relationshipCandidates());
   }
   candidates.push(...fallbackCandidates(context));
-  const hardCandidateCount = lowMood || (goal && goalState !== 'active') ? 2 : 0;
   if (!context.profile?.completedAt || hardCandidateCount >= candidates.length) {
     return candidates;
   }
@@ -783,7 +885,11 @@ function candidatePriorityIndex(
   candidate: AdvisorRecommendationCandidate,
   priorities: readonly AdvisorPriority[]
 ): number {
-  const sourcePriorities: AdvisorPriority[] = candidate.sourceLabels.includes('Goal')
+  if (candidate.id.startsWith('personal-plan:')) return -1;
+  const sourcePriorities: AdvisorPriority[] = candidate.id === 'setup-first-habit' ? ['habits']
+    : candidate.id === 'setup-first-goal' ? ['goals']
+    : candidate.id === 'setup-steady-pause' ? ['mood']
+    : candidate.sourceLabels.includes('Goal')
     ? ['goals', 'study']
     : candidate.sourceLabels.includes('Habit')
       ? ['habits']
@@ -808,7 +914,7 @@ function prioritizeAdvisorCandidates(
     .map((candidate, index) => ({ candidate, index, rank: candidatePriorityIndex(candidate, profile.priorities) }))
     .sort((left, right) => left.rank - right.rank || left.index - right.index)
     .map(({ candidate, rank }) => Number.isFinite(rank)
-      ? { ...candidate, sourceLabels: [...candidate.sourceLabels, 'Your Advisor setup'] }
+      ? { ...candidate, sourceLabels: [...new Set([...candidate.sourceLabels, 'Your Advisor setup'])] }
       : candidate);
 }
 
@@ -1433,6 +1539,13 @@ function synthesizeRecommendation(
       changeSignal: null,
     };
   }
+  if (candidate.id.startsWith('personal-plan:')) {
+    return {
+      ...candidate,
+      observations: candidate.observations ?? [candidate.observation],
+      changeSignal: null,
+    };
+  }
 
   const stateStream = candidateStream(candidate);
   const signals = getAdvisorChangeSignals(context, recent);
@@ -1545,7 +1658,8 @@ export function selectAdvisorRecommendation(
   options: AdvisorSelectionOptions = {}
 ): AdvisorRecommendation {
   const allCandidates = recommendationCandidates(context);
-  const familyCandidates = options.candidateFamily
+  // A personal plan has one authored action; "try another" can leave that family.
+  const familyCandidates = options.candidateFamily && options.candidateFamily !== 'personal-plan'
     ? allCandidates.filter(
         (candidate) => candidate.id.split(':')[0] === options.candidateFamily
       )
@@ -1555,6 +1669,15 @@ export function selectAdvisorRecommendation(
     return synthesizeRecommendation(context, recent, candidates[0]);
   }
   if (options.preserveToday !== false) {
+    const first = candidates[0];
+    // A newly saved plan replaces an unaccepted suggestion, not a stored commitment.
+    if (
+      first.id.startsWith('personal-plan:') &&
+      first.id !== options.excludeRecommendationId &&
+      !recent.some((item) => (typeof item === 'string' ? item : item.recommendationId) === first.id)
+    ) {
+      return synthesizeRecommendation(context, recent, first);
+    }
     const offeredToday = recommendationOfferedToday(
       context,
       recent,

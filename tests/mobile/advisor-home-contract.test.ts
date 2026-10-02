@@ -8,6 +8,7 @@ const card = read('mobile/components/AdvisorHomeCard.tsx');
 const tabs = read('mobile/app/(tabs)/_layout.tsx');
 const advisor = read('mobile/app/(tabs)/advisor.tsx');
 const dashboardLayout = read('mobile/lib/dashboard-layout.ts');
+const todayAdvisor = read('mobile/lib/today-advisor.ts');
 
 describe('mobile Advisor Home contracts', () => {
   it('keeps Today to greeting, mood, one Advisor doorway, and a compact customizable day', () => {
@@ -20,7 +21,7 @@ describe('mobile Advisor Home contracts', () => {
     expect(home).toContain('Customize your Today page');
     expect(dashboardLayout).toMatch(/mixed:[\s\S]*?'accountability'/);
 
-    const greeting = home.indexOf('{greetingForHour(now.getHours())}');
+    const greeting = home.indexOf('{todayGreeting(now.getHours(), advisorProfile.preferredName)}');
     const mood = home.indexOf('styles.moodSection');
     const advisor = home.indexOf('<AdvisorHomeCard');
     const yourDay = home.indexOf('title="Your day"');
@@ -30,10 +31,15 @@ describe('mobile Advisor Home contracts', () => {
     expect(yourDay).toBeGreaterThan(advisor);
   });
 
-  it('makes Home a read-only Advisor doorway rather than a second recommendation engine', () => {
+  it('uses the shared recommendation engine and lifecycle without a new model request on Today', () => {
     expect(card).toContain('YOUR ADVISOR');
     expect(card).toContain('Open Advisor');
-    expect(home).toContain('loadAdvisorAction(expectedOwnerKey)');
+    expect(home).toContain('loadTodayAdvisor({');
+    expect(home).toContain('startAdvisorStep(expectedOwner');
+    expect(todayAdvisor).toContain('selectAdvisorRecommendation(context, outcomes)');
+    expect(todayAdvisor).not.toContain('requestModelAdvisorRecommendation');
+    expect(todayAdvisor).not.toMatch(/completeAdvisorLifecycle|reconcileAdvisorLifecycle|recordAdvisorOffered|cancelAdvisorReminder/);
+    expect(home).toContain('!visibleAdvisor.targetCompleted');
     expect(home).toContain('currentAction={visibleAdvisorActionText}');
     expect(home).toContain('actionStatus={visibleAdvisorAction?.status ?? null}');
     expect(card).toContain("actionStatus === 'accepted'");
@@ -65,7 +71,7 @@ describe('mobile Advisor Home contracts', () => {
   });
 
   it('surfaces safety support without duplicating the recommendation ledger', () => {
-    expect(home).toContain('hasUnsafeAdvisorContext(advisorContext)');
+    expect(todayAdvisor).toContain("recommendation.kind === 'safety'");
     expect(home).toContain('visibleAdvisorSafety');
     expect(home).toContain('may need support beyond Advisor');
     expect(home).toContain('Find immediate and local support');
@@ -84,9 +90,23 @@ describe('mobile Advisor Home contracts', () => {
     expect(card).toContain('accessible={false}');
     expect(card).toContain('style={styles.artwork}');
     expect(card).toContain('minHeight: 44');
-    expect(card).toContain(
-      "accessibilityLabel={currentAction ? 'Open Advisor step' : 'Open Advisor'}"
-    );
+    expect(card).toContain("'Continue my step' : 'Start my step'");
     expect(home).toContain('accessibilityLabel="Add context to this check-in"');
+  });
+
+  it('offers optional setup without changing saved layouts or requesting permissions', () => {
+    expect(home).toContain('shouldOfferAdvisorSetup(advisorProfile, ownerKey)');
+    expect(home).toContain("mode: 'welcome', returnTo: 'today'");
+    expect(card).toContain('Explore for now');
+    expect(home).not.toMatch(/requestPermissions|ensureAiDataSharingConsent|dashboardLayoutStorage.write/);
+  });
+
+  it('never takes the Advisor interaction lock while skipping setup', () => {
+    const skip = home.slice(home.indexOf('const skipSetup ='), home.indexOf('\n  return (', home.indexOf('const skipSetup =')));
+    expect(skip).toContain('dismissAdvisorWelcomeForSession(ownerKey)');
+    expect(skip).toContain('void saveProfile(');
+    expect(skip).not.toContain('await');
+    expect(skip).not.toContain('setAdvisorBusy(');
+    expect(skip).not.toContain('advisorBusyRef.current =');
   });
 });

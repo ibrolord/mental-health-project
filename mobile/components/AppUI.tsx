@@ -340,6 +340,7 @@ export function AppButton({
   disabled = false,
   loading = false,
   style,
+  labelStyle,
   accessibilityLabel,
 }: {
   label: string;
@@ -349,6 +350,7 @@ export function AppButton({
   disabled?: boolean;
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
+  labelStyle?: StyleProp<TextStyle>;
   accessibilityLabel?: string;
 }) {
   const foreground =
@@ -381,7 +383,7 @@ export function AppButton({
       ) : icon ? (
         <Feather name={icon} size={16} color={foreground} />
       ) : null}
-      <Text style={[styles.buttonText, { color: foreground }]}>{label}</Text>
+      <Text style={[styles.buttonText, { color: foreground }, labelStyle]}>{label}</Text>
     </Pressable>
   );
 }

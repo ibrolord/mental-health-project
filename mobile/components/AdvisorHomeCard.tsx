@@ -7,6 +7,12 @@ type AdvisorHomeCardProps = {
   lowEnergy: boolean;
   currentAction?: string | null;
   actionStatus?: AdvisorActionStatus | null;
+  loading?: boolean;
+  onStart?: () => void;
+  offerSetup?: boolean;
+  onSetup?: () => void;
+  onSkip?: () => void;
+  completed?: boolean;
   onOpen: () => void;
 };
 
@@ -14,10 +20,16 @@ export function AdvisorHomeCard({
   lowEnergy,
   currentAction = null,
   actionStatus = null,
+  loading = false,
+  onStart,
+  offerSetup = false,
+  onSetup,
+  onSkip,
+  completed = false,
   onOpen,
 }: AdvisorHomeCardProps) {
   const { fontScale, width } = useWindowDimensions();
-  const showsArtwork = fontScale < LARGE_TEXT_SCALE && width >= 390;
+  const showsArtwork = !offerSetup && fontScale < LARGE_TEXT_SCALE && width >= 390;
 
   return (
     <View style={styles.card}>
@@ -32,7 +44,7 @@ export function AdvisorHomeCard({
       <View style={[styles.content, showsArtwork && styles.contentWithArtwork]}>
         <Text style={styles.eyebrow}>YOUR ADVISOR</Text>
         <Text accessibilityRole="header" style={styles.heading}>
-          {currentAction
+          {offerSetup ? 'Make this space yours.' : completed ? 'One step forward.' : currentAction
             ? actionStatus === 'accepted'
               ? 'Your planned step.'
               : actionStatus === 'needs_recovery'
@@ -40,20 +52,23 @@ export function AdvisorHomeCard({
                 : 'Your current step.'
             : lowEnergy
               ? 'Start with less.'
-              : 'Your next step is ready.'}
+              : 'One step at a time.'}
         </Text>
         <Text style={styles.description}>
-          {currentAction ?? 'Open Advisor to see what fits today.'}
+          {offerSetup ? 'What would you like support with? Choose a starting point, or explore at your own pace.'
+            : currentAction ?? (loading ? 'Finding a next step...' : 'Open Advisor when you want help choosing what comes next.')}
         </Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={currentAction ? 'Open Advisor step' : 'Open Advisor'}
-          accessibilityHint={currentAction ? 'Review or continue this step' : 'Review your current suggestion'}
-          onPress={onOpen}
-          style={({ pressed }) => [styles.openButton, pressed && styles.pressed]}
+          accessibilityLabel={offerSetup ? 'Choose my focus' : onStart ? (actionStatus === 'in_progress' ? 'Continue my step' : 'Start my step') : 'Open Advisor'}
+          accessibilityHint={offerSetup ? 'Optional setup with your focus and preferred name' : onStart ? 'Open the tool for this step' : 'Review your current suggestion'}
+          disabled={loading}
+          accessibilityState={{ disabled: loading, busy: loading }}
+          onPress={offerSetup ? onSetup : onStart ?? onOpen}
+          style={({ pressed }) => [styles.openButton, (pressed || loading) && styles.pressed]}
         >
           <Text style={styles.openButtonText}>
-            {currentAction
+            {offerSetup ? 'Choose my focus' : completed ? 'Reflect with Advisor' : onStart ? (actionStatus === 'in_progress' ? 'Continue' : 'Start') : currentAction
               ? actionStatus === 'accepted'
                 ? 'Review'
                 : actionStatus === 'needs_recovery'
@@ -62,6 +77,11 @@ export function AdvisorHomeCard({
               : 'Open Advisor'}
           </Text>
           <Feather accessible={false} name="arrow-right" size={17} color={Colors.onPrimary} />
+        </Pressable>
+        <Pressable accessibilityRole="button" disabled={loading}
+          accessibilityLabel={offerSetup ? 'Explore for now' : 'Open Advisor for more support'}
+          onPress={offerSetup ? onSkip : onOpen} style={styles.secondaryButton}>
+          <Text style={styles.secondaryText}>{offerSetup ? 'Explore for now' : 'More with Advisor'}</Text>
         </Pressable>
       </View>
     </View>
@@ -102,5 +122,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   openButtonText: { color: Colors.onPrimary, ...Typography.label },
+  secondaryButton: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  secondaryText: { color: Colors.primary, ...Typography.label },
   pressed: { opacity: 0.72 },
 });

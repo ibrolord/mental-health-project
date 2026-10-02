@@ -4,6 +4,7 @@ import type {
   AdvisorRecentRecommendation,
   AdvisorRecommendation,
 } from './advisor-core';
+import { hasUnsafeAdvisorContext } from './advisor-core';
 import type { AppleHealthAiSummary } from './apple-health-core';
 import {
   advisorMoodLabel,
@@ -45,14 +46,28 @@ export async function requestModelAdvisorRecommendation(
   context: AdvisorContext,
   candidates: readonly AdvisorRecommendation[],
   recent: readonly AdvisorRecentRecommendation[],
-  appleHealthSummary: AppleHealthAiSummary | null = null
+  appleHealthSummary: AppleHealthAiSummary | null = null,
+  requestOptions: { isCurrent?: () => boolean; expectedUserId?: string } = {}
 ): Promise<{
   recommendation: AdvisorRecommendation;
   model: AdvisorModel;
   personalized: boolean;
   brief: AdvisorDailyBrief;
 }> {
-  const signals = createAdvisorBriefSignals(context, appleHealthSummary);
+  if (hasUnsafeAdvisorContext(context)) {
+    throw new Error('Advisor safety guidance must stay local');
+  }
+  // Reject local-only candidates even if a caller forgets to strip the profile.
+  const modelCandidates = candidates.filter((candidate) =>
+    !candidate.id.startsWith('personal-plan:') &&
+    !candidate.sourceLabels.includes('Your personal plan')
+  );
+  if (modelCandidates.length === 0) throw new Error('No model-safe Advisor candidates');
+  const modelContext: AdvisorContext = {
+    ...context,
+    profile: context.profile ? { ...context.profile, personalPlan: undefined } : context.profile,
+  };
+  const signals = createAdvisorBriefSignals(modelContext, appleHealthSummary);
   const response = await apiRequest<AdvisorModelResponse>('/api/advisor', {
     nowIso: context.nowIso,
     mood: context.mood
@@ -61,7 +76,7 @@ export async function requestModelAdvisorRecommendation(
           localDate: context.mood.localDate,
         }
       : null,
-    candidates: candidates.map((candidate) => ({
+    candidates: modelCandidates.map((candidate) => ({
       id: candidate.id,
       observation: candidate.observation,
       observations: candidate.observations.length
@@ -76,28 +91,29 @@ export async function requestModelAdvisorRecommendation(
     recentFeedback: recent
       .filter(
         (item): item is Exclude<AdvisorRecentRecommendation, string> =>
-          typeof item !== 'string'
+          typeof item !== 'string' && !item.recommendationId.startsWith('personal-plan:')
       )
       .slice(0, 5)
       .map((item) => ({
         recommendationId: item.recommendationId,
         helpful: item.helpful ?? null,
       })),
-    profile: context.profile?.completedAt
+    profile: modelContext.profile?.completedAt
       ? {
-          preferredName: context.profile.preferredName,
-          priorities: context.profile.priorities,
-          supportStyle: context.profile.supportStyle,
+          preferredName: modelContext.profile.preferredName,
+          priorities: modelContext.profile.priorities,
+          supportStyle: modelContext.profile.supportStyle,
         }
       : null,
   }, {
     timeoutMs: ADVISOR_MODEL_TIMEOUT_MS,
+    ...requestOptions,
   });
 
   if (response.model === 'safety') {
     throw new Error('Advisor model returned an invalid safety response');
   }
-  const selected = candidates.find(
+  const selected = modelCandidates.find(
     (candidate) => candidate.id === response.selection.candidateId
   );
   if (!selected) throw new Error('Advisor selected an unknown action');

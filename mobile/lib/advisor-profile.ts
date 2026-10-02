@@ -1,3 +1,5 @@
+import { normalizePersonalPlan, type AdvisorPersonalPlan } from './onboarding-journey';
+
 export const ADVISOR_PROFILE_VERSION = 1;
 
 export type AdvisorFocus = 'stability' | 'momentum' | 'recovery' | 'structure';
@@ -26,6 +28,8 @@ export type AdvisorProfile = {
   supportStyle: AdvisorSupportStyle;
   lowEnergyEssentials: AdvisorLowEnergyEssential[];
   completedAt: string | null;
+  onboardingDismissedAt?: string | null;
+  personalPlan?: AdvisorPersonalPlan;
   updatedAt: string;
 };
 
@@ -90,6 +94,8 @@ export function defaultAdvisorProfile(nowIso = new Date().toISOString()): Adviso
     supportStyle: 'gentle',
     lowEnergyEssentials: ['grounding'],
     completedAt: null,
+    onboardingDismissedAt: null,
+    personalPlan: normalizePersonalPlan(null),
     updatedAt: nowIso,
   };
 }
@@ -119,6 +125,7 @@ export function normalizeAdvisorProfile(value: unknown): AdvisorProfile {
   return {
     version: ADVISOR_PROFILE_VERSION,
     preferredName: typeof raw.preferredName === 'string' ? sanitizeAdvisorName(raw.preferredName) : '',
+    personalPlan: normalizePersonalPlan(raw.personalPlan),
     focus,
     priorities: priorities.length ? priorities : prioritiesForAdvisorFocus(focus),
     supportStyle: typeof raw.supportStyle === 'string' && STYLES.has(raw.supportStyle as AdvisorSupportStyle)
@@ -127,6 +134,9 @@ export function normalizeAdvisorProfile(value: unknown): AdvisorProfile {
     lowEnergyEssentials: lowEnergyEssentials.length ? lowEnergyEssentials : ['grounding'],
     completedAt: typeof raw.completedAt === 'string' && Number.isFinite(new Date(raw.completedAt).getTime())
       ? raw.completedAt
+      : null,
+    onboardingDismissedAt: typeof raw.onboardingDismissedAt === 'string' && Number.isFinite(new Date(raw.onboardingDismissedAt).getTime())
+      ? raw.onboardingDismissedAt
       : null,
     updatedAt: typeof raw.updatedAt === 'string' && Number.isFinite(new Date(raw.updatedAt).getTime())
       ? raw.updatedAt

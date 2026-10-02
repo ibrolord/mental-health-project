@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { format } from 'date-fns';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -21,23 +21,15 @@ import {
   SupportAction,
 } from '@/components/AppUI';
 import { BotanicalHero } from '@/components/BotanicalHero';
-import { loadAmbientAdvisorContext } from '@/lib/advisor-context';
-import { hasUnsafeAdvisorContext } from '@/lib/advisor-core';
-import {
-  loadAdvisorAction,
-  type AdvisorActionInstance,
-} from '@/lib/advisor-action-storage';
+import { loadTodayAdvisor } from '@/lib/today-advisor';
+import { startAdvisorStep } from '@/lib/advisor-start-runtime';
+import { prefersSmallerStep } from '@/lib/advisor-step-sizing';
+import { dismissAdvisorWelcomeForSession, finishAdvisorWelcome, shouldOfferAdvisorSetup, todayGreeting } from '@/lib/advisor-onboarding';
 import { dashboardPreferences } from '@/lib/dashboard-preferences';
 import { dashboardModuleById, dashboardModulesForToday } from '@/lib/dashboard-layout';
 import { useDashboardLayout } from '@/lib/use-dashboard-layout';
 import { useAdvisorProfile } from '@/lib/use-advisor-profile';
 import { useLaunchMotion } from '@/components/LaunchExperience';
-
-function greetingForHour(hour: number): string {
-  if (hour < 12) return 'Good morning.';
-  if (hour < 17) return 'Good afternoon.';
-  return 'Good evening.';
-}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -55,10 +47,13 @@ export default function DashboardScreen() {
   const [lowEnergyMode, setLowEnergyMode] = useState(false);
   const [lowEnergyOwnerKey, setLowEnergyOwnerKey] = useState<string | null>(null);
   const [lowEnergyLoadAttempt, setLowEnergyLoadAttempt] = useState(0);
-  const [safetyOwnerKey, setSafetyOwnerKey] = useState<string | null>(null);
-  const [showAdvisorSafety, setShowAdvisorSafety] = useState(false);
-  const [advisorAction, setAdvisorAction] = useState<AdvisorActionInstance | null>(null);
-  const [advisorActionOwnerKey, setAdvisorActionOwnerKey] = useState<string | null>(null);
+  const [todayAdvisor, setTodayAdvisor] = useState<Awaited<ReturnType<typeof loadTodayAdvisor>> | null>(null);
+  const [advisorOwnerKey, setAdvisorOwnerKey] = useState<string | null>(null);
+  const [advisorLoading, setAdvisorLoading] = useState(false);
+  const [advisorBusy, setAdvisorBusy] = useState(false);
+  const advisorBusyRef = useRef(false);
+  const [advisorError, setAdvisorError] = useState('');
+  const [advisorRefresh, setAdvisorRefresh] = useState(0);
   const launchMotion = useLaunchMotion();
 
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
@@ -69,7 +64,7 @@ export default function DashboardScreen() {
   ownerKeyRef.current = ownerKey;
   const canSaveMood = Boolean(queryValue && user?.id);
   const { layout: dashboardLayout } = useDashboardLayout(ownerKey);
-  const { profile: advisorProfile } = useAdvisorProfile(ownerKey);
+  const { profile: advisorProfile, ready: profileReady, error: profileError, save: saveProfile } = useAdvisorProfile(ownerKey);
 
   useFocusEffect(
     useCallback(() => {
@@ -112,50 +107,36 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     const expectedOwnerKey = ownerKey;
-    setAdvisorAction(null);
-    setAdvisorActionOwnerKey(null);
-    if (!expectedOwnerKey) return;
+    setTodayAdvisor(null);
+    setAdvisorOwnerKey(null);
+    setAdvisorError('');
+    setAdvisorLoading(Boolean(expectedOwnerKey && profileReady));
+    if (!expectedOwnerKey || !profileReady) return;
 
     let active = true;
-    void loadAdvisorAction(expectedOwnerKey).then((loadedAction) => {
-      if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
-      setAdvisorAction(loadedAction);
-      setAdvisorActionOwnerKey(expectedOwnerKey);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [lowEnergyLoadAttempt, ownerKey]);
-
-  useEffect(() => {
-    const expectedOwnerKey = ownerKey;
-    setSafetyOwnerKey(null);
-    setShowAdvisorSafety(false);
-    if (!expectedOwnerKey) return;
-
-    let active = true;
-    void loadAmbientAdvisorContext({
+    void loadTodayAdvisor({
       ownerKey: expectedOwnerKey,
       queryColumn,
       queryValue: queryValue ?? null,
       userId: user?.id ?? null,
     })
-      .then((advisorContext) => {
+      .then((loaded) => {
         if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
-        setShowAdvisorSafety(hasUnsafeAdvisorContext(advisorContext));
-        setSafetyOwnerKey(expectedOwnerKey);
+        setTodayAdvisor(loaded);
+        setAdvisorOwnerKey(expectedOwnerKey);
       })
       .catch(() => {
         if (!active || ownerKeyRef.current !== expectedOwnerKey) return;
-        setShowAdvisorSafety(false);
-        setSafetyOwnerKey(expectedOwnerKey);
+        setAdvisorError('Your next step could not load. You can still use your tools below.');
+      })
+      .finally(() => {
+        if (active && ownerKeyRef.current === expectedOwnerKey) setAdvisorLoading(false);
       });
 
     return () => {
       active = false;
     };
-  }, [ownerKey, queryColumn, queryValue, user?.id]);
+  }, [ownerKey, queryColumn, queryValue, user?.id, profileReady, advisorProfile.updatedAt, lowEnergyLoadAttempt, advisorRefresh]);
 
   useEffect(() => {
     const expectedOwnerKey = ownerKey;
@@ -230,6 +211,7 @@ export default function DashboardScreen() {
       setTodayMood(mood);
       setMoodOwnerKey(expectedOwnerKey);
       setMoodStatus({ type: 'success', message: 'Saved.' });
+      setAdvisorRefresh((value) => value + 1);
     } catch (error) {
       if (ownerKeyRef.current !== expectedOwnerKey) return;
       console.warn('Unable to save check-in:', error);
@@ -250,19 +232,60 @@ export default function DashboardScreen() {
   const visibleAffirmation = moodOwnerKey === ownerKey ? affirmation : '';
   const visibleAffirmationBy = moodOwnerKey === ownerKey ? affirmationBy : '';
   const visibleLowEnergyMode = lowEnergyOwnerKey === ownerKey && lowEnergyMode;
-  const visibleAdvisorSafety = safetyOwnerKey === ownerKey && showAdvisorSafety;
-  const visibleAdvisorAction = advisorActionOwnerKey === ownerKey ? advisorAction : null;
+  const visibleAdvisor = advisorOwnerKey === ownerKey ? todayAdvisor : null;
+  const visibleAdvisorSafety = visibleAdvisor?.recommendation.kind === 'safety';
+  const visibleAdvisorAction = visibleAdvisor?.action ?? null;
+  const useSmallerStep = visibleAdvisorAction?.useSmallerStep ??
+    (visibleAdvisor ? prefersSmallerStep(visibleAdvisor.context) : visibleLowEnergyMode);
   const visibleAdvisorActionText = visibleAdvisorAction
     ? visibleAdvisorAction.useSmallerStep
       ? visibleAdvisorAction.smallerAction
       : visibleAdvisorAction.action
-    : null;
+    : visibleAdvisor
+      ? useSmallerStep ? visibleAdvisor.recommendation.smallerAction : visibleAdvisor.recommendation.action
+      : null;
+  const offerSetup = profileReady && shouldOfferAdvisorSetup(advisorProfile, ownerKey) && !visibleLowEnergyMode;
+  const welcomedOwners = useRef(new Set<string>());
+  useFocusEffect(useCallback(() => {
+    if (Platform.OS !== 'ios' || !ownerKey || !offerSetup || advisorLoading ||
+      lowEnergyOwnerKey !== ownerKey || !visibleAdvisor || visibleAdvisorSafety ||
+      welcomedOwners.current.has(ownerKey)) return;
+    welcomedOwners.current.add(ownerKey);
+    router.push({ pathname: '/advisor-setup', params: { mode: 'welcome', returnTo: 'today' } });
+  }, [ownerKey, offerSetup, advisorLoading, lowEnergyOwnerKey, visibleAdvisor, visibleAdvisorSafety, router]));
   const visibleModuleIds = dashboardModulesForToday(
     dashboardLayout,
     visibleLowEnergyMode,
     advisorProfile.completedAt ? advisorProfile.lowEnergyEssentials : []
   );
   const now = new Date();
+
+  const startNextStep = async () => {
+    if (!ownerKey || !visibleAdvisor || advisorBusyRef.current) return;
+    const expectedOwner = ownerKey;
+    advisorBusyRef.current = true;
+    setAdvisorBusy(true);
+    setAdvisorError('');
+    try {
+      const started = await startAdvisorStep(expectedOwner, visibleAdvisor.recommendation,
+        visibleAdvisorAction, useSmallerStep, () => ownerKeyRef.current === expectedOwner);
+      if (!started) return;
+      setAdvisorRefresh((value) => value + 1);
+      router.push(started.route as never);
+    } catch {
+      if (ownerKeyRef.current === expectedOwner) setAdvisorError('This step could not be started. Please try again.');
+    } finally {
+      advisorBusyRef.current = false;
+      setAdvisorBusy(false);
+    }
+  };
+
+  const skipSetup = () => {
+    if (!profileReady || advisorBusyRef.current) return;
+    dismissAdvisorWelcomeForSession(ownerKey);
+    setAdvisorRefresh((value) => value + 1);
+    void saveProfile(finishAdvisorWelcome(advisorProfile, null, ''));
+  };
 
   return (
     <AppScreen>
@@ -279,9 +302,9 @@ export default function DashboardScreen() {
           <View style={styles.heroCopy}>
             <Text style={styles.date}>{format(now, 'MMMM d, yyyy').toUpperCase()}</Text>
             <Text accessibilityRole="header" style={styles.title}>
-              {greetingForHour(now.getHours())}
+              {todayGreeting(now.getHours(), advisorProfile.preferredName)}
             </Text>
-            <Text style={styles.subtitle}>
+            <Text style={styles.subtitle} numberOfLines={visibleLowEnergyMode ? 1 : 3}>
               {visibleLowEnergyMode
                 ? 'You only need one small step.'
                 : visibleAffirmation
@@ -336,11 +359,19 @@ export default function DashboardScreen() {
           />
         ) : null}
 
-        {visibleModuleIds.includes('advisor') ? (
+        {advisorError || profileError ? <InlineStatus tone="error" message={advisorError || profileError} /> : null}
+        {visibleModuleIds.includes('advisor') && !visibleAdvisorSafety ? (
           <AdvisorHomeCard
             lowEnergy={visibleLowEnergyMode}
             currentAction={visibleAdvisorActionText}
             actionStatus={visibleAdvisorAction?.status ?? null}
+            completed={visibleAdvisor?.targetCompleted ?? false}
+            loading={advisorBusy || (!offerSetup && advisorLoading)}
+            offerSetup={offerSetup}
+            onSetup={() => router.push({ pathname: '/advisor-setup', params: { mode: 'welcome', returnTo: 'today' } })}
+            onSkip={() => void skipSetup()}
+            onStart={visibleAdvisor && !visibleAdvisor.targetCompleted && visibleAdvisorAction?.status !== 'needs_recovery'
+              ? () => void startNextStep() : undefined}
             onOpen={() => router.navigate('/advisor')}
           />
         ) : null}

@@ -26,6 +26,7 @@ import { advisorBriefStorage } from '@/lib/advisor-brief-storage';
 import {
   acceptAdvisorAction,
   clearAdvisorAction,
+  deferAdvisorActionFollowUp,
   loadAdvisorAction,
   resizeAdvisorAction,
   setAdvisorActionFollowUp,
@@ -63,12 +64,11 @@ import {
   reconcileAdvisorLifecycle,
   recoverAdvisorLifecycle,
   replaceAdvisorLifecycle,
-  startAdvisorLifecycle,
 } from '@/lib/advisor-lifecycle-runtime';
 import { evaluateAdvisorChangeSignals } from '@/lib/advisor-observation-ledger';
 import { checkAdvisorTargetCompletion } from '@/lib/advisor-target-completion-runtime';
 import { useAuth } from '@/lib/auth-context';
-import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
+import { ensureAiDataSharingConsent, hasAiDataSharingConsent } from '@/lib/ai-consent';
 import { appleHealthPreference } from '@/lib/apple-health-preference';
 import { loadAppleHealthSnapshot } from '@/lib/apple-health';
 import {
@@ -84,6 +84,10 @@ import {
   scheduleAdvisorReminder,
 } from '@/lib/notifications';
 import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
+import { startAdvisorStep } from '@/lib/advisor-start-runtime';
+import { prefersSmallerStep } from '@/lib/advisor-step-sizing';
+import { createAdvisorLoopRefresh } from '@/lib/advisor-loop-refresh';
+import { advisorLoopSelectionOptions } from '@/lib/advisor-loop-selection';
 
 const APPLE_HEALTH_AI_ENABLED =
   process.env.EXPO_PUBLIC_HEALTH_AI_ENABLED === 'true';
@@ -105,6 +109,7 @@ const SOURCE_LABELS: Record<string, string> = {
   Habits: 'Habits',
   'Apple Health summary': 'Apple Health summary',
   'Your Advisor setup': 'Your priorities',
+  'Your personal plan': 'Your personal plan',
 };
 
 function outcomeStatus(outcome: AdvisorOutcome): string {
@@ -125,6 +130,7 @@ function recoveryCopy(reason: AdvisorActionRecoveryReason | null): string {
 }
 
 function outcomeTitle(recommendationId: string): string {
+  if (recommendationId.startsWith('personal-plan:')) return 'Personal plan step';
   if (recommendationId.startsWith('low-grounding')) return 'Grounding step';
   if (recommendationId.startsWith('low-goal') || recommendationId.startsWith('goal:') || recommendationId.startsWith('due-goal')) return 'Goal step';
   if (recommendationId.startsWith('habit:')) return 'Habit step';
@@ -175,22 +181,23 @@ const FALLBACK_HEADLINES: Record<AdvisorBriefFocus, string> = {
 function deterministicBrief(
   context: AdvisorContext,
   recommendation: AdvisorRecommendation,
-  appleHealthSummary: AppleHealthAiSummary | null
+  appleHealthSummary: AppleHealthAiSummary | null,
+  existingBrief?: AdvisorDailyBrief
 ): AdvisorDailyBrief {
+  const personalPlan = recommendation.id.startsWith('personal-plan:');
+  if (!personalPlan && existingBrief) return existingBrief;
   const focus = fallbackFocus(recommendation);
   return {
     focus,
     headline: FALLBACK_HEADLINES[focus],
-    signals: createAdvisorBriefSignals(context, appleHealthSummary).slice(0, 2),
-    usedAppleHealth: Boolean(appleHealthSummary),
+    // These observations stay in the local brief, not the model signal builder.
+    signals: personalPlan
+      ? (recommendation.observations.length ? recommendation.observations : [recommendation.observation])
+          .slice(0, 3)
+          .map((text, index) => ({ id: `${recommendation.id}:observation:${index}`, kind: 'routine' as const, text }))
+      : createAdvisorBriefSignals(context, appleHealthSummary).slice(0, 2),
+    usedAppleHealth: !personalPlan && Boolean(appleHealthSummary),
   };
-}
-
-function prefersSmallerStep(context: AdvisorContext): boolean {
-  const style = context.profile?.supportStyle;
-  if (style === 'gentle') return true;
-  if (style === 'practical') return context.lowEnergyMode === true;
-  return false;
 }
 
 async function selectModelBackedRecommendation(
@@ -198,21 +205,27 @@ async function selectModelBackedRecommendation(
   recent: readonly AdvisorRecentRecommendation[],
   ownerKey: string | null,
   options: AdvisorSelectionOptions = {},
-  appleHealthSummary: AppleHealthAiSummary | null = null
+  appleHealthSummary: AppleHealthAiSummary | null = null,
+  isCurrent: () => boolean = () => true,
+  allowConsent = true
 ): Promise<{
   recommendation: AdvisorRecommendation;
   model: 'gemini' | 'claude' | null;
   brief: AdvisorDailyBrief;
 }> {
   const fallback = selectAdvisorRecommendation(context, recent, options);
-  if (fallback.kind === 'safety' || !ownerKey) {
+  const expectedUserId = ownerKey?.startsWith('user_id:') ? ownerKey.slice('user_id:'.length) : null;
+  if (fallback.kind === 'safety' || fallback.id.startsWith('personal-plan:') || !ownerKey || !expectedUserId || !isCurrent()) {
     return {
       recommendation: fallback,
       model: null,
       brief: deterministicBrief(context, fallback, appleHealthSummary),
     };
   }
-  if (!(await ensureAiDataSharingConsent(ownerKey))) {
+  const consented = allowConsent
+    ? await ensureAiDataSharingConsent(ownerKey)
+    : await hasAiDataSharingConsent(ownerKey);
+  if (!consented || !isCurrent()) {
     return {
       recommendation: fallback,
       model: null,
@@ -221,9 +234,13 @@ async function selectModelBackedRecommendation(
   }
 
   try {
-    const modelContext: AdvisorContext = appleHealthSummary
+    const healthContext: AdvisorContext = appleHealthSummary
       ? context
       : { ...context, health: null };
+    const modelContext: AdvisorContext = {
+      ...healthContext,
+      profile: context.profile ? { ...context.profile, personalPlan: undefined } : context.profile,
+    };
     const candidates = createAdvisorCandidateSet(
       modelContext,
       recent,
@@ -233,7 +250,8 @@ async function selectModelBackedRecommendation(
       modelContext,
       candidates,
       recent,
-      appleHealthSummary
+      appleHealthSummary,
+      { isCurrent, expectedUserId }
     );
     return {
       recommendation: result.recommendation,
@@ -254,10 +272,11 @@ async function applyObservationCadence(
   recent: readonly AdvisorRecentRecommendation[],
   ownerKey: string | null,
   generated: Awaited<ReturnType<typeof selectModelBackedRecommendation>>,
-  options: AdvisorSelectionOptions = {}
+  options: AdvisorSelectionOptions = {},
+  isCurrent: () => boolean = () => true
 ): Promise<Awaited<ReturnType<typeof selectModelBackedRecommendation>>> {
   const promoted = generated.recommendation.changeSignal;
-  if (!ownerKey || generated.recommendation.kind === 'safety' || !promoted) {
+  if (!isCurrent() || !ownerKey || generated.recommendation.kind === 'safety' || !promoted) {
     return generated;
   }
   const activeSignals = Array.from(
@@ -300,12 +319,11 @@ export default function AdvisorScreen() {
   const ownerKey = queryValue ? `${queryColumn}:${queryValue}` : null;
   const ownerRef = useRef(ownerKey);
   ownerRef.current = ownerKey;
-  const requestRef = useRef(0);
+  const loopRef = useRef<ReturnType<typeof createAdvisorLoopRefresh> | null>(null);
   const announcedActionRef = useRef<{
     ownerKey: string;
     action: string;
   } | null>(null);
-  const promptedOwnerRef = useRef<string | null>(null);
   const [context, setContext] = useState<AdvisorContext | null>(null);
   const [recommendation, setRecommendation] = useState<AdvisorRecommendation | null>(null);
   const [brief, setBrief] = useState<AdvisorDailyBrief | null>(null);
@@ -328,7 +346,6 @@ export default function AdvisorScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const request = ++requestRef.current;
       const expectedOwner = ownerKey;
       setNowTick(Date.now());
       setContext(null);
@@ -344,19 +361,26 @@ export default function AdvisorScreen() {
       setStatus('');
       setUseSmallerStep(false);
 
-      void reconcileAdvisorLifecycle(expectedOwner)
-        .then(() => Promise.all([
-          loadAmbientAdvisorContext({
-            ownerKey: expectedOwner,
-            queryColumn,
-            queryValue: queryValue ?? null,
-            userId: user?.id ?? null,
-          }),
-          loadAdvisorOutcomes(expectedOwner),
-          loadAdvisorAction(expectedOwner),
-        ]))
-        .then(async ([context, localOutcomes, loadedAction]) => {
-          if (request !== requestRef.current || ownerRef.current !== expectedOwner) return;
+      const loop = createAdvisorLoopRefresh({
+        isOwnerCurrent: () => ownerRef.current === expectedOwner,
+        onLoading: setLoading,
+        onError: () => setError('Advisor could not load right now. Please try again.'),
+        load: async ({ isCurrent, allowConsent }) => {
+          setNowTick(Date.now());
+          setError('');
+          await reconcileAdvisorLifecycle(expectedOwner);
+          if (!isCurrent()) return;
+          const [context, localOutcomes, loadedAction] = await Promise.all([
+            loadAmbientAdvisorContext({
+              ownerKey: expectedOwner,
+              queryColumn,
+              queryValue: queryValue ?? null,
+              userId: user?.id ?? null,
+            }),
+            loadAdvisorOutcomes(expectedOwner),
+            loadAdvisorAction(expectedOwner),
+          ]);
+          if (!isCurrent()) return;
           let storedAction = loadedAction;
           if (storedAction?.reminderAt) {
             const reminderIsFuture =
@@ -364,6 +388,7 @@ export default function AdvisorScreen() {
             const reminderExists = reminderIsFuture
               ? await hasAdvisorReminder().catch(() => false)
               : false;
+            if (!isCurrent()) return;
             if (!reminderExists) {
               const reconciled = await setAdvisorActionReminder(
                 expectedOwner,
@@ -373,6 +398,7 @@ export default function AdvisorScreen() {
               storedAction = reconciled.action ?? storedAction;
             }
           }
+          if (!isCurrent()) return;
           let reconciledOutcomes = localOutcomes;
           const targetCompleted = storedAction
             ? await checkAdvisorTargetCompletion(
@@ -385,17 +411,27 @@ export default function AdvisorScreen() {
                 new Date(context.nowIso)
               ).catch(() => false)
             : false;
+          if (!isCurrent()) return;
           if (storedAction && targetCompleted) {
             await completeAdvisorLifecycle(expectedOwner, storedAction);
             storedAction = null;
             reconciledOutcomes = await loadAdvisorOutcomes(expectedOwner);
           }
+          if (!isCurrent()) return;
           const localDate = format(new Date(context.nowIso), 'yyyy-MM-dd');
+          const selectionOptions = advisorLoopSelectionOptions(reconciledOutcomes, context.nowIso);
           const deterministicSelection = selectAdvisorRecommendation(
             context,
-            reconciledOutcomes
+            reconciledOutcomes,
+            selectionOptions
           );
           if (deterministicSelection.kind === 'safety') {
+            if (storedAction?.reminderAt || storedAction?.followUpAt) {
+              if (storedAction.reminderAt) await cancelAdvisorReminder();
+              if (!isCurrent()) return;
+              await setAdvisorActionFollowUp(expectedOwner, storedAction.id, null, null);
+              if (!isCurrent()) return;
+            }
             setContext(context);
             setRecommendation(deterministicSelection);
             setBrief(deterministicBrief(context, deterministicSelection, null));
@@ -413,14 +449,8 @@ export default function AdvisorScreen() {
             setAdvisorModel(null);
             setOutcomes(reconciledOutcomes);
             setActiveAdvisorAction(storedAction);
-            setUseSmallerStep(prefersSmallerStep(context));
+            setUseSmallerStep(prefersSmallerStep(context, deterministicSelection));
             setStateOwnerKey(expectedOwner);
-            if (expectedOwner && promptedOwnerRef.current !== expectedOwner) {
-              promptedOwnerRef.current = expectedOwner;
-              setTimeout(() => {
-                if (ownerRef.current === expectedOwner) router.push('/advisor-setup' as never);
-              }, 0);
-            }
             return;
           }
           const fingerprint = createAdvisorBriefFingerprint(context, reconciledOutcomes);
@@ -429,8 +459,15 @@ export default function AdvisorScreen() {
                 expectedOwner,
                 localDate,
                 fingerprint
+              ).then((cachedBrief) =>
+                cachedBrief?.recommendation.id === selectionOptions.excludeRecommendationId ||
+                (deterministicSelection.id.startsWith('personal-plan:') &&
+                cachedBrief?.recommendation.id !== deterministicSelection.id)
+                  ? null
+                  : cachedBrief
               ).catch(() => null)
             : null;
+          if (!isCurrent()) return;
           const storedRecommendation = storedAction
             ? recommendationForAction(storedAction)
             : null;
@@ -444,7 +481,7 @@ export default function AdvisorScreen() {
               ? {
                   recommendation: cached.recommendation,
                   model: cached.model,
-                  brief: cached.brief,
+                  brief: deterministicBrief(context, cached.recommendation, null, cached.brief),
                 }
             : await applyObservationCadence(
                 context,
@@ -453,30 +490,17 @@ export default function AdvisorScreen() {
                 await selectModelBackedRecommendation(
                   context,
                   reconciledOutcomes,
-                  expectedOwner
-                )
+                  expectedOwner,
+                  selectionOptions,
+                  null,
+                  isCurrent,
+                  allowConsent
+                ),
+                selectionOptions,
+                isCurrent
               );
           const currentRecommendation = generated.recommendation;
-          if (request !== requestRef.current || ownerRef.current !== expectedOwner) return;
-          if (
-            storedAction &&
-            currentRecommendation.kind === 'safety' &&
-            (storedAction.reminderAt || storedAction.followUpAt)
-          ) {
-            const reminderCleared = await cancelAdvisorReminder().then(
-              () => true,
-              () => false
-            );
-            if (reminderCleared) {
-              const suspended = await setAdvisorActionFollowUp(
-                expectedOwner,
-                storedAction.id,
-                null,
-                null
-              ).catch(() => ({ action: storedAction, changed: false }));
-              storedAction = suspended.action ?? storedAction;
-            }
-          }
+          if (!isCurrent()) return;
           let updatedOutcomes = reconciledOutcomes;
           if (!cached) {
             if (!storedAction || currentRecommendation.kind === 'safety') {
@@ -485,7 +509,7 @@ export default function AdvisorScreen() {
               );
               updatedOutcomes = await loadAdvisorOutcomes(expectedOwner);
             }
-            if (request !== requestRef.current || ownerRef.current !== expectedOwner) return;
+            if (!isCurrent()) return;
             if (expectedOwner) {
               await advisorBriefStorage.write({
                 version: 1,
@@ -500,9 +524,10 @@ export default function AdvisorScreen() {
                 recommendation: currentRecommendation,
                 brief: generated.brief,
               }).catch(() => undefined);
-              void refreshReminders().catch(() => undefined);
+              if (isCurrent()) void refreshReminders().catch(() => undefined);
             }
           }
+          if (!isCurrent()) return;
           setContext(context);
           setRecommendation(currentRecommendation);
           setBrief(generated.brief);
@@ -510,52 +535,26 @@ export default function AdvisorScreen() {
           setOutcomes(updatedOutcomes);
           setActiveAdvisorAction(storedAction);
           setUseSmallerStep(
-            storedAction?.useSmallerStep ?? prefersSmallerStep(context)
+            storedAction?.useSmallerStep ?? prefersSmallerStep(context, currentRecommendation)
           );
           setStateOwnerKey(expectedOwner);
-        })
-        .catch(() => {
-          if (request === requestRef.current && ownerRef.current === expectedOwner) {
-            setError('Advisor could not load right now. Please try again.');
-          }
-        })
-        .finally(() => {
-          if (request === requestRef.current && ownerRef.current === expectedOwner) {
-            setLoading(false);
-          }
-        });
-
+        },
+      });
+      loopRef.current = loop;
+      // No polling: focus and a real background-to-foreground transition reload
+      // the same context, durable action, completion evidence, and outcomes.
+      void loop.refresh(true);
+      loop.setAppActive(AppState.currentState === 'active');
+      const subscription = AppState.addEventListener('change', (state) => {
+        loop.setAppActive(state === 'active');
+      });
       return () => {
-        if (request === requestRef.current) requestRef.current += 1;
+        subscription.remove();
+        loop.dispose();
+        if (loopRef.current === loop) loopRef.current = null;
       };
-    }, [ownerKey, queryColumn, queryValue, router, user?.id])
+    }, [ownerKey, queryColumn, queryValue, user?.id])
   );
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active') return;
-      setNowTick(Date.now());
-      const expectedOwner = ownerRef.current;
-      if (!expectedOwner) return;
-      void loadAdvisorAction(expectedOwner).then(async (storedAction) => {
-        if (!storedAction || ownerRef.current !== expectedOwner) return;
-        let reconciled = storedAction;
-        if (storedAction.reminderAt) {
-          const reminderExists = await hasAdvisorReminder().catch(() => false);
-          if (!reminderExists) {
-            const result = await setAdvisorActionReminder(
-              expectedOwner,
-              storedAction.id,
-              null
-            ).catch(() => ({ action: storedAction, changed: false }));
-            reconciled = result.action ?? storedAction;
-          }
-        }
-        if (ownerRef.current === expectedOwner) setActiveAdvisorAction(reconciled);
-      }).catch(() => undefined);
-    });
-    return () => subscription.remove();
-  }, []);
 
   const currentAdvisorAction = recommendation?.kind === 'safety'
     ? null
@@ -634,10 +633,17 @@ export default function AdvisorScreen() {
       params: { from: 'advisor' },
     });
 
+  const beginMutation = (expectedOwner: string) => {
+    if (ownerRef.current !== expectedOwner) return null;
+    return loopRef.current?.beginMutation() ?? null;
+  };
+
   const refreshWithAppleHealth = async () => {
     if (
       !context ||
       !recommendation ||
+      recommendation.kind === 'safety' ||
+      recommendation.id.startsWith('personal-plan:') ||
       !context.profile?.completedAt ||
       activeAdvisorAction ||
       !ownerKey ||
@@ -649,12 +655,17 @@ export default function AdvisorScreen() {
       return;
     }
     const expectedOwner = ownerKey;
+    const operation = beginMutation(expectedOwner);
+    if (!operation) return;
     setBusy(true);
     setError('');
     setStatus('');
     try {
       if (!(await ensureAiDataSharingConsent(expectedOwner))) return;
-      if (!(await appleHealthPreference.read(user.id))) {
+      if (!operation.isCurrent()) return;
+      const healthEnabled = await appleHealthPreference.read(user.id);
+      if (!operation.isCurrent()) return;
+      if (!healthEnabled) {
         Alert.alert(
           'Set up Apple Health',
           'Choose the Health categories you want MHtoolkit to read in Settings.',
@@ -666,6 +677,7 @@ export default function AdvisorScreen() {
         return;
       }
       const snapshot = await loadAppleHealthSnapshot();
+      if (!operation.isCurrent()) return;
       const summary = createAppleHealthAiSummary(
         createAppleHealthOverview(snapshot)
       );
@@ -674,6 +686,7 @@ export default function AdvisorScreen() {
         return;
       }
       if (!(await confirmAppleHealthAiShare(summary))) return;
+      if (!operation.isCurrent()) return;
 
       const generated = await applyObservationCadence(
         context,
@@ -684,15 +697,18 @@ export default function AdvisorScreen() {
           outcomes,
           expectedOwner,
           {},
-          summary
-        )
+          summary,
+          operation.isCurrent
+        ),
+        {},
+        operation.isCurrent
       );
-      if (ownerRef.current !== expectedOwner) return;
+      if (!operation.isCurrent()) return;
       await recordAdvisorOffered(expectedOwner, generated.recommendation).catch(
         () => undefined
       );
       const updatedOutcomes = await loadAdvisorOutcomes(expectedOwner);
-      if (ownerRef.current !== expectedOwner) return;
+      if (!operation.isCurrent()) return;
       await advisorBriefStorage.write({
         version: 1,
         ownerKey: expectedOwner,
@@ -707,20 +723,21 @@ export default function AdvisorScreen() {
         recommendation: generated.recommendation,
         brief: generated.brief,
       }).catch(() => undefined);
-      if (ownerRef.current !== expectedOwner) return;
+      if (!operation.isCurrent()) return;
       setRecommendation(generated.recommendation);
       setBrief(generated.brief);
       setAdvisorModel(generated.model);
       setOutcomes(updatedOutcomes);
-      if (!activeAdvisorAction) setUseSmallerStep(prefersSmallerStep(context));
+      if (!activeAdvisorAction) setUseSmallerStep(prefersSmallerStep(context, generated.recommendation));
       setStatus('Today’s brief now includes the Health summary you approved.');
       void refreshReminders().catch(() => undefined);
     } catch {
-      if (ownerRef.current === expectedOwner) {
+      if (operation.isCurrent()) {
         setError('Apple Health could not be added to today’s brief.');
       }
     } finally {
-      if (ownerRef.current === expectedOwner) setBusy(false);
+      if (operation.isCurrent()) setBusy(false);
+      operation.finish();
     }
   };
 
@@ -739,49 +756,24 @@ export default function AdvisorScreen() {
     if (!recommendation || !ownerKey || busy || stateOwnerKey !== ownerKey) return;
     const expectedOwner = ownerKey;
     const selectedRecommendation = recommendation;
+    const operation = beginMutation(expectedOwner);
+    if (!operation) return;
     setBusy(true);
     setError('');
     setStatus('');
     try {
-      if (selectedRecommendation.kind === 'safety') {
-        router.push(selectedRecommendation.route as never);
-        return;
-      }
-      if (activeAdvisorAction?.status === 'in_progress') {
-        router.push(activeAdvisorAction.route as never);
-        return;
-      }
-      const accepted = activeAdvisorAction
-        ? { action: activeAdvisorAction }
-        : await acceptAdvisorAction(expectedOwner, selectedRecommendation, {
-            useSmallerStep,
-          });
-      if (!accepted.action) throw new Error('Advisor action was not saved.');
-      let actionToStart = accepted.action;
-      if (
-        actionToStart.status === 'accepted' &&
-        advisorFollowUpState(actionToStart, new Date()) === 'planned_due'
-      ) {
-        await cancelAdvisorReminder();
-        const resetFollowUp = await setAdvisorActionFollowUp(
-          expectedOwner,
-          actionToStart.id,
-          null,
-          null
-        );
-        if (!resetFollowUp.action) throw new Error('Advisor check-in state was not cleared.');
-        actionToStart = resetFollowUp.action;
-      }
-      const started = await startAdvisorLifecycle(expectedOwner, actionToStart);
-      if (ownerRef.current !== expectedOwner) return;
-      setActiveAdvisorAction(started ?? actionToStart);
-      router.push(actionToStart.route as never);
+      const started = await startAdvisorStep(expectedOwner, selectedRecommendation, activeAdvisorAction,
+        useSmallerStep, operation.isCurrent);
+      if (!started) return;
+      setActiveAdvisorAction(started.action);
+      router.push(started.route as never);
     } catch {
-      if (ownerRef.current === expectedOwner) {
+      if (operation.isCurrent()) {
         setError('This step could not be started. Please try again.');
       }
     } finally {
-      if (ownerRef.current === expectedOwner) setBusy(false);
+      if (operation.isCurrent()) setBusy(false);
+      operation.finish();
     }
   };
 
@@ -793,6 +785,8 @@ export default function AdvisorScreen() {
     }
     const expectedOwner = ownerKey;
     const currentRecommendation = recommendation;
+    const operation = beginMutation(expectedOwner);
+    if (!operation) return;
     setBusy(true);
     setError('');
     setStatus('');
@@ -823,19 +817,20 @@ export default function AdvisorScreen() {
           model: null,
           brief: deterministicBrief(context, selected, null),
         },
-        options
+        options,
+        operation.isCurrent
       );
       const nextRecommendation = generated.recommendation;
       const nextBrief = generated.brief;
-      if (ownerRef.current !== expectedOwner) return;
+      if (!operation.isCurrent()) return;
       if (actionToReplace) {
         await replaceAdvisorLifecycle(expectedOwner, actionToReplace);
-        if (ownerRef.current !== expectedOwner) return;
+        if (!operation.isCurrent()) return;
         setActiveAdvisorAction(null);
       }
       await recordAdvisorOffered(expectedOwner, nextRecommendation);
       const updatedOutcomes = await loadAdvisorOutcomes(expectedOwner);
-      if (ownerRef.current !== expectedOwner) return;
+      if (!operation.isCurrent()) return;
       await advisorBriefStorage.write({
         version: 1,
         ownerKey: expectedOwner,
@@ -846,17 +841,19 @@ export default function AdvisorScreen() {
         recommendation: nextRecommendation,
         brief: nextBrief,
       }).catch(() => undefined);
+      if (!operation.isCurrent()) return;
       setRecommendation(nextRecommendation);
       setBrief(nextBrief);
       setAdvisorModel(null);
       setOutcomes(updatedOutcomes);
-      setUseSmallerStep(prefersSmallerStep(context));
+      setUseSmallerStep(prefersSmallerStep(context, nextRecommendation));
     } catch {
-      if (ownerRef.current === expectedOwner) {
+      if (operation.isCurrent()) {
         setError('Another step could not be loaded. Please try again.');
       }
     } finally {
-      if (ownerRef.current === expectedOwner) setBusy(false);
+      if (operation.isCurrent()) setBusy(false);
+      operation.finish();
     }
   };
 
@@ -865,6 +862,7 @@ export default function AdvisorScreen() {
       void generateAnotherRecommendation();
       return;
     }
+    const expectedLoop = loopRef.current;
     Alert.alert(
       'Change your current step?',
       'Advisor will prepare a different step. Your current step stays until the replacement is ready.',
@@ -874,6 +872,7 @@ export default function AdvisorScreen() {
           text: 'Change step',
           style: 'destructive',
           onPress: () => {
+            if (loopRef.current !== expectedLoop || ownerRef.current !== ownerKey) return;
             void generateAnotherRecommendation(activeAdvisorAction);
           },
         },
@@ -882,16 +881,18 @@ export default function AdvisorScreen() {
   };
 
   const completeCurrentAction = async () => {
-    if (!activeAdvisorAction || !ownerKey || !context || busy) return;
+    if (!activeAdvisorAction || !ownerKey || !context || busy || stateOwnerKey !== ownerKey) return;
     const expectedOwner = ownerKey;
     const completed = activeAdvisorAction;
+    const operation = beginMutation(expectedOwner);
+    if (!operation) return;
     setBusy(true);
     setError('');
     setStatus('');
     try {
       await completeAdvisorLifecycle(expectedOwner, completed);
       const updatedOutcomes = await loadAdvisorOutcomes(expectedOwner);
-      if (ownerRef.current !== expectedOwner) return;
+      if (!operation.isCurrent()) return;
       const options = {
           preserveToday: false,
           excludeRecommendationId: completed.recommendationId,
@@ -911,12 +912,15 @@ export default function AdvisorScreen() {
           model: null,
           brief: deterministicBrief(context, selected, null),
         },
-        options
+        options,
+        operation.isCurrent
       );
       const nextRecommendation = generated.recommendation;
       const nextBrief = generated.brief;
+      if (!operation.isCurrent()) return;
       await recordAdvisorOffered(expectedOwner, nextRecommendation);
       const nextOutcomes = await loadAdvisorOutcomes(expectedOwner);
+      if (!operation.isCurrent()) return;
       await advisorBriefStorage.write({
         version: 1,
         ownerKey: expectedOwner,
@@ -927,20 +931,21 @@ export default function AdvisorScreen() {
         recommendation: nextRecommendation,
         brief: nextBrief,
       }).catch(() => undefined);
-      if (ownerRef.current !== expectedOwner) return;
+      if (!operation.isCurrent()) return;
       setActiveAdvisorAction(null);
       setRecommendation(nextRecommendation);
       setBrief(nextBrief);
       setAdvisorModel(null);
       setOutcomes(nextOutcomes);
-      setUseSmallerStep(false);
+      setUseSmallerStep(prefersSmallerStep(context, nextRecommendation));
       setStatus('Step completed. Advisor has your next option ready.');
     } catch {
-      if (ownerRef.current === expectedOwner) {
+      if (operation.isCurrent()) {
         setError('This step could not be completed. Please try again.');
       }
     } finally {
-      if (ownerRef.current === expectedOwner) setBusy(false);
+      if (operation.isCurrent()) setBusy(false);
+      operation.finish();
     }
   };
 
@@ -948,9 +953,11 @@ export default function AdvisorScreen() {
     result: 'partial' | 'not_done',
     reason: AdvisorActionRecoveryReason | null = null
   ) => {
-    if (!activeAdvisorAction || !ownerKey || busy) return;
+    if (!activeAdvisorAction || !ownerKey || busy || stateOwnerKey !== ownerKey) return;
     const expectedOwner = ownerKey;
     const current = activeAdvisorAction;
+    const operation = beginMutation(expectedOwner);
+    if (!operation) return;
     setBusy(true);
     setError('');
     setStatus('');
@@ -962,7 +969,7 @@ export default function AdvisorScreen() {
         reason
       );
       const updatedOutcomes = await loadAdvisorOutcomes(expectedOwner);
-      if (ownerRef.current !== expectedOwner) return;
+      if (!operation.isCurrent()) return;
       setActiveAdvisorAction(updated ?? current);
       setUseSmallerStep(updated?.useSmallerStep ?? current.useSmallerStep);
       setOutcomes(updatedOutcomes);
@@ -972,16 +979,22 @@ export default function AdvisorScreen() {
           : 'No judgment. Reset the step when you are ready.'
       );
     } catch {
-      if (ownerRef.current === expectedOwner) {
+      if (operation.isCurrent()) {
         setError('This check-in could not be saved. Please try again.');
       }
     } finally {
-      if (ownerRef.current === expectedOwner) setBusy(false);
+      if (operation.isCurrent()) setBusy(false);
+      operation.finish();
     }
   };
 
   const askWhyNotDone = () => {
     if (!activeAdvisorAction || busy) return;
+    const expectedLoop = loopRef.current;
+    const record = (reason: AdvisorActionRecoveryReason) => {
+      if (loopRef.current !== expectedLoop || ownerRef.current !== ownerKey) return;
+      void recordIncompleteAction('not_done', reason);
+    };
     const reasons: { label: string; value: AdvisorActionRecoveryReason }[] = [
       { label: 'Time got away', value: 'time' },
       { label: 'Energy was low', value: 'energy' },
@@ -994,38 +1007,49 @@ export default function AdvisorScreen() {
       [
         ...reasons.map((reason) => ({
           text: reason.label,
-          onPress: () => void recordIncompleteAction('not_done', reason.value),
+          onPress: () => record(reason.value),
         })),
-        { text: 'Something else', onPress: () => void recordIncompleteAction('not_done', 'other') },
+        { text: 'Something else', onPress: () => record('other') },
         { text: 'Cancel', style: 'cancel' as const },
       ]
     );
   };
 
   const toggleSmallerStep = async () => {
+    if (!ownerKey || busy || stateOwnerKey !== ownerKey) return;
     const nextValue = !useSmallerStep;
+    if (!activeAdvisorAction) {
+      setUseSmallerStep(nextValue);
+      return;
+    }
+    const operation = beginMutation(ownerKey);
+    if (!operation) return;
+    setBusy(true);
     setUseSmallerStep(nextValue);
-    if (!activeAdvisorAction || !ownerKey) return;
     try {
       const updated = await resizeAdvisorAction(
         ownerKey,
         activeAdvisorAction.id,
         nextValue
       );
-      if (ownerRef.current === ownerKey && updated.action) {
+      if (operation.isCurrent() && updated.action) {
         setActiveAdvisorAction(updated.action);
       }
     } catch {
-      if (ownerRef.current === ownerKey) {
+      if (operation.isCurrent()) {
         setUseSmallerStep(activeAdvisorAction.useSmallerStep);
         setError('The smaller step could not be saved.');
       }
+    } finally {
+      if (operation.isCurrent()) setBusy(false);
+      operation.finish();
     }
   };
 
   const scheduleCurrentActionReminder = () => {
-    if (!recommendation || !ownerKey || busy) return;
+    if (!recommendation || !ownerKey || busy || stateOwnerKey !== ownerKey) return;
     const expectedOwner = ownerKey;
+    const expectedLoop = loopRef.current;
     const choices = createAdvisorReminderChoices(new Date());
     Alert.alert(
       'Set a check-in',
@@ -1035,6 +1059,9 @@ export default function AdvisorScreen() {
           text: choice.label,
           onPress: () => {
             void (async () => {
+              if (loopRef.current !== expectedLoop) return;
+              const operation = beginMutation(expectedOwner);
+              if (!operation) return;
               setBusy(true);
               setError('');
               try {
@@ -1045,6 +1072,7 @@ export default function AdvisorScreen() {
                   useSmallerStep,
                   date: choice.date,
                 });
+                if (!operation.isCurrent()) return;
                 if (!result.scheduled) {
                   Alert.alert(
                     'Turn on Advisor check-ins',
@@ -1057,16 +1085,16 @@ export default function AdvisorScreen() {
                   return;
                 }
                 if (!result.action) throw new Error('Advisor action was not saved.');
-                if (ownerRef.current !== expectedOwner) return;
                 setActiveAdvisorAction(result.action);
                 setUseSmallerStep(result.action.useSmallerStep);
                 setStatus(`Check-in set for ${format(choice.date, 'EEE h:mm a')}.`);
               } catch {
-                if (ownerRef.current === expectedOwner) {
+                if (operation.isCurrent()) {
                   setError('The reminder could not be set. Please try again.');
                 }
               } finally {
-                if (ownerRef.current === expectedOwner) setBusy(false);
+                if (operation.isCurrent()) setBusy(false);
+                operation.finish();
               }
             })();
           },
@@ -1076,9 +1104,48 @@ export default function AdvisorScreen() {
     );
   };
 
+  const deferInAppCheckIn = () => {
+    if (!activeAdvisorAction || !ownerKey || busy || stateOwnerKey !== ownerKey) return;
+    const expectedOwner = ownerKey;
+    const expectedLoop = loopRef.current;
+    const current = activeAdvisorAction;
+    Alert.alert('Check in later', 'This check-in will wait here in Advisor.', [
+      ...createAdvisorReminderChoices(new Date()).map((choice) => ({
+        text: choice.label,
+        onPress: () => {
+          if (loopRef.current !== expectedLoop) return;
+          const operation = beginMutation(expectedOwner);
+          if (!operation) return;
+          setBusy(true);
+          setError('');
+          void (async () => {
+            try {
+              if (current.reminderAt) await cancelAdvisorReminder();
+              if (!operation.isCurrent()) return;
+              const result = await deferAdvisorActionFollowUp(expectedOwner, current.id, choice.date.toISOString());
+              if (!operation.isCurrent()) return;
+              if (!result.changed || !result.action) throw new Error('Check-in was not saved.');
+              setActiveAdvisorAction(result.action);
+              setStatus(`Check back here ${format(choice.date, 'EEE h:mm a')}.`);
+              setNowTick(Date.now());
+            } catch {
+              if (operation.isCurrent()) setError('The check-in could not be saved. Please try again.');
+            } finally {
+              if (operation.isCurrent()) setBusy(false);
+              operation.finish();
+            }
+          })();
+        },
+      })),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   const answerHelpfulness = async (helpful: boolean | null) => {
     if (!pendingFeedback || !ownerKey || busy || stateOwnerKey !== ownerKey) return;
     const expectedOwner = ownerKey;
+    const operation = beginMutation(expectedOwner);
+    if (!operation) return;
     setBusy(true);
     setError('');
     setStatus('');
@@ -1089,15 +1156,17 @@ export default function AdvisorScreen() {
         helpful
       );
       const updatedOutcomes = await loadAdvisorOutcomes(expectedOwner);
-      if (ownerRef.current !== expectedOwner) return;
+      if (!operation.isCurrent()) return;
       setOutcomes(updatedOutcomes);
       setStatus(helpful === null ? 'Feedback skipped.' : 'Thanks. Advisor will use that next time.');
+      if (helpful !== null && !activeAdvisorAction) void loopRef.current?.refresh();
     } catch {
-      if (ownerRef.current === expectedOwner) {
+      if (operation.isCurrent()) {
         setError('Feedback could not be saved. Please try again.');
       }
     } finally {
-      if (ownerRef.current === expectedOwner) setBusy(false);
+      if (operation.isCurrent()) setBusy(false);
+      operation.finish();
     }
   };
 
@@ -1178,6 +1247,7 @@ export default function AdvisorScreen() {
               context?.profile?.completedAt &&
               !activeAdvisorAction &&
               user?.id &&
+              !recommendation.id.startsWith('personal-plan:') &&
               recommendation.kind === 'standard' ? (
                 <Pressable
                   accessibilityRole="button"
@@ -1221,6 +1291,7 @@ export default function AdvisorScreen() {
                     : `Use smaller step: ${smallerAction}`
                 }
                 onPress={() => void toggleSmallerStep()}
+                disabled={busy}
                 style={({ pressed }) => [
                   styles.smallerStep,
                   pressed && styles.pressed,
@@ -1239,7 +1310,8 @@ export default function AdvisorScreen() {
             <Text style={styles.sourceLine}>{sourceLine}</Text>
             {currentAdvisorAction?.followUpAt ? (
               <Text style={styles.reminderLine}>
-                Check-in {format(new Date(currentAdvisorAction.followUpAt), 'EEE h:mm a')}
+                {currentAdvisorAction.reminderAt ? 'Reminder' : 'Check back here'}{' '}
+                {format(new Date(currentAdvisorAction.followUpAt), 'EEE h:mm a')}
               </Text>
             ) : null}
           </AppCard>
@@ -1270,8 +1342,8 @@ export default function AdvisorScreen() {
                   },
                   {
                     label: 'Check in later',
-                    icon: 'bell',
-                    onPress: scheduleCurrentActionReminder,
+                    icon: 'clock',
+                    onPress: deferInAppCheckIn,
                     disabled: busy,
                   },
                   {
@@ -1326,8 +1398,8 @@ export default function AdvisorScreen() {
                   },
                   {
                     label: 'Check in later',
-                    icon: 'bell',
-                    onPress: scheduleCurrentActionReminder,
+                    icon: 'clock',
+                    onPress: deferInAppCheckIn,
                     disabled: busy,
                   },
                   {

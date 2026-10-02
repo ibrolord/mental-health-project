@@ -8,6 +8,8 @@ interface ApiRequestOptions {
   timeoutMs?: number;
   accessToken?: string;
   signal?: AbortSignal;
+  isCurrent?: () => boolean;
+  expectedUserId?: string;
 }
 
 /**
@@ -24,19 +26,31 @@ export async function apiRequest<T = any>(
     'X-Client-Platform': Platform.OS === 'android' ? 'android' : 'ios',
   };
 
-  const { data: { session } } = options.accessToken
+  const { data: { session } } = options.accessToken && options.expectedUserId === undefined
     ? { data: { session: null } }
     : await supabase.auth.getSession();
   const accessToken = options.accessToken ?? session?.access_token;
+  const assertCurrent = () => {
+    if (options.isCurrent?.() === false) throw new Error('Request is no longer current');
+    if (options.expectedUserId !== undefined && (
+      session?.user?.id !== options.expectedUserId || accessToken !== session?.access_token
+    )) {
+      throw new Error('Authenticated user changed before request');
+    }
+  };
+  // Session lookup can finish after an account switch but before React updates.
+  assertCurrent();
   if (!accessToken) {
     throw new Error('No authenticated Supabase session');
   }
   headers['Authorization'] = `Bearer ${accessToken}`;
 
+  const requestBody = JSON.stringify(body);
+  assertCurrent();
   const res = await fetchWithTimeout(`${API_URL}${path}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify(body),
+    body: requestBody,
     signal: options.signal,
   }, options.timeoutMs);
 

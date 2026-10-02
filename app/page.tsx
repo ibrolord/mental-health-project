@@ -1,262 +1,109 @@
+import Image from 'next/image';
 import Link from 'next/link';
-import {
-  ArrowRight,
-  Check,
-  Eye,
-  HeartHandshake,
-  LockKeyhole,
-  Sparkles,
-} from 'lucide-react';
-
-const week = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+import { ArrowDown, ArrowUpRight, Check, HeartHandshake, LockKeyhole, Smartphone } from 'lucide-react';
+import { SupportExplorer } from '@/components/launch/support-explorer';
+import { APP_STORE_URL, LANDING_EVIDENCE, SOURCE_REPOSITORY } from '@/lib/landing-content';
+import styles from './landing.module.css';
 
 export default function Home() {
   return (
-    <main className="launch-page">
-      <div className="launch-orb launch-orb-one" aria-hidden="true" />
-      <div className="launch-orb launch-orb-two" aria-hidden="true" />
-
-      <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-6 sm:px-8 lg:px-12">
-        <Link href="/" className="flex items-center gap-3" aria-label="MHtoolkit home">
-          <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[#163a32] text-sm font-bold text-[#f7f1df]">
-            MH
-          </span>
-          <span className="text-sm font-semibold tracking-[0.12em] text-[#163a32]">
-            MHTOOLKIT
-          </span>
+    <main className={styles.page}>
+      <a className={styles.skipLink} href="#main-content">Skip to content</a>
+      <header className={`${styles.wrap} ${styles.header}`}>
+        <Link href="/" className={styles.brand} aria-label="MHtoolkit home">
+          <Image src="/icon.png" width={42} height={42} alt="" /><span>MHtoolkit</span>
         </Link>
-        <div className="flex items-center gap-4 text-sm font-medium text-[#35584f]">
-          <Link className="hidden hover:text-[#163a32] sm:inline" href="/support">
-            Support
-          </Link>
-          <Link
-            className="rounded-full border border-[#b9c9bf] bg-white/55 px-4 py-2 transition hover:bg-white"
-            href="/auth/login"
-          >
-            Existing user
-          </Link>
-        </div>
+        <nav aria-label="Main navigation" className={styles.nav}>
+          <a href="#our-mission" className={styles.desktopLink}>Our mission</a>
+          <a href="#your-toolkit" className={styles.desktopLink}>Your toolkit</a>
+          <Link href="/auth/login">Sign in</Link>
+          <a href={APP_STORE_URL} className={styles.navCta}>Get the app <ArrowUpRight size={16} aria-hidden="true" /></a>
+        </nav>
       </header>
-
-      <section className="relative z-10 mx-auto grid w-full max-w-7xl items-center gap-14 px-5 pb-20 pt-8 sm:px-8 lg:grid-cols-[1.08fr_0.92fr] lg:px-12 lg:pb-28 lg:pt-14">
-        <div className="launch-reveal">
-          <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-[#afc3b4] bg-[#edf3e9]/80 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-[#315c4d]">
-            <Sparkles className="h-3.5 w-3.5" />
-            The 7-day private check-in
+      <section id="main-content" className={`${styles.wrap} ${styles.hero}`}>
+        <div className={styles.heroCopy}>
+          <p className={styles.eyebrow}>FREE, OPEN-SOURCE MENTAL-HEALTH SUPPORT</p>
+          <h1>Make room for <em>your mental health.</em></h1>
+          <p className={styles.lead}>When life feels like a lot, finding support shouldn&apos;t. Understand your feelings, build a little structure, and find a next step that fits today.</p>
+          <div className={styles.actions}>
+            <a href={APP_STORE_URL} className={styles.primary}><Smartphone size={20} aria-hidden="true" />Get MHtoolkit for iOS<ArrowUpRight size={18} aria-hidden="true" /></a>
+            <Link href="/onboarding" className={styles.textLink}>Try it in your browser <ArrowUpRight size={16} aria-hidden="true" /></Link>
           </div>
-          <h1 className="font-display max-w-3xl text-[clamp(3.4rem,8vw,7.5rem)] font-medium leading-[0.86] tracking-[-0.055em] text-[#163a32]">
-            Notice how you&apos;re doing.
-            <span className="mt-3 block italic text-[#c65f3d]">Without the noise.</span>
-          </h1>
-          <p className="mt-8 max-w-xl text-lg leading-8 text-[#48675f] sm:text-xl">
-            A private 30-second check-in that helps you pause, log the moment,
-            and spot patterns over seven days. No signup required.
-          </p>
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-            <Link
-              href="/onboarding"
-              className="group inline-flex min-h-14 items-center justify-center gap-3 rounded-full bg-[#163a32] px-7 text-base font-bold text-[#fffdf4] shadow-[0_18px_45px_rgba(22,58,50,0.22)] transition hover:-translate-y-0.5 hover:bg-[#204c41]"
-            >
-              Start day one
-              <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-            </Link>
-            <a
-              href="#how-it-works"
-              className="inline-flex min-h-14 items-center justify-center rounded-full border border-[#9fb4a7] bg-white/55 px-7 text-base font-bold text-[#24483e] transition hover:bg-white"
-            >
-              See how it works
-            </a>
-          </div>
-          <div className="mt-7 flex flex-wrap gap-x-6 gap-y-3 text-sm text-[#58736c]">
-            {['Works in your browser', 'No ads', 'Delete anytime'].map((item) => (
-              <span key={item} className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-[#c65f3d]" />
-                {item}
-              </span>
-            ))}
-          </div>
+          <ul className={styles.trust} aria-label="What to expect">
+            {['Free to use', 'No ads', 'Start without an email'].map(item => <li key={item}><Check size={15} aria-hidden="true" />{item}</li>)}
+          </ul>
         </div>
-
-        <div className="launch-reveal launch-delay-1 relative mx-auto w-full max-w-[520px]">
-          <div className="absolute -left-8 top-10 hidden rotate-[-7deg] rounded-2xl bg-[#f4bf75] px-5 py-4 text-sm font-bold leading-5 text-[#4e351d] shadow-lg sm:block">
-            30 seconds.
-            <br />
-            That&apos;s the habit.
+        <figure className={styles.heroArt}>
+          <Image src="/launch-hero-2026.png" alt="Illustration of friends making time for reflection and supporting one another" width={1732} height={909} sizes="(max-width: 760px) 100vw, 52vw" priority />
+          <figcaption><HeartHandshake size={20} aria-hidden="true" /><span>For the hard days, the ordinary days,<br />and the days you&apos;re finding your way.</span></figcaption>
+        </figure>
+        <a href="#your-toolkit" className={styles.scrollLink}>Find what would help today <ArrowDown size={16} aria-hidden="true" /></a>
+      </section>
+      <section id="our-mission" className={styles.mission} aria-labelledby="mission-title">
+        <div className={`${styles.wrap} ${styles.missionGrid}`}>
+          <div>
+            <p className={styles.eyebrow}>WHY WE&apos;RE HERE</p>
+            <h2 id="mission-title">Support should be easier to reach.</h2>
+            <p>Mental health touches how we feel, sleep, connect, and get through the day. Yet cost, stigma, and access can put support out of reach.</p>
+            <p>Our mission is to make everyday mental-health support more accessible. MHtoolkit brings practical tools together in one free, open-source app, with room for your culture, your priorities, and your pace.</p>
+            <a href={SOURCE_REPOSITORY} className={styles.lightLink}>Explore our open-source project <ArrowUpRight size={16} aria-hidden="true" /></a>
           </div>
-          <div className="launch-device">
-            <div className="mb-10 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#6b7f77]">
-                  Day 1 of 7
-                </p>
-                <p className="font-display mt-1 text-3xl font-medium text-[#163a32]">
-                  Right now
-                </p>
-              </div>
-              <span className="grid h-11 w-11 place-items-center rounded-full bg-[#e6efe4]">
-                <LockKeyhole className="h-5 w-5 text-[#315c4d]" />
-              </span>
-            </div>
-
-            <p className="text-lg font-semibold text-[#274b41]">How does today feel?</p>
-            <div className="mt-5 grid grid-cols-5 gap-2">
-              {[
-                ['Great', '01'],
-                ['Good', '02'],
-                ['Okay', '03'],
-                ['Low', '04'],
-                ['Heavy', '05'],
-              ].map(([label, number], index) => (
-                <div
-                  key={label}
-                  className={`rounded-2xl border px-2 py-4 text-center ${
-                    index === 2
-                      ? 'border-[#c65f3d] bg-[#fff1e8] text-[#9f4228]'
-                      : 'border-[#d8ded7] bg-[#faf9f3] text-[#66766f]'
-                  }`}
-                >
-                  <span className="block text-[10px] font-bold tracking-[0.12em]">{number}</span>
-                  <span className="mt-2 block text-xs font-semibold">{label}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-8 rounded-3xl bg-[#173d34] p-5 text-[#f7f1df]">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">Your seven-day rhythm</p>
-                <p className="text-xs text-[#b8cec4]">1 complete</p>
-              </div>
-              <div className="mt-5 grid grid-cols-7 gap-2">
-                {week.map((day, index) => (
-                  <div key={`${day}-${index}`} className="text-center">
-                    <div
-                      className={`mx-auto h-2.5 w-2.5 rounded-full ${
-                        index === 0 ? 'bg-[#f4bf75]' : 'bg-[#46675e]'
-                      }`}
-                    />
-                    <span className="mt-2 block text-[10px] text-[#b8cec4]">{day}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+          <div className={styles.stats}>
+            {LANDING_EVIDENCE.map(stat => <article key={stat.id}>
+              <p className={styles.statNumber}>{stat.value}</p><p>{stat.description}</p>
+              <a href={stat.url} target="_blank" rel="noopener noreferrer">{stat.source} <ArrowUpRight size={14} aria-hidden="true" /><span className="sr-only"> (opens in a new tab)</span></a>
+            </article>)}
+            <p className={styles.statNote}>Global figures describe the need for support, not results from using MHtoolkit.</p>
           </div>
         </div>
       </section>
-
-      <section
-        id="how-it-works"
-        className="relative z-10 border-y border-[#cdd8cf] bg-[#f8f4e8]/75"
-      >
-        <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-12 lg:py-28">
-          <div className="grid gap-10 lg:grid-cols-[0.75fr_1.25fr]">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b14f34]">
-                Small enough to keep
-              </p>
-              <h2 className="font-display mt-4 text-5xl font-medium leading-[0.95] tracking-[-0.04em] text-[#163a32] sm:text-6xl">
-                Seven days.
-                <br />
-                One honest moment at a time.
-              </h2>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              {[
-                {
-                  number: '01',
-                  title: 'Pause',
-                  copy: 'Choose the feeling that fits. Add a private note only if you want to.',
-                },
-                {
-                  number: '02',
-                  title: 'Return',
-                  copy: 'Come back for one quick check-in each day. Missing a day is not failure.',
-                },
-                {
-                  number: '03',
-                  title: 'Notice',
-                  copy: 'Look back at your week and notice patterns worth carrying forward.',
-                },
-              ].map((step) => (
-                <article
-                  key={step.number}
-                  className="rounded-[2rem] border border-[#cad6cc] bg-white/70 p-6"
-                >
-                  <span className="font-display text-3xl italic text-[#c65f3d]">
-                    {step.number}
-                  </span>
-                  <h3 className="mt-12 text-xl font-bold text-[#163a32]">{step.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#5a7069]">{step.copy}</p>
-                </article>
-              ))}
-            </div>
-          </div>
+      <section id="your-toolkit" className={`${styles.wrap} ${styles.toolkit}`} aria-labelledby="toolkit-title">
+        <div className={styles.sectionIntro}>
+          <div><p className={styles.eyebrow}>A TOOLKIT FOR REAL LIFE</p><h2 id="toolkit-title">What would help<br /><em>you today?</em></h2></div>
+          <p>You don&apos;t need to use everything. Start with what matters to you, and make space for more when you&apos;re ready.</p>
+        </div>
+        <SupportExplorer />
+      </section>
+      <section className={styles.path} aria-labelledby="path-title">
+        <div className={styles.wrap}>
+          <p className={styles.eyebrow}>YOUR PACE, NOT A PERFECT ROUTINE</p>
+          <h2 id="path-title">A small place to start.<br />Something to come back to.</h2>
+          <ol className={styles.steps}>
+            <li><span>01</span><h3>Start with what matters.</h3><p>Choose a feeling, a goal, or a practice. You can explore without creating a named account.</p></li>
+            <li><span>02</span><h3>Make the next step manageable.</h3><p>Turn a goal into a small action, take a grounding break, or put a thought into words.</p></li>
+            <li><span>03</span><h3>Notice what works for you.</h3><p>Return to your check-ins and routines. Keep what helps, adjust what doesn&apos;t, and invite support if you want it.</p></li>
+          </ol>
         </div>
       </section>
-
-      <section className="relative z-10 mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-12 lg:py-28">
-        <div className="grid gap-5 lg:grid-cols-3">
-          {[
-            {
-              icon: LockKeyhole,
-              title: 'Private by default',
-              copy: 'Start with a random anonymous account. No email is needed for the challenge.',
-            },
-            {
-              icon: Eye,
-              title: 'No attention traps',
-              copy: 'No ads, public feed, likes, or streak shame. The product is built for reflection.',
-            },
-            {
-              icon: HeartHandshake,
-              title: 'Clear boundaries',
-              copy: 'MHtoolkit is a self-help tool, not therapy, diagnosis, medical advice, or crisis care.',
-            },
-          ].map(({ icon: Icon, title, copy }) => (
-            <article
-              key={title}
-              className="rounded-[2rem] border border-[#c4d1c8] bg-[#edf3e9]/65 p-7 sm:p-8"
-            >
-              <Icon className="h-6 w-6 text-[#b14f34]" />
-              <h3 className="mt-10 text-xl font-bold text-[#163a32]">{title}</h3>
-              <p className="mt-3 leading-7 text-[#587169]">{copy}</p>
-            </article>
-          ))}
+      <section className={`${styles.wrap} ${styles.principles}`} aria-labelledby="principles-title">
+        <div><p className={styles.eyebrow}>BUILT AROUND PEOPLE</p><h2 id="principles-title">Your wellbeing isn&apos;t<br />a performance metric.</h2></div>
+        <div className={styles.principleList}>
+          <article><LockKeyhole aria-hidden="true" size={22} /><div><h3>You choose what to share.</h3><p>Partner sharing and AI context are choices, not assumptions. Manage them in the app.</p></div></article>
+          <article><HeartHandshake aria-hidden="true" size={22} /><div><h3>Support has more than one shape.</h3><p>Explore country-specific support resources, including African and diaspora communities, and bring a trusted person into your journey.</p></div></article>
+          <article><Check aria-hidden="true" size={22} /><div><h3>You can see what&apos;s behind the tools.</h3><p>Explore the research behind our approaches and the source code behind the app.</p><Link href="/research" className={styles.textLink}>Read the research <ArrowUpRight size={16} aria-hidden="true" /></Link></div></article>
         </div>
       </section>
-
-      <section className="relative z-10 px-5 pb-20 sm:px-8 lg:px-12 lg:pb-28">
-        <div className="mx-auto max-w-7xl overflow-hidden rounded-[2.5rem] bg-[#173d34] px-6 py-14 text-center text-[#fffdf4] sm:px-12 sm:py-20">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#f4bf75]">
-            Start where you are
-          </p>
-          <h2 className="font-display mx-auto mt-5 max-w-3xl text-5xl font-medium leading-[0.95] tracking-[-0.04em] sm:text-7xl">
-            One check-in. No performance required.
-          </h2>
-          <p className="mx-auto mt-6 max-w-xl leading-7 text-[#c6d8d0]">
-            Your first entry stays private and takes about 30 seconds.
-          </p>
-          <Link
-            href="/onboarding"
-            className="mt-9 inline-flex min-h-14 items-center justify-center gap-3 rounded-full bg-[#f4bf75] px-7 font-bold text-[#3f2a18] transition hover:-translate-y-0.5 hover:bg-[#ffd49a]"
-          >
-            Start day one
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+      <section className={`${styles.wrap} ${styles.faq}`} aria-labelledby="faq-title">
+        <h2 id="faq-title">A few things you might be wondering.</h2>
+        <details><summary>Who is MHtoolkit for?</summary><p>Adults who want practical support with everyday mental wellbeing: understanding feelings, managing overwhelm, building routines, and staying connected. Choose the tools that fit you.</p></details>
+        <details><summary>Is it really free?</summary><p>Yes. MHtoolkit is free to use, with no advertising. Its source code is available under the AGPL-3.0 licence.</p></details>
+        <details><summary>Do I need to create an account?</summary><p>You can start anonymously. Create an account when you want to keep your data across devices or connect with an accountability partner.</p></details>
+        <details><summary>How does AI support work?</summary><p>Advisor offers a practical next step from the context you choose to share. AI chat is also available if you want to talk things through. AI processing is optional.</p></details>
+        <details><summary>Can I use this alongside professional support?</summary><p>Yes. MHtoolkit provides everyday self-help tools, not diagnosis, treatment, or emergency care. You can prepare a Visit Brief to review and share with a professional. For urgent help, <Link href="/resources">find local support</Link>.</p></details>
+      </section>
+      <section className={`${styles.wrap} ${styles.download}`} aria-labelledby="download-title">
+        <Image src="/icon.png" alt="" width={64} height={64} />
+        <p className={styles.eyebrow}>START WHERE YOU ARE</p>
+        <h2 id="download-title">You don&apos;t have to figure<br />everything out today.</h2>
+        <p>Make a little room for yourself. Your toolkit is here.</p>
+        <div className={styles.actions}>
+          <a href={APP_STORE_URL} className={styles.primary}><Smartphone size={20} aria-hidden="true" />Get MHtoolkit for iOS<ArrowUpRight size={18} aria-hidden="true" /></a>
+          <Link href="/onboarding" className={styles.textLink}>Try the web app <ArrowUpRight size={16} aria-hidden="true" /></Link>
         </div>
       </section>
-
-      <footer className="relative z-10 border-t border-[#ccd7cf] px-5 py-9 text-sm text-[#60766f] sm:px-8 lg:px-12">
-        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 sm:flex-row">
-          <p>MHtoolkit is free, private by default, and built by Bolaji Agunbiade.</p>
-          <div className="flex gap-5">
-            <Link href="/privacy" className="hover:text-[#163a32]">
-              Privacy
-            </Link>
-            <Link href="/support" className="hover:text-[#163a32]">
-              Support
-            </Link>
-          </div>
-        </div>
+      <footer className={`${styles.wrap} ${styles.footer}`}>
+        <div><Link href="/" className={styles.brand}>MHtoolkit</Link><p>Free, open-source support for everyday mental health.</p></div>
+        <nav aria-label="Footer navigation"><Link href="/privacy">Privacy</Link><Link href="/support">Support &amp; feedback</Link><a href={SOURCE_REPOSITORY}>Source code</a><Link href="/resources">Find urgent support</Link></nav>
       </footer>
     </main>
   );

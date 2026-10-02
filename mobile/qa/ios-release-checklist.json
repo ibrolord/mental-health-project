@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-08-24.2",
+  "checklistVersion": "2026-09-27.4",
   "platform": "ios",
-  "expectedInventory": { "routes": 38, "routeChecks": 759, "workflows": 121, "total": 880 },
+  "expectedInventory": { "routes": 38, "routeChecks": 786, "workflows": 129, "total": 915 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -130,7 +130,7 @@
       "source": "app/(tabs)/index.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["support", "mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "add-context", "safety-support", "open-advisor", "open-together", "customize-today"]
+      "controls": ["support", "mood-great", "mood-good", "mood-okay", "mood-low", "mood-very-low", "add-context", "safety-support", "open-advisor", "open-together", "customize-today", "choose-focus", "explore-for-now", "start-continue-step"]
     },
     {
       "id": "advisor",
@@ -146,7 +146,7 @@
       "source": "app/advisor-setup.tsx",
       "kind": "stack",
       "identityRequirements": ["saved-anonymous", "email-owner"],
-      "controls": ["preferred-name", "focus-options", "priority-options", "advice-style", "low-energy-essentials", "save", "balanced-default"]
+      "controls": ["preferred-name", "focus-options", "priority-options", "advice-style", "low-energy-essentials", "save", "balanced-default", "welcome-steady", "welcome-routine", "welcome-follow-through", "welcome-save", "welcome-skip", "welcome-name-toggle", "welcome-support", "welcome-back", "welcome-next", "welcome-change-focus", "welcome-study-toggle", "welcome-study-link", "welcome-reduce-motion", "welcome-motivation", "welcome-custom-motivation", "welcome-obstacle", "welcome-custom-obstacle", "welcome-commitment", "welcome-custom-action", "welcome-cue", "welcome-skip-question", "welcome-edit-step", "welcome-replay"]
     },
     {
       "id": "mood-tracker",
@@ -410,7 +410,7 @@
       "source": "app/settings.tsx",
       "kind": "stack",
       "identityRequirements": ["email-owner"],
-      "controls": ["create-account", "finish-account", "sign-in", "sign-out", "notifications-master", "notification-category-toggles", "reminder-times", "test-reminder", "permission-denied-open-settings", "health-setup", "health-disable", "export", "revoke-ai-consent", "privacy", "visit-brief-collapse", "visit-brief-section-toggles", "visit-brief-safety-opt-in", "visit-brief-exact-preview", "visit-brief-share", "privacy-activity-collapse", "privacy-activity-refresh", "email-support", "support-page", "delete-saved-data", "delete-account"]
+      "controls": ["create-account", "finish-account", "sign-in", "sign-out", "notifications-master", "notification-category-toggles", "reminder-times", "test-reminder", "permission-denied-open-settings", "health-setup", "health-disable", "tune-advisor", "export", "revoke-ai-consent", "privacy", "visit-brief-collapse", "visit-brief-section-toggles", "visit-brief-safety-opt-in", "visit-brief-exact-preview", "visit-brief-share", "privacy-activity-collapse", "privacy-activity-refresh", "email-support", "support-page", "delete-saved-data", "delete-account"]
     },
     {
       "id": "support",
@@ -507,6 +507,14 @@
     { "id": "together.collaboration", "area": "together", "kind": "manual", "title": "Comments, priority suggestions with accept or decline, and owner-selected rewards persist and remain connection-scoped" },
     { "id": "together.revoke-block", "area": "together", "kind": "manual", "title": "Ending or blocking a connection immediately removes partner access while retaining the owner's private records" },
     { "id": "together.owner-isolation", "area": "privacy", "kind": "manual", "title": "Owner, partner, outsider, and revoked-partner identities cannot read or mutate another connection's Together records" },
+    { "id": "advisor.welcome", "area": "advisor", "kind": "manual", "title": "Choose each starting focus and optional name; verify correct next step and personalized greeting after reload; skip without enabling AI, Health, notifications, or sharing" },
+    { "id": "advisor.welcome-isolation", "area": "advisor", "kind": "manual", "title": "Completed and skipped setup do not repeat; another owner cannot see the name or choices; a failed save stays retryable; detailed Settings remain editable" },
+    { "id": "advisor.welcome-slow-storage", "area": "advisor", "kind": "manual", "title": "With stalled or failed preference storage, both welcome and Today skip remain usable; preview/CTA agree; leaving a pending save never causes late navigation; another owner can start setup independently" },
+    { "id": "advisor.welcome-accessibility", "area": "advisor", "kind": "manual", "title": "VoiceOver announces selected focus and first-step preview; optional name expands without stealing focus; keyboard Done works; all controls remain reachable at largest Dynamic Type and smallest supported screen" },
+    { "id": "advisor.personal-journey", "area": "advisor", "kind": "manual", "title": "Complete all six illustrated steps with custom motivation, obstacle, action and cue; Back and Edit preserve answers; Save shows the authored plan in Advisor after restart; setup replays and edits in Settings" },
+    { "id": "advisor.personal-journey-privacy", "area": "advisor", "kind": "manual", "title": "Skip never saves drafted answers or expands consent; new free text stays out of AI requests; export includes local profile and deletion clears it; switching owners cannot show or save another profile's answers" },
+    { "id": "advisor.personal-journey-motion", "area": "advisor", "kind": "manual", "title": "Every step has its matching offline illustration; Reduce Motion shows one static scene across preference changes; all six screens remain usable with keyboard and largest Dynamic Type; fresh setup is skippable and completed setup is not forced again" },
+    { "id": "advisor.today-handoff", "area": "advisor", "kind": "manual", "title": "Start and continue the same persisted step from Today and Advisor; mood save refreshes suggestions; low-energy essentials do not overwrite the full tool layout" },
     { "id": "advisor.planned-vs-active", "area": "advisor", "kind": "manual", "title": "Scheduling a check-in creates a planned step without claiming it started; starting it changes Today and Advisor to current-step language" },
     { "id": "advisor.personalization", "area": "advisor", "kind": "manual", "title": "First use requires setup before consent or model access; name, focus, priorities, style, and low-energy essentials persist and deterministically shape the brief" },
     { "id": "advisor.follow-up-persistence", "area": "advisor", "kind": "manual", "title": "A scheduled Advisor check-in survives notification delivery, dismissal, force quit, relaunch, and foreground reconciliation until the user records an outcome" },

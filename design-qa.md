@@ -137,3 +137,198 @@ No actionable P0, P1, or P2 visual issues remain.
 - [x] No browser console warnings or errors.
 
 final result: passed
+
+---
+
+# Guided Start iOS Onboarding QA - September 27, 2026
+
+## Evidence
+
+- Source visual truth: `/Users/ibrobaba/codex/mhtoolkit/docs/design/ios-onboarding-2026-09-27/concept-guided-start.png`.
+- Final native implementation: `/Users/ibrobaba/codex/mhtoolkit/docs/design/ios-onboarding-2026-09-27/19-guided-start-final.png`.
+- Final full-view combined comparison: `/Users/ibrobaba/codex/mhtoolkit/docs/design/ios-onboarding-2026-09-27/20-guided-start-comparison-final.png`.
+- Final focused choice-list comparison: `/Users/ibrobaba/codex/mhtoolkit/docs/design/ios-onboarding-2026-09-27/21-guided-start-choice-comparison-final.png`.
+- Largest Dynamic Type captures: `16-largest-text-top.png`, `17-largest-text-actions.png`, and `18-largest-text-choice.png` in the same evidence directory.
+- State: Build a routine selected, optional name collapsed, no entered name, cream theme, `/advisor-setup?mode=welcome&returnTo=today`.
+- Environment: actual React Native iOS 26.4 development client in Device Hub; not a browser mockup or TestFlight build.
+- Source is 853 x 1844 pixels. Native window capture is 790 x 1720 pixels. The comparison crops the native image at x61/y327 to 668 x 1233, excluding desktop/device chrome and native status/back regions, then scales both to 393 pixels wide without stretching height. Combined canvas: 802 x 850. Native logical point width was not instrumented; 393 is comparison width, not a claimed measured device viewport.
+- The source has no native safe area/back header and contains extra quote/reassurance copy intentionally removed in implementation. Heights are therefore not identical; do not interpret canvas padding or remaining rounded screen corners as app layout differences.
+
+## Findings
+
+- [P2, fixed and verified] Skip fell below the initial native viewport. Reduced gaps and row padding preserve touch sizes while exposing both actions in final capture `19`.
+- [P2, fixed and verified] Artwork had an interior rectangular left boundary, then disappeared after the first sizing correction. An explicit full-width frame and image dimensions restore the existing raster; final comparison `20` confirms the result.
+- [P2, fixed and verified] At the largest Dynamic Type size, Optional squeezed the name label into broken word fragments. The labels now stack at accessibility sizes, verified in capture `17`.
+- [P3, fixed and verified] The selected radio now uses the source's filled indicator with a white check, verified in comparison `21`.
+
+No actionable P0/P1/P2 visual finding remains in the final standard-size welcome state. This is not a full-device accessibility or release certification.
+
+## Required Fidelity Surfaces
+
+- Fonts/typography: Native Georgia headings and serif brand retain the source hierarchy; native sans-serif body text uses the existing app typography. The generated raster's exact font cannot be established. Final default-size text is readable. Largest text reflows vertically, with stacked name labels and reachable actions; full VoiceOver/form testing remains separate.
+- Spacing/layout: Connected list, preview, name disclosure, and full-width pill CTA match the selected structure. Native back navigation is intentionally retained. Both primary and skip actions are visible without scrolling at the captured standard size.
+- Colors/tokens: Existing cream, forest, sage selection, rust eyebrow, and outlined borders retained. Native choice rows are slightly lighter than the generated image, intentionally using the app's card token.
+- Image quality: Reuses the existing watercolor branch raster rather than inventing new vector artwork. Its orientation differs from the generated concept but preserves the established brand asset. Final header framing and blend were visually inspected; decoration is hidden at large text sizes.
+- Copy/content: Main heading, three options, preview, and primary action follow the selected concept. Removed decorative quote and extra reassurance intentionally. Preview instead explicitly explains the saved Advisor priority; name is visibly optional. Skip copy changes when an unsaved name or pending save exists.
+
+## Comparison History
+
+1. Captured native first pass with routine selected; opened source and implementation together.
+2. Created and inspected normalized full-view and focused choice-list comparisons.
+3. Found skip visibility and artwork seam issues above. Applied spacing, artwork, and radio fixes.
+4. The Mac initially locked, delaying native checks. After unlocking, capture `08` confirmed skip visibility but exposed missing artwork; explicit sizing corrected it.
+5. Captured and inspected comparisons `14` and `15`. Tested all three destinations, optional name, skip, Support/Back, and cold-relaunch persistence in the native client.
+6. Largest text revealed name-label crowding; stacked the labels and verified the corrected layout and skip. Restored original text size and preview preferences.
+7. Captured final state `19`; generated and inspected full-view comparison `20` and focused comparison `21` after the last edit. Passed the scoped visual gate based on these images, not unit tests alone.
+
+## Implementation Checklist
+
+- [x] Selected concept implemented using native components and existing artwork.
+- [x] Preview and primary label update on native routine selection.
+- [x] Automated routing, save-failure, owner-isolation, and stale-navigation checks pass.
+- [x] Both independent correctness-review findings fixed and rechecked.
+- [x] Recapture post-fix screen and compare again.
+- [x] Click all three native destinations, skip, name, back, and Support.
+- [x] Verify saved name/focus after a native cold relaunch.
+- [x] Check welcome choices and exit at largest Dynamic Type; restore original setting.
+- [ ] Physical VoiceOver, full large-text form sweep, compact iPhone, and iPad.
+- [ ] Native fault-injection/owner-switch integration and exact signed-release QA.
+
+Detailed implementation/verification record: `/Users/ibrobaba/codex/mhtoolkit/docs/design/ios-onboarding-2026-09-27/GUIDED-START-QA.md`.
+
+final result: passed
+
+Scope of this result: selected welcome visual fidelity at the captured standard size, with the documented largest-text checks. Remaining device, integration, and release checks above are not implied to pass.
+
+---
+
+# Illustrated Quiet Momentum iOS QA - September 27, 2026
+
+## Evidence
+
+- Source: `/Users/ibrobaba/codex/mhtoolkit/docs/design/ios-onboarding-motion-2026-09-27/selected-quiet-momentum.png`.
+- Implementation: `26-illustrated-final.png` in the same directory; actual native iOS 26.4 development client, not a browser clone.
+- Full comparison: `27-illustrated-final-comparison.png`; focused selector comparison: `28-illustrated-final-choice-comparison.png`. Both inspected after the final motion fix.
+- State: routine selected, first stage, cream theme, normal text size.
+- Source 853 x 1844; native window 790 x 1720. Native app-content crop x61/y327, 668 x 1233. Both normalized to width393 without stretching height; combined canvas802 x850. The native logical viewport was not instrumented; comparison393 is not a measured native point width.
+- Native safe-area/back controls intentionally retained. Shorter native content height is an explicit adaptation, not a one-to-one pixel match.
+
+## Findings And Iterations
+
+- [P2 fixed, observed] Initial illustration pushed the third option behind the footer. Reduced hero height to a viewport-bounded size; all choices and both actions are fully visible in capture14.
+- [P2 fixed, observed] Largest-text heading split a word across lines. Smaller display base size continues to scale while preserving whole words; captures16 and17 show the heading and reachable controls.
+- [P1 fixed, native recheck passed] Live Reduce Motion exposed inactive animated layers, overlapping illustrations. Replaced the animated subtree with one plain selected Image. Post-unlock native reduced/normal/reduced tests showed single static scenes when enabled and restored animation when disabled. Recordings23/24 and capture25 document the fix; recording19 remains failure evidence. Original Reduce Motion = 0 was restored and verified in Settings.
+
+## Required Fidelity Surfaces
+
+- Typography: Georgia display heading/brand and native sans copy match the editorial hierarchy. Choice descriptions were removed visually as in the selected concept, retained in accessibility labels. Heading and CTA wrap at large text.
+- Spacing: selected connected list and one primary action preserved. Art is intentionally smaller to retain existing native Back controls and keep all three choices visible. Corners and gaps use existing tokens.
+- Colors: existing cream, forest, pale sage, and clay Support action retained. No purple or new palette. Selection is indicated by text and filled check, not color alone.
+- Image quality: original generated RGBA illustrations, same character and gouache palette. Routine shows writing rather than the concept's generic pause scene, intentionally responding to the selected focus. Subject, transparent edges, hands, and crop were visually inspected. No CSS/SVG replacement art.
+- Copy: headline, supporting sentence, focus labels and first CTA match the selected concept. Research remains on stage two with study context and source, not an invented app success claim.
+
+## Verification
+
+- 616 mobile tests; TypeScript and targeted lint passed.
+- Native selection, first-stage progression, optional-name keyboard, skip-without-save, final Goals handoff and saved priority verified.
+- Artwork absent from the native accessibility tree. Large text and normal-motion recording inspected.
+- Independent reviewer found no bug in the Reduce Motion correction; the required native reconciliation retest passed. Final full and selector comparisons inspected; no actionable P0/P1/P2 visual issue remains within this captured welcome-state scope.
+- No full VoiceOver, compact iPhone/iPad, or exact signed-release claim.
+
+final result: passed
+
+Scope: illustrated onboarding fidelity at the captured simulator size and the documented motion/large-text checks only. Final preview is open; original test settings restored. Physical accessibility, compact iPhone/iPad layouts, and exact signed-artifact release QA remain separate gates. No push, submission, or release was performed.
+
+---
+
+# Six-Step Personal Onboarding QA - September 27, 2026
+
+## Findings
+
+- **[P2 open, functional] Retrying an account migration after a later-store failure
+  can discard newly edited anonymous answers.** The provisional target copy is
+  treated as an intentional target plan on retry, then the newer source is
+  cleared. Independent reproduction is recorded in the journey QA report. Track
+  provisional-copy provenance or roll back an unchanged provisional target;
+  cover failure, source edit, and retry. Further runtime edits are paused pending
+  user confirmation because the configured two-round review limit was reached.
+- **[P2 fixed, visual] Header/safe-area duplication and undersized opening art.**
+  Welcome now handles its safe-area inset without a redundant native stack header;
+  opening art has a larger viewport-bounded frame. Post-fix capture `01-focus.png`
+  and comparison `14-final-design-comparison.png` show all focus choices and exits.
+- **[P2 fixed, behavior] Restored custom-action editing and completion navigation.**
+  Clearing/reselecting a custom action no longer unmounts/erases its field. Final
+  save dismisses to Advisor rather than retaining setup in a duplicate tabs stack.
+  Both rechecked through native interactions after the changes.
+
+## Evidence And Normalization
+
+- Source visual truth: `/Users/ibrobaba/codex/mhtoolkit/docs/design/ios-onboarding-motion-2026-09-27/selected-quiet-momentum.png`.
+- Implementation: `/Users/ibrobaba/codex/mhtoolkit/docs/design/ios-onboarding-journey-2026-09-27/01-focus.png`.
+- Full comparison: `14-final-design-comparison.png`; focused choice-list comparison:
+  `16-final-choice-comparison.png` in the journey directory. Both opened together
+  and inspected after the final art-size change.
+- Source853x1844; native window790x1720. App-content crop x61/y238,w668,h1301;
+  both normalized to width393 without height stretching. Combined full-view
+  canvas802x850. This is native React Native, not CSS; logical viewport/density
+  were not instrumented. Bottom rounded screen corners remain in the crop and
+  are not implementation defects. Source has no native status/safe-area regions.
+- Focused source crop x43/y1086,w767,h435; native x101/y1007,w588,h264; both
+  normalized to width393. Different row heights are an intentional native fit.
+- State: routine selected, normal text, motion allowed, cream theme, iOS26.4
+  ExpoSDK54 development client. Six progress segments replace two intentionally.
+- Screens `02` through `06` show the new motivation, obstacle, research, action,
+  and review states. Some are scrolled so options or actions can be inspected;
+  screenshot contact sheet `15` is an overview, not uniform-scroll proof.
+
+## Required Fidelity Surfaces
+
+- Typography: existing Georgia heading and wordmark with native sans controls.
+  Default headings and choices are legible; native row density is intentionally
+  tighter than the generated source. Large-text evidence/action/review and name
+  keyboard remain reachable; a complete physical VoiceOver sweep was not done.
+- Spacing/layout: original connected selector and single primary footer retained.
+  Later screens scroll, with Back and Skip available. Artwork is smaller on the
+  five question/review screens; it is hidden at accessibility text sizes.
+- Colors/tokens: cream, forest, sage selected state, clay support/research labels.
+  Checked radio and text communicate selection without relying only on color.
+- Image quality: bundled original transparent gouache scenes, same character and
+  palette. Routine shows writing, motivation a photo, obstacle clearing a desk,
+  evidence reading, and review a doorway. No vector/emoji approximations.
+- Copy/content: benefits and personal motivation precede the plan; real study
+  metrics include the measured outcome and expandable sources. No fabricated
+  MHtoolkit success percentage. Optional name, custom answers, and skip work.
+
+## Iterations And Verification
+
+1. Implemented six stages using the previously selected art direction and four
+   additional original assets. Fixed safe-area layout and Unicode plan-ID collision.
+2. Native click-through found/prompted keyboard and custom-field checks; corrected
+   transient custom-action editing and final navigation. Retested save, Settings
+   editing, replay-without-save, and Advisor's visible use of motivation/action/cue.
+3. Initial comparison `11` showed smaller first-screen art and mismatched selected
+   state. Enlarged art, selected routine, recaptured `01`, and compared `14`/`16`.
+   No actionable visual P0/P1/P2 remains in the captured standard-size state.
+4. Native Reduce Motion uses one static scene; largest-text evidence/commitment/
+   review and keyboard checked. Original simulator preferences and demo profile
+   restored. Preview reopened without saving new draft choices.
+5. 828 mobile tests, TypeScript, scoped ESLint, and iOS JavaScript export passed.
+   Full-repo run has three unrelated outreach-data failures. Independent review
+   still found the migration retry bug above; tests do not override that evidence.
+
+## Checklist
+
+- [x] Six illustrated/animated native screens with sourced evidence.
+- [x] Personal motivation/action/cue persistence and visible Advisor integration.
+- [x] Preset/custom editing, back/skip, Settings replay, and saved-plan preservation.
+- [x] Combined source/render comparison and post-fix recapture.
+- [x] Scoped Reduce Motion, Dynamic Type, and keyboard tests.
+- [ ] Fix and retest the confirmed migration retry data-loss sequence.
+- [ ] Physical accessibility, compact iPhone/iPad, live auth migration, and full
+  signed-artifact release checklist.
+
+final result: blocked
+
+Blocker is the confirmed migration retry defect, not a remaining captured visual
+mismatch. No commit, push, App Store submission, or release was performed.
+Details: `/Users/ibrobaba/codex/mhtoolkit/docs/design/ios-onboarding-journey-2026-09-27/QA.md`.

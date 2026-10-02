@@ -13,10 +13,11 @@ export const MOBILE_ROOT = path.resolve(SCRIPT_DIR, '..');
 export const REPO_ROOT = path.resolve(MOBILE_ROOT, '..');
 export const CHECKLIST_PATH = path.join(MOBILE_ROOT, 'qa', 'ios-release-checklist.json');
 export const RUNS_ROOT = path.join(MOBILE_ROOT, 'qa', 'runs');
-export const EXPECTED_INVENTORY = Object.freeze({ routes: 38, routeChecks: 759, workflows: 121, total: 880 });
-export const EXPECTED_CHECKLIST_SHA256 = '3cdfbde2e956b3044547342d3093103405a01e7988215458f7230ed75c4563cd';
+export const EXPECTED_INVENTORY = Object.freeze({ routes: 38, routeChecks: 786, workflows: 129, total: 915 });
+export const EXPECTED_CHECKLIST_SHA256 = 'f11eb5519f827c6c338cdb58d8d4cddaa586ef2e9680d1819cd2daa4fbefc3ba';
 const REQUIRED_ROUTE_CONTROLS = Object.freeze({
-  dashboard: ['support', 'safety-support', 'open-advisor', 'open-together'],
+  dashboard: ['support', 'safety-support', 'open-advisor', 'open-together', 'choose-focus', 'explore-for-now', 'start-continue-step'],
+  'advisor-setup': ['welcome-steady', 'welcome-routine', 'welcome-follow-through', 'welcome-save', 'welcome-skip', 'welcome-next', 'welcome-change-focus', 'welcome-study-toggle', 'welcome-study-link', 'welcome-reduce-motion'],
   advisor: [
     'support',
     'start',

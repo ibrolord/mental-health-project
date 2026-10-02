@@ -32,8 +32,7 @@ describe('mobile Advisor detail and context contracts', () => {
       advisor.indexOf('const startRecommendation'),
       advisor.indexOf('const generateAnotherRecommendation')
     );
-    expect(startFlow).toContain("advisorFollowUpState(actionToStart, new Date()) === 'planned_due'");
-    expect(startFlow).toContain('setAdvisorActionFollowUp(');
+    expect(startFlow).toContain('startAdvisorStep(expectedOwner');
     expect(advisor).toContain("label: 'Done'");
     expect(advisor).toContain("label: 'Remind me'");
     expect(advisor).toContain('Make it smaller');
@@ -49,9 +48,7 @@ describe('mobile Advisor detail and context contracts', () => {
     expect(advisor).toContain('const [historyOpen, setHistoryOpen] = useState(false);');
     expect(advisor).toContain('loadAdvisorOutcomes');
     expect(advisor).toContain('loadAdvisorAction(expectedOwner)');
-    expect(advisor).toContain('acceptAdvisorAction(expectedOwner');
     expect(advisor).toContain('reconcileAdvisorLifecycle(expectedOwner)');
-    expect(advisor).toContain('startAdvisorLifecycle(expectedOwner, actionToStart)');
     expect(advisor).toContain('completeAdvisorLifecycle(expectedOwner, completed)');
     expect(advisor).toContain('recoverAdvisorLifecycle(');
     expect(advisor).toContain('replaceAdvisorLifecycle(expectedOwner, actionToReplace)');
@@ -154,7 +151,7 @@ describe('mobile Advisor detail and context contracts', () => {
     );
     expect(advisor).toContain('!APPLE_HEALTH_AI_ENABLED ||');
     expect(advisor).toContain('confirmAppleHealthAiShare(summary)');
-    expect(advisor).toContain('appleHealthSummary\n    );');
+    expect(advisor).toContain('appleHealthSummary,\n      { isCurrent, expectedUserId }\n    );');
     expect(advisor).toContain('createAdvisorCandidateSet(');
     expect(advisor).toContain('requestModelAdvisorRecommendation(');
     expect(advisor).toContain("advisorModel === 'gemini' ? 'Gemini-guided · '");
@@ -180,23 +177,33 @@ describe('mobile Advisor detail and context contracts', () => {
 
   it('finishes personalization before consent, model calls, or brief caching', () => {
     const start = advisor.indexOf('const localDate =');
-    const loadFlow = advisor.slice(start, advisor.indexOf('.catch(() => {', start));
+    const end = advisor.indexOf('loopRef.current = loop;', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const loadFlow = advisor.slice(start, end);
     expect(loadFlow).toContain('if (!context.profile?.completedAt) {');
-    expect(loadFlow).toContain("router.push('/advisor-setup' as never)");
+    expect(loadFlow).not.toContain("router.push('/advisor-setup' as never)");
     expect(loadFlow.indexOf('if (!context.profile?.completedAt) {')).toBeLessThan(
       loadFlow.indexOf('const fingerprint =')
     );
     expect(loadFlow.indexOf('if (!context.profile?.completedAt) {')).toBeLessThan(
       loadFlow.indexOf('selectModelBackedRecommendation(')
     );
-    expect(loadFlow.indexOf("router.push('/advisor-setup' as never)")).toBeLessThan(
-      loadFlow.indexOf('selectModelBackedRecommendation(')
+    const personalizationGuard = loadFlow.slice(
+      loadFlow.indexOf('if (!context.profile?.completedAt) {'),
+      loadFlow.indexOf('const fingerprint =')
     );
+    expect(personalizationGuard).toContain('return;');
+    expect(personalizationGuard).not.toContain('selectModelBackedRecommendation(');
+    expect(personalizationGuard).not.toContain('advisorBriefStorage');
   });
 
   it('caches a generated brief against the post-offer context and reuses cached briefs', () => {
     const start = advisor.indexOf('const fingerprint =');
-    const loadFlow = advisor.slice(start, advisor.indexOf('.catch(() => {', start));
+    const end = advisor.indexOf('loopRef.current = loop;', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const loadFlow = advisor.slice(start, end);
     expect(loadFlow).toContain('if (!cached) {');
     expect(loadFlow.indexOf('recordAdvisorOffered(expectedOwner')).toBeLessThan(
       loadFlow.indexOf('updatedOutcomes = await loadAdvisorOutcomes(expectedOwner)')

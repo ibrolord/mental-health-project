@@ -36,6 +36,7 @@ import { clearContextSelections } from '@/lib/chat-context-preference';
 import { clearGoToActions } from '@/lib/go-to-actions-storage';
 import { clearAdvisorAction } from '@/lib/advisor-action-storage';
 import { advisorBriefStorage } from '@/lib/advisor-brief-storage';
+import { advisorProfileStorage } from '@/lib/advisor-profile-storage';
 import { clearAdvisorOutcomes } from '@/lib/advisor-outcome-storage';
 import { clearAdvisorObservationLedger } from '@/lib/advisor-observation-ledger';
 import { clearAdvisorLifecycleJournal } from '@/lib/advisor-lifecycle-runtime';
@@ -302,13 +303,15 @@ export default function SettingsScreen() {
         { expectedUserId: expectedOwnerId },
         { accessToken }
       );
-      const data = JSON.stringify(exportData, null, 2);
+      const advisorProfile = await advisorProfileStorage.read(`user_id:${expectedOwnerId}`);
+      const data = JSON.stringify({ ...exportData, localAdvisorProfile: advisorProfile }, null, 2);
       if (!FileSystem.cacheDirectory) {
         throw new Error('A private export location is unavailable.');
       }
       exportPath = `${FileSystem.cacheDirectory}mhtoolkit-data-export-${Date.now()}.json`;
       await FileSystem.writeAsStringAsync(exportPath, data);
       if (await Sharing.isAvailableAsync()) {
+        await captureOwnerSession(expectedOwnerId);
         await Sharing.shareAsync(exportPath);
       }
     } catch {
@@ -354,6 +357,7 @@ export default function SettingsScreen() {
                 clearGoToActions(consentSubjectId),
                 clearAdvisorAction(consentSubjectId),
                 advisorBriefStorage.clear(consentSubjectId),
+                advisorProfileStorage.clear(consentSubjectId),
                 clearAdvisorOutcomes(consentSubjectId),
                 clearAdvisorObservationLedger(consentSubjectId),
                 clearAllReminders(),
@@ -622,6 +626,10 @@ export default function SettingsScreen() {
       </View>
 
       <SectionHeader title="Advisor context" description="Optional signals Advisor may use on this device." />
+      <RowGroup>
+        <ListRow title="Tune Advisor" description="Your name, priorities, advice style, and low-energy essentials."
+          icon="compass" onPress={() => router.push('/advisor-setup')} />
+      </RowGroup>
       <AppleHealthSettingsCard ownerId={user?.id ?? null} />
 
       <SectionHeader title="Privacy and data" />

@@ -50,7 +50,6 @@ export function useAdvisorProfile(ownerKey: string | null) {
 
   const save = useCallback(async (next: AdvisorProfile) => {
     if (!ownerKey || profileOwnerKey !== ownerKey) return false;
-    setProfile(next);
     setError('');
     try {
       const saved = await advisorProfileStorage.write(ownerKey, next);

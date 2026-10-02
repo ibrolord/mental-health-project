@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AdvisorRecommendation } from './advisor-core';
+import { automaticAdvisorFollowUpAt } from './advisor-cadence-core';
 
 const STORAGE_PREFIX = 'mhtoolkit.advisor_action.v1';
 
@@ -53,6 +54,7 @@ const VALID_ROUTES = new Set<AdvisorRecommendation['route']>([
   '/(tabs)/tracker',
   '/plans',
   '/resources',
+  '/accountability',
 ]);
 
 export function advisorActionStorageKey(ownerKey: string): string {
@@ -250,6 +252,7 @@ export function createAdvisorActionStorage(
       ...action,
       status: 'in_progress',
       startedAt: action.startedAt ?? now,
+      followUpAt: action.followUpAt ?? automaticAdvisorFollowUpAt(new Date(now)),
       recoveryReason: null,
       updatedAt: now,
     }),
@@ -302,6 +305,24 @@ export function createAdvisorActionStorage(
     nowIso
   );
 
+  const deferAdvisorActionFollowUp = (
+    ownerKey: string | null,
+    actionId: string,
+    followUpAt: string,
+    nowIso?: string
+  ) => updateAdvisorAction(ownerKey, actionId, (action, now) => {
+    if (!validIso(followUpAt) || new Date(followUpAt).getTime() <= new Date(now).getTime()) {
+      throw new Error('Choose a future check-in time.');
+    }
+    return {
+      ...action,
+      followUpAt,
+      reminderAt: null,
+      status: action.status === 'needs_recovery' ? 'in_progress' : action.status,
+      updatedAt: now,
+    };
+  }, nowIso);
+
   const recordAdvisorActionCheckIn = (
     ownerKey: string | null,
     actionId: string,
@@ -328,7 +349,9 @@ export function createAdvisorActionStorage(
         lastCheckInResult: result,
         recoveryReason,
         recoveryCount: action.recoveryCount + 1,
-        useSmallerStep: result === 'partial' ? true : action.useSmallerStep,
+        useSmallerStep: result === 'partial' || recoveryReason === 'time' || recoveryReason === 'energy'
+          ? true
+          : action.useSmallerStep,
         updatedAt: now,
       };
     },
@@ -357,6 +380,7 @@ export function createAdvisorActionStorage(
     resizeAdvisorAction,
     setAdvisorActionReminder,
     setAdvisorActionFollowUp,
+    deferAdvisorActionFollowUp,
     recordAdvisorActionCheckIn,
     clearAdvisorAction,
   };
@@ -370,5 +394,6 @@ export const startAdvisorAction = advisorActionStorage.startAdvisorAction;
 export const resizeAdvisorAction = advisorActionStorage.resizeAdvisorAction;
 export const setAdvisorActionReminder = advisorActionStorage.setAdvisorActionReminder;
 export const setAdvisorActionFollowUp = advisorActionStorage.setAdvisorActionFollowUp;
+export const deferAdvisorActionFollowUp = advisorActionStorage.deferAdvisorActionFollowUp;
 export const recordAdvisorActionCheckIn = advisorActionStorage.recordAdvisorActionCheckIn;
 export const clearAdvisorAction = advisorActionStorage.clearAdvisorAction;

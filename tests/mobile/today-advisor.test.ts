@@ -1,0 +1,74 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AdvisorContext } from '../../mobile/lib/advisor-core';
+import type { AdvisorActionInstance } from '../../mobile/lib/advisor-action-storage';
+
+const mocks = vi.hoisted(() => ({
+  context: vi.fn(), action: vi.fn(), outcomes: vi.fn(), cache: vi.fn(), completed: vi.fn(),
+}));
+vi.mock('../../mobile/lib/advisor-context', () => ({ loadAmbientAdvisorContext: mocks.context }));
+vi.mock('../../mobile/lib/advisor-action-storage', () => ({ loadAdvisorAction: mocks.action }));
+vi.mock('../../mobile/lib/advisor-outcome-storage', () => ({ loadAdvisorOutcomes: mocks.outcomes }));
+vi.mock('../../mobile/lib/advisor-brief-storage', () => ({ advisorBriefStorage: { read: mocks.cache } }));
+vi.mock('../../mobile/lib/advisor-target-completion-runtime', () => ({ checkAdvisorTargetCompletion: mocks.completed }));
+import { loadTodayAdvisor } from '../../mobile/lib/today-advisor';
+
+const owner = { ownerKey: 'session_id:test', queryColumn: 'session_id' as const, queryValue: 'test', userId: 'anon-auth-id' };
+const context: AdvisorContext = { nowIso: '2026-09-27T12:00:00.000Z', mood: null, goals: [], habits: [], health: null, habitWeek: null };
+const action: AdvisorActionInstance = {
+  version: 2, id: 'saved-action', recommendationId: 'goal:g1', action: 'Write one paragraph.',
+  smallerAction: 'Open the document.', route: '/goals', sourceLabels: ['Goal'], observations: [],
+  changeSignalId: null, status: 'in_progress', acceptedAt: context.nowIso, startedAt: context.nowIso,
+  reminderAt: null, followUpAt: null, lastCheckInAt: null, lastCheckInResult: null, recoveryReason: null,
+  recoveryCount: 0, useSmallerStep: false, updatedAt: context.nowIso,
+};
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.context.mockResolvedValue(context);
+  mocks.action.mockResolvedValue(null);
+  mocks.outcomes.mockResolvedValue([]);
+  mocks.cache.mockResolvedValue(null);
+  mocks.completed.mockResolvedValue(false);
+});
+
+describe('Today Advisor read model', () => {
+  it('uses the shared selection without requesting a model', async () => {
+    expect((await loadTodayAdvisor(owner)).recommendation.route).toBe('/(tabs)/tracker');
+    expect(mocks.action).toHaveBeenCalledWith(owner.ownerKey);
+    expect(mocks.context).toHaveBeenCalledWith(owner);
+  });
+
+  it('reuses a matching cached brief and retains the actual current action', async () => {
+    const selection = (await loadTodayAdvisor(owner)).recommendation;
+    mocks.action.mockResolvedValue(action);
+    mocks.cache.mockResolvedValue({ recommendation: { ...selection, id: 'cached-choice' } });
+    const result = await loadTodayAdvisor(owner);
+    expect(result.recommendation.id).toBe('cached-choice');
+    expect(result.action).toEqual(action);
+    expect(mocks.completed).toHaveBeenCalledWith(action, owner);
+  });
+
+  it('reports completion for a review handoff instead of completing or deleting anything on load', async () => {
+    mocks.action.mockResolvedValue(action);
+    mocks.completed.mockResolvedValue(true);
+    const result = await loadTodayAdvisor(owner);
+    expect(result.targetCompleted).toBe(true);
+    expect(result.action).toEqual(action);
+    expect(mocks.outcomes).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not invent completion when its verification is unavailable', async () => {
+    mocks.action.mockResolvedValue(action);
+    mocks.completed.mockRejectedValue(new Error('offline'));
+    expect((await loadTodayAdvisor(owner)).targetCompleted).toBe(false);
+  });
+
+  it('prioritizes safety over cached advice and an existing commitment', async () => {
+    mocks.context.mockResolvedValue({ ...context, goals: [{ id: 'g', title: 'hurt myself', dueAt: null }] });
+    mocks.action.mockResolvedValue(action);
+    const result = await loadTodayAdvisor(owner);
+    expect(result.recommendation.kind).toBe('safety');
+    expect(result.action).toBeNull();
+    expect(mocks.cache).not.toHaveBeenCalled();
+  });
+});

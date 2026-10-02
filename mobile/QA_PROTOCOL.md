@@ -174,7 +174,7 @@ npm run qa:ios:verify -- \
 ## Coverage model
 
 The manifest and its reviewed SHA-256 enforce all native route files. Its exact
-38-route, 759 route/control, 121 workflow, and 880 total-row inventory cannot
+38-route, 786 route/control, 129 workflow, and 915 total-row inventory cannot
 silently shrink. Each route requires render,
 control, state-boundary, restoration, and navigation evidence appropriate to
 its tab, stack, or modal type. Every named control is a separate required row.

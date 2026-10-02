@@ -118,7 +118,6 @@ async function migrateAnonymousLocalState(
     [`mhtoolkit.advisor_observation_ledger.v1:${encodedSource}`, `mhtoolkit.advisor_observation_ledger.v1:${encodedTarget}`],
     [`mhtoolkit.advisor_lifecycle.v1:${encodedSource}`, `mhtoolkit.advisor_lifecycle.v1:${encodedTarget}`],
     [`mhtoolkit.advisor.daily-brief.v1.${sourceOwnerKey}`, `mhtoolkit.advisor.daily-brief.v1.${targetOwnerKey}`],
-    [`mhtoolkit.advisor.profile.v1:${encodedSource}`, `mhtoolkit.advisor.profile.v1:${encodedTarget}`],
     [`mhtoolkit.ai_full_context.v3:${encodedSource}`, `mhtoolkit.ai_full_context.v3:${encodedTarget}`],
     [`mhtoolkit.chat_context.v1:${encodedSource}`, `mhtoolkit.chat_context.v1:${encodedTarget}`],
     [`mhtoolkit.go_to_actions.v1:${encodedSource}`, `mhtoolkit.go_to_actions.v1:${encodedTarget}`],
@@ -127,6 +126,7 @@ async function migrateAnonymousLocalState(
     [`mhtoolkit.ai_data_sharing_consent.v4:${encodedSource}`, `mhtoolkit.ai_data_sharing_consent.v4:${encodedTarget}`],
     [`mhtoolkit.apple-health.enabled.${sourceUserId}`, `mhtoolkit.apple-health.enabled.${targetUserId}`],
   ];
+  const finalizeProfileMigration = await advisorProfileStorage.migrateOwner(sourceOwnerKey, targetOwnerKey);
   await Promise.all(keyPairs.map(([sourceKey, targetKey]) => moveAsyncStorageKey(sourceKey, targetKey)));
 
   const [moodDraft, reflectionDraft] = await Promise.all([
@@ -144,6 +144,7 @@ async function migrateAnonymousLocalState(
     clearReflectionDraft(sourceUserId),
     moveJournalAudioForUser(sourceUserId, targetUserId),
   ]);
+  await finalizeProfileMigration();
 }
 
 async function mergeAnonymousSessionIntoCurrentAccount(

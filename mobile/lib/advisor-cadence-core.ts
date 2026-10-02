@@ -31,12 +31,21 @@ function atLocalHour(base: Date, dayOffset: number, hour: number): Date {
   return date;
 }
 
-export function createAdvisorReminderChoices(now: Date): AdvisorReminderChoice[] {
+// This is a local check-in time, not a request to schedule a notification.
+export function automaticAdvisorFollowUpAt(now: Date): string {
   const later = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  if (later.getHours() >= 21) return atLocalHour(later, 1, 9).toISOString();
+  if (later.getHours() < 8) return atLocalHour(later, 0, 9).toISOString();
+  return later.toISOString();
+}
+
+export function createAdvisorReminderChoices(now: Date): AdvisorReminderChoice[] {
+  const later = new Date(automaticAdvisorFollowUpAt(now));
   let laterLabel = 'In 2 hours';
-  if (later.getHours() >= 21 || later.getHours() < 8) {
-    later.setTime(atLocalHour(now, 1, 9).getTime());
-    laterLabel = 'Tomorrow morning';
+  if (later.getTime() !== now.getTime() + 2 * 60 * 60 * 1000) {
+    laterLabel = later.toDateString() === now.toDateString()
+      ? 'This morning'
+      : 'Tomorrow morning';
   }
 
   const eveningToday = atLocalHour(now, 0, 19);

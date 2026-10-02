@@ -27,6 +27,7 @@ const ROUTES = new Set([
   '/(tabs)/tracker',
   '/plans',
   '/resources',
+  '/accountability',
 ]);
 const FOCUSES = new Set(['steady', 'deadline', 'routine', 'baseline', 'recover']);
 const SIGNAL_KINDS = new Set([
