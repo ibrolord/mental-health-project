@@ -147,11 +147,15 @@ and the final simulator Metro/Hermes bundle succeeded afterward. The audit still
 has 21 high transitive findings, rooted in braces and node-forge advisories with
 no published fixes. No claim of a clean audit or accepted residual risk is made.
 
-Public Google/Apple/anonymous settings passed again. The six management-only
-checks remain blocked: Chrome's Supabase session expired, and the existing
-dashboard attestations are stale. App Store Connect also requires sign-in.
-The user was asked to sign in to both Chrome tabs. Expo and Vercel accounts are
-authenticated. No authentication setting was changed.
+Public Google/Apple/anonymous settings passed again. Chrome sign-in subsequently
+succeeded and all six management-only settings were observed on the production
+dashboard at 2026-10-03T20:44:51Z. Fresh evidence is in the ignored local file
+`mobile/qa/runs/social-auth-dashboard-2026-10-03.json`. Running
+`npm run verify:social-auth -- --dashboard-evidence
+mobile/qa/runs/social-auth-dashboard-2026-10-03.json` exited zero. No provider
+setting was changed. This is configuration evidence, not completed social login.
+App Store Connect accepted the saved developer-account password and is waiting
+for the owner's two-factor code.
 
 Physical-device execution is explicitly excluded from this pass. This is not
 physical QA evidence, and does not turn the existing exact-artifact release
@@ -164,14 +168,23 @@ physical audio, accessibility, Apple sign-in, or notification delivery.
 - Apple lookup on 2026-10-03 reports public version 1.0.7, released
   2026-09-28T13:34:32Z. The candidate is now 1.0.8 in Expo, package metadata,
   Fastlane, review notes, and the version baseline.
-- EAS latest completed build is 1.0.7 (67), ID
-  `1e7dfda6-fe80-4713-8874-2a2830e30cc6`; it does not contain these repairs.
+- Feature commit `3acb23a04d9ec5b2c59138456672c204fe55c3ad` was pushed to main.
+  EAS production build 1.0.8 (68), ID
+  `74cb750d-38b0-427a-8a8d-840288b0d03c`, completed from that commit.
+  Downloaded IPA SHA-256 is
+  `21d56a95626de4fa70b358dff33a524bae10384a945812c84893993327644ae1`.
+  Signature verification passes. Its bundle uses the production API URL and
+  does not contain the localhost preview API URL. Signed entitlements include
+  Apple sign-in, HealthKit, and production notifications; debug access is off.
+  EAS Submit reports successful upload to App Store Connect, submission ID
+  `3e9b1ba8-cfd6-45ac-8680-5638660a85ea`. Apple processing and App Review
+  submission are separate; neither is inferred from this upload receipt.
 - Production API build passed. Expo Doctor passed all 18 isolated checks again
   with the final patched lockfile. `/tmp/mht-release-isolated-doctor-final.log`.
   The in-place run detects the web and mobile projects' separate React copies;
   the isolated layout matches the mobile EAS build context.
-- Live public Supabase settings enable Google, Apple, and anonymous auth.
-  Management-only redirects/linking checks and signed-device login remain open.
+- Live public Supabase settings and management-only redirects/linking checks
+  pass. Signed-device login is unexecuted under the physical-test waiver.
 - The connector reports all 43 local migration versions present in production,
   with no extra remote versions. The CLI migration check stalled and was stopped;
   this is alternative evidence, not a passing CLI verification.
@@ -183,16 +196,31 @@ physical audio, accessibility, Apple sign-in, or notification delivery.
   Expo downgrade or framework-major upgrade was applied. Findings are not
   declared unreachable or accepted risks. `/tmp/mht-mobile-prod-audit-after.json`.
 
-## Next Verification
+## Latest Backend Verification
 
-- Finish final review and full verification of the two authorized edge-case fixes.
-- Rebuild the exact simulator artifact, install it, verify its JS/binary hashes,
-  and click through the adaptive guidance, current-step feedback, and reminder
-  opt-out flows using disposable data.
+- Next and its lint package were patched to 15.5.27; Sharp to 0.35.4. Compatible
+  transitive patches were also applied without force or a framework-major upgrade.
+- Normal root `npm ci`, lint, production build, and all 215 files / 2,150 tests
+  pass. Added benign image-runtime coverage for Next/Sharp interoperability and
+  the brand-asset resize/modulation/compositing workflow.
+- Local production-server smoke: landing page, yoga page, Open Graph PNG, and
+  ordinary icon image optimization all return 200; output dimensions are correct.
+- Independent static dependency review returned SHIP for the scoped patch,
+  confirming coherent patched Next/Sharp and Linux platform package versions.
+  This review is not a native QA pass or proof of Linux runtime execution.
+- Root audit has zero critical findings but is not clean: eight high and two
+  moderate remain. The production-dependency subset has six high findings in
+  the Tailwind/braces dependency chain. The mobile audit still has 21 high.
+  No exploit reproduction or claim of application-level exploitability was made.
+
+## Remaining Verification
+
+- Finish the signed-IPA review checker, including its CLI migration check.
+- Verify TestFlight upload and App Review submission separately; a finished EAS
+  build is not a submission receipt.
 - Local preview API was `http://127.0.0.1:3012`; production artifacts must not use it.
-- Deploy the backward-compatible API contract before shipping the new iOS client.
-  An old backend rejects the new optional request fields; iOS safely falls back
-  locally, but that does not demonstrate model-backed guidance.
+- The feature API deployment is Ready and serves the production domain; deploy
+  and verify the follow-up backend dependency patch before final submission.
 - Physical-device/TestFlight gate remains unexecuted under the user's waiver. Current checklist
   is `2026-10-03.1`, with 39 routes, 843 route checks, 160 workflows and 1,003 rows.
   Canonical digest: `f858552edf631280e799fb2a9722a532f24012aedac1274c3a7a5d20d2fe18d3`.
