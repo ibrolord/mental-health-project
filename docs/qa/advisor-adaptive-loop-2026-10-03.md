@@ -221,9 +221,15 @@ physical audio, accessibility, Apple sign-in, or notification delivery.
   exited 1 and is not represented as passing. Log:
   `/tmp/mht-release-1.0.8-68-review-gate.log`. All 43 local migration versions
   match the connector's fresh production list; this is independent evidence.
-- TestFlight/App Store Connect binary upload is confirmed by EAS Submit.
-  Apple processing and App Review submission remain unconfirmed. Chrome is
-  waiting for the owner's Apple two-factor code; no code has been supplied.
+- TestFlight/App Store Connect binary upload and processing are confirmed.
+  On 2026-10-03 at 6:01 PM EDT, App Store Connect accepted version 1.0.8 (68)
+  for App Review and displayed `Waiting for Review`. Submission ID:
+  `971459cb-384f-4c2d-91ad-fadd0d1e7008`. The English (Canada) and English (U.S.)
+  release notes and reviewer instructions were updated for build 68.
+  Automatic release after approval remains selected. Approval and public
+  availability of 1.0.8 are not yet confirmed. Receipt:
+  `https://appstoreconnect.apple.com/apps/6760159800/distribution/reviewsubmissions/details/971459cb-384f-4c2d-91ad-fadd0d1e7008`.
+  Local screenshot: `/tmp/mhtoolkit-1.0.8-68-waiting-for-review.jpg`.
 - Local preview API was `http://127.0.0.1:3012`; production artifacts must not use it.
 - Backend commit `2fef64c77b7f1caf2da3177941d01b0fca44e699` has a successful
   GitHub/Vercel deployment status. Production domain `mhtoolkit.vercel.app`
