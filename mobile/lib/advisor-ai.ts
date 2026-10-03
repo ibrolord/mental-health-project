@@ -5,6 +5,7 @@ import type {
   AdvisorRecommendation,
 } from './advisor-core';
 import { hasUnsafeAdvisorContext } from './advisor-core';
+import { advisorFollowThroughOptions, advisorModelFeedback, type AdvisorCommitmentContext } from './advisor-follow-through';
 import type { AppleHealthAiSummary } from './apple-health-core';
 import {
   advisorMoodLabel,
@@ -24,6 +25,7 @@ type AdvisorModelResponse = {
     observations: string[];
     signalIds: string[];
     focus: AdvisorBriefFocus;
+    followThroughId?: string | null;
   };
   model: AdvisorModel | 'safety';
   personalized: boolean;
@@ -47,7 +49,7 @@ export async function requestModelAdvisorRecommendation(
   candidates: readonly AdvisorRecommendation[],
   recent: readonly AdvisorRecentRecommendation[],
   appleHealthSummary: AppleHealthAiSummary | null = null,
-  requestOptions: { isCurrent?: () => boolean; expectedUserId?: string } = {}
+  requestOptions: { isCurrent?: () => boolean; expectedUserId?: string; commitment?: AdvisorCommitmentContext | null } = {}
 ): Promise<{
   recommendation: AdvisorRecommendation;
   model: AdvisorModel;
@@ -60,16 +62,26 @@ export async function requestModelAdvisorRecommendation(
   // Reject local-only candidates even if a caller forgets to strip the profile.
   const modelCandidates = candidates.filter((candidate) =>
     !candidate.id.startsWith('personal-plan:') &&
-    !candidate.sourceLabels.includes('Your personal plan')
+    !candidate.sourceLabels.includes('Your personal plan') &&
+    (appleHealthSummary || !candidate.sourceLabels.includes('Apple Health summary'))
   );
   if (modelCandidates.length === 0) throw new Error('No model-safe Advisor candidates');
   const modelContext: AdvisorContext = {
     ...context,
+    nowIso: new Date().toISOString(),
     profile: context.profile ? { ...context.profile, personalPlan: undefined } : context.profile,
   };
   const signals = createAdvisorBriefSignals(modelContext, appleHealthSummary);
+  const { commitment = null, ...apiOptions } = requestOptions;
+  if (commitment && (modelCandidates.length !== 1 || modelCandidates[0].id !== commitment.recommendationId)) {
+    throw new Error('Advisor must keep the accepted commitment');
+  }
+  const feedback = advisorModelFeedback(recent, modelContext.nowIso);
+  const followThrough = new Map(modelCandidates.map((candidate) => [
+    candidate.id, advisorFollowThroughOptions(candidate.id, feedback, commitment),
+  ]));
   const response = await apiRequest<AdvisorModelResponse>('/api/advisor', {
-    nowIso: context.nowIso,
+    nowIso: modelContext.nowIso,
     mood: context.mood
       ? {
           label: advisorMoodLabel(context.mood.emoji),
@@ -85,19 +97,12 @@ export async function requestModelAdvisorRecommendation(
       action: candidate.action,
       smallerAction: candidate.smallerAction,
       sourceLabels: [...candidate.sourceLabels],
+      followThroughOptions: followThrough.get(candidate.id),
     })),
     signals,
     appleHealthSummary,
-    recentFeedback: recent
-      .filter(
-        (item): item is Exclude<AdvisorRecentRecommendation, string> =>
-          typeof item !== 'string' && !item.recommendationId.startsWith('personal-plan:')
-      )
-      .slice(0, 5)
-      .map((item) => ({
-        recommendationId: item.recommendationId,
-        helpful: item.helpful ?? null,
-      })),
+    recentFeedback: feedback,
+    commitment,
     profile: modelContext.profile?.completedAt
       ? {
           preferredName: modelContext.profile.preferredName,
@@ -107,7 +112,7 @@ export async function requestModelAdvisorRecommendation(
       : null,
   }, {
     timeoutMs: ADVISOR_MODEL_TIMEOUT_MS,
-    ...requestOptions,
+    ...apiOptions,
   });
 
   if (response.model === 'safety') {
@@ -139,6 +144,8 @@ export async function requestModelAdvisorRecommendation(
       headline: BRIEF_HEADLINES[response.selection.focus],
       signals: selectedSignals,
       usedAppleHealth: Boolean(appleHealthSummary),
+      followThrough: followThrough.get(selected.id)?.find((option) =>
+        option.id === response.selection.followThroughId)?.text,
     },
   };
 }

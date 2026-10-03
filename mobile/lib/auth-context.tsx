@@ -89,6 +89,8 @@ const MOBILE_AUTH_REDIRECT = 'mhtoolkit://auth/callback';
 let pendingAnonymousMergeSourceId: string | null = null;
 
 async function clearAdvisorOwnerState(ownerKey: string, eraseCompletions = false): Promise<void> {
+  const { clearAdvisorClient } = await import('./advisor-client-runtime');
+  await clearAdvisorClient(ownerKey);
   // Completion retries must settle before their dependent Advisor stores are erased.
   if (eraseCompletions) await clearToolCompletions(ownerKey);
   else await suspendToolCompletions(ownerKey);
@@ -136,19 +138,12 @@ async function migrateAnonymousLocalState(
   const finalizeProfileMigration = await advisorProfileStorage.migrateOwner(sourceOwnerKey, targetOwnerKey);
   await Promise.all(keyPairs.map(([sourceKey, targetKey]) => moveAsyncStorageKey(sourceKey, targetKey)));
 
-  const [moodDraft, reflectionDraft] = await Promise.all([
-    moodDraftStorage.read(sourceUserId),
-    reflectionDraftStorage.read(sourceUserId),
-  ]);
+  const moodDraft = await moodDraftStorage.read(sourceUserId);
   if (moodDraft && !(await moodDraftStorage.read(targetUserId))) {
     await moodDraftStorage.write(targetUserId, moodDraft);
   }
-  if (reflectionDraft && !(await reflectionDraftStorage.read(targetUserId))) {
-    await reflectionDraftStorage.write(targetUserId, reflectionDraft);
-  }
   await Promise.all([
     moodDraftStorage.clear(sourceUserId),
-    clearReflectionDraft(sourceUserId),
     moveJournalAudioForUser(sourceUserId, targetUserId),
   ]);
   // A source save during the other migrations refreshes only a safe provisional
@@ -170,8 +165,16 @@ async function mergeAnonymousSessionIntoCurrentAccount(
     throw new Error('The destination account could not be verified.');
   }
 
+  let reflectionMigration: Awaited<ReturnType<typeof reflectionDraftStorage.beginOwnerMigration>> | undefined;
+  let serverMerged = false;
   try {
     const destination = current.session;
+    // Drain and reserve BOTH draft owners through preflight, server merge, local
+    // migration and cleanup. No second, racy collision check after account deletion.
+    reflectionMigration = await reflectionDraftStorage.beginOwnerMigration(
+      sourceSession.user.id,
+      destination.user.id
+    );
     await migrateToolCompletions(
       `user_id:${sourceSession.user.id}`,
       `user_id:${destination.user.id}`,
@@ -184,19 +187,24 @@ async function mergeAnonymousSessionIntoCurrentAccount(
           },
           { accessToken: destination.access_token }
         );
+        serverMerged = true;
         await migrateAnonymousLocalState(sourceSession.user.id, destination.user.id);
       }
     );
-    pendingAnonymousMergeSourceId = null;
+    await reflectionMigration.finish();
   } catch (error) {
-    // Restore the anonymous session so a failed merge never strands the
-    // profile that was being protected by the old sign-in guard.
-    await supabase.auth.setSession({
-      access_token: sourceSession.access_token,
-      refresh_token: sourceSession.refresh_token,
-    });
-    pendingAnonymousMergeSourceId = null;
+    // After confirmed server success the source may no longer exist. Keep the
+    // destination session, where the encrypted draft is already durable.
+    if (!serverMerged) {
+      await supabase.auth.setSession({
+        access_token: sourceSession.access_token,
+        refresh_token: sourceSession.refresh_token,
+      });
+    }
     throw error;
+  } finally {
+    reflectionMigration?.release();
+    pendingAnonymousMergeSourceId = null;
   }
 }
 

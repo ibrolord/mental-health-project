@@ -18,13 +18,18 @@ export function createAdvisorLoopRefresh(dependencies: Dependencies) {
   let queued = false;
   const available = () => alive && dependencies.isOwnerCurrent();
 
-  function refresh(allowConsent = false): Promise<void> {
+  function refresh(allowConsent = false, changed = false): Promise<void> {
     if (!available() || !appActive) return Promise.resolve();
     if (mutation) {
       queued = true;
       return Promise.resolve();
     }
-    if (running) return running;
+    if (running) {
+      // A write can finish while context/model work is in flight. Read it once
+      // more after this request instead of silently losing the change event.
+      if (changed) queued = true;
+      return running;
+    }
     const request = ++revision;
     const isCurrent = () => available() && appActive && request === revision;
     dependencies.onLoading(true);
@@ -33,7 +38,13 @@ export function createAdvisorLoopRefresh(dependencies: Dependencies) {
       .catch((error: unknown) => { if (isCurrent()) dependencies.onError(error); })
       .finally(() => {
         if (isCurrent()) dependencies.onLoading(false);
-        if (running === task) running = null;
+        if (running === task) {
+          running = null;
+          if (queued && available() && appActive && !mutation) {
+            queued = false;
+            void refresh();
+          }
+        }
       });
     running = task;
     return task;
@@ -42,14 +53,15 @@ export function createAdvisorLoopRefresh(dependencies: Dependencies) {
   return {
     refresh,
     setAppActive(active: boolean) {
-      if (!available() || appActive === active) return;
+      if (!alive || appActive === active) return;
       appActive = active;
       if (active) {
         void refresh();
       } else {
         revision += 1;
         running = null;
-        dependencies.onLoading(false);
+        queued = false;
+        if (available()) dependencies.onLoading(false);
       }
     },
     beginMutation() {

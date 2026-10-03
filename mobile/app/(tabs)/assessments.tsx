@@ -15,6 +15,10 @@ import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
 type FeatherName = ComponentProps<typeof Feather>['name'];
 type ToolRoute =
   | '/ground'
+  | '/body-practices'
+  | '/reflect?mode=worry-time'
+  | '/reflect?mode=coping-card'
+  | '/habits?source=tools&template=everyday-basics'
   | '/meditate'
   | '/yoga'
   | '/focus'
@@ -43,6 +47,7 @@ const GROUPS: {
     items: [
       { title: 'Ground me now', description: 'One guided step at a time', icon: 'compass', route: '/ground' },
       { title: 'Meditation', description: 'Breathing and guided practices', icon: 'wind', route: '/meditate' },
+      { title: 'Body practices', description: 'Muscle relaxation, settling, and visual focus', icon: 'activity', route: '/body-practices' },
       { title: 'Yoga', description: 'Gentle chair and floor movement', icon: 'activity', route: '/yoga' },
       { title: 'Focus mode', description: 'Time blocks with real breaks', icon: 'clock', route: '/focus' },
       { title: 'Attention games', description: 'Offline exercises, including math', icon: 'grid', route: '/mind-games' },
@@ -54,10 +59,13 @@ const GROUPS: {
     items: [
       { title: 'Goals', description: 'Milestones and next steps', icon: 'check-circle', route: '/goals' },
       { title: 'Habits and routines', description: 'Build or change a pattern', icon: 'repeat', route: '/habits' },
+      { title: 'Everyday basics', description: 'Choose your own daily care checklist', icon: 'sun', route: '/habits?source=tools&template=everyday-basics' },
       { title: 'My plans', description: 'Activity, safety, and staying well', icon: 'clipboard', route: '/plans' },
       { title: 'Life planner', description: 'Time-bound dreams and priorities', icon: 'map', route: '/planner' },
       { title: 'Private journal', description: 'Freeform and guided notes', icon: 'edit-3', route: '/journal' },
       { title: 'Guided reflection', description: 'Research-informed prompts', icon: 'book-open', route: '/reflect' },
+      { title: 'Worry time', description: 'Set a worry down and choose when to return', icon: 'clock', route: '/reflect?mode=worry-time' },
+      { title: 'My coping card', description: 'Your own words and helpful next steps', icon: 'credit-card', route: '/reflect?mode=coping-card' },
     ],
   },
   {

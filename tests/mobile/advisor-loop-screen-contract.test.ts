@@ -37,6 +37,6 @@ describe('Advisor loop screen wiring', () => {
     expect(source).toContain('if (!operation.isCurrent()) return;');
     expect(source).toContain('operation.finish();');
     expect(source).toContain('advisorLoopSelectionOptions(reconciledOutcomes, context.nowIso)');
-    expect(source).toContain('if (helpful !== null && !activeAdvisorAction) void loopRef.current?.refresh();');
+    expect(source).toContain('if (helpful !== null) void loopRef.current?.refresh(false, true);');
   });
 });

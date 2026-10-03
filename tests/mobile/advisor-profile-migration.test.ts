@@ -12,6 +12,7 @@ import {
   createAdvisorProfileStorage,
 } from '../../mobile/lib/advisor-profile-storage';
 import type { AdvisorPersonalPlan } from '../../mobile/lib/onboarding-journey';
+import { createReflectionDraftStorage } from '../../mobile/lib/reflections';
 
 const SOURCE_OWNER = 'user_id:anonymous/source';
 const TARGET_OWNER = 'user_id:account/target';
@@ -728,14 +729,17 @@ function authMigration(
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
   const draftStorage = { read: vi.fn(async () => null), clear: vi.fn(async () => {}) };
-  return new Function('AsyncStorage', 'advisorProfileStorage', 'moodDraftStorage', 'reflectionDraftStorage',
-    'clearReflectionDraft', 'moveJournalAudioForUser', `${compiled}\nreturn migrateAnonymousLocalState;`)(
-    memory, storage, draftStorage, draftStorage, vi.fn(async () => {}), moveAudio,
+  return new Function('AsyncStorage', 'advisorProfileStorage', 'moodDraftStorage',
+    'moveJournalAudioForUser', `${compiled}\nreturn migrateAnonymousLocalState;`)(
+    memory, storage, draftStorage, moveAudio,
   ) as (sourceUserId: string, targetUserId: string) => Promise<void>;
 }
 
 // Exercise the enclosing auth success/recovery boundary, with no real sessions or requests.
-function authMerge(h: ReturnType<typeof harness>, moveAudio: () => Promise<void>) {
+function authMerge(h: ReturnType<typeof harness>, moveAudio: () => Promise<void>,
+  reflectionDraftStorage: Pick<ReturnType<typeof createReflectionDraftStorage>, 'beginOwnerMigration'> = {
+    beginOwnerMigration: async () => ({ finish: async () => {}, release: () => {} }),
+  }) {
   const source = readFileSync(path.resolve('mobile/lib/auth-context.tsx'), 'utf8');
   const ast = ts.createSourceFile('auth-context.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const declaration = ast.statements.find((node) => ts.isFunctionDeclaration(node) &&
@@ -760,17 +764,41 @@ function authMerge(h: ReturnType<typeof harness>, moveAudio: () => Promise<void>
     completionsMigrated();
   });
   const auth = new Function('supabase', 'apiRequest', 'migrateToolCompletions', 'migrateAnonymousLocalState',
-    'sourceSession', `let pendingAnonymousMergeSourceId = sourceSession.user.id;
+    'sourceSession', 'reflectionDraftStorage', `let pendingAnonymousMergeSourceId = sourceSession.user.id;
       ${compiled}
       return {
         merge: () => mergeAnonymousSessionIntoCurrentAccount(sourceSession),
         pending: () => pendingAnonymousMergeSourceId,
-      };`)(supabase, apiRequest, migrateToolCompletions, authMigration(h.memory, h.storage, moveAudio), sourceSession
+      };`)(supabase, apiRequest, migrateToolCompletions, authMigration(h.memory, h.storage, moveAudio), sourceSession,
+        reflectionDraftStorage
   ) as { merge: () => Promise<void>; pending: () => string | null };
   return { ...auth, setSession, apiRequest, migrateToolCompletions, completionsMigrated };
 }
 
 describe('anonymous auth profile migration integration', () => {
+  it('restores the anonymous session before any server merge when reflection drafts conflict', async () => {
+    const h = harness();
+    const values = new Map<string, string>();
+    const drafts = createReflectionDraftStorage({ secureStore: {
+      getItemAsync: async (key) => values.get(key) ?? null,
+      setItemAsync: async (key, value) => { values.set(key, value); },
+      deleteItemAsync: async (key) => { values.delete(key); },
+    } });
+    for (const owner of ['anonymous-source', 'account-target']) {
+      await drafts.write(owner, {
+        templateId: 'worry-time', stepIndex: 0, responses: { worry: `QA ${owner}` },
+      });
+    }
+    const auth = authMerge(h, async () => {}, {
+      beginOwnerMigration: (source, target) => drafts.beginOwnerMigration(
+        source.replace('/', '-'), target.replace('/', '-')
+      ),
+    });
+    await expect(auth.merge()).rejects.toThrow('Both profiles have an unfinished reflection');
+    expect(auth.apiRequest).not.toHaveBeenCalled();
+    expect(auth.migrateToolCompletions).not.toHaveBeenCalled();
+    expect(auth.setSession).toHaveBeenCalledWith({ access_token: 'test-source-access', refresh_token: 'test-source-refresh' });
+  });
   it.each([false, true])('copies the latest source on retry after a later store fails (legacy target: %s)', async (hasTarget) => {
     const h = harness();
     h.seed(SOURCE_OWNER, sourceProfile());
@@ -938,7 +966,7 @@ describe('anonymous auth profile migration integration', () => {
     expect(JSON.parse(h.values.get(advisorProfileStorageKey(TARGET_OWNER))!)).not.toHaveProperty('_ownerMigration');
   });
 
-  it('bounds repeated source edits and restores anonymous auth instead of reporting completion', async () => {
+  it('bounds repeated source edits without restoring an account already merged by the server', async () => {
     const h = harness();
     h.seed(SOURCE_OWNER, sourceProfile());
     let updates = 0;
@@ -949,25 +977,12 @@ describe('anonymous auth profile migration integration', () => {
         personalPlan: { ...PLAN, action: `Concurrent answer ${updates}` } }));
     });
     const auth = authMerge(h, async () => {});
-    const restoring = deferred();
-    const release = deferred();
-    auth.setSession.mockImplementationOnce(async () => {
-      restoring.resolve();
-      await release.promise;
-      return { error: null };
-    });
-    const rejected = expect(auth.merge()).rejects.toThrow('Please try signing in again');
-    await restoring.promise;
-    expect(auth.pending()).toBe('anonymous/source');
+    await expect(auth.merge()).rejects.toThrow('Please try signing in again');
     expect(auth.completionsMigrated).not.toHaveBeenCalled();
-    release.resolve();
-    await rejected;
     await Promise.all(saves);
     expect(updates).toBe(3); // Initial copy plus two bounded refresh/check attempts.
     expect(auth.apiRequest).toHaveBeenCalledOnce();
-    expect(auth.setSession).toHaveBeenCalledExactlyOnceWith({
-      access_token: 'test-source-access', refresh_token: 'test-source-refresh',
-    });
+    expect(auth.setSession).not.toHaveBeenCalled();
     expect((await h.storage.read(SOURCE_OWNER)).personalPlan?.action).toBe('Concurrent answer 3');
     expect((await h.storage.read(TARGET_OWNER)).personalPlan?.action).toBe('Concurrent answer 2');
     expect(JSON.parse(h.values.get(advisorProfileStorageKey(TARGET_OWNER))!)).toHaveProperty('_ownerMigration');
@@ -1016,7 +1031,7 @@ describe('anonymous auth profile migration integration', () => {
       expect(await h.storage.read(SOURCE_OWNER)).toEqual(newer);
       expect(h.values.get(advisorProfileStorageKey(TARGET_OWNER))).toBe(expectedTarget);
       expect(auth.completionsMigrated).not.toHaveBeenCalled();
-      expect(auth.setSession).toHaveBeenCalledOnce();
+      expect(auth.setSession).not.toHaveBeenCalled();
     }
   );
 
@@ -1061,7 +1076,7 @@ describe('anonymous auth profile migration integration', () => {
     await expect(auth.merge()).rejects.toThrow('refresh failed');
     expect(await h.storage.read(SOURCE_OWNER)).toEqual(newer);
     expect(auth.completionsMigrated).not.toHaveBeenCalled();
-    expect(auth.setSession).toHaveBeenCalledOnce();
+    expect(auth.setSession).not.toHaveBeenCalled();
     await authMerge(h, async () => {}).merge();
     expect(await h.storage.read(TARGET_OWNER)).toEqual(newer);
     expect(h.values.has(advisorProfileStorageKey(SOURCE_OWNER))).toBe(false);
@@ -1074,6 +1089,6 @@ describe('anonymous auth profile migration integration', () => {
     expect(await h.storage.read(SOURCE_OWNER)).toEqual(sourceProfile());
     expect(h.values.has(advisorProfileStorageKey(TARGET_OWNER))).toBe(false);
     expect(auth.completionsMigrated).not.toHaveBeenCalled();
-    expect(auth.setSession).toHaveBeenCalledOnce();
+    expect(auth.setSession).not.toHaveBeenCalled();
   });
 });

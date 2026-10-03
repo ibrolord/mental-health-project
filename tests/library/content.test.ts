@@ -146,7 +146,8 @@ describe('unified library catalog', () => {
     }
 
     expect(MOBILE_BOOK_PRACTICE_TEMPLATES).toEqual(BOOK_PRACTICE_TEMPLATES);
-    expect(MOBILE_ROUTINE_TEMPLATES).toEqual(ROUTINE_TEMPLATES);
+    // Existing book-linked routines retain parity; Everyday basics is iOS-only.
+    expect(MOBILE_ROUTINE_TEMPLATES.filter(({ id }) => id !== 'everyday-basics')).toEqual(ROUTINE_TEMPLATES);
   });
 
   it('filters practice templates by action, topic, source book, and template content', () => {

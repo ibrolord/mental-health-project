@@ -72,6 +72,9 @@ function sleep(ms) {
 // this list explicit so an auth/content-negotiation response is never silently
 // promoted to a passing link.
 const BROWSER_VERIFIED_URLS = new Set([
+  // Browser-verified on 2026-10-03: AP renders the Pugh/Garfield interview,
+  // including its article body, but returns 403 to automated HEAD/GET probes.
+  'https://apnews.com/article/9468f8be87b273576b8efd71aa0dd80d',
   'https://www.mind.org.uk/information-support/your-stories/workplace-wellbeing/',
   'https://www.mind.org.uk/information-support/your-stories/my-mental-health-as-an-entrepreneur-success-failure-recovery/',
   'https://www.mind.org.uk/information-support/your-stories/how-i-overcame-adversity-in-the-midst-of-crisis/',

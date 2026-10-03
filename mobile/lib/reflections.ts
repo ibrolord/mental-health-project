@@ -11,13 +11,16 @@ export type ReflectionTemplateId =
   | 'compassionate-reset'
   | 'good-moments'
   | 'express-and-close'
-  | 'weekly-patterns';
+  | 'weekly-patterns'
+  | 'worry-time'
+  | 'coping-card';
 
 export type ReflectionStep = {
   id: string;
   label: string;
   prompt: string;
   placeholder: string;
+  kind?: 'date-time';
 };
 
 export type ReflectionTemplate = {
@@ -30,6 +33,8 @@ export type ReflectionTemplate = {
   tags: string[];
   evidenceIds: string[];
   steps: ReflectionStep[];
+  note?: string;
+  source?: { label: string; url: string };
 };
 
 export type ReflectionDraft = {
@@ -39,6 +44,18 @@ export type ReflectionDraft = {
   updatedAt: string;
 };
 
+export function assertReflectionDraftsMergeable(
+  source: ReflectionDraft | null,
+  target: ReflectionDraft | null
+): void {
+  if (!source || !target) return;
+  const entries = (draft: ReflectionDraft) => Object.entries(draft.responses)
+    .filter(([, value]) => value.trim()).sort(([a], [b]) => a.localeCompare(b));
+  if (source.templateId === target.templateId &&
+      JSON.stringify(entries(source)) === JSON.stringify(entries(target))) return;
+  throw new Error('Both profiles have an unfinished reflection. Save your current reflection to Journal before signing in. Neither draft has been discarded.');
+}
+
 export type ReflectionDraftWriteToken = {
   ownerId: string;
   revision: number;
@@ -47,6 +64,11 @@ export type ReflectionDraftWriteToken = {
 type StoredReflectionDraft = ReflectionDraft & {
   version: typeof REFLECTION_DRAFT_VERSION;
   ownerId: string;
+  _ownerMigration?: {
+    version: 1;
+    sourceOwnerId: string;
+    copiedDraft: string;
+  };
 };
 
 type ReflectionDraftStorageOptions = {
@@ -344,6 +366,34 @@ export const REFLECTION_TEMPLATES: ReflectionTemplate[] = [
   },
 ];
 
+// These iOS additions use the same encrypted draft and journal lifecycle.
+REFLECTION_TEMPLATES.push(
+  {
+    id: 'worry-time', title: 'Worry time', skill: 'Set it down for now',
+    summary: 'Capture a worry, separate action from uncertainty, and choose when to return.',
+    duration: '3-5 min', primary: false, tags: ['worry time'], evidenceIds: [],
+    note: 'For everyday worries, not urgent safety needs. Your note stays available in Journal. A review time is a plan, not a notification.',
+    source: { label: 'NHS guidance on worry time', url: 'https://www.nhs.uk/every-mind-matters/mental-wellbeing-tips/self-help-cbt-techniques/tackling-your-worries/' },
+    steps: [
+      { id: 'worry', label: 'The worry', prompt: 'What is taking up space in your mind? A sentence is enough.', placeholder: 'I keep thinking about...' },
+      { id: 'action', label: 'What is in your hands?', prompt: 'Is there a practical action you can take, or is this uncertainty you cannot solve right now?', placeholder: 'One small action, or: I cannot act on this right now.' },
+      { id: 'review-at', label: 'Return to it', prompt: 'Optionally choose a time for a short review. You can return sooner if you need to.', placeholder: '', kind: 'date-time' },
+      { id: 'return', label: 'Back to now', prompt: 'What would you like to give your attention to next? At review time, decide whether to act, ask for support, or let the worry go.', placeholder: 'For now, I will...' },
+    ],
+  },
+  {
+    id: 'coping-card', title: 'My coping card', skill: 'Words to come back to',
+    summary: 'Keep a believable reminder and one helpful action ready for difficult moments.',
+    duration: '2-3 min', primary: false, tags: ['coping card'], evidenceIds: [],
+    note: 'Saved with your journal, not automatically shared with Advisor or a partner. Mark the entry Important to find it quickly.',
+    steps: [
+      { id: 'words', label: 'Words that help', prompt: 'What would you want to hear in a difficult moment? Choose something kind and believable, not forced positivity.', placeholder: 'I can take one small step without solving everything.' },
+      { id: 'action', label: 'One helpful action', prompt: 'What simple action or source of support tends to help you?', placeholder: 'Sit somewhere quiet, ask someone to listen, or use a familiar tool.' },
+      { id: 'when', label: 'When to use this', prompt: 'What might remind you to come back to this card?', placeholder: 'When I notice...' },
+    ],
+  },
+);
+
 export function reflectionTemplateById(
   id: ReflectionTemplateId | null
 ): ReflectionTemplate | null {
@@ -364,7 +414,10 @@ export function serializeReflectionResponses(
   return template.steps
     .flatMap((step) => {
       const response = responses[step.id]?.trim();
-      return response ? [`## ${step.label}\n${response}`] : [];
+      const formatted = step.kind === 'date-time' && response && Number.isFinite(Date.parse(response))
+        ? new Date(response).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+        : response;
+      return formatted ? [`## ${step.label}\n${formatted}`] : [];
     })
     .join('\n\n');
 }
@@ -374,6 +427,12 @@ export function validateReflectionResponses(
   responses: Record<string, string>
 ): string | null {
   const values = template.steps.map((step) => responses[step.id] ?? '');
+  if ((template.id === 'worry-time' || template.id === 'coping-card') && !responses[template.steps[0].id]?.trim()) {
+    return `Add ${template.id === 'worry-time' ? 'a worry' : 'your coping words'} before saving.`;
+  }
+  if (template.steps.some((step) => step.kind === 'date-time' && responses[step.id] && !Number.isFinite(Date.parse(responses[step.id])))) {
+    return 'Choose a valid review date and time.';
+  }
   if (!values.some((value) => value.trim())) {
     return 'Write at least one response before saving.';
   }
@@ -480,8 +539,122 @@ export function createReflectionDraftStorage({
     onCleanupError,
   });
   const ownerRevisions = new Map<string, number>();
+  const queues = new Map<string, Promise<unknown>>();
+  const pending = new Map<string, Set<Promise<unknown>>>();
+  const failedWrites = new Map<string, unknown>();
+  const reservations = new Map<string, Promise<void>>();
+  const retiredOwners = new Set<string>();
 
   const ownerRevision = (ownerId: string) => ownerRevisions.get(ownerId) ?? 0;
+  const invalidate = (ownerId: string) => ownerRevisions.set(ownerId, ownerRevision(ownerId) + 1);
+
+  function runExclusive<T>(ownerId: string, operation: () => Promise<T>): Promise<T> {
+    const current = (queues.get(ownerId) ?? Promise.resolve()).catch(() => {}).then(operation);
+    queues.set(ownerId, current);
+    const operations = pending.get(ownerId) ?? new Set<Promise<unknown>>();
+    pending.set(ownerId, operations);
+    operations.add(current);
+    return current.finally(() => {
+      operations.delete(current);
+      if (!operations.size) pending.delete(ownerId);
+      if (queues.get(ownerId) === current) queues.delete(ownerId);
+    });
+  }
+
+  function assertWritable(ownerId: string): void {
+    if (reservations.has(ownerId)) {
+      throw new Error('Reflection drafts are being transferred. Wait for sign-in to finish, then try again.');
+    }
+  }
+
+  async function readStored(ownerId: string, preserveInvalid = false): Promise<StoredReflectionDraft | null> {
+    const key = reflectionDraftStorageKey(ownerId);
+    const raw = await storage.getItem(key);
+    if (raw === null) return null;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = null;
+    }
+    if (!isStoredReflectionDraft(parsed, ownerId)) {
+      if (preserveInvalid) {
+        throw new Error('A reflection draft could not be read. Sign-in was stopped to preserve it.');
+      }
+      await storage.removeItem(key);
+      return null;
+    }
+
+    return parsed;
+  }
+
+  function publicDraft(draft: ReflectionDraft): ReflectionDraft {
+    return { templateId: draft.templateId, stepIndex: draft.stepIndex,
+      responses: { ...draft.responses }, updatedAt: draft.updatedAt };
+  }
+
+  function draftIdentity(draft: ReflectionDraft): string {
+    return JSON.stringify([draft.templateId, draft.stepIndex, draft.updatedAt,
+      Object.entries(draft.responses).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)]);
+  }
+
+  function isUnchangedProvisional(draft: StoredReflectionDraft | null, sourceOwnerId: string): boolean {
+    const provenance = draft?._ownerMigration;
+    return Boolean(draft && isRecord(provenance) && provenance.version === 1 &&
+      provenance.sourceOwnerId === sourceOwnerId && provenance.copiedDraft === draftIdentity(draft));
+  }
+
+  function serializeDraft(
+    ownerId: string,
+    draft: Omit<ReflectionDraft, 'updatedAt'>,
+    updatedAt = now(),
+    migration?: StoredReflectionDraft['_ownerMigration']
+  ): string {
+    const stored: StoredReflectionDraft = {
+      templateId: draft.templateId,
+      stepIndex: draft.stepIndex,
+      responses: { ...draft.responses },
+      version: REFLECTION_DRAFT_VERSION,
+      ownerId,
+      updatedAt,
+    };
+    if (!isStoredReflectionDraft(stored, ownerId)) {
+      throw new Error('Reflection draft is invalid');
+    }
+    const serialized = JSON.stringify(stored);
+    if (utf8ByteLength(serialized) > MAX_REFLECTION_DRAFT_BYTES) {
+      throw new Error('Reflection draft is too large for encrypted storage');
+    }
+    // Provenance and its exact baseline commit in the same encrypted generation.
+    // Normal writes deliberately strip it, including identical explicit saves.
+    // The baseline can double the payload, still below the secure store's 180 KB limit.
+    return migration ? JSON.stringify({ ...stored, _ownerMigration: migration }) : serialized;
+  }
+
+  async function readForEditing(ownerId: string): Promise<{
+    draft: ReflectionDraft | null;
+    writeToken: ReflectionDraftWriteToken;
+  }> {
+    reflectionDraftStorageKey(ownerId);
+    const reservation = reservations.get(ownerId);
+    if (reservation) {
+      await reservation;
+      return readForEditing(ownerId);
+    }
+    // Include validation/cleanup in the owner queue, not just the encrypted read.
+    const revision = ownerRevision(ownerId);
+    const draft = await runExclusive(ownerId, () => readStored(ownerId));
+    // A read accepted before reservation must not hydrate a mounted screen with
+    // the pre-transfer snapshot while the migration drains its underlying I/O.
+    if (revision !== ownerRevision(ownerId)) return readForEditing(ownerId);
+    return { draft: draft ? publicDraft(draft) : null, writeToken: { ownerId, revision } };
+  }
+
+  function isWriteTokenCurrent(token: ReflectionDraftWriteToken): boolean {
+    return !reservations.has(token.ownerId) && !retiredOwners.has(token.ownerId) &&
+      token.revision === ownerRevision(token.ownerId);
+  }
 
   return {
     captureWriteToken(ownerId: string): ReflectionDraftWriteToken {
@@ -489,30 +662,9 @@ export function createReflectionDraftStorage({
       return { ownerId, revision: ownerRevision(ownerId) };
     },
 
-    async read(ownerId: string): Promise<ReflectionDraft | null> {
-      const key = reflectionDraftStorageKey(ownerId);
-      const raw = await storage.getItem(key);
-      if (raw === null) return null;
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        await storage.removeItem(key);
-        return null;
-      }
-      if (!isStoredReflectionDraft(parsed, ownerId)) {
-        await storage.removeItem(key);
-        return null;
-      }
-
-      return {
-        templateId: parsed.templateId,
-        stepIndex: parsed.stepIndex,
-        responses: { ...parsed.responses },
-        updatedAt: parsed.updatedAt,
-      };
-    },
+    read: async (ownerId: string) => (await readForEditing(ownerId)).draft,
+    readForEditing,
+    isWriteTokenCurrent,
 
     async write(
       ownerId: string,
@@ -520,34 +672,125 @@ export function createReflectionDraftStorage({
       token?: ReflectionDraftWriteToken
     ): Promise<boolean> {
       const key = reflectionDraftStorageKey(ownerId);
+      assertWritable(ownerId);
+      if (retiredOwners.has(ownerId)) {
+        throw new Error('This reflection profile has been transferred. Reopen the reflection in your signed-in account.');
+      }
       if (
         token &&
         (token.ownerId !== ownerId || token.revision !== ownerRevision(ownerId))
       ) {
         return false;
       }
-      const stored: StoredReflectionDraft = {
-        ...draft,
-        version: REFLECTION_DRAFT_VERSION,
-        ownerId,
-        updatedAt: now(),
-      };
-      if (!isStoredReflectionDraft(stored, ownerId)) {
-        throw new Error('Reflection draft is invalid');
-      }
-
-      const serialized = JSON.stringify(stored);
-      if (utf8ByteLength(serialized) > MAX_REFLECTION_DRAFT_BYTES) {
-        throw new Error('Reflection draft is too large for encrypted storage');
-      }
-      await storage.setItem(key, serialized);
+      const serialized = serializeDraft(ownerId, draft);
+      await runExclusive(ownerId, async () => {
+        try {
+          await storage.setItem(key, serialized);
+          failedWrites.delete(ownerId);
+        } catch (error) {
+          // A settled failure must still block sign-in until a save or explicit
+          // discard succeeds; otherwise preflight silently sees an older draft.
+          failedWrites.set(ownerId, error);
+          throw error;
+        }
+      });
       return true;
     },
 
-    clear(ownerId: string): Promise<void> {
+    async clear(ownerId: string, token?: ReflectionDraftWriteToken): Promise<void> {
+      const key = reflectionDraftStorageKey(ownerId);
+      assertWritable(ownerId);
+      if (token && (token.ownerId !== ownerId || !isWriteTokenCurrent(token))) {
+        throw new Error('This reflection changed. Reload the saved draft before clearing it.');
+      }
       // Invalidate captured snapshots before the encrypted removal is queued.
-      ownerRevisions.set(ownerId, ownerRevision(ownerId) + 1);
-      return storage.removeItem(reflectionDraftStorageKey(ownerId));
+      invalidate(ownerId);
+      return runExclusive(ownerId, async () => {
+        await storage.removeItem(key);
+        failedWrites.delete(ownerId);
+      });
+    },
+
+    async beginOwnerMigration(sourceOwnerId: string, targetOwnerId: string) {
+      const sourceKey = reflectionDraftStorageKey(sourceOwnerId);
+      const targetKey = reflectionDraftStorageKey(targetOwnerId);
+      if (sourceOwnerId === targetOwnerId || retiredOwners.has(sourceOwnerId)) {
+        throw new Error('This reflection profile cannot be transferred again.');
+      }
+      const owners = [sourceOwnerId, targetOwnerId];
+      owners.forEach(assertWritable);
+      let unlock!: () => void;
+      const reservation = new Promise<void>((resolve) => { unlock = resolve; });
+      // Reserve both owners synchronously, before waiting for any accepted I/O.
+      const draining = owners.flatMap((owner) => [...(pending.get(owner) ?? [])]);
+      for (const owner of owners) {
+        reservations.set(owner, reservation);
+        invalidate(owner);
+      }
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        for (const owner of owners) {
+          // Tokens captured by a mounted screen during the transfer are stale too.
+          invalidate(owner);
+          reservations.delete(owner);
+        }
+        unlock();
+      };
+
+      try {
+        const drained = await Promise.allSettled(draining);
+        const failure = drained.find((result) => result.status === 'rejected');
+        if (failure?.status === 'rejected') throw failure.reason;
+        for (const owner of owners) {
+          if (failedWrites.has(owner)) {
+            throw new Error('A reflection edit could not be saved. Save or discard it before signing in.');
+          }
+        }
+        const source = await readStored(sourceOwnerId, true);
+        const target = await readStored(targetOwnerId, true);
+        const unchangedProvisional = isUnchangedProvisional(target, sourceOwnerId);
+        if (!unchangedProvisional) assertReflectionDraftsMergeable(source, target);
+        let provisionalCopy = target?._ownerMigration ? publicDraft(target) : null;
+        if (source && (!target || unchangedProvisional)) {
+          // Keep the source, but make a durable destination copy BEFORE the server
+          // can delete its account. On failure either/both encrypted copies remain.
+          await storage.setItem(targetKey, serializeDraft(targetOwnerId, source, source.updatedAt, {
+            version: 1, sourceOwnerId, copiedDraft: draftIdentity(source),
+          }));
+          const copied = await readStored(targetOwnerId, true);
+          if (!copied || draftIdentity(copied) !== draftIdentity(source) ||
+              !isUnchangedProvisional(copied, sourceOwnerId)) {
+            throw new Error('The reflection draft transfer could not be verified. The source draft was kept.');
+          }
+          provisionalCopy = publicDraft(copied);
+        } else if (!source && unchangedProvisional) {
+          // A discard or journal save also retires this unchanged provisional
+          // copy. Propagate removal before the server can delete the source account.
+          await storage.removeItem(targetKey);
+          provisionalCopy = null;
+        }
+        let finished = false;
+        return {
+          async finish(): Promise<void> {
+            if (released) throw new Error('The reflection draft transfer has ended.');
+            if (finished) return;
+            // Commit ownership before deleting source bytes. A crash/cleanup
+            // failure must not leave the only surviving draft replaceable on retry.
+            if (provisionalCopy) {
+              await storage.setItem(targetKey, serializeDraft(targetOwnerId, provisionalCopy, provisionalCopy.updatedAt));
+            }
+            if (source) await storage.removeItem(sourceKey);
+            retiredOwners.add(sourceOwnerId);
+            finished = true;
+          },
+          release,
+        };
+      } catch (error) {
+        release();
+        throw error;
+      }
     },
   };
 }

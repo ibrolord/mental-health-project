@@ -38,6 +38,7 @@ export function GuidedPractice<TStep extends GuidedStep>({
   onBeforeReset,
   onComplete,
   renderStepVisual,
+  pauseInstruction,
 }: {
   steps: readonly TStep[];
   startLabel?: string;
@@ -49,6 +50,7 @@ export function GuidedPractice<TStep extends GuidedStep>({
   onBeforeReset?: (timer: GuidedTimerState) => Promise<boolean>;
   onComplete?: () => void;
   renderStepVisual?: (step: TStep, index: number) => ReactNode;
+  pauseInstruction?: string;
 }) {
   const [timer, setTimer] = useState<GuidedTimerState>({
     ...initialTimer,
@@ -262,7 +264,7 @@ export function GuidedPractice<TStep extends GuidedStep>({
           <View style={{ flex: 1 }}>
             <Text style={styles.completeTitle}>Practice complete</Text>
             <Text style={appUiStyles.muted}>
-              Notice what changed, even if the shift was small.
+              Notice how you feel now. No change is okay.
             </Text>
           </View>
         </View>
@@ -308,6 +310,10 @@ export function GuidedPractice<TStep extends GuidedStep>({
         <Text accessibilityLiveRegion="polite" style={styles.pauseNotice}>
           {pauseNotice}
         </Text>
+      ) : null}
+
+      {!timer.running && !timer.complete && pauseInstruction ? (
+        <Text accessibilityLiveRegion="polite" style={styles.pauseNotice}>{pauseInstruction}</Text>
       ) : null}
 
       {persistenceMessage ? (

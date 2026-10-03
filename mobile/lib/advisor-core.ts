@@ -177,6 +177,10 @@ export type AdvisorRecentRecommendation =
       helpful?: boolean | null;
       resolution?: 'completed' | 'partial' | 'skipped' | null;
       completedAt?: string | null;
+      startedAt?: string | null;
+      resolvedAt?: string | null;
+      feedbackAt?: string | null;
+      barrier?: 'time' | 'energy' | 'unclear' | 'priority' | 'other' | null;
     };
 
 export type AdvisorSelectionOptions = {

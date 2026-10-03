@@ -1,7 +1,7 @@
 app_identifier("com.mhtoolkit.app")
 username("princebolajibreeze@gmail.com")
 app(6760159800)
-app_version("1.0.7")
+app_version("1.0.8")
 
 # Skip binary upload - we already uploaded via EAS
 skip_binary_upload(true)

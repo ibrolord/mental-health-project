@@ -1,6 +1,6 @@
 {
-  "lastApprovedVersion": "1.0.6",
-  "candidateVersion": "1.0.7",
-  "verifiedAt": "2026-08-27",
-  "evidence": "Apple's public lookup API reports MHtoolkit 1.0.6 released on 2026-08-27. The 1.0.7 candidate opens a new version so the approved App Store screenshot set can be replaced with mission-led mental-health and accountability imagery."
+  "lastApprovedVersion": "1.0.7",
+  "candidateVersion": "1.0.8",
+  "verifiedAt": "2026-10-03",
+  "evidence": "Apple's public lookup API (https://itunes.apple.com/lookup?id=6760159800&country=ca) reports MHtoolkit 1.0.7 released on 2026-09-28T13:34:32Z. Version 1.0.8 opens a new train for adaptive Advisor follow-through, optional local follow-ups, body practices, and reflection draft-transfer fixes."
 }

@@ -1,7 +1,7 @@
 No login is required for the core review path. MHtoolkit creates a private anonymous session. Together accountability features require a permanent account because two verified accounts are needed.
 
 BUILD UNDER REVIEW
-Version 1.0.7, build assigned by EAS at production build time
+Version 1.0.8, build assigned by EAS at production build time
 Bundle ID: com.mhtoolkit.app
 
 SUGGESTED REVIEW PATH
@@ -13,6 +13,8 @@ SUGGESTED REVIEW PATH
 6. Open AI Chat. Sending first displays AI data-sharing consent. Personal context is off by default and selectable by category. Explicit crisis language receives a deterministic safety response.
 7. Open Settings to revoke AI consent, export or delete data, delete a permanent account, contact support, and open crisis resources.
 8. On iPhone, optionally set up read-only Apple Health access. Mood shows permitted sleep, movement, workout, mindfulness, and State of Mind summaries. Raw HealthKit samples remain on device. An aggregate can be sent to AI only after a per-request preview and confirmation.
+9. In Advisor, accept a step and record progress or feedback. With AI consent, Advisor uses bounded recent outcomes to select a follow-through message without replacing that commitment. Optional automatic follow-ups use local notifications, respect quiet hours and notification choices, and can be paused or turned off in Settings. Background refresh is scheduled opportunistically by iOS, not continuous AI processing.
+10. In Tools, try Body practices and the visual focus pacer. These are optional wellbeing exercises, not EMDR therapy or treatment. Reflections include worry time and coping cards.
 
 MEDICAL AND PRIVACY BOUNDARIES
 MHtoolkit supports self-management and reflection. It does not diagnose, treat, or replace a doctor or licensed professional. Partners receive only user-enabled activity counts and fixed-format celebrations; database authorization prevents access to raw private content. AI consent can be revoked in Settings.

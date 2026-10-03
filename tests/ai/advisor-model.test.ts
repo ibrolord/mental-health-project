@@ -44,6 +44,23 @@ function request(): AdvisorModelRequest {
 describe('model-backed Advisor selection', () => {
   beforeEach(() => routedChat.mockReset());
 
+  it('uses actual outcomes and accepts only a supplied follow-through message', async () => {
+    const input = request();
+    input.candidates[0].followThroughOptions = [{ id: 'smaller', text: 'You said time got in the way. Try the smaller version.' }];
+    input.recentFeedback = [{ recommendationId: 'habit:walk', helpful: null, resolution: 'partial', started: true, barrier: 'time', recordedAt: input.nowIso }];
+    routedChat.mockResolvedValue({ model: 'gemini', response: JSON.stringify({
+      candidateId: 'habit:walk', observations: input.candidates[0].observations,
+      signalIds: [], focus: 'routine', followThroughId: 'smaller',
+    }) });
+    expect((await createModelAdvisorRecommendation(input)).selection.followThroughId).toBe('smaller');
+    expect(routedChat.mock.calls[0][0][0].content).toContain('"barrier":"time"');
+    routedChat.mockResolvedValue({ model: 'gemini', response: JSON.stringify({
+      candidateId: 'habit:walk', observations: input.candidates[0].observations,
+      signalIds: [], focus: 'routine', followThroughId: 'invented',
+    }) });
+    expect((await createModelAdvisorRecommendation(input)).personalized).toBe(false);
+  });
+
   it('uses Gemini preference and accepts a bounded known candidate', async () => {
     routedChat.mockResolvedValue({
       model: 'gemini',

@@ -498,8 +498,9 @@ describe('native local notifications', () => {
     );
     expect(values.get(REMINDER_TIMES_KEY)).toBe('[20]');
     expect(JSON.parse(values.get(MOOD_REMINDER_IDS_KEY)!)).toEqual([
-      'notification-2',
+      'notification-1',
     ]);
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
   });
 
   it('rolls back delivery times when the new schedule cannot be built', async () => {
@@ -534,7 +535,7 @@ describe('native local notifications', () => {
     expect(calls).toBeGreaterThanOrEqual(3);
   });
 
-  it('finishes disabling after an active refresh completes', async () => {
+  it('discards an active refresh when disabling supersedes its content', async () => {
     const Notifications = createNotifications();
     const { storage, values } = createStorage({
       [NOTIFICATIONS_KEY]: 'true',
@@ -563,13 +564,11 @@ describe('native local notifications', () => {
     const disable = service.setRemindersEnabled(false);
     releaseContent();
     await expect(Promise.all([refresh, disable])).resolves.toEqual([
-      ['notification-1'],
+      [],
       false,
     ]);
 
-    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(
-      'notification-1'
-    );
+    expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
     expect(values.get(NOTIFICATIONS_KEY)).toBe('false');
     expect(values.has(MOOD_REMINDER_IDS_KEY)).toBe(false);
   });
@@ -592,7 +591,7 @@ describe('native local notifications', () => {
     const disable = service.setRemindersEnabled(false);
     releasePermission();
 
-    await expect(Promise.all([enable, disable])).resolves.toEqual([true, false]);
+    await expect(Promise.all([enable, disable])).resolves.toEqual([false, false]);
     expect(values.get(NOTIFICATIONS_KEY)).toBe('false');
     expect(values.has(MOOD_REMINDER_IDS_KEY)).toBe(false);
   });
@@ -667,13 +666,11 @@ describe('native local notifications', () => {
     const enable = service.setRemindersEnabled(true);
     releaseContent();
     await expect(Promise.all([refresh, enable])).resolves.toEqual([
-      ['notification-1'],
+      [],
       false,
     ]);
 
-    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(
-      'notification-1'
-    );
+    expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
     expect(values.get(NOTIFICATIONS_KEY)).toBe('false');
     expect(values.has(MOOD_REMINDER_IDS_KEY)).toBe(false);
   });

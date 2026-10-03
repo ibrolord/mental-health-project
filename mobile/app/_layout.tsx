@@ -20,6 +20,8 @@ import { AppBackButton } from '@/components/AppBackButton';
 import { recordOperationalEvent } from '@/lib/observability';
 import { Colors } from '@/lib/constants';
 import { LaunchExperience } from '@/components/LaunchExperience';
+import '@/lib/advisor-background-task';
+import { AdvisorClientLoop } from '@/components/AdvisorClientLoop';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -161,6 +163,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <AuthProvider onReady={handleAuthReady}>
           <AcquisitionCapture />
+          <AdvisorClientLoop />
           <StatusBar style="dark" />
           <Stack
             screenOptions={{
@@ -180,6 +183,7 @@ export default function RootLayout() {
           <Stack.Screen name="habits" options={stackScreenOptions('Habit Tracker')} />
           <Stack.Screen name="journal" options={stackScreenOptions('Private Journal')} />
           <Stack.Screen name="reflect" options={stackScreenOptions('Guided Reflection')} />
+          <Stack.Screen name="body-practices" options={stackScreenOptions('Body Practices')} />
           <Stack.Screen name="saved" options={stackScreenOptions('Saved')} />
           <Stack.Screen name="affirmations" options={stackScreenOptions('Affirmations')} />
           <Stack.Screen name="library" options={stackScreenOptions('Library')} />

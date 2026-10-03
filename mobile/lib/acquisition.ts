@@ -1,4 +1,5 @@
 import 'react-native-url-polyfill/auto';
+import { emitAdvisorClient } from './advisor-client-events';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
@@ -220,5 +221,6 @@ export async function saveCheckInWithAttribution(
   if (typeof data !== 'string' || !data) {
     throw new Error('Check-in save did not return a mood entry ID.');
   }
+  emitAdvisorClient(`user_id:${expectedUserId}`);
   return data;
 }

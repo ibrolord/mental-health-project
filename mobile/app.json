@@ -2,7 +2,7 @@
   "expo": {
     "name": "MHtoolkit",
     "slug": "mhtoolkit",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "mhtoolkit",
@@ -18,7 +18,11 @@
         "NSCameraUsageDescription": "MHtoolkit's live voice sessions are audio-only. The bundled WebRTC library references camera APIs, but MHtoolkit never requests, captures, or transmits camera data.",
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
-          "audio"
+          "audio",
+          "processing"
+        ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.expo.modules.backgroundtask.processing"
         ]
       },
       "privacyManifests": {
@@ -102,7 +106,8 @@
       "expo-font",
       "expo-web-browser",
       "expo-apple-authentication",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-background-task"
     ],
     "experiments": {
       "typedRoutes": true

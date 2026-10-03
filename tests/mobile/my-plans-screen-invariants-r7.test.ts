@@ -133,12 +133,17 @@ describe('My Plans mobile screen invariants', () => {
       'resetAiDataSharingConsent(consentSubjectId)',
       'clearFullContextPreference(consentSubjectId)',
       'clearContextSelections(consentSubjectId)',
-      'clearAllReminders()',
+      'clearAllReminders(async () => {',
     ]) {
       expect(settings).toContain(cleanup);
     }
     expect(authContext).toContain('clearFullContextPreference(deletedOwnerKey)');
     expect(authContext).toContain('clearContextSelections(deletedOwnerKey)');
+  });
+
+  it('checks the deleting profile inside reminder cleanup instead of using a stale session', () => {
+    expect(settings).toMatch(/clearAllReminders\(async \(\) => \{\s*const \{ data, error \} = await supabase.auth.getSession\(\);\s*if \(error\) throw error;\s*return data.session\?\.user.id === expectedOwnerId;/);
+    expect(settings).not.toContain('clearAllReminders()');
   });
 
   it('fails closed when sign-out privacy cleanup is incomplete', () => {

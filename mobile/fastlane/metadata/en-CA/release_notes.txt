@@ -1,4 +1,6 @@
-What's new in 1.0.7:
+What's new in 1.0.8:
 
-- Refreshed App Store presentation makes daily check-ins, accountability, grounding, goals, and the wider toolkit easier to discover.
-- Reliability and release-readiness improvements for the iPhone experience.
+- Advisor uses your progress, barriers, and feedback to help you follow through while keeping your chosen step intact.
+- Optional local follow-ups respect your notification choices, quiet hours, and pause settings.
+- New gentle body practices, a visual focus pacer, worry-time reflections, and coping cards expand your toolkit.
+- Improved reflection draft transfer when moving from an anonymous profile to an account.

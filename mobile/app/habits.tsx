@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { emitAdvisorClient } from '@/lib/advisor-client-events';
 import { Feather } from '@expo/vector-icons';
 import {
   Alert,
@@ -28,6 +29,7 @@ import {
   createHabitDedupeKey,
   habitMomentum,
   isUnexpectedHabitInsertError,
+  selectedRoutineItems,
   isRewardUnlocked,
   type HabitCategory,
   type HabitDraft,
@@ -140,6 +142,8 @@ export default function HabitsScreen() {
   const [error, setError] = useState('');
   const [sourceTitle, setSourceTitle] = useState('');
   const [selectedRoutineId, setSelectedRoutineId] = useState('');
+  const [routineSelections, setRoutineSelections] = useState<Record<string, string[]>>({});
+  const installRef = useRef(false);
   const ownerRef = useRef(context.user_id);
   const createRef = useRef(false);
   const appliedLibraryRef = useRef('');
@@ -210,6 +214,11 @@ export default function HabitsScreen() {
   }, [authLoading, context.user_id, today]);
 
   useEffect(() => {
+    if (firstParam(params.source) === 'tools' && firstParam(params.template) === 'everyday-basics') {
+      setSelectedRoutineId('everyday-basics');
+      setTemplatesOpen(true);
+      return;
+    }
     if (firstParam(params.source) !== 'library') {
       appliedLibraryRef.current = '';
       return;
@@ -301,6 +310,7 @@ export default function HabitsScreen() {
         return;
       }
       setHabits((current) => [...current, data as Habit]);
+      emitAdvisorClient(`user_id:${ownerId}`);
       setDraft(blankDraft());
       setSourceTitle('');
       setEditorOpen(false);
@@ -312,12 +322,15 @@ export default function HabitsScreen() {
 
   const installTemplate = async (template: RoutineTemplate) => {
     const ownerId = context.user_id;
-    if (!ownerId || installingId) return;
+    const names = routineSelections[template.id];
+    const items = selectedRoutineItems(template, names);
+    if (!ownerId || installRef.current || items.length === 0) return;
+    installRef.current = true;
     setInstallingId(template.id);
     setError('');
     try {
       const results = await Promise.all(
-        template.items.map((item) =>
+        items.map((item) =>
           supabase
             .from('habits')
             .insert(rowForDraft(item, ownerId))
@@ -330,6 +343,7 @@ export default function HabitsScreen() {
         .filter(({ data }) => Boolean(data))
         .map(({ data }) => data as Habit);
       if (created.length > 0) {
+        emitAdvisorClient(`user_id:${ownerId}`);
         setHabits((current) => {
           const known = new Set(current.map(({ id }) => id));
           return [...current, ...created.filter(({ id }) => !known.has(id))];
@@ -346,7 +360,10 @@ export default function HabitsScreen() {
         setTemplatesOpen(false);
         setSlot(template.slot);
       }
+    } catch {
+      if (ownerRef.current === ownerId) setError('That routine could not be added. Try again; duplicate items are skipped.');
     } finally {
+      installRef.current = false;
       if (ownerRef.current === ownerId) setInstallingId(null);
     }
   };
@@ -371,6 +388,7 @@ export default function HabitsScreen() {
       return;
     }
 
+    emitAdvisorClient(`user_id:${ownerId}`);
     const { data } = await supabase
       .from('habits')
       .select(HABIT_SELECT)
@@ -450,6 +468,7 @@ export default function HabitsScreen() {
           if (archiveError) {
             setError('That habit could not be archived.');
           } else {
+            emitAdvisorClient(`user_id:${ownerId}`);
             setHabits((current) =>
               current.filter((candidate) => candidate.id !== habit.id)
             );
@@ -539,7 +558,7 @@ export default function HabitsScreen() {
         <>
           <SectionHeader
             title="Start from a routine"
-            description="Install only what fits. Duplicate items are skipped."
+            description="Select the items you want. Duplicate items are skipped."
           />
           {sourceTitle && selectedRoutineId ? (
             <View style={styles.libraryRoutineNotice}>
@@ -569,16 +588,28 @@ export default function HabitsScreen() {
               </Text>
               <View style={styles.templateItems}>
                 {template.items.map((item) => (
-                  <View key={item.name} style={styles.templateItem}>
+                  <Pressable
+                    key={item.name}
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={item.name}
+                    accessibilityState={{ checked: (routineSelections[template.id] ?? template.items.map((entry) => entry.name)).includes(item.name), disabled: Boolean(installingId) }}
+                    disabled={Boolean(installingId)}
+                    style={[styles.templateItem, { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 }]}
+                    onPress={() => setRoutineSelections((current) => {
+                      const selected = current[template.id] ?? template.items.map((entry) => entry.name);
+                      return { ...current, [template.id]: selected.includes(item.name) ? selected.filter((name) => name !== item.name) : [...selected, item.name] };
+                    })}
+                  >
+                    <Feather name={(routineSelections[template.id] ?? template.items.map((entry) => entry.name)).includes(item.name) ? 'check-square' : 'square'} size={20} color={Colors.primary} />
                     <Text style={styles.templateItemText}>{item.name}</Text>
-                  </View>
+                  </Pressable>
                 ))}
               </View>
               <AppButton
-                label="Install routine"
+                label="Add selected habits"
                 variant="text"
                 loading={installingId === template.id}
-                disabled={Boolean(installingId)}
+                disabled={!context.user_id || loading || Boolean(installingId) || routineSelections[template.id]?.length === 0}
                 onPress={() => void installTemplate(template)}
                 style={{ marginTop: 14 }}
               />

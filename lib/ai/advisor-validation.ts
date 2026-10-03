@@ -32,6 +32,9 @@ export const advisorCandidateSchema = z.object({
   action: boundedText(240),
   smallerAction: boundedText(240),
   sourceLabels: z.array(boundedText(80)).max(4),
+  followThroughOptions: z.array(z.object({
+    id: boundedText(40), text: boundedText(240),
+  }).strict()).max(3).optional(),
 }).strict();
 
 export const advisorModelRequestSchema = z.object({
@@ -46,7 +49,18 @@ export const advisorModelRequestSchema = z.object({
   recentFeedback: z.array(z.object({
     recommendationId: boundedText(160),
     helpful: z.boolean().nullable(),
+    resolution: z.enum(['completed', 'partial', 'skipped']).nullable().optional(),
+    started: z.boolean().optional(),
+    barrier: z.enum(['time', 'energy', 'unclear', 'priority', 'other']).nullable().optional(),
+    recordedAt: z.string().datetime().optional(),
   }).strict()).max(5),
+  commitment: z.object({
+    recommendationId: boundedText(160),
+    status: z.enum(['accepted', 'in_progress', 'needs_recovery']),
+    lastCheckInResult: z.enum(['partial', 'not_done']).nullable(),
+    recoveryReason: z.enum(['time', 'energy', 'unclear', 'priority', 'other']).nullable(),
+    useSmallerStep: z.boolean(),
+  }).strict().nullable().optional(),
   profile: z.object({
     preferredName: z.string().trim().max(24),
     priorities: z.array(z.enum([
@@ -62,6 +76,9 @@ export const advisorModelRequestSchema = z.object({
       message: 'Candidate IDs must be unique',
       path: ['candidates'],
     });
+  }
+  if (value.commitment && (ids.length !== 1 || ids[0] !== value.commitment.recommendationId)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Keep the accepted commitment as the only candidate', path: ['commitment'] });
   }
   const signalIds = value.signals.map((signal) => signal.id);
   if (new Set(signalIds).size !== signalIds.length) {
@@ -88,6 +105,7 @@ export const advisorModelOutputSchema = z.object({
   observations: z.array(boundedText(180)).min(1).max(3),
   signalIds: z.array(boundedText(160)).max(3),
   focus: z.enum(['steady', 'deadline', 'routine', 'baseline', 'recover']),
+  followThroughId: boundedText(40).nullable().optional(),
 }).strict();
 
 export type AdvisorModelRequest = z.infer<typeof advisorModelRequestSchema>;

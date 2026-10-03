@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { emitAdvisorClient } from './advisor-client-events';
 import * as Crypto from 'expo-crypto';
 import { supabase } from './supabase';
 import { advisorBriefStorage } from './advisor-brief-storage';
@@ -83,7 +84,11 @@ export function startToolCompletion(
   };
 }
 
-export const recordToolCompletion = coordinator.record;
+export async function recordToolCompletion(...args: Parameters<typeof coordinator.record>) {
+  const result = await coordinator.record(...args);
+  if (result) emitAdvisorClient(args[0].ownerKey);
+  return result;
+}
 export const refreshToolCompletions = coordinator.refresh;
 export const withToolCompletionDataDeletion = coordinator.remove;
 export const clearToolCompletions = (owner: string) => coordinator.remove(owner, async () => {});

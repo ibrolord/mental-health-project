@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { emitAdvisorClient } from './advisor-client-events';
 import type { AdvisorRecommendation } from './advisor-core';
 import { automaticAdvisorFollowUpAt } from './advisor-cadence-core';
 
@@ -388,12 +389,20 @@ export function createAdvisorActionStorage(
 
 const advisorActionStorage = createAdvisorActionStorage(AsyncStorage);
 
+function notifyChange<Args extends unknown[], Result>(operation: (...args: Args) => Promise<Result>) {
+  return async (...args: Args): Promise<Result> => {
+    const result = await operation(...args);
+    if (typeof args[0] === 'string') emitAdvisorClient(args[0]);
+    return result;
+  };
+}
+
 export const loadAdvisorAction = advisorActionStorage.loadAdvisorAction;
-export const acceptAdvisorAction = advisorActionStorage.acceptAdvisorAction;
-export const startAdvisorAction = advisorActionStorage.startAdvisorAction;
-export const resizeAdvisorAction = advisorActionStorage.resizeAdvisorAction;
-export const setAdvisorActionReminder = advisorActionStorage.setAdvisorActionReminder;
-export const setAdvisorActionFollowUp = advisorActionStorage.setAdvisorActionFollowUp;
-export const deferAdvisorActionFollowUp = advisorActionStorage.deferAdvisorActionFollowUp;
-export const recordAdvisorActionCheckIn = advisorActionStorage.recordAdvisorActionCheckIn;
-export const clearAdvisorAction = advisorActionStorage.clearAdvisorAction;
+export const acceptAdvisorAction = notifyChange(advisorActionStorage.acceptAdvisorAction);
+export const startAdvisorAction = notifyChange(advisorActionStorage.startAdvisorAction);
+export const resizeAdvisorAction = notifyChange(advisorActionStorage.resizeAdvisorAction);
+export const setAdvisorActionReminder = notifyChange(advisorActionStorage.setAdvisorActionReminder);
+export const setAdvisorActionFollowUp = notifyChange(advisorActionStorage.setAdvisorActionFollowUp);
+export const deferAdvisorActionFollowUp = notifyChange(advisorActionStorage.deferAdvisorActionFollowUp);
+export const recordAdvisorActionCheckIn = notifyChange(advisorActionStorage.recordAdvisorActionCheckIn);
+export const clearAdvisorAction = notifyChange(advisorActionStorage.clearAdvisorAction);

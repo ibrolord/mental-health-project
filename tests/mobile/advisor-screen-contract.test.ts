@@ -117,20 +117,19 @@ describe('mobile Advisor detail and context contracts', () => {
     expect(advisor).toContain('visibleOutcomes');
   });
 
-  it('rotates cached safe candidates without another paid model call', () => {
+  it('uses the consent-gated model for an explicit replacement and retains the old action until ready', () => {
     const tryAnother = advisor.slice(
       advisor.indexOf('const generateAnotherRecommendation'),
       advisor.indexOf('const answerHelpfulness')
     );
-    expect(tryAnother).toContain('selectAdvisorRecommendation(');
-    expect(tryAnother).toContain('brief: deterministicBrief(context, selected, null)');
+    expect(tryAnother).toContain('selectModelBackedRecommendation(');
+    expect(tryAnother).toContain('options, null, operation.isCurrent, false');
     expect(tryAnother).toContain('const nextBrief = generated.brief;');
-    expect(tryAnother).toContain('setAdvisorModel(null);');
+    expect(tryAnother).toContain('setAdvisorModel(generated.model);');
     expect(tryAnother).toContain(
       "currentRecommendation.id.split(':')[0]"
     );
     expect(tryAnother).toContain('preserveToday: false');
-    expect(tryAnother).not.toContain('selectModelBackedRecommendation(');
     expect(advisor).toContain("from '@/lib/advisor-observation-ledger'");
     expect(advisor).toContain('evaluateAdvisorChangeSignals(');
     expect(tryAnother).toContain('Change your current step?');
@@ -151,7 +150,7 @@ describe('mobile Advisor detail and context contracts', () => {
     );
     expect(advisor).toContain('!APPLE_HEALTH_AI_ENABLED ||');
     expect(advisor).toContain('confirmAppleHealthAiShare(summary)');
-    expect(advisor).toContain('appleHealthSummary,\n      { isCurrent, expectedUserId }\n    );');
+    expect(advisor).toContain('appleHealthSummary,\n      { isCurrent, expectedUserId, commitment:');
     expect(advisor).toContain('createAdvisorCandidateSet(');
     expect(advisor).toContain('requestModelAdvisorRecommendation(');
     expect(advisor).toContain("advisorModel === 'gemini' ? 'Gemini-guided · '");

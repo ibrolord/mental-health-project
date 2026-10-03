@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "checklistVersion": "2026-10-02.1",
+  "checklistVersion": "2026-10-03.1",
   "platform": "ios",
-  "expectedInventory": { "routes": 38, "routeChecks": 796, "workflows": 133, "total": 929 },
+  "expectedInventory": { "routes": 39, "routeChecks": 843, "workflows": 160, "total": 1003 },
   "identityRoles": ["fresh-anonymous", "saved-anonymous", "email-owner", "google-owner", "apple-owner", "partner", "revoked-partner"],
   "requirements": {
     "defaultRouteDeviceRequirements": ["physical-iphone", "ipad"],
@@ -63,6 +63,11 @@
       "together.revoke-block": { "identityRequirements": ["email-owner", "partner", "revoked-partner"] },
       "together.owner-isolation": { "identityRequirements": ["email-owner", "partner", "revoked-partner"] },
       "advisor.planned-vs-active": { "identityRequirements": ["saved-anonymous"] },
+      "advisor.adaptive-feedback": { "identityRequirements": ["email-owner"] },
+      "advisor.adaptive-commitment": { "identityRequirements": ["email-owner"] },
+      "advisor.adaptive-refresh": { "identityRequirements": ["email-owner"] },
+      "advisor.adaptive-privacy": { "identityRequirements": ["email-owner", "saved-anonymous"] },
+      "auth.reflection-draft-transfer": { "identityRequirements": ["saved-anonymous", "email-owner"] },
       "advisor.follow-up-persistence": { "identityRequirements": ["saved-anonymous"] },
       "advisor.recovery-loop": { "identityRequirements": ["saved-anonymous"] },
       "advisor.foreground-reconcile": { "identityRequirements": ["saved-anonymous"] },
@@ -73,6 +78,23 @@
       "privacy.tool-completion-lifecycle": { "identityRequirements": ["saved-anonymous", "email-owner"] },
       "advisor.weekly-review": { "identityRequirements": ["saved-anonymous"] },
       "advisor.notification-optout": { "identityRequirements": ["saved-anonymous"] },
+      "advisor.automatic-follow-up-settings": { "identityRequirements": ["saved-anonymous", "email-owner"] },
+      "advisor.automatic-follow-up-permission-denied": { "identityRequirements": ["email-owner"] },
+      "advisor.automatic-follow-up-category-off": { "identityRequirements": ["email-owner"] },
+      "advisor.automatic-follow-up-delivery": { "deviceRequirements": ["physical-iphone", "ipad"], "identityRequirements": ["email-owner"] },
+      "advisor.automatic-follow-up-quiet-hours": { "identityRequirements": ["email-owner"] },
+      "advisor.automatic-follow-up-timezone": { "identityRequirements": ["email-owner"] },
+      "advisor.automatic-follow-up-dst": { "identityRequirements": ["email-owner"] },
+      "advisor.automatic-follow-up-pause-resume": { "identityRequirements": ["email-owner"] },
+      "advisor.automatic-follow-up-goal-completion": { "identityRequirements": ["email-owner"] },
+      "advisor.automatic-follow-up-habit-completion": { "identityRequirements": ["email-owner"] },
+      "advisor.automatic-follow-up-tool-completion": { "identityRequirements": ["email-owner"] },
+      "advisor.background-task-success": { "deviceRequirements": ["physical-iphone"], "identityRequirements": ["email-owner"] },
+      "advisor.background-task-restricted": { "deviceRequirements": ["physical-iphone"], "identityRequirements": ["email-owner"] },
+      "advisor.background-task-force-quit": { "deviceRequirements": ["physical-iphone"], "identityRequirements": ["email-owner"] },
+      "privacy.advisor-reminders-sign-out": { "identityRequirements": ["email-owner", "fresh-anonymous", "partner"] },
+      "privacy.advisor-reminders-delete-saved-data": { "identityRequirements": ["email-owner", "partner"] },
+      "privacy.advisor-reminders-delete-account": { "identityRequirements": ["email-owner", "fresh-anonymous", "partner"] },
       "privacy.export": { "identityRequirements": ["email-owner"] },
       "privacy.visit-brief": { "identityRequirements": ["email-owner"] },
       "privacy.activity": { "identityRequirements": ["email-owner"] },
@@ -174,7 +196,7 @@
       "source": "app/(tabs)/assessments.tsx",
       "kind": "tab",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["start-gad7", "source-gad7", "start-phq9", "source-phq9", "start-cbi", "source-cbi"]
+      "controls": ["start-gad7", "source-gad7", "start-phq9", "source-phq9", "start-cbi", "source-cbi", "body-practices", "everyday-basics", "worry-time", "coping-card"]
     },
     {
       "id": "more",
@@ -270,7 +292,7 @@
       "source": "app/habits.tsx",
       "kind": "stack",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["slot-filters", "add-close", "build-reduce", "category", "cue", "tiny-step", "reason", "reward", "save", "double-submit", "templates", "install-template", "check-in", "undo-check-in", "streak", "accountability", "archive", "partners"]
+      "controls": ["slot-filters", "add-close", "build-reduce", "category", "cue", "tiny-step", "reason", "reward", "save", "double-submit", "templates", "install-template", "check-in", "undo-check-in", "streak", "accountability", "archive", "partners", "routine-item-selection", "routine-none-selected"]
     },
     {
       "id": "journal",
@@ -278,7 +300,7 @@
       "source": "app/journal.tsx",
       "kind": "stack",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["new-close", "title", "entry", "tags", "favorite", "context-toggle", "save", "double-submit", "search", "filters", "edit", "delete", "library-prefill", "retry-completion"]
+      "controls": ["new-close", "title", "entry", "tags", "favorite", "context-toggle", "save", "double-submit", "search", "filters", "edit", "delete", "library-prefill", "retry-completion", "worries-filter", "coping-cards-filter"]
     },
     {
       "id": "guided-reflection",
@@ -286,7 +308,7 @@
       "source": "app/reflect.tsx",
       "kind": "stack",
       "identityRequirements": ["saved-anonymous"],
-      "controls": ["template-select", "more-templates", "restore-encrypted-draft", "response-input", "previous-step", "next-step", "save-to-journal", "open-journal", "start-another", "weekly-pattern-deep-link", "retry-completion"]
+      "controls": ["template-select", "more-templates", "restore-encrypted-draft", "response-input", "previous-step", "next-step", "save-to-journal", "open-journal", "start-another", "weekly-pattern-deep-link", "retry-completion", "worry-time-deep-link", "coping-card-deep-link", "review-date-picker", "remove-review-time"]
     },
     {
       "id": "saved",
@@ -303,6 +325,14 @@
       "kind": "stack",
       "identityRequirements": ["saved-anonymous"],
       "controls": ["search", "media-filters", "topic-filters", "clear-filters", "open-item", "back-to-library", "save", "priority", "source", "note", "journal-integration", "goal-integration", "habit-integration"]
+    },
+    {
+      "id": "body-practices",
+      "path": "/body-practices",
+      "source": "app/body-practices.tsx",
+      "kind": "stack",
+      "identityRequirements": ["fresh-anonymous"],
+      "controls": ["muscle-relaxation", "gentle-settling", "visual-focus", "begin", "pause", "resume", "reset", "step-navigation", "stop", "all-practices", "still-focus", "slower", "steady", "small-movement", "background-stop", "reduce-motion", "source", "support", "grounding"]
     },
     {
       "id": "meditation",
@@ -414,7 +444,7 @@
       "source": "app/settings.tsx",
       "kind": "stack",
       "identityRequirements": ["email-owner"],
-      "controls": ["create-account", "finish-account", "sign-in", "sign-out", "notifications-master", "notification-category-toggles", "reminder-times", "test-reminder", "permission-denied-open-settings", "health-setup", "health-disable", "tune-advisor", "export", "revoke-ai-consent", "privacy", "visit-brief-collapse", "visit-brief-section-toggles", "visit-brief-safety-opt-in", "visit-brief-exact-preview", "visit-brief-share", "privacy-activity-collapse", "privacy-activity-refresh", "email-support", "support-page", "delete-saved-data", "delete-account"]
+      "controls": ["create-account", "finish-account", "sign-in", "sign-out", "notifications-master", "notification-category-toggles", "reminder-times", "test-reminder", "permission-denied-open-settings", "health-setup", "health-disable", "tune-advisor", "export", "revoke-ai-consent", "privacy", "visit-brief-collapse", "visit-brief-section-toggles", "visit-brief-safety-opt-in", "visit-brief-exact-preview", "visit-brief-share", "privacy-activity-collapse", "privacy-activity-refresh", "email-support", "support-page", "delete-saved-data", "delete-account", "advisor-automatic-follow-up", "advisor-quiet-start", "advisor-quiet-end", "advisor-quiet-hour-picker", "advisor-quiet-save", "advisor-quiet-cancel", "advisor-pause-until-tomorrow", "advisor-resume-follow-up", "advisor-follow-up-retry"]
     },
     {
       "id": "support",
@@ -434,6 +464,11 @@
     }
   ],
   "workflows": [
+    { "id": "support.worry-time", "area": "support", "kind": "manual", "title": "Open Worry time from Tools, enter a worry, choose/change/remove review date including year, save, reopen through Journal Worries, edit and delete; verify encrypted draft restore and owner isolation, and no notification claim or automatic AI sharing" },
+    { "id": "support.coping-card", "area": "support", "kind": "manual", "title": "Create a coping card, reject an empty first response, save to Journal, filter Coping cards, mark Important, relaunch, edit and delete; verify export/deletion and no partner sharing" },
+    { "id": "support.everyday-basics", "area": "support", "kind": "manual", "title": "Open Everyday basics, select a subset, reject zero selection, install once despite double tap, retry partial/network failure, check and undo a habit, relaunch and verify daily logs; custom habit and archive remain usable" },
+    { "id": "support.visual-focus", "area": "support", "kind": "manual", "title": "Verify no autoplay, moving/still focus, speeds and ranges, stop/reset/complete, background and navigation stop, no catch-up or auto-resume, Reduce Motion before and during exercise, large text and VoiceOver; no therapy claims or false completion records" },
+    { "id": "support.body-practices", "area": "support", "kind": "manual", "title": "Run muscle relaxation and settling offline; begin/pause/resume/reset/step navigation/stop/back/source/support all work; pause prompts release tension, leaving clears progress and no efficacy or vagus-reset outcome is claimed" },
     { "id": "artifact.clean-commit", "area": "artifact", "kind": "automated", "title": "Exact source commit is clean and matches the artifact" },
     { "id": "artifact.identity", "area": "artifact", "kind": "automated", "title": "Bundle ID, version, build number, signer, device family, and minimum OS match the release record" },
     { "id": "artifact.hash", "area": "artifact", "kind": "automated", "title": "Record SHA-256 for the exact IPA and installed app" },
@@ -566,6 +601,28 @@
     { "id": "wellbeing.yoga-targets", "area": "accessibility", "kind": "manual", "title": "Every yoga control has a descriptive label and a non-overlapping target of at least 44 by 44 points" },
     { "id": "wellbeing.yoga-audio-cleanup", "area": "wellbeing", "kind": "manual", "title": "Yoga rain and ocean sounds start, switch, stop, fail safely, and release on navigation without overlap" },
     { "id": "wellbeing.yoga-restart", "area": "wellbeing", "kind": "manual", "title": "Yoga completion, restart, manual step navigation, reset, and sequence switching restore the correct state" },
-    { "id": "wellbeing.yoga-progress", "area": "accessibility", "kind": "manual", "title": "Yoga progress reports whole-practice progress consistently and reaches completion exactly once" }
+    { "id": "wellbeing.yoga-progress", "area": "accessibility", "kind": "manual", "title": "Yoga progress reports whole-practice progress consistently and reaches completion exactly once" },
+    { "id": "advisor.automatic-follow-up-settings", "area": "advisor", "kind": "manual", "title": "In Settings verify automatic follow-up defaults off, enable and disable persist after relaunch for each owner, rapid toggles leave one matching native registration, disabling cancels pending automatic reminders, and failed load/save stays retryable without a false success or lost preferences" },
+    { "id": "advisor.automatic-follow-up-permission-denied", "area": "notification", "kind": "manual", "title": "Deny the actual iOS notification permission prompt, then separately revoke permission in system Settings with a pending automatic reminder; inspect the native pending requests and original due window for no automatic delivery, verify in-app check-ins still work, and explicitly re-enable permission before checking recovery without duplicates" },
+    { "id": "advisor.automatic-follow-up-category-off", "area": "notification", "kind": "manual", "title": "With native permission allowed and automatic follow-up enabled, independently turn off Advisor notifications and the reminders master switch; pending automatic requests are cancelled and do not deliver at their original due times, foreground/background refresh cannot recreate them, and unrelated category preferences remain unchanged" },
+    { "id": "advisor.automatic-follow-up-delivery", "area": "notification", "kind": "manual", "title": "Schedule a real automatic reminder for a started step, record its native request and due time, close the app and lock the physical device, observe local delivery, and tap it to cold-launch the matching current-owner Advisor step exactly once; repeat while foregrounded and verify the deep link and Back destination without private lock-screen content" },
+    { "id": "advisor.automatic-follow-up-quiet-hours", "area": "notification", "kind": "manual", "title": "Use the native quiet-start/end hour pickers, Save and Cancel; equal hours show validation and minutes are ignored as disclosed; verify same-day and overnight windows including start/end boundaries, persisted values after relaunch, and native requests deferred outside quiet hours with no delivery inside the quiet window" },
+    { "id": "advisor.automatic-follow-up-timezone", "area": "notification", "kind": "manual", "title": "With an automatic reminder pending, change the physical device timezone across a date boundary, foreground and relaunch, and inspect the replacement native request; record named zones, local/UTC due times and offsets, verify the current local quiet window is respected without duplicate or stale requests, then restore device settings" },
+    { "id": "advisor.automatic-follow-up-dst", "area": "notification", "kind": "manual", "title": "On a physical device exercise both spring-forward missing hours and fall-back repeated hours with quiet hours and an automatic reminder spanning each transition; record local/UTC timestamps and offsets, verify a valid due time outside quiet hours, one pending request and no duplicate delivery, then restore device settings; a JavaScript clock mock is not native evidence" },
+    { "id": "advisor.automatic-follow-up-pause-resume", "area": "advisor", "kind": "manual", "title": "Pause until tomorrow cancels the pending automatic request and persists its displayed local resume time across relaunch; refresh while paused creates no reminder; explicit Resume and natural expiry at tomorrow's quiet-end hour each reconcile at most one eligible reminder, including across a daylight-saving transition" },
+    { "id": "advisor.automatic-follow-up-goal-completion", "area": "advisor", "kind": "manual", "title": "Start a goal-linked step and schedule an automatic reminder, complete that exact goal before delivery, inspect native cancellation and absence at the original due time, then foreground and relaunch without recreating it; completing an unrelated goal must not cancel the active step's reminder" },
+    { "id": "advisor.automatic-follow-up-habit-completion", "area": "advisor", "kind": "manual", "title": "Start a habit-linked step with an automatic reminder, check in the matching habit for today, inspect native cancellation and absence at the original due time, then foreground and relaunch without recreating it; another habit or another day's check-in must not cancel the active step's reminder" },
+    { "id": "advisor.automatic-follow-up-tool-completion", "area": "advisor", "kind": "manual", "title": "Start a tool-linked step with an automatic reminder, finish the exact practice, inspect native cancellation and absence at the original due time, and verify offline completion plus reconnect/relaunch cannot resurrect it; browsing, partial practice, failed saves, and unrelated tool completion must not cancel the active reminder" },
+    { "id": "advisor.background-task-success", "area": "advisor", "kind": "manual", "title": "On the exact signed TestFlight artifact on a physical iPhone, capture an actual iOS-dispatched background task while the app is inactive, its background refresh completion and resulting owner-scoped state/native reminder reconciliation; registration alone, a foreground call, simulator, or debug trigger is not execution evidence, and the 60-minute minimum is not a guaranteed schedule" },
+    { "id": "advisor.background-task-restricted", "area": "advisor", "kind": "manual", "title": "On a physical iPhone disable Background App Refresh and exercise the system-restricted condition; record the OS restriction and native registration/execution outcome, verify launch and foreground refresh remain usable and no successful background execution is claimed without evidence, then restore permission and check recovery; simulator-only restriction or mocked status cannot replace this case" },
+    { "id": "advisor.background-task-force-quit", "area": "advisor", "kind": "manual", "title": "Register background refresh on a physical iPhone, swipe the app away, and record the force-quit state and observation window; do not claim a background run while force-quit, distinguish already-scheduled local notification delivery from task execution, then relaunch and verify one current-owner reconciliation without duplicate reminders or any hourly-execution guarantee" },
+    { "id": "privacy.advisor-reminders-sign-out", "area": "privacy", "kind": "manual", "title": "With pending and delivered automatic reminders and an in-flight refresh, sign out the disposable owner, enter the fresh anonymous profile and then a separate partner account; native pending/delivered owner reminders are cleared, stale notification taps cannot open the former owner's step, preferences do not leak and late callbacks cannot recreate cross-profile reminders after relaunch" },
+    { "id": "privacy.advisor-reminders-delete-saved-data", "area": "privacy", "kind": "manual", "title": "Delete saved data while an automatic reminder is pending and refresh is in flight; inspect native pending/delivered cancellation, empty owner follow-up state and no resurrection at the original due time or after relaunch/reconnect, then switch to a separate partner account and verify no former-owner reminder, preference or stale deep-link leakage" },
+    { "id": "privacy.advisor-reminders-delete-account", "area": "privacy", "kind": "manual", "title": "Delete a disposable account with pending/delivered automatic reminders and an in-flight background refresh; verify native cancellation and cleared follow-up state, then use the fresh anonymous profile and a separate partner account; delayed callbacks, stale notification taps and relaunch must not recreate reminders or expose the deleted owner's step or preferences" },
+    { "id": "advisor.adaptive-feedback", "area": "advisor", "kind": "manual", "title": "With AI consent, verify a live model response uses current completed, partial, skipped, barrier and helpfulness feedback. Missing records are not failure; feedback recorded during reconciliation and on an older offer is included; completed habit signals never say still open" },
+    { "id": "advisor.adaptive-commitment", "area": "advisor", "kind": "manual", "title": "Accepted actions remain byte-identical after mood, feedback and routine changes; follow-through refers only to the current attempt's progress and barrier, not historical partial progress. Change the step only after explicit replacement; low-energy and smaller-step recovery remain usable" },
+    { "id": "advisor.adaptive-refresh", "area": "advisor", "kind": "manual", "title": "Foreground guidance refreshes with automatic follow-up disabled and paused; changes during a pending request coalesce into one later refresh; fallback retries on a later foreground visit after one minute; a matching model brief is reused until context changes or six hours pass; no model polling occurs" },
+    { "id": "advisor.adaptive-privacy", "area": "privacy", "kind": "manual", "title": "Consent denial and owner switches prevent new model requests and stale UI results; personal-plan free text remains local; Health-derived commitments are not uploaded without fresh aggregate confirmation; background tasks never call AI; provider failure shows local guidance without an AI label" },
+    { "id": "auth.reflection-draft-transfer", "area": "auth", "kind": "manual", "title": "Use disposable identities with distinct and identical unfinished reflections; verify collisions stop before server merge, writes during transfer cannot overwrite either draft, destination copy survives server success and local cleanup failure, no deleted source session is restored after confirmed server success, and relaunch preserves the signed-in draft" }
   ]
 }

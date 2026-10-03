@@ -62,6 +62,10 @@ export async function createModelAdvisorRecommendation(
 Rules:
 - Use only the supplied facts. Do not infer a condition, cause, diagnosis, or risk level.
 - Prefer one realistic action that fits the current mood and recent feedback.
+- Treat completion, partial progress, skipped steps and explicit barriers as feedback, not failure or a health score. Not started is not the same as skipped.
+- If commitment is supplied, keep it. Never replace an accepted commitment. Choose follow-through that fits its check-in and barrier.
+- Prefer a different approach after unhelpful feedback; when time or energy is the barrier, favor a manageable step. Completion does not prove the step improved health.
+- Choose followThroughId only from the selected candidate's followThroughOptions, or null. These messages are verified progress/context; do not invent new ones.
 - When an Advisor profile is supplied, prefer candidates matching its ordered priorities unless a same-day low mood or urgent deadline already determines the first candidate.
 - The support style changes tone and action size, never the underlying facts or safety rules.
 - Copy one to three observations verbatim from the selected candidate. Do not rewrite them.
@@ -69,7 +73,7 @@ Rules:
 - Select up to three signal IDs that most directly explain today's priority. Use only supplied signal IDs.
 - Every selected signal must support the selected candidate's source labels. Use no signal IDs when none match.
 - Choose one focus: steady, deadline, routine, baseline, or recover.
-- Return JSON only in this exact shape: {"candidateId":"...","observations":["..."],"signalIds":["..."],"focus":"steady"}
+- Return JSON only in this exact shape: {"candidateId":"...","observations":["..."],"signalIds":["..."],"focus":"steady","followThroughId":null}
 
 Advisor input:
 ${JSON.stringify(request)}`;
@@ -107,6 +111,8 @@ ${JSON.stringify(request)}`;
     !selectedCandidate ||
     !observationsAreSafe ||
     !selectedSignalIdsAreSafe ||
+    (selected.followThroughId != null && !selectedCandidate.followThroughOptions?.some((option) => option.id === selected.followThroughId)) ||
+    (request.commitment && selectedCandidate.id !== request.commitment.recommendationId) ||
     model === 'safety'
   ) {
     return { selection: fallbackOutput(request), model, personalized: false };

@@ -71,6 +71,7 @@ function isStoredAdvisorBrief(value: unknown): value is StoredAdvisorBrief {
     FOCUSES.has(brief.focus) &&
     typeof brief.headline === 'string' &&
     typeof brief.usedAppleHealth === 'boolean' &&
+    (brief.followThrough === undefined || (typeof brief.followThrough === 'string' && brief.followThrough.length <= 240)) &&
     Array.isArray(brief.signals) &&
     brief.signals.every(
       (signal) =>
@@ -96,7 +97,8 @@ export function createAdvisorBriefStorage(storage: BriefStorage) {
     async read(
       ownerKey: string,
       localDate: string,
-      fingerprint: string
+      fingerprint: string,
+      nowIso?: string
     ): Promise<StoredAdvisorBrief | null> {
       const raw = await storage.getItem(keyForOwner(ownerKey));
       if (!raw) return null;
@@ -109,6 +111,11 @@ export function createAdvisorBriefStorage(storage: BriefStorage) {
           parsed.fingerprint !== fingerprint
         ) {
           return null;
+        }
+        if (nowIso) {
+          const age = Date.parse(nowIso) - Date.parse(parsed.generatedAt);
+          const maxAge = parsed.model ? 6 * 60 * 60 * 1000 : 60 * 1000;
+          if (!Number.isFinite(age) || age < 0 || age >= maxAge) return null;
         }
         return parsed;
       } catch {

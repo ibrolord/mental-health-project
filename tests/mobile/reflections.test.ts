@@ -84,11 +84,11 @@ describe('mobile guided reflections', () => {
       createGeneration: () => `draft-${++generation}`,
     });
 
-  it('ports every web reflection mode and its copy', () => {
-    expect(REFLECTION_TEMPLATES).toEqual(WEB_REFLECTION_TEMPLATES);
-    expect(REFLECTION_TEMPLATES).toHaveLength(7);
+  it('retains web reflection modes and adds two iOS journal tools', () => {
+    expect(REFLECTION_TEMPLATES.slice(0, 7)).toEqual(WEB_REFLECTION_TEMPLATES);
+    expect(REFLECTION_TEMPLATES).toHaveLength(9);
     expect(REFLECTION_TEMPLATES.filter((template) => template.primary)).toHaveLength(3);
-    expect(REFLECTION_TEMPLATES.filter((template) => !template.primary)).toHaveLength(4);
+    expect(REFLECTION_TEMPLATES.filter((template) => !template.primary)).toHaveLength(6);
   });
 
   it('serializes answered steps in order and rejects invalid responses', () => {
@@ -263,9 +263,11 @@ describe('mobile guided reflections', () => {
   it('flushes drafts on lifecycle changes and clears them from privacy workflows', () => {
     expect(reflectScreen).toContain("AppState.addEventListener('change'");
     expect(reflectScreen).toContain('void flushDraftRef.current()');
-    expect(reflectScreen).toContain('stateOwnerId !== ownerId');
-    expect(reflectScreen).toContain('persistDraftSnapshotRef.current(previousSnapshot)');
-    expect(reflectScreen).toContain('reflectionDraftStorage.captureWriteToken(ownerId)');
+    expect(reflectScreen).toContain('stateOwnerId !== context.user_id');
+    expect(reflectScreen).toContain('const operation = reflectionDraftStorage.write(');
+    expect(reflectScreen).toContain('.readForEditing(ownerId)');
+    expect(reflectScreen).not.toContain('reflectionDraftStorage.captureWriteToken(');
+    expect(reflectScreen).not.toContain('previous.catch(');
     expect(settingsSource).toContain('clearReflectionDraft(expectedOwnerId)');
     expect(authContextSource).toContain('clearReflectionDraft(user.id)');
     expect(authContextSource).toContain(
@@ -273,11 +275,15 @@ describe('mobile guided reflections', () => {
     );
     expect(authContextSource).toContain('clearReflectionDraft(deletedOwnerId)');
     expect(authContextSource).toContain('migrateAnonymousLocalState');
-    expect(authContextSource).toContain('reflectionDraftStorage.read(sourceUserId)');
+    expect(authContextSource).toContain('reflectionDraftStorage.beginOwnerMigration(');
+    expect(authContextSource).toContain('await reflectionMigration.finish()');
+    expect(authContextSource).not.toContain('reflectionDraftStorage.read(sourceUserId)');
     expect(authContextSource).toContain('moodDraftStorage.read(sourceUserId)');
   });
 
   it('deletes temporary exports even after sharing is cancelled or fails', () => {
+    expect(settingsSource).toContain('reflectionDraftStorage.read(expectedOwnerId)');
+    expect(settingsSource).toContain('local_reflection_draft: localReflectionDraft');
     expect(settingsSource).toContain('FileSystem.cacheDirectory');
     expect(settingsSource).toContain('FileSystem.deleteAsync(exportPath');
     expect(settingsSource).toContain('{ idempotent: true }');

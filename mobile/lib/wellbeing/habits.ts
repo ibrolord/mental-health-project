@@ -43,6 +43,10 @@ export function isUnexpectedHabitInsertError(
   return Boolean(error && error.code !== '23505');
 }
 
+export function selectedRoutineItems(template: RoutineTemplate, names?: readonly string[]): HabitDraft[] {
+  return names ? template.items.filter((item) => names.includes(item.name)) : template.items;
+}
+
 export const HABIT_CATEGORIES: {
   id: HabitCategory;
   label: string;
@@ -75,6 +79,18 @@ const baseHabit = (
 });
 
 export const ROUTINE_TEMPLATES: RoutineTemplate[] = [
+  {
+    id: 'everyday-basics', title: 'Everyday basics', eyebrow: 'Care, not a score',
+    description: 'Choose the basics that fit your day. Leave out anything that does not suit your needs; add your own habit anytime.',
+    slot: 'anytime', evidenceIds: ['habit-repetition'],
+    items: [
+      baseHabit({ name: 'Pause for a drink', description: 'Follow your usual needs and any fluid guidance you have.', category: 'nourishment', icon: 'droplets', cue: 'At a natural break', tinyStep: 'Check whether I need a drink', routineSlot: 'anytime' }),
+      baseHabit({ name: 'Make space for a meal', description: 'An accessible meal or snack that works for me.', category: 'nourishment', icon: 'apple', cue: 'When I notice hunger or my usual meal time', tinyStep: 'Choose something available', routineSlot: 'anytime' }),
+      baseHabit({ name: 'Take a comfortable movement break', description: 'Seated movement, a stretch, or a short walk if suitable.', category: 'movement', icon: 'activity', cue: 'After sitting for a while', tinyStep: 'Move comfortably for a moment', routineSlot: 'anytime' }),
+      baseHabit({ name: 'Check in with someone', description: 'A small connection on my terms.', category: 'social', icon: 'users', cue: 'When I have a quiet moment', tinyStep: 'Send a hello to someone I trust', routineSlot: 'anytime' }),
+      baseHabit({ name: 'Take a screen-free rest', description: 'A pause without needing to earn it.', category: 'wellbeing', icon: 'moon', cue: 'Between activities', tinyStep: 'Put the screen aside for a minute', routineSlot: 'anytime' }),
+    ],
+  },
   {
     id: 'morning-anchor',
     title: 'Morning anchor',

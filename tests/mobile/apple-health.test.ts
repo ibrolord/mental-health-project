@@ -387,7 +387,8 @@ describe('Apple Health release boundaries', () => {
     const plugin = app.plugins.find(
       (entry: unknown) => Array.isArray(entry) && entry[0] === '@kingstinct/react-native-healthkit'
     );
-    expect(app.version).toBe('1.0.7');
+    const release = JSON.parse(readFileSync(resolve(root, 'mobile/qa/app-store-release-baseline.json'), 'utf8'));
+    expect(app.version).toBe(release.candidateVersion);
     expect(plugin?.[1]).toMatchObject({
       background: false,
     });

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { emitAdvisorClient } from './advisor-client-events';
 
 interface PreferenceStorage {
   getItem(key: string): Promise<string | null>;
@@ -20,9 +21,11 @@ export function createDashboardPreferences(storage: PreferenceStorage) {
     async writeLowEnergyMode(ownerKey: string, enabled: boolean): Promise<void> {
       if (enabled) {
         await storage.setItem(lowEnergyKey(ownerKey), 'enabled');
+        emitAdvisorClient(ownerKey);
         return;
       }
       await storage.removeItem(lowEnergyKey(ownerKey));
+      emitAdvisorClient(ownerKey);
     },
   };
 }

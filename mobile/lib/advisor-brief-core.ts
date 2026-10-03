@@ -3,6 +3,7 @@ import type {
   AdvisorRecentRecommendation,
 } from './advisor-core';
 import type { AppleHealthAiSummary } from './apple-health-core';
+import type { AdvisorActionInstance } from './advisor-action-storage';
 
 export type AdvisorBriefFocus =
   | 'steady'
@@ -22,6 +23,7 @@ export type AdvisorDailyBrief = {
   headline: string;
   signals: readonly AdvisorBriefSignal[];
   usedAppleHealth: boolean;
+  followThrough?: string;
 };
 
 const MOOD_LABELS: Record<string, 'Great' | 'Good' | 'Okay' | 'Low' | 'Very low'> = {
@@ -103,7 +105,7 @@ export function createAdvisorBriefSignals(
     signals.push({
       id: `routine:${habit.id}`,
       kind: 'routine',
-      text: boundedSignal(`${slot} routine “${habit.name}” is still open.`),
+      text: boundedSignal(`${slot} routine “${habit.name}” is ${habit.completedToday ? 'marked done' : 'still open'}.`),
     });
     const streakCount = Math.max(0, habit.streakCount ?? 0);
     if (streakCount > 0) {
@@ -175,7 +177,8 @@ function localDateKey(value: string): string {
 export function createAdvisorBriefFingerprint(
   context: AdvisorContext,
   recent: readonly AdvisorRecentRecommendation[],
-  appleHealthSummary: AppleHealthAiSummary | null = null
+  appleHealthSummary: AppleHealthAiSummary | null = null,
+  commitment: AdvisorActionInstance | null = null
 ): string {
   return stableHash(JSON.stringify({
     date: localDateKey(context.nowIso),
@@ -193,13 +196,25 @@ export function createAdvisorBriefFingerprint(
     momentumAvailability: context.momentumAvailability,
     notifications: context.notifications,
     sourceAvailability: context.sourceAvailability,
-    feedback: recent.slice(0, 5).map((item) =>
+    commitment: commitment ? {
+      id: commitment.id, status: commitment.status,
+      lastCheckInResult: commitment.lastCheckInResult,
+      recoveryReason: commitment.recoveryReason,
+      useSmallerStep: commitment.useSmallerStep,
+    } : null,
+    // Include every retained outcome: a late answer on an older offer can
+    // move into the model's newest-five feedback window.
+    feedback: recent.map((item) =>
       typeof item === 'string'
         ? { recommendationId: item, helpful: null, resolution: null }
         : {
             recommendationId: item.recommendationId,
             helpful: item.helpful ?? null,
             resolution: item.resolution ?? (item.completedAt ? 'completed' : null),
+            startedAt: item.startedAt,
+            resolvedAt: item.resolvedAt,
+            feedbackAt: item.feedbackAt,
+            barrier: item.barrier,
           }
     ),
     appleHealthSummary,

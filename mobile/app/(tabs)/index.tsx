@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { subscribeAdvisorClient } from '@/lib/advisor-client-events';
 import { Alert, Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { format } from 'date-fns';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -62,6 +63,9 @@ export default function DashboardScreen() {
   const queryColumn = isAuthenticated ? 'user_id' : 'session_id';
   const queryValue = isAuthenticated ? user?.id : sessionId;
   const ownerKey = queryValue ? `${queryColumn}:${queryValue}` : null;
+  useEffect(() => subscribeAdvisorClient((event) => {
+    if (event.ownerKey === ownerKey && event.kind === 'refreshed') setAdvisorRefresh((value) => value + 1);
+  }), [ownerKey]);
   const ownerKeyRef = useRef(ownerKey);
   const focusedMoodOwnerRef = useRef<string | null>(null);
   ownerKeyRef.current = ownerKey;

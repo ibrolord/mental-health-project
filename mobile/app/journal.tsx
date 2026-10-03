@@ -45,7 +45,7 @@ import {
 } from '@/lib/journal-audio';
 import { supabase } from '@/lib/supabase';
 
-type JournalFilter = 'all' | 'favorites' | 'library_notes';
+type JournalFilter = 'all' | 'favorites' | 'library_notes' | 'worry time' | 'coping card';
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? '' : value ?? '';
@@ -292,6 +292,7 @@ function JournalContent() {
     const query = search.trim().toLocaleLowerCase();
     return ownerEntries.filter((entry) => {
       if (filter === 'favorites' && !entry.is_favorite) return false;
+      if ((filter === 'worry time' || filter === 'coping card') && !entry.tags.includes(filter)) return false;
       if (
         filter === 'library_notes' &&
         entry.entry_kind !== 'book_note' &&
@@ -918,6 +919,8 @@ function JournalContent() {
             [
               ['all', 'All'],
               ['favorites', 'Important'],
+              ['worry time', 'Worries'],
+              ['coping card', 'Coping cards'],
               ['library_notes', 'Library notes'],
             ] as const
           ).map(([value, label]) => (

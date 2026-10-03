@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { subscribeAdvisorClient } from '@/lib/advisor-client-events';
 import { AccessibilityInfo, Alert, AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -207,15 +208,20 @@ async function selectModelBackedRecommendation(
   options: AdvisorSelectionOptions = {},
   appleHealthSummary: AppleHealthAiSummary | null = null,
   isCurrent: () => boolean = () => true,
-  allowConsent = true
+  allowConsent = true,
+  commitment: AdvisorActionInstance | null = null
 ): Promise<{
   recommendation: AdvisorRecommendation;
   model: 'gemini' | 'claude' | null;
   brief: AdvisorDailyBrief;
 }> {
-  const fallback = selectAdvisorRecommendation(context, recent, options);
+  const selected = selectAdvisorRecommendation(context, recent, options);
+  const fallback = selected.kind === 'safety' ? selected
+    : commitment ? recommendationForAction(commitment) : selected;
   const expectedUserId = ownerKey?.startsWith('user_id:') ? ownerKey.slice('user_id:'.length) : null;
-  if (fallback.kind === 'safety' || fallback.id.startsWith('personal-plan:') || !ownerKey || !expectedUserId || !isCurrent()) {
+  if (fallback.kind === 'safety' || fallback.id.startsWith('personal-plan:') ||
+    (!appleHealthSummary && fallback.sourceLabels.includes('Apple Health summary')) ||
+    !ownerKey || !expectedUserId || !isCurrent()) {
     return {
       recommendation: fallback,
       model: null,
@@ -241,7 +247,7 @@ async function selectModelBackedRecommendation(
       ...healthContext,
       profile: context.profile ? { ...context.profile, personalPlan: undefined } : context.profile,
     };
-    const candidates = createAdvisorCandidateSet(
+    const candidates = commitment ? [fallback] : createAdvisorCandidateSet(
       modelContext,
       recent,
       options
@@ -251,7 +257,13 @@ async function selectModelBackedRecommendation(
       candidates,
       recent,
       appleHealthSummary,
-      { isCurrent, expectedUserId }
+      { isCurrent, expectedUserId, commitment: commitment ? {
+        recommendationId: commitment.recommendationId,
+        status: commitment.status,
+        lastCheckInResult: commitment.lastCheckInResult,
+        recoveryReason: commitment.recoveryReason,
+        useSmallerStep: commitment.useSmallerStep,
+      } : null }
     );
     return {
       recommendation: result.recommendation,
@@ -483,31 +495,24 @@ export default function AdvisorScreen() {
             setStateOwnerKey(expectedOwner);
             return;
           }
-          const fingerprint = createAdvisorBriefFingerprint(context, reconciledOutcomes);
+          const fingerprint = createAdvisorBriefFingerprint(context, reconciledOutcomes, null, storedAction);
           const cached = expectedOwner
             ? await advisorBriefStorage.read(
                 expectedOwner,
                 localDate,
-                fingerprint
+                fingerprint,
+                context.nowIso
               ).then((cachedBrief) =>
-                cachedBrief?.recommendation.id === selectionOptions.excludeRecommendationId ||
-                (deterministicSelection.id.startsWith('personal-plan:') &&
+                (!storedAction && cachedBrief?.recommendation.id === selectionOptions.excludeRecommendationId) ||
+                (storedAction && cachedBrief?.recommendation.id !== storedAction.recommendationId) ||
+                (!storedAction && deterministicSelection.id.startsWith('personal-plan:') &&
                 cachedBrief?.recommendation.id !== deterministicSelection.id)
                   ? null
                   : cachedBrief
               ).catch(() => null)
             : null;
           if (!isCurrent()) return;
-          const storedRecommendation = storedAction
-            ? recommendationForAction(storedAction)
-            : null;
-          const generated = storedRecommendation
-            ? {
-                recommendation: storedRecommendation,
-                model: null,
-                brief: deterministicBrief(context, storedRecommendation, null),
-              }
-            : cached
+          const generated = cached
               ? {
                   recommendation: cached.recommendation,
                   model: cached.model,
@@ -524,7 +529,8 @@ export default function AdvisorScreen() {
                   selectionOptions,
                   null,
                   isCurrent,
-                  allowConsent
+                  allowConsent,
+                  storedAction
                 ),
                 selectionOptions,
                 isCurrent
@@ -547,7 +553,9 @@ export default function AdvisorScreen() {
                 localDate,
                 fingerprint: createAdvisorBriefFingerprint(
                   context,
-                  updatedOutcomes
+                  updatedOutcomes,
+                  null,
+                  storedAction
                 ),
                 generatedAt: new Date().toISOString(),
                 model: generated.model,
@@ -578,7 +586,11 @@ export default function AdvisorScreen() {
       const subscription = AppState.addEventListener('change', (state) => {
         loop.setAppActive(state === 'active');
       });
+      const unsubscribeClient = subscribeAdvisorClient((event) => {
+        if (event.ownerKey === expectedOwner && (event.kind === 'changed' || event.kind === 'refreshed')) void loop.refresh(false, true);
+      });
       return () => {
+        unsubscribeClient();
         subscription.remove();
         loop.dispose();
         if (loopRef.current === loop) loopRef.current = null;
@@ -861,20 +873,12 @@ export default function AdvisorScreen() {
           ? undefined
           : currentRecommendation.id.split(':')[0],
       };
-      const selected = selectAdvisorRecommendation(
-        context,
-        recent,
-        options
-      );
       const generated = await applyObservationCadence(
         context,
         recent,
         expectedOwner,
-        {
-          recommendation: selected,
-          model: null,
-          brief: deterministicBrief(context, selected, null),
-        },
+        await selectModelBackedRecommendation(context, recent, expectedOwner,
+          options, null, operation.isCurrent, false),
         options,
         operation.isCurrent
       );
@@ -886,8 +890,8 @@ export default function AdvisorScreen() {
         if (!operation.isCurrent()) return;
         setActiveAdvisorAction(null);
       }
-      await recordAdvisorOffered(expectedOwner, nextRecommendation);
-      const updatedOutcomes = await loadAdvisorOutcomes(expectedOwner);
+      await recordAdvisorOffered(expectedOwner, nextRecommendation).catch(() => undefined);
+      const updatedOutcomes = await loadAdvisorOutcomes(expectedOwner).catch(() => outcomes);
       if (!operation.isCurrent()) return;
       await advisorBriefStorage.write({
         version: 1,
@@ -895,7 +899,7 @@ export default function AdvisorScreen() {
         localDate: format(new Date(context.nowIso), 'yyyy-MM-dd'),
         fingerprint: createAdvisorBriefFingerprint(context, updatedOutcomes),
         generatedAt: new Date().toISOString(),
-        model: null,
+        model: generated.model,
         recommendation: nextRecommendation,
         brief: nextBrief,
       }).catch(() => undefined);
@@ -906,7 +910,7 @@ export default function AdvisorScreen() {
       setToolCompletion(null);
       setRecommendation(nextRecommendation);
       setBrief(nextBrief);
-      setAdvisorModel(null);
+      setAdvisorModel(generated.model);
       setOutcomes(updatedOutcomes);
       setUseSmallerStep(prefersSmallerStep(context, nextRecommendation));
     } catch {
@@ -951,9 +955,14 @@ export default function AdvisorScreen() {
     setBusy(true);
     setError('');
     setStatus('');
+    let completedDurably = false;
     try {
       await completeAdvisorLifecycle(expectedOwner, completed);
-      const updatedOutcomes = await loadAdvisorOutcomes(expectedOwner);
+      completedDurably = true;
+      if (!operation.isCurrent()) return;
+      setActiveAdvisorAction(null);
+      setToolCompletion(null);
+      const updatedOutcomes = await loadAdvisorOutcomes(expectedOwner).catch(() => outcomes);
       if (!operation.isCurrent()) return;
       const options = {
           preserveToday: false,
@@ -980,8 +989,8 @@ export default function AdvisorScreen() {
       const nextRecommendation = generated.recommendation;
       const nextBrief = generated.brief;
       if (!operation.isCurrent()) return;
-      await recordAdvisorOffered(expectedOwner, nextRecommendation);
-      const nextOutcomes = await loadAdvisorOutcomes(expectedOwner);
+      await recordAdvisorOffered(expectedOwner, nextRecommendation).catch(() => undefined);
+      const nextOutcomes = await loadAdvisorOutcomes(expectedOwner).catch(() => updatedOutcomes);
       if (!operation.isCurrent()) return;
       await advisorBriefStorage.write({
         version: 1,
@@ -1003,7 +1012,13 @@ export default function AdvisorScreen() {
       setStatus('Step completed. Advisor has your next option ready.');
     } catch {
       if (operation.isCurrent()) {
-        setError('This step could not be completed. Please try again.');
+        if (completedDurably) {
+          setRecommendation(null);
+          setBrief(null);
+          setError('Step completed. Your next suggestion could not load; reopen Advisor to try again.');
+        } else {
+          setError('This step could not be completed. Please try again.');
+        }
       }
     } finally {
       if (operation.isCurrent()) setBusy(false);
@@ -1221,7 +1236,7 @@ export default function AdvisorScreen() {
       if (!operation.isCurrent()) return;
       setOutcomes(updatedOutcomes);
       setStatus(helpful === null ? 'Feedback skipped.' : 'Thanks. Advisor will use that next time.');
-      if (helpful !== null && !activeAdvisorAction) void loopRef.current?.refresh();
+      if (helpful !== null) void loopRef.current?.refresh(false, true);
     } catch {
       if (operation.isCurrent()) {
         setError('Feedback could not be saved. Please try again.');
@@ -1363,6 +1378,11 @@ export default function AdvisorScreen() {
                 </Text>
               )}
               <Text style={styles.cadenceLine}>{cadenceLine}</Text>
+              {brief.followThrough ? (
+                <Text style={styles.checkInBody} accessibilityLabel={`Follow-through: ${brief.followThrough}`}>
+                  {brief.followThrough}
+                </Text>
+              ) : null}
               {Platform.OS === 'ios' &&
               APPLE_HEALTH_AI_ENABLED &&
               context?.profile?.completedAt &&

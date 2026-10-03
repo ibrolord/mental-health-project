@@ -8,6 +8,56 @@ function deferred() {
 }
 
 describe('Advisor foreground refresh gate', () => {
+  it('tracks background state while the owner is temporarily unavailable', async () => {
+    let current = true;
+    const load = vi.fn(async () => {});
+    const gate = createAdvisorLoopRefresh({ isOwnerCurrent: () => current, load, onLoading: vi.fn(), onError: vi.fn() });
+    await gate.refresh();
+    current = false;
+    gate.setAppActive(false);
+    current = true;
+    await gate.refresh();
+    expect(load).toHaveBeenCalledTimes(1);
+    gate.setAppActive(true);
+    await gate.refresh();
+    expect(load).toHaveBeenCalledTimes(2);
+    gate.dispose();
+  });
+  it('replaces a queued pre-background change with a single fresh foreground load', async () => {
+    const slow = deferred();
+    const load = vi.fn(async () => { if (load.mock.calls.length === 1) await slow.promise; });
+    const gate = createAdvisorLoopRefresh({ isOwnerCurrent: () => true, load, onLoading: vi.fn(), onError: vi.fn() });
+    const old = gate.refresh();
+    await Promise.resolve();
+    void gate.refresh(false, true);
+    gate.setAppActive(false);
+    gate.setAppActive(true);
+    await gate.refresh();
+    slow.resolve();
+    await old;
+    expect(load).toHaveBeenCalledTimes(2);
+    gate.dispose();
+  });
+  it('coalesces data changes during a model request into one fresh load', async () => {
+    const slow = deferred();
+    const seen: number[] = [];
+    let data = 0;
+    const gate = createAdvisorLoopRefresh({
+      isOwnerCurrent: () => true, onLoading: vi.fn(), onError: vi.fn(),
+      load: async () => { seen.push(data); if (seen.length === 1) await slow.promise; },
+    });
+    const pending = gate.refresh();
+    await Promise.resolve();
+    data = 1;
+    void gate.refresh(false, true);
+    data = 2;
+    void gate.refresh(false, true);
+    slow.resolve();
+    await pending;
+    await gate.refresh();
+    expect(seen).toEqual([0, 2]);
+    gate.dispose();
+  });
   it('refreshes relevant context once per real foreground event, without polling or prompting for consent', async () => {
     const readContext = vi.fn(async () => {});
     const readAction = vi.fn(async () => {});

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { Feather } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   AppState,
   Alert,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -49,6 +51,8 @@ const TEMPLATE_ICONS: Record<ReflectionTemplateId, FeatherName> = {
   'good-moments': 'sun',
   'express-and-close': 'book-open',
   'weekly-patterns': 'activity',
+  'worry-time': 'clock',
+  'coping-card': 'credit-card',
 };
 
 const PRIMARY_TEMPLATES = REFLECTION_TEMPLATES.filter(
@@ -87,15 +91,16 @@ function ReflectContent() {
   const [draftReady, setDraftReady] = useState(false);
   const [stateOwnerId, setStateOwnerId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [hydrationEpoch, setHydrationEpoch] = useState(0);
+  const [needsReload, setNeedsReload] = useState(false);
+  const hydrationTokenRef = useRef<ReflectionDraftWriteToken | null>(null);
+  const ignoreRequestedModeRef = useRef(false);
   const ownerIdRef = useRef(context.user_id);
   const ownerGenerationRef = useRef(0);
   const mountedRef = useRef(true);
   const draftWriteSequenceRef = useRef(0);
   const pendingDraftWriteRef = useRef<Promise<void> | null>(null);
-  const nextDraftSnapshotIdRef = useRef(0);
-  const queuedDraftSnapshotIdsRef = useRef(new Set<number>());
   const latestDraftRef = useRef<{
-    snapshotId: number;
     ownerId: string;
     ownerGeneration: number;
     writeToken: ReflectionDraftWriteToken;
@@ -114,13 +119,28 @@ function ReflectContent() {
     ? reflectionTemplateById(activeId)
     : null;
 
+  const requireFreshDraft = (token = hydrationTokenRef.current) => {
+    if (token && token.ownerId === ownerIdRef.current && reflectionDraftStorage.isWriteTokenCurrent(token)) {
+      return true;
+    }
+    setDraftReady(false);
+    setNeedsReload(true);
+    setError('This reflection changed during sign-in or cleanup. Reload the saved draft before continuing.');
+    return false;
+  };
+
+  const reloadDraft = () => {
+    hydrationTokenRef.current = null;
+    latestDraftRef.current = null;
+    setDraftReady(false);
+    setHydrationEpoch((current) => current + 1);
+  };
+
   useEffect(() => {
     const ownerId = context.user_id;
-    const previousSnapshot = latestDraftRef.current;
     latestDraftRef.current = null;
-    if (previousSnapshot) {
-      void persistDraftSnapshotRef.current(previousSnapshot);
-    }
+    hydrationTokenRef.current = null;
+    draftWriteSequenceRef.current += 1;
     const ownerGeneration = ++ownerGenerationRef.current;
     let active = true;
 
@@ -130,6 +150,7 @@ function ReflectContent() {
     setResponses({});
     setSaveState('idle');
     setDraftReady(false);
+    setNeedsReload(false);
     setDraftState(authLoading ? 'loading' : 'idle');
     setError('');
     if (authLoading || !ownerId) {
@@ -140,8 +161,8 @@ function ReflectContent() {
 
     setDraftState('loading');
     void reflectionDraftStorage
-      .read(ownerId)
-      .then((draft) => {
+      .readForEditing(ownerId)
+      .then(({ draft, writeToken }) => {
         if (
           !active ||
           ownerIdRef.current !== ownerId ||
@@ -149,28 +170,29 @@ function ReflectContent() {
         ) {
           return;
         }
+        if (!requireFreshDraft(writeToken)) return;
+        hydrationTokenRef.current = writeToken;
         const requestedTemplate = reflectionTemplateById(
-          typeof params.mode === 'string'
+          !ignoreRequestedModeRef.current && typeof params.mode === 'string'
             ? (params.mode as ReflectionTemplateId)
             : null
         );
-        const restoreDraft = () => {
-          if (!draft) return;
-          setActiveId(draft.templateId);
-          setStepIndex(draft.stepIndex);
-          setResponses(draft.responses);
+        const installDraft = (templateId: ReflectionTemplateId | null, index: number, answers: Record<string, string>) => {
+          if (!active || ownerIdRef.current !== ownerId || ownerGenerationRef.current !== ownerGeneration) return;
+          if (!requireFreshDraft(writeToken)) return;
+          latestDraftRef.current = templateId ? {
+            ownerId, ownerGeneration, writeToken, templateId, stepIndex: index, responses: { ...answers },
+          } : null;
+          setActiveId(templateId);
+          setStepIndex(index);
+          setResponses(answers);
           setStateOwnerId(ownerId);
-          setDraftState('saved');
           setDraftReady(true);
         };
-        const startRequestedTemplate = () => {
-          if (!requestedTemplate) return;
-          setActiveId(requestedTemplate.id);
-          setStepIndex(0);
-          setResponses({});
-          setStateOwnerId(ownerId);
-          setDraftState('idle');
-          setDraftReady(true);
+        const restoreDraft = () => {
+          if (!draft) return;
+          installDraft(draft.templateId, draft.stepIndex, draft.responses);
+          setDraftState('saved');
         };
 
         if (
@@ -197,15 +219,16 @@ function ReflectContent() {
                 text: `Start ${requestedTemplate.title}`,
                 style: 'destructive',
                 onPress: () => {
+                  if (!active || !requireFreshDraft(writeToken)) return;
                   setDraftReady(false);
                   void reflectionDraftStorage
-                    .clear(ownerId)
+                    .clear(ownerId, writeToken)
                     .then(() => {
                       if (
                         ownerIdRef.current === ownerId &&
                         ownerGenerationRef.current === ownerGeneration
                       ) {
-                        startRequestedTemplate();
+                        reloadDraft();
                       }
                     })
                     .catch(() => {
@@ -213,7 +236,7 @@ function ReflectContent() {
                         ownerIdRef.current === ownerId &&
                         ownerGenerationRef.current === ownerGeneration
                       ) {
-                        restoreDraft();
+                        setNeedsReload(true);
                         setError('The existing draft could not be replaced.');
                       }
                     });
@@ -227,10 +250,8 @@ function ReflectContent() {
         if (draft) {
           restoreDraft();
         } else {
-          if (requestedTemplate) setActiveId(requestedTemplate.id);
-          setStateOwnerId(ownerId);
+          installDraft(requestedTemplate?.id ?? null, 0, {});
           setDraftState('idle');
-          setDraftReady(true);
         }
       })
       .catch(() => {
@@ -243,20 +264,16 @@ function ReflectContent() {
         }
         setStateOwnerId(ownerId);
         setDraftState('error');
-        setDraftReady(true);
+        setDraftReady(false);
+        setNeedsReload(true);
       });
 
     return () => {
       active = false;
     };
-  }, [authLoading, context.user_id, params.mode]);
+  }, [authLoading, context.user_id, params.mode, hydrationEpoch]);
 
   persistDraftSnapshotRef.current = async (snapshot) => {
-    if (queuedDraftSnapshotIdsRef.current.has(snapshot.snapshotId)) {
-      await pendingDraftWriteRef.current?.catch(() => {});
-      return;
-    }
-    queuedDraftSnapshotIdsRef.current.add(snapshot.snapshotId);
     const sequence = ++draftWriteSequenceRef.current;
     if (
       mountedRef.current &&
@@ -266,32 +283,26 @@ function ReflectContent() {
       setDraftState('saving');
     }
 
-    const previous = pendingDraftWriteRef.current;
-    const operation = (previous ? previous.catch(() => {}) : Promise.resolve()).then(
-      () =>
-        reflectionDraftStorage.write(
-          snapshot.ownerId,
-          {
-            templateId: snapshot.templateId,
-            stepIndex: snapshot.stepIndex,
-            responses: snapshot.responses,
-          },
-          snapshot.writeToken
-        )
+    // Register synchronously. Storage is the ONLY queue, so auth can drain every
+    // edit even if an earlier device write has not completed yet.
+    const operation = reflectionDraftStorage.write(
+      snapshot.ownerId,
+      { templateId: snapshot.templateId, stepIndex: snapshot.stepIndex, responses: snapshot.responses },
+      snapshot.writeToken
     );
-    const trackedOperation = operation.then(() => undefined);
+    const trackedOperation = operation.then(() => undefined, () => undefined);
     pendingDraftWriteRef.current = trackedOperation;
 
     try {
       const didWrite = await operation;
       if (
-        didWrite &&
         mountedRef.current &&
         sequence === draftWriteSequenceRef.current &&
         ownerIdRef.current === snapshot.ownerId &&
         ownerGenerationRef.current === snapshot.ownerGeneration
       ) {
-        setDraftState('saved');
+        setDraftState(didWrite ? 'saved' : 'error');
+        if (!didWrite) requireFreshDraft(snapshot.writeToken);
       }
     } catch {
       if (
@@ -301,6 +312,7 @@ function ReflectContent() {
         ownerGenerationRef.current === snapshot.ownerGeneration
       ) {
         setDraftState('error');
+        if (!reflectionDraftStorage.isWriteTokenCurrent(snapshot.writeToken)) requireFreshDraft(snapshot.writeToken);
       }
     } finally {
       if (pendingDraftWriteRef.current === trackedOperation) {
@@ -310,50 +322,9 @@ function ReflectContent() {
   };
 
   flushDraftRef.current = async () => {
-    const snapshot = latestDraftRef.current;
-    if (snapshot) {
-      await persistDraftSnapshotRef.current(snapshot);
-      return;
-    }
+    // Edits are already registered; lifecycle flushes never replay stale words.
     await pendingDraftWriteRef.current?.catch(() => {});
   };
-
-  useEffect(() => {
-    const ownerId = context.user_id;
-    if (
-      !draftReady ||
-      !ownerId ||
-      stateOwnerId !== ownerId ||
-      !activeTemplate ||
-      saveState === 'saving' ||
-      saveState === 'saved'
-    ) {
-      return;
-    }
-
-    latestDraftRef.current = {
-      snapshotId: ++nextDraftSnapshotIdRef.current,
-      ownerId,
-      ownerGeneration: ownerGenerationRef.current,
-      writeToken: reflectionDraftStorage.captureWriteToken(ownerId),
-      templateId: activeTemplate.id,
-      stepIndex,
-      responses: { ...responses },
-    };
-    const timeout = setTimeout(() => {
-      void flushDraftRef.current();
-    }, 350);
-
-    return () => clearTimeout(timeout);
-  }, [
-    activeTemplate,
-    context.user_id,
-    draftReady,
-    responses,
-    saveState,
-    stateOwnerId,
-    stepIndex,
-  ]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -369,15 +340,25 @@ function ReflectContent() {
     };
   }, []);
 
+  const editorToken = hydrationTokenRef.current;
+  const editorGeneration = ownerGenerationRef.current;
+  const canUseEditor = () => {
+    // Native callbacks/dialogs from an older render cannot borrow a later
+    // hydration's token, even when the account ID has not changed.
+    if (!mountedRef.current || editorGeneration !== ownerGenerationRef.current ||
+        editorToken !== hydrationTokenRef.current) return false;
+    return requireFreshDraft(editorToken);
+  };
+
   const resetReflection = () => {
-    latestDraftRef.current = null;
+    ignoreRequestedModeRef.current = true;
     setActiveId(null);
     setStepIndex(0);
     setResponses({});
     setSaveState('idle');
     setDraftState('idle');
-    setDraftReady(Boolean(context.user_id && !authLoading));
     setError('');
+    reloadDraft();
   };
 
   const begin = (template: ReflectionTemplate) => {
@@ -390,6 +371,13 @@ function ReflectContent() {
       setError('Your private profile is still loading. Please try again.');
       return;
     }
+    if (!canUseEditor()) return;
+    const snapshot = {
+      ownerId: context.user_id, ownerGeneration: ownerGenerationRef.current,
+      writeToken: hydrationTokenRef.current!, templateId: template.id, stepIndex: 0, responses: {},
+    };
+    latestDraftRef.current = snapshot;
+    void persistDraftSnapshotRef.current(snapshot);
     setActiveId(template.id);
     setStepIndex(0);
     setResponses({});
@@ -399,7 +387,8 @@ function ReflectContent() {
 
   const discardDraft = () => {
     const ownerId = context.user_id;
-    if (!ownerId) return;
+    const writeToken = editorToken;
+    if (!ownerId || !writeToken || !canUseEditor()) return;
     Alert.alert(
       'Discard this draft?',
       'Your answers will be removed from this device.',
@@ -409,16 +398,19 @@ function ReflectContent() {
           text: 'Discard',
           style: 'destructive',
           onPress: () => {
+            if (!canUseEditor()) return;
             latestDraftRef.current = null;
             setDraftReady(false);
             void reflectionDraftStorage
-              .clear(ownerId)
+              .clear(ownerId, writeToken)
               .then(() => {
-                if (ownerIdRef.current === ownerId) resetReflection();
+                if (mountedRef.current && ownerIdRef.current === ownerId &&
+                    ownerGenerationRef.current === editorGeneration) resetReflection();
               })
               .catch(() => {
-                if (ownerIdRef.current === ownerId) {
-                  setDraftReady(true);
+                if (mountedRef.current && ownerIdRef.current === ownerId &&
+                    ownerGenerationRef.current === editorGeneration) {
+                  setNeedsReload(true);
                   setError('The encrypted draft could not be removed. Please try again.');
                 }
               });
@@ -429,34 +421,45 @@ function ReflectContent() {
   };
 
   const updateResponse = (stepId: string, value: string) => {
-    setResponses((current) => ({ ...current, [stepId]: value }));
+    const current = latestDraftRef.current;
+    if (saveInFlightRef.current || !current || !canUseEditor()) return;
+    const snapshot = { ...current, responses: { ...current.responses, [stepId]: value } };
+    latestDraftRef.current = snapshot;
+    void persistDraftSnapshotRef.current(snapshot);
+    setResponses(snapshot.responses);
     if (saveState !== 'idle') setSaveState('idle');
     if (error) setError('');
   };
 
   const changeStep = (nextStep: number) => {
-    if (!activeTemplate) return;
-    setStepIndex(Math.max(0, Math.min(activeTemplate.steps.length - 1, nextStep)));
+    const current = latestDraftRef.current;
+    if (saveInFlightRef.current || !activeTemplate || !current || !canUseEditor()) return;
+    const snapshot = { ...current, stepIndex: Math.max(0, Math.min(activeTemplate.steps.length - 1, nextStep)) };
+    latestDraftRef.current = snapshot;
+    void persistDraftSnapshotRef.current(snapshot);
+    setStepIndex(snapshot.stepIndex);
     if (error) setError('');
   };
 
   const saveReflection = async () => {
     if (saveInFlightRef.current || saveState === 'saved') return;
     const ownerId = context.user_id;
-    if (!activeTemplate || !ownerId || authLoading) {
+    const snapshot = latestDraftRef.current;
+    if (!activeTemplate || !ownerId || authLoading || !snapshot) {
       setSaveState('error');
       setError('Your private profile is still loading. Please try again.');
       return;
     }
+    if (!canUseEditor()) return;
 
-    const validationError = validateReflectionResponses(activeTemplate, responses);
+    const validationError = validateReflectionResponses(activeTemplate, snapshot.responses);
     if (validationError) {
       setSaveState('error');
       setError(validationError);
       return;
     }
 
-    const content = serializeReflectionResponses(activeTemplate, responses);
+    const content = serializeReflectionResponses(activeTemplate, snapshot.responses);
     const prepared = prepareJournalDraft({
       ...emptyJournalDraft(),
       title: activeTemplate.title,
@@ -490,13 +493,17 @@ function ReflectContent() {
         setError('This reflection could not be saved. Your responses are still here.');
         return;
       }
+      if (!requireFreshDraft(snapshot.writeToken)) {
+        setSaveState('error');
+        return;
+      }
       void completion.complete(completionSession, {
         id: result.data.id,
       });
 
       try {
         latestDraftRef.current = null;
-        await reflectionDraftStorage.clear(ownerId);
+        await reflectionDraftStorage.clear(ownerId, snapshot.writeToken);
         if (
           ownerIdRef.current !== ownerId ||
           ownerGenerationRef.current !== ownerGeneration
@@ -504,6 +511,7 @@ function ReflectContent() {
           return;
         }
         setDraftState('idle');
+        hydrationTokenRef.current = null;
       } catch {
         if (
           ownerIdRef.current !== ownerId ||
@@ -538,6 +546,8 @@ function ReflectContent() {
         saveState={saveState}
         draftState={draftState}
         error={[error, completion.error].filter(Boolean).join(' ')}
+        needsReload={needsReload}
+        onReload={reloadDraft}
         completion={completion}
         onDiscard={discardDraft}
         onChooseAnother={resetReflection}
@@ -613,6 +623,7 @@ function ReflectContent() {
           {[error, completion.error].filter(Boolean).join(' ')}
         </Text>
       ) : null}
+      {needsReload ? <AppButton label="Reload saved reflection" onPress={reloadDraft} /> : null}
       <ToolCompletionRetry completion={completion} />
     </AppScreen>
   );
@@ -670,6 +681,8 @@ function ReflectionRunner({
   saveState,
   draftState,
   error,
+  needsReload,
+  onReload,
   completion,
   onDiscard,
   onChooseAnother,
@@ -684,6 +697,8 @@ function ReflectionRunner({
   saveState: SaveState;
   draftState: DraftState;
   error: string;
+  needsReload: boolean;
+  onReload: () => void;
   completion: ReturnType<typeof useToolCompletion>;
   onDiscard: () => void;
   onChooseAnother: () => void;
@@ -705,6 +720,7 @@ function ReflectionRunner({
             Open it now or start another reflection.
           </Text>
           {error ? <Text style={[appUiStyles.error, styles.error]}>{error}</Text> : null}
+          {needsReload ? <AppButton label="Reload saved reflection" onPress={onReload} /> : null}
           <ToolCompletionRetry completion={completion} />
           <AppButton
             label="Open journal"
@@ -734,7 +750,7 @@ function ReflectionRunner({
         label="Discard draft"
         icon="x"
         variant="quiet"
-        disabled={saveState === 'saving'}
+        disabled={needsReload || saveState === 'saving'}
         onPress={onDiscard}
         style={styles.discardButton}
       />
@@ -769,29 +785,53 @@ function ReflectionRunner({
       </AppCard>
 
       <AppCard>
+        {template.note ? <Text style={[appUiStyles.muted, { marginBottom: 16 }]}>{template.note}</Text> : null}
         <Text style={appUiStyles.label}>{step.label}</Text>
         <Text style={styles.prompt}>{step.prompt}</Text>
         <View style={styles.responseGroup}>
-          <AppInput
+          {step.kind === 'date-time' ? (
+            <View style={{ gap: 12 }}>
+              {responses[step.id] && Number.isFinite(Date.parse(responses[step.id])) ? (
+                <>
+                  <Text style={appUiStyles.muted}>{new Date(responses[step.id]).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</Text>
+                  <DateTimePicker
+                    accessibilityLabel="Worry review date and time"
+                    value={new Date(responses[step.id])}
+                    mode="datetime"
+                    display="compact"
+                    disabled={needsReload || saveState === 'saving'}
+                    onChange={(event, value) => {
+                      if (event.type === 'set' && value && Number.isFinite(value.getTime())) onResponseChange(step.id, value.toISOString());
+                    }}
+                  />
+                  <AppButton label="Remove review time" variant="quiet" disabled={needsReload || saveState === 'saving'} onPress={() => onResponseChange(step.id, '')} />
+                </>
+              ) : <AppButton label="Choose review time" icon="calendar" variant="secondary" disabled={needsReload || saveState === 'saving'} onPress={() => onResponseChange(step.id, new Date(Date.now() + 15 * 60_000).toISOString())} />}
+            </View>
+          ) : <AppInput
             accessibilityLabel={step.label}
             value={responses[step.id] ?? ''}
             onChangeText={(value) => onResponseChange(step.id, value)}
+            editable={!needsReload && saveState !== 'saving'}
             maxLength={REFLECTION_RESPONSE_LIMIT}
             multiline
             autoFocus
             placeholder={step.placeholder}
             inputStyle={styles.responseInput}
-          />
+          />}
         </View>
         <View style={styles.responseMeta}>
           <Text style={styles.metaText}>
             {completeCount} of {template.steps.length} answered
           </Text>
-          <Text style={styles.metaText}>
+          {step.kind !== 'date-time' ? <Text style={styles.metaText}>
             {(responses[step.id] ?? '').length.toLocaleString()} /{' '}
             {REFLECTION_RESPONSE_LIMIT.toLocaleString()}
-          </Text>
+          </Text> : null}
         </View>
+        {template.source ? <AppButton label={template.source.label} variant="quiet" icon="external-link" onPress={() => {
+          void Linking.openURL(template.source!.url).catch(() => Alert.alert('Could not open the source', 'Please try again when you are online.'));
+        }} /> : null}
 
         {statusCopy ? (
           <Text
@@ -804,6 +844,7 @@ function ReflectionRunner({
           </Text>
         ) : null}
         {error ? <Text style={[appUiStyles.error, styles.error]}>{error}</Text> : null}
+        {needsReload ? <AppButton label="Reload saved reflection" onPress={onReload} /> : null}
           <ToolCompletionRetry completion={completion} />
 
         <View style={styles.actionRow}>
@@ -812,7 +853,7 @@ function ReflectionRunner({
             accessibilityLabel="Previous reflection step"
             icon="arrow-left"
             variant="secondary"
-            disabled={stepIndex === 0 || saveState === 'saving'}
+            disabled={needsReload || stepIndex === 0 || saveState === 'saving'}
             onPress={() => onStepChange(stepIndex - 1)}
             style={styles.actionButton}
           />
@@ -821,6 +862,7 @@ function ReflectionRunner({
               label="Save to journal"
               icon="save"
               loading={saveState === 'saving'}
+              disabled={needsReload}
               onPress={onSave}
               style={styles.actionButton}
             />
@@ -828,7 +870,7 @@ function ReflectionRunner({
             <AppButton
               label="Next"
               icon="arrow-right"
-              disabled={saveState === 'saving'}
+              disabled={needsReload || saveState === 'saving'}
               onPress={() => onStepChange(stepIndex + 1)}
               style={styles.actionButton}
             />

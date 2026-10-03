@@ -3,6 +3,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   CHECKLIST_PATH,
+  EXPECTED_CHECKLIST_SHA256,
+  EXPECTED_INVENTORY,
   MOBILE_ROOT,
   RUNS_ROOT,
   createRun,
@@ -15,6 +17,77 @@ import {
 } from '../../mobile/scripts/qa-release-gate.mjs';
 
 const checklist = JSON.parse(readFileSync(CHECKLIST_PATH, 'utf8'));
+
+const adaptiveWorkflows = ['advisor.adaptive-feedback', 'advisor.adaptive-commitment',
+  'advisor.adaptive-refresh', 'advisor.adaptive-privacy', 'auth.reflection-draft-transfer'];
+
+function beforeAdaptiveLoop() {
+  const previous = structuredClone(checklist);
+  previous.checklistVersion = '2026-10-02.3';
+  previous.expectedInventory = { routes: 39, routeChecks: 843, workflows: 155, total: 998 };
+  previous.workflows = previous.workflows.filter((row: { id: string }) => !adaptiveWorkflows.includes(row.id));
+  for (const id of adaptiveWorkflows) delete previous.requirements.rows[id];
+  return previous;
+}
+
+function beforeEverydaySupport() {
+  const previous = beforeAdaptiveLoop();
+  previous.checklistVersion = '2026-10-02.2';
+  previous.expectedInventory = { routes: 38, routeChecks: 805, workflows: 150, total: 955 };
+  previous.routes = previous.routes.filter((route: { id: string }) => route.id !== 'body-practices');
+  const additions: Record<string, string[]> = {
+    'assessments-list': ['body-practices', 'everyday-basics', 'worry-time', 'coping-card'],
+    habits: ['routine-item-selection', 'routine-none-selected'],
+    journal: ['worries-filter', 'coping-cards-filter'],
+    'guided-reflection': ['worry-time-deep-link', 'coping-card-deep-link', 'review-date-picker', 'remove-review-time'],
+  };
+  for (const route of previous.routes) {
+    route.controls = route.controls.filter((control: string) => !additions[route.id]?.includes(control));
+  }
+  previous.workflows = previous.workflows.filter((workflow: { id: string }) => !['support.worry-time', 'support.coping-card', 'support.everyday-basics', 'support.visual-focus', 'support.body-practices'].includes(workflow.id));
+  return previous;
+}
+
+const advisorSettingsControls = [
+  'advisor-automatic-follow-up',
+  'advisor-quiet-start',
+  'advisor-quiet-end',
+  'advisor-quiet-hour-picker',
+  'advisor-quiet-save',
+  'advisor-quiet-cancel',
+  'advisor-pause-until-tomorrow',
+  'advisor-resume-follow-up',
+  'advisor-follow-up-retry',
+];
+const advisorBackgroundWorkflows = [
+  'advisor.background-task-success',
+  'advisor.background-task-restricted',
+  'advisor.background-task-force-quit',
+];
+const advisorPrivacyWorkflows = [
+  'privacy.advisor-reminders-sign-out',
+  'privacy.advisor-reminders-delete-saved-data',
+  'privacy.advisor-reminders-delete-account',
+];
+const advisorFollowUpWorkflows = [
+  'advisor.automatic-follow-up-settings',
+  'advisor.automatic-follow-up-permission-denied',
+  'advisor.automatic-follow-up-category-off',
+  'advisor.automatic-follow-up-delivery',
+  'advisor.automatic-follow-up-quiet-hours',
+  'advisor.automatic-follow-up-timezone',
+  'advisor.automatic-follow-up-dst',
+  'advisor.automatic-follow-up-pause-resume',
+  'advisor.automatic-follow-up-goal-completion',
+  'advisor.automatic-follow-up-habit-completion',
+  'advisor.automatic-follow-up-tool-completion',
+  ...advisorBackgroundWorkflows,
+  ...advisorPrivacyWorkflows,
+];
+const advisorFollowUpRowIds = [
+  ...advisorSettingsControls.map((control) => `route.settings.control.${control}`),
+  ...advisorFollowUpWorkflows,
+];
 
 function completeRun() {
   const commit = 'a'.repeat(40);
@@ -110,15 +183,93 @@ function exactContext(run: ReturnType<typeof completeRun>['run'], commit: string
 }
 
 describe('exhaustive mobile QA release gate', () => {
+  it('adds adaptive-loop coverage without rewriting any earlier requirement', () => {
+    expect(checklistDigest(beforeAdaptiveLoop())).toBe('99cdc23912a4dafad8c9edc4157c57a22354935bcaa5e876e563fd5ad85f08e0');
+  });
   it('covers every native route file and has unique evidence rows', () => {
     expect(validateChecklist(checklist, MOBILE_ROOT)).toEqual([]);
     const ids = expandChecklist(checklist).map((item) => item.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(checklist.expectedInventory).toEqual({ routes: 38, routeChecks: 796, workflows: 133, total: 929 });
-    expect(checklist.routes).toHaveLength(38);
-    expect(checklist.workflows).toHaveLength(133);
-    expect(ids).toHaveLength(929);
-    expect(checklistDigest(checklist)).toMatch(/^[a-f0-9]{64}$/);
+    expect(checklist.expectedInventory).toEqual({ routes: 39, routeChecks: 843, workflows: 160, total: 1003 });
+    expect(checklist.expectedInventory).toEqual(EXPECTED_INVENTORY);
+    expect(checklist.routes).toHaveLength(39);
+    expect(checklist.workflows).toHaveLength(160);
+    expect(ids).toHaveLength(1003);
+    expect(checklistDigest(checklist)).toBe(EXPECTED_CHECKLIST_SHA256);
+  });
+
+  it('adds follow-up coverage without changing any pre-existing checklist row or requirement', () => {
+    const previous = beforeEverydaySupport();
+    previous.checklistVersion = '2026-10-02.1';
+    previous.expectedInventory = { routes: 38, routeChecks: 796, workflows: 133, total: 929 };
+    const settings = previous.routes.find((route: { id: string }) => route.id === 'settings');
+    settings.controls = settings.controls.filter((control: string) => !advisorSettingsControls.includes(control));
+    previous.workflows = previous.workflows.filter((workflow: { id: string }) => !advisorFollowUpWorkflows.includes(workflow.id));
+    for (const id of advisorFollowUpWorkflows) delete previous.requirements.rows[id];
+
+    // Removing only the new feature must reproduce the exact former canonical manifest.
+    expect(checklistDigest(previous)).toBe('95993c0ef17ba894a2163e0b82a62765c6c98f46e5b96d1d68828f331e0c45ac');
+  });
+
+  it('adds everyday-support coverage without weakening existing release requirements', () => {
+    expect(checklistDigest(beforeEverydaySupport())).toBe('c572ec3d3ad1b935e52c3989f5685204d50c66b9a765d8cd117e2aa7cba67145');
+  });
+
+  it('requires separate physical evidence rows for Settings and every automatic follow-up workflow', () => {
+    const rows = new Map(expandChecklist(checklist).map((item) => [item.id, item]));
+    expect(advisorSettingsControls).toHaveLength(9);
+    expect(advisorFollowUpWorkflows).toHaveLength(17);
+    for (const id of advisorFollowUpRowIds) {
+      const item = rows.get(id)!;
+      expect(item, id).toBeDefined();
+      expect(item.kind, id).toBe('manual');
+      expect(item.deviceRequirements, id).toContain('physical-iphone');
+      expect(item.identityRequirements.length, id).toBeGreaterThan(0);
+      expect(item.commandPattern, id).toBeUndefined();
+      if (id.startsWith('route.settings.') || id === 'advisor.automatic-follow-up-delivery') {
+        expect(item.deviceRequirements, id).toContain('ipad');
+      }
+    }
+    for (const id of advisorBackgroundWorkflows) {
+      expect(checklist.requirements.rows[id].deviceRequirements).toEqual(['physical-iphone']);
+    }
+    for (const id of advisorPrivacyWorkflows) {
+      expect(rows.get(id)!.identityRequirements).toEqual(expect.arrayContaining(['email-owner', 'partner']));
+      if (id !== 'privacy.advisor-reminders-delete-saved-data') {
+        expect(rows.get(id)!.identityRequirements).toContain('fresh-anonymous');
+      }
+    }
+  });
+
+  it('leaves every new follow-up result pending and evidence-free in an unexecuted run', () => {
+    const run = createRun(checklist);
+    expect(run.metadata.completedAt).toBe('');
+    expect(run.results.filter((result) => advisorFollowUpRowIds.includes(result.id))).toHaveLength(26);
+    for (const id of advisorFollowUpRowIds) {
+      expect(run.results.find((result) => result.id === id)).toMatchObject({
+        status: 'pending', testedAt: '', artifactId: '', deviceIds: [], actorIds: [], evidence: [],
+      });
+    }
+  });
+
+  it.each(advisorBackgroundWorkflows)('rejects simulator substitution for required physical case %s', (id) => {
+    const { run, commit } = completeRun();
+    run.metadata.devices.push({
+      id: 'iphone-sim', type: 'simulator-iphone', model: 'iPhone 17 Simulator', osVersion: '26.5',
+    });
+    run.results.find((result) => result.id === id)!.deviceIds = ['iphone-sim'];
+
+    expect(validateRunData(checklist, run, exactContext(run, commit)))
+      .toContain(`${id} is missing required device coverage: physical-iphone.`);
+  });
+
+  it.each(advisorPrivacyWorkflows)('requires a separate-account actor for reminder isolation case %s', (id) => {
+    const { run, commit } = completeRun();
+    const result = run.results.find((result) => result.id === id)!;
+    result.actorIds = result.actorIds.filter((actor) => actor !== 'identity-partner');
+
+    expect(validateRunData(checklist, run, exactContext(run, commit)))
+      .toContain(`${id} is missing required identity role: partner.`);
   });
 
   it('keeps the written protocol aligned with the enforced inventory and simulator preflight', () => {

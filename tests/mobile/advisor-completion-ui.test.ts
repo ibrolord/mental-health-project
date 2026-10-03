@@ -32,6 +32,7 @@ function loadComponent(file: string, modules: Record<string, unknown>) {
     if (name === 'react-native') return { ...native, ...(modules[name] ?? {}) };
     if (name === '@/lib/constants') return constants;
     if (name in modules) return modules[name];
+    if (name === '@/lib/advisor-client-events') return { subscribeAdvisorClient: () => () => {} };
     throw new Error(`Missing screen dependency: ${name}`);
   };
   new Function('require', 'module', 'exports', compiled)(requireMock, evaluated, evaluated.exports);
@@ -119,10 +120,13 @@ function advisorHarness(initial: { action: AdvisorActionInstance | null; complet
   const start = vi.fn(async (_owner: string, active: AdvisorActionInstance) => active);
   const checkTarget = vi.fn(async () => false);
   const completeAction = vi.fn(async (): Promise<AdvisorActionInstance | null> => null);
+  const replaceAction = vi.fn(async () => undefined);
+  const alert = vi.fn();
   const cancelReminder = vi.fn(async (): Promise<void> => undefined);
   const hasReminder = vi.fn(async () => true);
   const clearFollowUp = vi.fn(async () => ({ action }));
   const appStateListeners = new Set<(state: string) => void>();
+  const clientListeners = new Set<(event: { ownerKey: string; kind: string }) => void>();
   const select = vi.fn(() => recommendation);
   const requestModel = vi.fn();
   const context = { nowIso: now, profile: { completedAt: now }, lowEnergyMode: false };
@@ -143,6 +147,7 @@ function advisorHarness(initial: { action: AdvisorActionInstance | null; complet
   const modules: Record<string, unknown> = {
     react: hooks,
     'react-native': {
+      Alert: { alert },
       AppState: { currentState: 'active', addEventListener: (_event: string, listener: (state: string) => void) => {
         appStateListeners.add(listener);
         return { remove: () => appStateListeners.delete(listener) };
@@ -155,6 +160,10 @@ function advisorHarness(initial: { action: AdvisorActionInstance | null; complet
     '@/components/AdvisorTrendCard': { AdvisorTrendCard: 'AdvisorTrendCard' },
     '@/lib/auth-context': { useAuth: () => auth },
     '@/lib/advisor-context': { loadAmbientAdvisorContext: async () => context },
+    '@/lib/advisor-client-events': { subscribeAdvisorClient: (listener: (event: { ownerKey: string; kind: string }) => void) => {
+      clientListeners.add(listener);
+      return () => clientListeners.delete(listener);
+    } },
     '@/lib/advisor-core': { selectAdvisorRecommendation: select, createAdvisorTrendSummary: () => null },
     '@/lib/advisor-ai': { requestModelAdvisorRecommendation: requestModel },
     '@/lib/advisor-brief-core': { createAdvisorBriefFingerprint: () => 'fingerprint', createAdvisorBriefSignals: () => [] },
@@ -164,7 +173,7 @@ function advisorHarness(initial: { action: AdvisorActionInstance | null; complet
     '@/lib/advisor-reminder-coordinator': { createAdvisorReminderCoordinator: () => () => undefined },
     '@/lib/advisor-cadence-core': { advisorCadenceLabel: () => '' },
     '@/lib/advisor-outcome-storage': { loadAdvisorOutcomes: loadOutcomes, recordAdvisorOffered: offered, answerAdvisorHelpfulness: answerHelpfulness },
-    '@/lib/advisor-lifecycle-runtime': { startAdvisorLifecycle: start, completeAdvisorLifecycle: completeAction },
+    '@/lib/advisor-lifecycle-runtime': { startAdvisorLifecycle: start, completeAdvisorLifecycle: completeAction, replaceAdvisorLifecycle: replaceAction },
     '@/lib/advisor-loop-refresh': { createAdvisorLoopRefresh },
     '@/lib/advisor-loop-selection': { advisorLoopSelectionOptions },
     '@/lib/advisor-start-runtime': { startAdvisorStep: createAdvisorStepStarter({ accept, start, cancelReminder, clearFollowUp }) },
@@ -173,7 +182,7 @@ function advisorHarness(initial: { action: AdvisorActionInstance | null; complet
     '@/lib/advisor-target-completion-runtime': { checkAdvisorTargetCompletion: checkTarget },
     '@/lib/tool-completion-runtime': { refreshToolCompletions: refresh },
     '@/lib/tool-completion-storage': { TOOL_COMPLETION_LABELS },
-    '@/lib/ai-consent': { ensureAiDataSharingConsent: async () => false },
+    '@/lib/ai-consent': { ensureAiDataSharingConsent: async () => false, hasAiDataSharingConsent: async () => false },
     '@/lib/apple-health-preference': {}, '@/lib/apple-health': {},
     '@/lib/apple-health-core': {}, '@/lib/apple-health-ai-consent': {},
     '@/lib/notifications': { refreshReminders: async () => undefined, cancelAdvisorReminder: cancelReminder, hasAdvisorReminder: hasReminder },
@@ -184,10 +193,58 @@ function advisorHarness(initial: { action: AdvisorActionInstance | null; complet
     render(); cleanup?.(); cleanup = focused!(); await settle(); return render();
   };
   const setAppState = (state: string) => appStateListeners.forEach((listener) => listener(state));
-  return { auth, context, refresh, push, offered, loadOutcomes, answerHelpfulness, accept, start, checkTarget, completeAction, cancelReminder, hasReminder, clearFollowUp, setAppState, select, requestModel, render, focus };
+  const changed = (ownerKey: string) => clientListeners.forEach((listener) => listener({ ownerKey, kind: 'changed' }));
+  return { auth, context, refresh, push, offered, loadOutcomes, answerHelpfulness, accept, start, checkTarget, completeAction, replaceAction, alert, cancelReminder, hasReminder, clearFollowUp, setAppState, changed, select, requestModel, render, focus };
 }
 
 describe('completion UI behavior', () => {
+  it.each([
+    ['complete', 'offered'], ['replace', 'offered'],
+    ['complete', 'read'], ['replace', 'read'],
+  ] as const)('keeps a committed %s successful when optional history %s fails', async (kind, failure) => {
+    const harness = advisorHarness({ action, completion: null });
+    let tree = await harness.focus();
+    if (failure === 'offered') harness.offered.mockRejectedValueOnce(new Error('optional history unavailable'));
+    else harness.loadOutcomes.mockRejectedValue(new Error('optional history unavailable'));
+    const actions = elements(tree).filter((element) => element.type === 'ActionRow').flatMap((element) => element.props.actions);
+    if (kind === 'complete') {
+      actions.find((item) => item.label === 'Done').onPress();
+    } else {
+      actions.find((item) => item.label === 'Change step').onPress();
+      const buttons = harness.alert.mock.calls[0][2];
+      buttons.find((button: { text: string }) => button.text === 'Change step').onPress();
+    }
+    await settle();
+    tree = harness.render();
+    expect(kind === 'complete' ? harness.completeAction : harness.replaceAction).toHaveBeenCalledOnce();
+    expect(harness.offered).toHaveBeenCalled();
+    expect(elements(tree).some((element) => element.props.label === 'Start')).toBe(true);
+    expect(elements(tree).some((element) => element.props.label === 'Continue')).toBe(false);
+    expect(elements(tree).filter((element) => element.type === 'InlineStatus').map((element) => element.props.message).join(' ')).not.toContain('could not');
+  });
+  it('does not present an already completed action as retryable if next-step selection fails', async () => {
+    const harness = advisorHarness({ action, completion: null });
+    const tree = await harness.focus();
+    harness.select.mockImplementationOnce(() => { throw new Error('next suggestion unavailable'); });
+    const actions = elements(tree).filter((element) => element.type === 'ActionRow').flatMap((element) => element.props.actions);
+    actions.find((item) => item.label === 'Done').onPress();
+    await settle();
+    const result = elements(harness.render());
+    expect(harness.completeAction).toHaveBeenCalledOnce();
+    expect(result.some((element) => ['Continue', 'Start'].includes(element.props.label))).toBe(false);
+    expect(result.filter((element) => element.type === 'InlineStatus').map((element) => element.props.message).join(' ')).toContain('Step completed. Your next suggestion could not load');
+  });
+  it('refreshes a committed change without requiring background-follow-up opt-in', async () => {
+    const harness = advisorHarness({ action, completion: null });
+    await harness.focus();
+    const reads = harness.refresh.mock.calls.length;
+    harness.changed('user_id:other');
+    await settle();
+    expect(harness.refresh).toHaveBeenCalledTimes(reads);
+    harness.changed('user_id:a');
+    await settle();
+    expect(harness.refresh).toHaveBeenCalledTimes(reads + 1);
+  });
   it.each(['/ground', '/goals', '/resources'] as const)('starts Today %s with the correct saved-step linkage', async (route) => {
     const push = vi.fn();
     const started = { route, action: route === '/resources' ? null : { ...action, route } };
@@ -329,6 +386,30 @@ describe('completion UI behavior', () => {
     expect(text(harness.render())).not.toContain('Did your last step help?');
     expect(harness.offered).not.toHaveBeenCalled();
     expect(harness.accept).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false, null])('refreshes explicit feedback %s while preserving an active commitment', async (helpful) => {
+    const harness = advisorHarness({ action, completion: null });
+    const previous = {
+      actionId: 'previous-action', recommendationId: recommendation.id, completedAt: now,
+      startedAt: now, feedbackAt: null, helpful: null,
+    };
+    harness.loadOutcomes.mockResolvedValue([previous]);
+    const tree = await harness.focus();
+    const reads = harness.refresh.mock.calls.length;
+    const before = JSON.stringify(action);
+    harness.loadOutcomes.mockResolvedValue([{ ...previous, helpful, feedbackAt: now }]);
+    const label = helpful === true ? 'Yes, my last Advisor step helped'
+      : helpful === false ? 'My last Advisor step did not help' : 'Skip Advisor feedback';
+    elements(tree).find((element) => element.props.accessibilityLabel === label)!.props.onPress();
+    await settle();
+    expect(harness.answerHelpfulness).toHaveBeenCalledWith('user_id:a', 'previous-action', helpful);
+    expect(harness.refresh).toHaveBeenCalledTimes(reads + (helpful === null ? 0 : 1));
+    expect(JSON.stringify(action)).toBe(before);
+    expect(harness.accept).not.toHaveBeenCalled();
+    expect(harness.start).not.toHaveBeenCalled();
+    expect(harness.push).not.toHaveBeenCalled();
+    expect(text(harness.render())).not.toContain('Did your last step help?');
   });
 
   it('finishes setup before offering a new step after a browsed activity', async () => {

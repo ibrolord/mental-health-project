@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdvisorRecommendation } from '../../mobile/lib/advisor-core';
 
 const { apiRequest } = vi.hoisted(() => ({ apiRequest: vi.fn() }));
@@ -76,7 +76,52 @@ const candidate: AdvisorRecommendation = {
 };
 
 describe('Advisor daily brief signals', () => {
-  beforeEach(() => apiRequest.mockReset());
+  beforeEach(() => {
+    apiRequest.mockReset();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-14T13:00:00.000Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('sends bounded outcome feedback and returns the selected grounded follow-through', async () => {
+    apiRequest.mockResolvedValue({ model: 'gemini', personalized: true, selection: {
+      candidateId: candidate.id, observations: candidate.observations,
+      signalIds: [], focus: 'routine', followThroughId: 'smaller',
+    } });
+    const result = await requestModelAdvisorRecommendation(context, [candidate], [{
+      recommendationId: candidate.id, offeredAt: context.nowIso, resolvedAt: context.nowIso,
+      resolution: 'partial', barrier: 'time', helpful: null,
+    }], null, { expectedUserId: 'test-owner', commitment: {
+      recommendationId: candidate.id, status: 'needs_recovery',
+      lastCheckInResult: 'partial', recoveryReason: 'time', useSmallerStep: false,
+    } });
+    expect(result.recommendation.action).toBe(candidate.action);
+    expect(result.brief.followThrough).toContain('You said time got in the way.');
+    expect(apiRequest.mock.calls[0][1].recentFeedback[0]).toMatchObject({ resolution: 'partial', barrier: 'time' });
+    expect(apiRequest.mock.calls[0][2]).not.toHaveProperty('commitment');
+  });
+
+  it('never uploads a Health-derived commitment without a fresh confirmed summary', async () => {
+    await expect(requestModelAdvisorRecommendation(context, [{ ...candidate, sourceLabels: ['Apple Health summary'] }], [])).rejects.toThrow('No model-safe');
+    expect(apiRequest).not.toHaveBeenCalled();
+  });
+
+  it('does not label a completed routine as still open', () => {
+    const signals = createAdvisorBriefSignals({ ...context, habits: [{ ...context.habits[0], completedToday: true }] });
+    expect(signals.find((signal) => signal.id === 'routine:walk')?.text).toContain('marked done');
+  });
+  it('includes feedback recorded after the context snapshot and invalidates older-offer feedback', async () => {
+    apiRequest.mockResolvedValue({ model: 'gemini', personalized: true, selection: {
+      candidateId: candidate.id, observations: candidate.observations, signalIds: [], focus: 'routine',
+    } });
+    const feedbackAt = new Date().toISOString();
+    const recent = Array.from({ length: 6 }, (_, i) => ({ recommendationId: `goal:${i}`, helpful: null as boolean | null, offeredAt: context.nowIso }));
+    const before = createAdvisorBriefFingerprint(context, recent);
+    const changed = recent.map((item, i) => i === 5 ? { ...item, helpful: false, feedbackAt } : item);
+    expect(createAdvisorBriefFingerprint(context, changed)).not.toBe(before);
+    await requestModelAdvisorRecommendation(context, [candidate], changed);
+    expect(apiRequest.mock.calls[0][1].recentFeedback[0]).toMatchObject({ recommendationId: 'goal:5', helpful: false });
+  });
 
   it('bounds optional model personalization so the deterministic brief can take over', async () => {
     apiRequest.mockResolvedValue({

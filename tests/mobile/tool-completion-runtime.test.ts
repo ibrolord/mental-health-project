@@ -38,6 +38,7 @@ function runtime(confirmedIds: string[]) {
   }).outputText;
   const evaluated = { exports: {} };
   new Function('require', 'module', 'exports', code)((name: string) => {
+    if (name === './advisor-client-events') return { emitAdvisorClient: () => {} };
     if (!(name in imports)) throw new Error(`Unmocked dependency: ${name}`);
     return imports[name];
   }, evaluated, evaluated.exports);

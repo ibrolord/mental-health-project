@@ -8,8 +8,11 @@ import {
 } from './notifications-core';
 import { loadSmartReminderPlan } from './notification-content';
 import { recordOperationalEvent } from './observability';
+import { supabase } from './supabase';
 
 export type {
+  AutomaticAdvisorReminderInput,
+  AutomaticAdvisorReminderResult,
   NotificationCategory,
   NotificationPreferences,
 } from './notifications-core';
@@ -121,7 +124,12 @@ function getService(): NotificationService {
       Notifications,
       AsyncStorage,
       Platform.OS === 'android' ? 'android' : 'ios',
-      loadSmartReminderPlan
+      loadSmartReminderPlan,
+      async () => {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        return data.session?.user.id ?? null;
+      }
     );
   }
   return service;
@@ -179,7 +187,8 @@ export const setRemindersEnabled = async (enabled: boolean) => {
     throw error;
   }
 };
-export const clearAllReminders = () => getService().clearAllReminders();
+export const clearAllReminders = (isCurrent?: () => Promise<boolean>): Promise<void> =>
+  getService().clearAllReminders(isCurrent);
 export const areRemindersEnabled = () => getService().areRemindersEnabled();
 export const setReminderTimes = (times: number[]) =>
   getService().setReminderTimes(times);
@@ -221,6 +230,14 @@ export const scheduleAdvisorReminder = async (date: Date) => {
 
 export const cancelAdvisorReminder = () => getService().cancelAdvisorReminder();
 export const hasAdvisorReminder = () => getService().hasAdvisorReminder();
+export const reconcileAutomaticAdvisorReminder = (
+  input: import('./notifications-core').AutomaticAdvisorReminderInput,
+  isCurrent: () => Promise<boolean>
+) => getService().reconcileAutomaticAdvisorReminder(input, isCurrent);
+export const cancelAutomaticAdvisorReminder = (ownerKey?: string) =>
+  getService().cancelAutomaticAdvisorReminder(ownerKey);
+export const clearAutomaticAdvisorHistory = (ownerKey: string) =>
+  getService().clearAutomaticAdvisorHistory(ownerKey);
 
 // Rebuild local reminders after a user changes a goal, plan, or library state.
 // It is a no-op until the user has enabled reminders on this device.

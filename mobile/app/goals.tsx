@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { emitAdvisorClient } from '@/lib/advisor-client-events';
 import {
   AccessibilityInfo,
   Alert,
@@ -130,6 +131,7 @@ export default function GoalsScreen() {
   };
 
   const refreshReminderContent = () => {
+    if (query) emitAdvisorClient(`${query.column}:${query.value}`);
     void refreshReminders().catch((error) => {
       console.warn('Could not refresh local reminders after a goal change:', error);
     });

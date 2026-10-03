@@ -53,6 +53,16 @@ function brief(overrides: Partial<StoredAdvisorBrief> = {}): StoredAdvisorBrief 
 }
 
 describe('Advisor daily brief storage', () => {
+  it('retries a temporary local fallback after a minute and refreshes model guidance after six hours', async () => {
+    const { storage } = memoryStorage();
+    const briefs = createAdvisorBriefStorage(storage);
+    await briefs.write(brief({ model: null }));
+    expect(await briefs.read('user_id:user-1', '2026-08-14', 'abc123', '2026-08-14T12:00:30.000Z')).not.toBeNull();
+    expect(await briefs.read('user_id:user-1', '2026-08-14', 'abc123', '2026-08-14T12:01:00.000Z')).toBeNull();
+    await briefs.write(brief());
+    expect(await briefs.read('user_id:user-1', '2026-08-14', 'abc123', '2026-08-14T13:00:00.000Z')).not.toBeNull();
+    expect(await briefs.read('user_id:user-1', '2026-08-14', 'abc123', '2026-08-14T18:00:00.000Z')).toBeNull();
+  });
   it('round-trips a Together brief with the legitimate accountability route', async () => {
     const { storage } = memoryStorage();
     const briefs = createAdvisorBriefStorage(storage);

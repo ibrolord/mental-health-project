@@ -40,8 +40,11 @@ import { advisorProfileStorage } from '@/lib/advisor-profile-storage';
 import { clearAdvisorOutcomes } from '@/lib/advisor-outcome-storage';
 import { clearAdvisorObservationLedger } from '@/lib/advisor-observation-ledger';
 import { clearAdvisorLifecycleJournal } from '@/lib/advisor-lifecycle-runtime';
+import { clearAdvisorClient, readAdvisorClientPreferences } from '@/lib/advisor-client-runtime';
+import { emitAdvisorClient } from '@/lib/advisor-client-events';
+import { AdvisorClientSettings } from '@/components/AdvisorClientSettings';
 import { loadToolCompletions, withToolCompletionDataDeletion } from '@/lib/tool-completion-runtime';
-import { clearReflectionDraft } from '@/lib/reflection-draft-storage';
+import { clearReflectionDraft, reflectionDraftStorage } from '@/lib/reflection-draft-storage';
 import { supabase } from '@/lib/supabase';
 import { AppleHealthSettingsCard } from '@/components/AppleHealthSettingsCard';
 import { appleHealthPreference } from '@/lib/apple-health-preference';
@@ -105,7 +108,7 @@ const NOTIFICATION_OPTIONS: {
   {
     key: 'advisorNudges',
     title: 'Advisor check-ins',
-    description: 'Daily briefs and follow-ups you explicitly schedule.',
+    description: 'Daily briefs and your chosen follow-ups.',
   },
 ];
 
@@ -177,6 +180,7 @@ export default function SettingsScreen() {
     try {
       const enabled = await setRemindersEnabled(val);
       setRemindersOn(enabled);
+      emitAdvisorClient(consentSubjectId);
       if (val && !enabled) {
         Alert.alert(
           'Notifications are off',
@@ -216,6 +220,7 @@ export default function SettingsScreen() {
     try {
       const saved = await setNotificationPreferences(next);
       setLocalNotificationPreferences(saved);
+      emitAdvisorClient(consentSubjectId);
       setReminderStatus('Notification choices updated.');
     } catch (error) {
       console.warn('Unable to update notification choices:', error);
@@ -248,6 +253,7 @@ export default function SettingsScreen() {
     try {
       const saved = await setReminderTimes(next);
       setSelectedTimes(saved);
+      emitAdvisorClient(consentSubjectId);
       setReminderStatus('Reminder times updated.');
     } catch (error) {
       console.warn('Unable to update reminder times:', error);
@@ -306,11 +312,15 @@ export default function SettingsScreen() {
       );
       const advisorProfile = await advisorProfileStorage.read(`user_id:${expectedOwnerId}`);
       const localToolCompletions = await loadToolCompletions(`user_id:${expectedOwnerId}`);
+      const localAdvisorClient = await readAdvisorClientPreferences(`user_id:${expectedOwnerId}`);
+      const localReflectionDraft = await reflectionDraftStorage.read(expectedOwnerId);
       await captureOwnerSession(expectedOwnerId);
       const data = JSON.stringify({
         ...exportData,
         localAdvisorProfile: advisorProfile,
         local_tool_completions: localToolCompletions,
+        local_advisor_follow_up_preferences: localAdvisorClient,
+        local_reflection_draft: localReflectionDraft,
       }, null, 2);
       if (!FileSystem.cacheDirectory) {
         throw new Error('A private export location is unavailable.');
@@ -348,6 +358,8 @@ export default function SettingsScreen() {
             setLoading(true);
             try {
               const accessToken = await captureOwnerSession(expectedOwnerId);
+              await clearAdvisorClient(`user_id:${expectedOwnerId}`);
+              setDataGeneration((current) => current + 1);
               await withToolCompletionDataDeletion(`user_id:${expectedOwnerId}`, async () => {
                 const result = await apiRequest(
                   '/api/data/delete',
@@ -369,7 +381,11 @@ export default function SettingsScreen() {
                 advisorProfileStorage.clear(consentSubjectId),
                 clearAdvisorOutcomes(consentSubjectId),
                 clearAdvisorObservationLedger(consentSubjectId),
-                clearAllReminders(),
+                clearAllReminders(async () => {
+                  const { data, error } = await supabase.auth.getSession();
+                  if (error) throw error;
+                  return data.session?.user.id === expectedOwnerId;
+                }),
                 offlineSafetyPlanCache.clear(expectedOwnerId),
                 clearReflectionDraft(expectedOwnerId),
                 appleHealthPreference.clear(expectedOwnerId),
@@ -634,6 +650,7 @@ export default function SettingsScreen() {
         ) : null}
       </View>
 
+      {consentSubjectId ? <AdvisorClientSettings key={`${consentSubjectId}:${dataGeneration}`} ownerKey={consentSubjectId} /> : null}
       <SectionHeader title="Advisor context" description="Optional signals Advisor may use on this device." />
       <RowGroup>
         <ListRow title="Tune Advisor" description="Your name, priorities, advice style, and low-energy essentials."

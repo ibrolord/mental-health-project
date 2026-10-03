@@ -58,14 +58,15 @@ const screen = ts.createSourceFile('advisor.tsx', readFileSync(
   path.resolve(process.cwd(), 'mobile/app/(tabs)/advisor.tsx'), 'utf8'
 ), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const orchestration = screen.statements.filter((statement) =>
-  (ts.isFunctionDeclaration(statement) && ['fallbackFocus', 'deterministicBrief', 'selectModelBackedRecommendation']
+  (ts.isFunctionDeclaration(statement) && ['fallbackFocus', 'deterministicBrief', 'selectModelBackedRecommendation', 'recommendationForAction']
     .includes(statement.name?.text ?? '')) ||
   (ts.isVariableStatement(statement) && statement.declarationList.declarations.some((declaration) =>
     ts.isIdentifier(declaration.name) && declaration.name.text === 'FALLBACK_HEADLINES'))
 );
 type SelectModel = (
   input: AdvisorContext, recent: readonly AdvisorRecentRecommendation[], owner: string | null,
-  options?: AdvisorSelectionOptions, health?: AppleHealthAiSummary | null, isCurrent?: () => boolean
+  options?: AdvisorSelectionOptions, health?: AppleHealthAiSummary | null, isCurrent?: () => boolean,
+  allowConsent?: boolean, commitment?: import('../../mobile/lib/advisor-action-storage').AdvisorActionInstance | null
 ) => Promise<{ recommendation: AdvisorRecommendation; model: string | null; brief: AdvisorDailyBrief }>;
 type DeterministicBrief = (
   input: AdvisorContext, recommendation: AdvisorRecommendation,
@@ -73,7 +74,7 @@ type DeterministicBrief = (
 ) => AdvisorDailyBrief;
 
 function screenHarness() {
-  expect(orchestration).toHaveLength(4);
+  expect(orchestration).toHaveLength(5);
   const consent = vi.fn(async (_owner: string) => true);
   const candidates = vi.fn(createAdvisorCandidateSet);
   const request = vi.fn(requestModelAdvisorRecommendation);
@@ -82,12 +83,12 @@ function screenHarness() {
   }).outputText;
   const runtime = new Function('dependencies', `
     const { selectAdvisorRecommendation, createAdvisorCandidateSet, requestModelAdvisorRecommendation,
-      ensureAiDataSharingConsent, createAdvisorBriefSignals } = dependencies;
+      ensureAiDataSharingConsent, hasAiDataSharingConsent, createAdvisorBriefSignals } = dependencies;
     ${compiled}
     return { select: selectModelBackedRecommendation, brief: deterministicBrief };
   `)({ selectAdvisorRecommendation, createAdvisorCandidateSet: candidates,
     requestModelAdvisorRecommendation: request, ensureAiDataSharingConsent: consent,
-    createAdvisorBriefSignals }) as { select: SelectModel; brief: DeterministicBrief };
+    hasAiDataSharingConsent: consent, createAdvisorBriefSignals }) as { select: SelectModel; brief: DeterministicBrief };
   return { ...runtime, consent, candidates, request };
 }
 
@@ -292,6 +293,29 @@ describe('local personal-plan recommendations', () => {
 });
 
 describe('personal-plan model isolation', () => {
+  it('keeps an accepted step byte-identical while refreshing AI follow-through', async () => {
+    const harness = screenHarness();
+    const input = context();
+    const commitment: import('../../mobile/lib/advisor-action-storage').AdvisorActionInstance = {
+      version: 2, id: 'action-test', recommendationId: 'habit:walk', action: 'Walk outside.',
+      smallerAction: 'Put on shoes.', route: '/habits', sourceLabels: ['Habit'], observations: ['A walk is planned.'],
+      changeSignalId: null, status: 'needs_recovery', acceptedAt: NOW, startedAt: NOW,
+      reminderAt: null, followUpAt: null, lastCheckInAt: NOW, lastCheckInResult: 'partial',
+      recoveryReason: 'time', recoveryCount: 1, useSmallerStep: false, updatedAt: NOW,
+    };
+    const result = await harness.select(input, [], 'user_id:owner-a', {}, null, () => true, false, commitment);
+    expect(result.model).toBe('gemini');
+    expect(result.recommendation.action).toBe(commitment.action);
+    expect(result.recommendation.smallerAction).toBe(commitment.smallerAction);
+    expect(result.recommendation.id).toBe(commitment.recommendationId);
+    expect(harness.candidates).not.toHaveBeenCalled();
+    expect(apiRequest.mock.calls[0][1].commitment).toMatchObject({ recoveryReason: 'time' });
+    harness.consent.mockResolvedValue(false);
+    apiRequest.mockClear();
+    const fallback = await harness.select(input, [], 'user_id:owner-a', {}, null, () => true, false, commitment);
+    expect(fallback.recommendation.action).toBe(commitment.action);
+    expect(apiRequest).not.toHaveBeenCalled();
+  });
   it('returns the local plan before checking, prompting, or changing AI consent', async () => {
     const harness = screenHarness();
     const result = await harness.select(context(), [], 'user_id:owner-a');
@@ -366,7 +390,7 @@ describe('personal-plan model isolation', () => {
     expect(harness.consent).toHaveBeenCalledWith('user_id:owner-a');
     expect(harness.candidates.mock.calls[0][0].profile?.personalPlan).toBeUndefined();
     expect(harness.request.mock.calls[0][0].profile?.personalPlan).toBeUndefined();
-    expect(harness.request.mock.calls[0][4]).toEqual({ isCurrent, expectedUserId: 'owner-a' });
+    expect(harness.request.mock.calls[0][4]).toEqual({ isCurrent, expectedUserId: 'owner-a', commitment: null });
     expect(apiRequest.mock.calls[0][2]).toMatchObject({ isCurrent, expectedUserId: 'owner-a' });
     const payload = JSON.stringify(apiRequest.mock.calls[0][1]);
     for (const secret of Object.values(SECRETS)) expect(payload).not.toContain(secret);
@@ -381,12 +405,12 @@ describe('personal-plan model isolation', () => {
     const safe = selectAdvisorRecommendation({ ...input, profile: { ...input.profile!, personalPlan: undefined } });
     await requestModelAdvisorRecommendation(input, [local, { ...local, id: 'unrecognized-local-id' }, safe], [
       { recommendationId: `personal-plan:${SECRETS.action}`, helpful: false },
-      { recommendationId: safe.id, helpful: true },
+      { recommendationId: safe.id, helpful: true, feedbackAt: NOW },
     ]);
     const payload = apiRequest.mock.calls[0][1];
     expect(payload.candidates).toHaveLength(1);
     expect(payload.candidates[0].id).toBe(safe.id);
-    expect(payload.recentFeedback).toEqual([{ recommendationId: safe.id, helpful: true }]);
+    expect(payload.recentFeedback).toEqual([expect.objectContaining({ recommendationId: safe.id, helpful: true, recordedAt: NOW })]);
     for (const secret of Object.values(SECRETS)) expect(JSON.stringify(payload)).not.toContain(secret);
     expect(payload.profile).not.toHaveProperty('personalPlan');
   });
