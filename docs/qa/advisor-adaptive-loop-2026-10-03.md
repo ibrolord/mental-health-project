@@ -215,12 +215,22 @@ physical audio, accessibility, Apple sign-in, or notification delivery.
 
 ## Remaining Verification
 
-- Finish the signed-IPA review checker, including its CLI migration check.
-- Verify TestFlight upload and App Review submission separately; a finished EAS
-  build is not a submission receipt.
+- The signed-IPA checker completed with 73 PASS lines and one failure: its
+  migration CLI child stalled and required cancellation. All remaining source,
+  privacy, metadata, resource-link, and IPA checks passed. The overall checker
+  exited 1 and is not represented as passing. Log:
+  `/tmp/mht-release-1.0.8-68-review-gate.log`. All 43 local migration versions
+  match the connector's fresh production list; this is independent evidence.
+- TestFlight/App Store Connect binary upload is confirmed by EAS Submit.
+  Apple processing and App Review submission remain unconfirmed. Chrome is
+  waiting for the owner's Apple two-factor code; no code has been supplied.
 - Local preview API was `http://127.0.0.1:3012`; production artifacts must not use it.
-- The feature API deployment is Ready and serves the production domain; deploy
-  and verify the follow-up backend dependency patch before final submission.
+- Backend commit `2fef64c77b7f1caf2da3177941d01b0fca44e699` has a successful
+  GitHub/Vercel deployment status. Production domain `mhtoolkit.vercel.app`
+  resolves to Ready deployment `dpl_DT5hxkzNuS8JUmK4Ahd8tKtUCpuF`.
+  Live support/privacy pages and normal image optimization return 200; Advisor
+  API CORS preflight returns 204. This smoke does not assert signed-in model
+  execution or background delivery on hardware.
 - Physical-device/TestFlight gate remains unexecuted under the user's waiver. Current checklist
   is `2026-10-03.1`, with 39 routes, 843 route checks, 160 workflows and 1,003 rows.
   Canonical digest: `f858552edf631280e799fb2a9722a532f24012aedac1274c3a7a5d20d2fe18d3`.
