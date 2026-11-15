@@ -774,6 +774,8 @@ export default function VoiceSupportScreen() {
         messagesRef.current,
         VOICE_HISTORY_MESSAGES
       );
+      // [] means nothing valid to send; the server would reject it.
+      if (chatMessages.length === 0) throw new Error('Nothing to send');
       const chat = await apiRequest<{ response?: unknown; model?: unknown }>(
         '/api/chat',
         { messages: chatMessages },
@@ -1261,6 +1263,12 @@ export default function VoiceSupportScreen() {
         await speakLocalSafetyMessage();
         return;
       }
+      const fallbackMessages = buildChatRequestMessages(
+        nextMessages,
+        VOICE_HISTORY_MESSAGES
+      );
+      // [] means nothing valid to send; the server would reject it.
+      if (fallbackMessages.length === 0) throw new Error('Nothing to send');
       const chatHeaders = await getAuthHeaders();
       if (!turnIsCurrent()) return;
       const chatResponse = await fetchWithTimeout(`${API_URL}/api/chat`, {
@@ -1272,7 +1280,7 @@ export default function VoiceSupportScreen() {
           'X-Client-Timeout-Ms': String(MAX_CHAT_REQUEST_MS),
         },
         body: JSON.stringify({
-          messages: buildChatRequestMessages(nextMessages, VOICE_HISTORY_MESSAGES),
+          messages: fallbackMessages,
         }),
         signal: turnAbort.signal,
       }, MAX_CHAT_REQUEST_MS);

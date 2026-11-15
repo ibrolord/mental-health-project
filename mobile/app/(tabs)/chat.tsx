@@ -703,8 +703,11 @@ export default function ChatScreen() {
         healthSummaryEnabled && healthSummary
           ? { ...selectedContext, appleHealthSummary: healthSummary }
           : selectedContext;
+      const requestMessages = buildChatRequestMessages(nextMessages);
+      // [] means nothing valid to send; the server would reject it.
+      if (requestMessages.length === 0) throw new Error('Nothing to send');
       const response = await apiRequest<ChatApiResponse>('/api/chat', {
-        messages: buildChatRequestMessages(nextMessages),
+        messages: requestMessages,
         userContext: requestContext,
       });
       if (typeof response.response !== 'string' || !response.response.trim()) {

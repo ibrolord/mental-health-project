@@ -8,6 +8,9 @@ import {
   buildChatRequestMessages,
   CHAT_ASSISTANT_MESSAGE_MAX_CHARS,
   CHAT_MAX_MESSAGES,
+  CHAT_MESSAGES_MAX_BYTES,
+  sliceCodePoints,
+  utf8ByteLength,
   CHAT_TOTAL_MAX_CHARS,
   CHAT_USER_MESSAGE_MAX_CHARS,
   windowFromUserTurn,
@@ -138,7 +141,9 @@ describe('mobile chat history helpers', () => {
     const chat = readFileSync(resolve(process.cwd(), 'mobile/app/(tabs)/chat.tsx'), 'utf8');
     expect(chat).toContain('maxLength={CHAT_USER_MESSAGE_MAX_CHARS}');
     expect(chat).not.toContain('maxLength={8_000}');
-    expect(chat).toContain('messages: buildChatRequestMessages(nextMessages)');
+    expect(chat).toContain('const requestMessages = buildChatRequestMessages(nextMessages);');
+    expect(chat).toContain('if (requestMessages.length === 0) throw');
+    expect(chat).toContain('messages: requestMessages,');
     const catchBlock = chat.slice(chat.indexOf('} catch (reason) {'), chat.indexOf('} finally {', chat.indexOf('} catch (reason) {')));
     expect(catchBlock).toContain('setMessages(previousMessages)');
     expect(catchBlock).toContain('setSendError(');
@@ -149,6 +154,9 @@ describe('mobile chat history helpers', () => {
     const voice = readFileSync(resolve(process.cwd(), 'mobile/app/voice.tsx'), 'utf8');
     expect(voice).not.toContain('.slice(-12)');
     expect(voice.match(/buildChatRequestMessages\(/g)?.length).toBe(2);
+    // Both voice requests are skipped when there is nothing valid to send.
+    expect(voice).toContain('if (chatMessages.length === 0) throw');
+    expect(voice).toContain('if (fallbackMessages.length === 0) throw');
   });
 
   it('stay within the new server message-count and total character limits', () => {
@@ -282,6 +290,97 @@ describe('mobile chat history against the live (old) server schema', () => {
       expect(request.at(-1)?.content).toBe(window.at(-1)?.content);
       expect(liveServerMessagesSchema.safeParse(request).success).toBe(true);
     }
+  });
+});
+
+// Codex review of 5cba6ba: the live server rejects bodies over 64 KiB (413),
+// and 24,000 chars of CJK text is ~72 KB of JSON.
+const jsonBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
+const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
+
+describe('mobile chat history byte budget', () => {
+  it('matches TextEncoder for mixed text, emoji and lone surrogates', () => {
+    for (const text of ['', 'abc', 'é ß', '漢字', '😀👍🏽', 'a\ud83db', '\udc00x', 'end\ud83d', 'mix é漢😀 "q" \n']) {
+      expect(utf8ByteLength(text)).toBe(new TextEncoder().encode(text).length);
+    }
+  });
+
+  it('fits seven 3,400-character CJK messages in the live server body limit', () => {
+    const messages: ChatHistoryMessage[] = Array.from({ length: 7 }, (_, index) => ({
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      content: `${index}${'漢'.repeat(3_400)}`,
+    }));
+    expect(jsonBytes(messages)).toBeGreaterThan(64 * 1024);
+
+    const request = buildChatRequestMessages(messages);
+    expect(jsonBytes(request)).toBeLessThanOrEqual(CHAT_MESSAGES_MAX_BYTES);
+    expect(request.at(-1)).toEqual(messages.at(-1));
+    expectValidShape(request);
+    expect(liveServerMessagesSchema.safeParse(request).success).toBe(true);
+    expect(chatRequestSchema.safeParse({ messages: request }).success).toBe(true);
+    // Worst case with a full 30,000-char ASCII userContext still fits 64 KiB.
+    expect(jsonBytes({ messages: request, userContext: { notes: 'x'.repeat(30_000) } }))
+      .toBeLessThanOrEqual(64 * 1024);
+  });
+
+  it('keeps every byte-heavy history under the budget', () => {
+    for (const unit of ['漢', '😀', 'é', '"', '\u0001']) {
+      for (const turns of [1, 3, 8, 30]) {
+        const messages = conversation(turns).map((message) => ({
+          ...message,
+          content: unit.repeat(5_000),
+        }));
+        const request = buildChatRequestMessages(messages);
+        expect(request.length).toBeGreaterThan(0);
+        expect(jsonBytes(request)).toBeLessThanOrEqual(CHAT_MESSAGES_MAX_BYTES);
+        expect(liveServerMessagesSchema.safeParse(request).success).toBe(true);
+        expect(chatRequestSchema.safeParse({ messages: request }).success).toBe(true);
+      }
+    }
+  });
+
+  it('does not split an emoji at the 4,000-character cut', () => {
+    const request = buildChatRequestMessages([
+      { role: 'user', content: 'a'.repeat(3_999) + '😀' + 'tail' },
+    ]);
+    expect(request[0].content).toBe('a'.repeat(3_999));
+    expect(isHighSurrogate(request[0].content.charCodeAt(request[0].content.length - 1))).toBe(false);
+    expect(sliceCodePoints('ab😀', 3)).toBe('ab');
+    expect(sliceCodePoints('ab😀', 4)).toBe('ab😀');
+  });
+
+  it('cuts the newest user turn on code points when it alone exceeds the budget', () => {
+    const newest = '😀'.repeat(500);
+    const request = buildChatRequestMessages(
+      [
+        { role: 'user', content: 'older' },
+        { role: 'assistant', content: 'reply' },
+        { role: 'user', content: newest },
+      ],
+      40,
+      200
+    );
+    expect(request).toHaveLength(1);
+    expect(request[0].role).toBe('user');
+    expect(jsonBytes(request)).toBeLessThanOrEqual(200);
+    expect(newest.startsWith(request[0].content)).toBe(true);
+    expect(request[0].content.length % 2).toBe(0);
+    expect(isHighSurrogate(request[0].content.charCodeAt(request[0].content.length - 1))).toBe(false);
+  });
+
+  it('applies a byte budget in windowFromUserTurn without losing the newest message', () => {
+    const messages = conversation(5, 100, 100);
+    const window = windowFromUserTurn(messages, 200, Number.POSITIVE_INFINITY, 500);
+    expectValidShape(window);
+    expect(window.at(-1)).toEqual(messages.at(-1));
+    expect(jsonBytes(window)).toBeLessThanOrEqual(500);
+    expect(windowFromUserTurn(messages, 200, Number.POSITIVE_INFINITY, 1)).toEqual([messages.at(-1)]);
+  });
+
+  it('returns [] when there is nothing valid to send', () => {
+    expect(buildChatRequestMessages([])).toEqual([]);
+    expect(buildChatRequestMessages([{ role: 'user', content: '   ' }])).toEqual([]);
+    expect(buildChatRequestMessages([{ role: 'assistant', content: 'hello' }])).toEqual([]);
   });
 });
 
