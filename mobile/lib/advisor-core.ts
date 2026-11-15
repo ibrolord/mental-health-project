@@ -202,110 +202,111 @@ const MOOD_LABELS: Record<MoodEmoji, string> = {
 // commitment. Fail closed on explicit high-risk action fragments before doing so.
 const UNSAFE_ACTION_FRAGMENT = /\b(?:suicid(?:e|al)|self[ -]?harm|die(?:\s+(?:today|tonight|now))?|end\s+my\s+life|take\s+my\s+life|cut\s+myself|kill\s+(?:myself|someone|somebody|him|her|them)|murder\s+(?:myself|someone|somebody|him|her|them)|assassinate\s+(?:someone|somebody|him|her|them)|hurt\s+(?:myself|someone|somebody|him|her|them)|harm\s+(?:myself|someone|somebody|him|her|them)|overdose|take\s+(?:extra|too\s+many|all\s+(?:of\s+)?my)\s+(?:pills|tablets|medications?)|shoot\s+(?:myself|someone|somebody|him|her|them)|stab\s+(?:myself|someone|somebody|him|her|them)|hang\s+myself|drown\s+myself|poison\s+(?:myself|someone|somebody|him|her|them))\b/i;
 
-// Changing, stopping or doubling medication is a decision for the prescriber,
-// so a goal, habit or plan that says so is never turned into an Advisor
-// action. Reminders to take medication as prescribed ("take my meds") are not
-// matched and keep working.
-const MEDICATION_TERM =
-  '(?:meds|medication|medications|medicine|medicines|pills|tablets|dose|doses|dosage|antidepressants?|ssris?|snris?|lithium|insulin|sertraline|fluoxetine|escitalopram|citalopram|venlafaxine|bupropion|quetiapine|olanzapine|aripiprazole|lamotrigine|zoloft|prozac|lexapro|wellbutrin|seroquel|abilify|adderall|ritalin|xanax|ativan|klonopin|valium|benzos?)';
-// A dose amount such as "50mg", "0.5 mg" or "2 x 20mg".
+// Changing, stopping, starting or doubling medication is a decision for the
+// prescriber, so a goal, habit or plan that mentions one is never turned into
+// an Advisor action. The rule is deliberately simple and fails safe: any text
+// that mentions a medication (a medication word, drug name or dose amount)
+// AND any change word is blocked, unless the WHOLE normalised text is one of a
+// few bounded, clearly safe forms (adherence reminders and clinician
+// consultations). Overblocking only means the Advisor skips that item.
+//
+// Every pattern below is a flat alternation or a single bounded group so
+// matching stays linear in the input length (no nested or unbounded
+// repetition that can backtrack exponentially).
+const GENERIC_MEDICATION =
+  '(?:meds?|medications?|medicines?|pills?|tablets?|capsules?)';
+const MEDICATION_WORD = `(?:${GENERIC_MEDICATION}|drugs?|doses?|dosages?|dosing|prescriptions?|rx|antidepressants?|antipsychotics?|mood stabili[sz]ers?|stimulants?|sleeping pills?|painkillers?|opioids?|ssris?|snris?|maois?|lithium|insulin|sertraline|fluoxetine|paroxetine|escitalopram|citalopram|venlafaxine|desvenlafaxine|duloxetine|vortioxetine|mirtazapine|trazodone|amitriptyline|nortriptyline|bupropion|buspirone|hydroxyzine|propranolol|gabapentin|pregabalin|quetiapine|olanzapine|risperidone|aripiprazole|clozapine|haloperidol|lamotrigine|valproate|depakote|carbamazepine|clonazepam|lorazepam|diazepam|alprazolam|zolpidem|zopiclone|methylphenidate|lisdexamfetamine|dexamfetamine|atomoxetine|guanfacine|modafinil|naltrexone|buprenorphine|suboxone|methadone|tramadol|oxycodone|zoloft|prozac|paxil|lexapro|celexa|effexor|pristiq|cymbalta|trintellix|remeron|wellbutrin|buspar|lyrica|neurontin|seroquel|zyprexa|risperdal|abilify|clozaril|lamictal|tegretol|adderall|ritalin|vyvanse|concerta|strattera|ambien|xanax|ativan|klonopin|valium|benzos?)`;
+// A dose amount such as "50mg", "0.5 mg" or "1 g".
 const DOSE_AMOUNT =
-  '\\d+(?:[.,]\\d+)?\\s*(?:x\\s*\\d+(?:[.,]\\d+)?\\s*)?(?:mg|mcg|µg|ug|g|ml|iu|units?|milligrams?|micrograms?)?';
-// Up to four words or dose amounts between the verb and the medication
-// ("to half my 100mg pills"). Adherence verbs are excluded so "stop
-// forgetting my medication" is not read as "stop ... medication".
-const MEDICATION_FILLER = `(?:(?!(?:forgetting|forget|missing|remembering|being\\s+late)\\b)(?:[a-z]+|${DOSE_AMOUNT})\\s+){0,4}?`;
-const MEDICATION_DETERMINER =
-  '(?:my\\s+|the\\s+|a\\s+|an\\s+|some\\s+|all\\s+(?:of\\s+)?my\\s+|some\\s+of\\s+my\\s+|half\\s+(?:of\\s+)?my\\s+)?';
-const CHANGE_VERB =
-  '(?:stop|stopping|quit|quitting|ditch|ditching|come\\s+off|coming\\s+off|get\\s+off|getting\\s+off|go\\s+off|going\\s+off|wean\\s+(?:myself\\s+)?off|taper(?:ing)?(?:\\s+off)?|skip|skipping|cut\\s+(?:down|back)(?:\\s+on)?|reduce|reducing|lower|lowering|increase|increasing|raise|raising|double|doubling|triple|tripling|halve|halving|change|changing|switch|switching|adjust|adjusting|no\\s+more)';
-// Starting or restarting a medication is also a prescriber decision.
-// "Start taking my meds on time" is adherence and stays allowed.
-const START_VERB =
-  '(?:start|starting|begin|beginning|restart|restarting|resume|resuming|put\\s+myself\\s+on)';
-// Tighter than MEDICATION_FILLER so "start my day with meds" is not matched.
-const START_FILLER = `(?:${DOSE_AMOUNT}\\s+)?(?:(?!(?:with|after|before|and)\\b)[a-z]+\\s+)?`;
-const ADHERENCE_TAIL =
-  '(?!\\s+(?:again\\s+)?(?:on\\s+time|as\\s+(?:prescribed|directed|instructed)|regularly|consistently|every\\s+(?:day|morning|evening|night)|each\\s+(?:day|morning|evening|night)|daily|with\\s+(?:food|breakfast|dinner|water)|at\\s+the\\s+same\\s+time)\\b)';
-const DOSE_UNIT = '(?:mg|mcg|µg|ug|ml|iu|units?|milligrams?|micrograms?|pills?|tablets?|capsules?)';
-const MEDICATION_CHANGE = [
-  new RegExp(
-    `\\b${CHANGE_VERB}\\s+(?:taking\\s+|using\\s+)?${MEDICATION_DETERMINER}${MEDICATION_FILLER}${MEDICATION_TERM}\\b`,
-    'i'
-  ),
-  new RegExp(
-    `\\b${START_VERB}\\s+(?:taking\\s+|using\\s+|on\\s+)?${MEDICATION_DETERMINER}${START_FILLER}${MEDICATION_TERM}\\b${ADHERENCE_TAIL}`,
-    'i'
-  ),
-  new RegExp(`\\boff\\s+(?:of\\s+)?(?:all\\s+)?my\\s+(?:[a-z]+\\s+)?${MEDICATION_TERM}\\b`, 'i'),
-  /\b(?:twice|double|triple|extra)\s+(?:the\s+|my\s+)?(?:[a-z]+\s+)?(?:dose|doses|dosage)\b/i,
-  // Moving to a new amount: "go up to 100mg", "increase it by 25 mg",
-  // "take 2 extra pills".
-  new RegExp(
-    `\\b(?:go|going|move|moving|bump|bumping|step|stepping|drop|dropping|come|coming)\\s+(?:up|down)\\s+(?:to\\s+|by\\s+)?\\d+(?:[.,]\\d+)?\\s*${DOSE_UNIT}\\b`,
-    'i'
-  ),
-  new RegExp(
-    `\\b${CHANGE_VERB}\\s+(?:it|my\\s+dose|the\\s+dose|my\\s+dosage)?\\s*(?:to|by)\\s+\\d+(?:[.,]\\d+)?\\s*${DOSE_UNIT}\\b`,
-    'i'
-  ),
-  new RegExp(`\\btake\\s+(?:\\d+|an?)\\s+(?:extra|more|additional)\\s+${DOSE_UNIT}\\b`, 'i'),
-] as const;
-
-// Asking a clinician about a change is the safe action, not the change
-// itself: "ask my doctor whether to stop taking sertraline". The exemption
-// applies only when the clause *is* the consultation request: it opens with
-// asking or talking to a clinician and the change is the topic ("about",
-// "whether", "before" ...), or it reads "discuss <change> with my doctor".
-// A change that only mentions a clinician ("Stop taking sertraline before I
-// talk to my doctor") is still a change.
-const CLINICIAN =
-  '(?:doctor|dr|gp|prescriber|psychiatrist|pharmacist|nurse|nurse\\s+practitioner|np|clinician|provider|care\\s+team|therapist|physician|specialist)';
-const CLINICIAN_REF = `(?:my\\s+|a\\s+|the\\s+|your\\s+)?${CLINICIAN}`;
-// Optional lead-in before the request: "I'll", "I need to", "remember to".
-const CONSULTATION_LEAD =
-  "(?:(?:i|i'll|i\\s+will|i\\s+should|i\\s+need\\s+to|i\\s+want\\s+to|i'm\\s+going\\s+to|i\\s+am\\s+going\\s+to|i\\s+must|i\\s+have\\s+to|need\\s+to|want\\s+to|going\\s+to|gonna|should|must|will|remember\\s+to|plan\\s+to|try\\s+to|please|to)\\s+)*";
-const CONSULTATION_VERB =
-  '(?:ask|asking|talk\\s+to|talking\\s+to|talk\\s+with|speak\\s+(?:to|with)|speaking\\s+(?:to|with)|check\\s+with|checking\\s+with|call|calling|email|message|see|book\\s+(?:an?\\s+)?(?:appointment|appt)\\s+with|consult|consulting)';
-// Words that make the change the subject of the consultation.
-const CONSULTATION_TOPIC =
-  '(?:about|whether|if|when|how|what|regarding|re|on|before|first\\s+before|for\\s+advice\\s+(?:on|about)|to\\s+see\\s+(?:if|whether)|should\\s+i|can\\s+i|could\\s+i)';
-// Anchored to the whole (trimmed) clause.
-const CLINICIAN_CONSULTATION = new RegExp(
-  `^[^a-z0-9]*${CONSULTATION_LEAD}(?:${CONSULTATION_VERB}\\s+(?:with\\s+)?${CLINICIAN_REF}\\s+${CONSULTATION_TOPIC}\\b|(?:discuss|discussing|talk\\s+about|ask\\s+about|bring\\s+up)\\b.*\\bwith\\s+${CLINICIAN_REF}[^a-z0-9]*$)`,
+  '\\d+(?:[.,]\\d+)? ?(?:mg|mcg|µg|μg|ug|g|grams?|ml|iu|units?|milligrams?|micrograms?)';
+const MEDICATION_MENTION = new RegExp(
+  // "Stop taking <anything>" is treated as a medication mention too, so an
+  // unlisted drug name still fails safe. ("Start taking ..." is left out
+  // because "start taking breaks" is a common, harmless goal.)
+  `\\b${MEDICATION_WORD}\\b|\\b${DOSE_AMOUNT}\\b|\\b(?:stop|quit|skip|taper|wean|discontinu|suspend|omit|paus|restart|resum|ceas)[a-z]* (?:taking|on)\\b|\\b(?:come|coming|came|get|getting|go|going|went|wean\\w*|taper\\w*) off\\b`,
   'i'
 );
-// Clause breaks: line breaks, punctuation, dashes, bullets and joining words
-// that start a new instruction.
-const MEDICATION_CLAUSE_BREAK = /[.;:!?,\n/|•–—]+|\s-+\s|\b(?:and|then|but|plus|also)\b/i;
-// "Stop forgetting / missing / skipping my meds" is about taking medication
-// as prescribed. The phrase is replaced before matching so the change verbs
-// inside it ("stop", "skip") are not read as a change.
-const ADHERENCE_PHRASE =
-  /\b(?:stop|stopping|quit|quitting|no\s+more|avoid|avoiding|don'?t|do\s+not|never)\s+(?:forgetting|forget|missing|miss|skipping|skip|being\s+late\s+(?:with|on|taking))\b/gi;
+// Any word that can describe stopping, starting or changing an amount.
+// Stems take any word ending ("stop", "stopping", "stopped").
+const CHANGE_STEM =
+  '(?:stop|quit|start|restart|resum|begin|began|increas|decreas|doubl|halv|skip|taper|wean|switch|chang|adjust|reduc|lower|rais|cut|drop|ditch|tripl|discontinu|ceas|swap|replac|suspend|omit|paus|withdr[ae]w|abandon|cancel|hold|bump|ramp|scal)\\w*';
+const MEDICATION_CHANGE_WORD = new RegExp(
+  `\\b(?:${CHANGE_STEM}|add\\w*|instead|(?:don't|dont|do not|never|avoid\\w*|refus\\w*) (?:take|taking)|half|twice|extra|more|less|fewer|off|without|no more|up (?:my |the )?(?:doses?|dosage)|up it|up to|up by|(?:go|goes|going|went|step\\w*|mov\\w*|come|coming) (?:up|down|back))\\b`,
+  'i'
+);
 
-function describesMedicationChange(text: string): boolean {
+// Optional lead-in before a safe form: "I will", "I need to", "remember to".
+// At most three single words from a fixed set, so it cannot backtrack.
+const SAFE_LEAD =
+  "(?:(?:i|i'll|ill|i'm|im|will|need|needs|want|wants|to|should|must|have|going|gonna|am|please|remember|try|plan|always|really) ){0,3}";
+const SAFE_TIMING = '(?:morning|evening|night|nighttime|bedtime|daily|regular|usual)';
+// "Stop forgetting / missing / skipping my meds", "Don't skip my pills".
+const SAFE_ADHERENCE = new RegExp(
+  `^${SAFE_LEAD}(?:stop|quit|no more|don't|dont|do not|never|avoid|avoiding) (?:forgetting|forget|missing|miss|skipping|skip)(?: to take| taking)? (?:my |the )?(?:${SAFE_TIMING} )?${GENERIC_MEDICATION}(?: (?:on time|as prescribed|as directed|every day|each day|daily|again))?$`,
+  'i'
+);
+// "Take my meds on time", "Start taking my medication as prescribed".
+const SAFE_AS_PRESCRIBED = new RegExp(
+  `^${SAFE_LEAD}(?:take|taking|start taking|keep taking) (?:my |the )(?:${SAFE_TIMING} )?${GENERIC_MEDICATION} (?:on time|as prescribed|as directed)$`,
+  'i'
+);
+const CLINICIAN =
+  '(?:doctor|dr|gp|prescriber|psychiatrist|pharmacist|nurse|nurse practitioner|np|clinician|provider|care team|therapist|physician|specialist)';
+const CLINICIAN_REF = `(?:my |a |the )?${CLINICIAN}`;
+const CONSULTATION_VERB =
+  '(?:ask|talk to|talk with|speak to|speak with|check with|call|email|message|see|consult)';
+// The consultation topic is positively defined: it must BE the question about
+// one change to one medication, e.g. "whether to stop taking sertraline",
+// "if I should lower my dose", "about restarting my pills". Anything else
+// ("about sleep once I stop taking sertraline") is not a safe form.
+const CONSULTATION_FRAME =
+  "(?:(?:whether|if) )?(?:(?:to|i should|i can|i could|i need to|i ought to|it's ok to|its ok to|it is ok to|it's safe to|it is safe to) )?";
+// Up to two plain words ("my evening sertraline", "50mg"): no punctuation,
+// joining words or further change words, so it cannot hide a second instruction.
+const CONSULTATION_FILLER = `(?:(?!(?:and|or|then|also|plus|but|so|once|while|when|before|after|until|since|because|unless|instead|n|${CHANGE_STEM})\\b)[a-z0-9']+ ){0,2}`;
+const CONSULTATION_CHANGE = `(?:${CHANGE_STEM}|(?:come|coming|get|getting|go|going) off)(?: (?:off|down|back|up))?(?: (?:taking|using|on))? (?:my |the |a |an |some )?${CONSULTATION_FILLER}(?:${MEDICATION_WORD}|${DOSE_AMOUNT})(?: (?:doses?|dosage))?`;
+// "Ask my doctor about/whether/if <change question>".
+const SAFE_CONSULTATION_ASK = new RegExp(
+  `^${SAFE_LEAD}${CONSULTATION_VERB} ${CLINICIAN_REF} (?:about|whether|if) ${CONSULTATION_FRAME}${CONSULTATION_CHANGE}$`,
+  'i'
+);
+// "Discuss <change> with my doctor".
+const SAFE_CONSULTATION_DISCUSS = new RegExp(
+  `^${SAFE_LEAD}(?:discuss|talk about|ask about|bring up) ${CONSULTATION_FRAME}${CONSULTATION_CHANGE} with ${CLINICIAN_REF}$`,
+  'i'
+);
+
+function isSafeMedicationForm(text: string): boolean {
   return (
-    MEDICATION_CHANGE.some((pattern) => pattern.test(text)) &&
-    !CLINICIAN_CONSULTATION.test(text.trim())
+    SAFE_ADHERENCE.test(text) ||
+    SAFE_AS_PRESCRIBED.test(text) ||
+    SAFE_CONSULTATION_ASK.test(text) ||
+    SAFE_CONSULTATION_DISCUSS.test(text)
   );
 }
 
 export function isMedicationChangeText(value: string): boolean {
-  const normalized = value
+  let normalized = value
     .normalize('NFKC')
-    .replace(/[​-‍⁠﻿]/g, '')
-    .replace(/[’‘]/g, "'")
-    // Line breaks separate instructions, so keep them for the clause split.
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+    .replace(/[’‘\u02BC]/g, "'")
+    .toLowerCase()
+    // Line breaks stay distinct so they can never sit inside a safe form.
     .replace(/\r\n?|[\u000B\u000C\u0085\u2028\u2029]/g, '\n')
     .replace(/[^\S\n]+/g, ' ')
-    .replace(ADHERENCE_PHRASE, 'adhere to');
-  // The whole text and each clause are checked. A consultation request
-  // exempts only its own clause, so "ask my doctor, then stop my meds" and
-  // "Ask my doctor about sleep\nStop taking sertraline" are still changes.
-  return [normalized, ...normalized.split(MEDICATION_CLAUSE_BREAK)].some(
-    (text) => text.trim() !== '' && describesMedicationChange(text)
-  );
+    .trim();
+  // Detection ignores line breaks so "stop\ntaking X" still reads as one
+  // phrase; the safe forms below keep them and therefore never match.
+  const flattened = normalized.replace(/\n/g, ' ');
+  if (!MEDICATION_MENTION.test(flattened) || !MEDICATION_CHANGE_WORD.test(flattened)) {
+    return false;
+  }
+  // A single trailing full stop or exclamation mark ends the sentence; it does
+  // not start a new instruction.
+  if (normalized.endsWith('.') || normalized.endsWith('!')) {
+    normalized = normalized.slice(0, -1).trimEnd();
+  }
+  return !isSafeMedicationForm(normalized);
 }
 
 function average(values: readonly number[]): number | null {

@@ -6,6 +6,7 @@ import {
   createAdvisorRecommendation,
   createAdvisorTrendSummary,
   getAdvisorChangeSignals,
+  isMedicationChangeText,
   selectAdvisorRecommendation,
   type AdvisorContext,
   type AdvisorHealthFeatures,
@@ -838,6 +839,46 @@ describe('mobile Advisor recommendation engine', () => {
     'Ask my doctor about sleep\u2028Stop taking sertraline',
     'Ask my doctor - stop taking sertraline',
     'Call my doctor then stop my meds',
+    // Codex review of 1e4cc1a: separators the clause split missed, and
+    // frequency or food wording must not exempt starting a medication.
+    'Ask my doctor about sleep & stop taking sertraline',
+    'Ask my doctor about sleep + stop taking sertraline',
+    'Ask my doctor about sleep; stop taking sertraline',
+    'Ask my doctor about sleep also stop my meds',
+    'Ask my doctor about sleep 🙂 stop my meds',
+    'Restart sertraline daily',
+    'Start taking lithium with food',
+    'Start taking my meds daily',
+    'Resume my pills every morning',
+    'Stop forgetting my meds and double my dose',
+    'Discuss sleep with my doctor and stop my meds',
+    'Take more pills tonight',
+    'Bump up to 75mg',
+    'I will '.repeat(200) + 'stop my meds',
+    // Codex review of this change: consultation topics are positively
+    // defined, and wider dose/drug/verb coverage.
+    'Ask my doctor about sleep once I stop taking sertraline',
+    'Ask my doctor about sleep while I stop taking sertraline',
+    'Ask my doctor about sleep before I stop taking sertraline',
+    'Ask my doctor whether to stop and double sertraline',
+    'Up to 100mg',
+    'Up by 25 mg',
+    'Stop taking 1 g',
+    'Stop taking trazodone',
+    'Stop taking my new prescription thing',
+    'Come off it slowly',
+    'Suspend my medication',
+    'Omit my evening dose',
+    'Pause my meds this week',
+    'Ask my doctor about changing jobs. stop sertraline',
+    'Ask my doctor about withdrawal symptoms. stop sertraline',
+    'Ask my doctor about changing jobs stop sertraline',
+    'Add sertraline to my routine',
+    'Take sertraline instead of fluoxetine',
+    'Do not take my medication',
+    'Avoid taking my medication',
+    'Take 100mg instead of 50mg',
+    'stop\ntaking metformin',
   ])('never turns a medication change into an action: %s', (title) => {
     const goalOnly = createAdvisorRecommendation(
       context({ goals: [{ id: 'goal-med', title, dueAt: '2026-08-14T09:00:00.000Z' }] })
@@ -858,6 +899,18 @@ describe('mobile Advisor recommendation engine', () => {
     expect(createAdvisorContextSnapshot(context({
       goals: [{ id: 'goal-med', title, dueAt: null }],
     })).goals).toEqual([]);
+  });
+
+  it.each([
+    'i will '.repeat(200) + 'stop my meds',
+    'i will '.repeat(200) + 'ask my doctor about stopping my meds',
+    'ask my doctor about ' + 'stop my meds '.repeat(300) + '&',
+    'discuss ' + 'stopping meds '.repeat(300) + 'with',
+    '1.'.repeat(2000) + '1 mg stop',
+  ])('classifies adversarial medication text in linear time (%#)', (title) => {
+    const started = performance.now();
+    expect(isMedicationChangeText(title)).toBe(true);
+    expect(performance.now() - started).toBeLessThan(50);
   });
 
   it('keeps other goals when skipping a medication-change goal', () => {
@@ -892,6 +945,15 @@ describe('mobile Advisor recommendation engine', () => {
     'Talk to my psychiatrist about lowering my dose',
     'Discuss stopping sertraline with my doctor',
     'Start my day with a walk',
+    'Take my meds on time',
+    "Don't skip my pills.",
+    'I need to stop forgetting my evening meds',
+    'Ask my doctor if I can start taking lithium',
+    'Ask my doctor about whether to restart my pills',
+    'Ask my doctor whether to stop taking sertraline.',
+    'Ask my GP if it is ok to lower my sertraline dose',
+    'Discuss coming off my antidepressants with my psychiatrist',
+    'Start taking breaks at work',
   ])('keeps benign medication reminders working: %s', (title) => {
     const result = createAdvisorRecommendation(
       context({ habits: [{ id: 'habit-1', name: title, tinyStep: null, completedToday: false }] })
