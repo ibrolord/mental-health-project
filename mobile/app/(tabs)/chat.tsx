@@ -53,6 +53,10 @@ import {
   LOCAL_SAFETY_MESSAGE,
 } from '@/lib/local-safety';
 import { RequestTimeoutError } from '@/lib/request';
+import {
+  buildChatRequestMessages,
+  CHAT_USER_MESSAGE_MAX_CHARS,
+} from '@/lib/chat-history';
 import { supabase } from '@/lib/supabase';
 
 interface Message {
@@ -64,6 +68,8 @@ interface Message {
 
 interface ChatApiResponse {
   response?: unknown;
+  /** 'safety' means the server returned its fixed crisis response. */
+  model?: unknown;
   responseId?: string;
   reportToken?: string;
 }
@@ -115,6 +121,7 @@ export default function ChatScreen() {
   const [contextExpanded, setContextExpanded] = useState(false);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
   const [localSafetyOpen, setLocalSafetyOpen] = useState(false);
+  const [sendError, setSendError] = useState('');
   const [contextError, setContextError] = useState('');
   const [healthSummaryEnabled, setHealthSummaryEnabled] = useState(false);
   const [healthSummary, setHealthSummary] = useState<AppleHealthAiSummary | null>(
@@ -183,6 +190,7 @@ export default function ChatScreen() {
     setContextStatus('idle');
     setContextExpanded(false);
     setLocalSafetyOpen(false);
+    setSendError('');
     setContextError('');
     setHealthSummaryEnabled(false);
     setHealthSummary(null);
@@ -682,9 +690,11 @@ export default function ChatScreen() {
       return;
     }
     const newMessage: Message = { role: 'user', content: trimmed };
+    const previousMessages = messages;
     const nextMessages = [...messages, newMessage];
     setMessages(nextMessages);
     setInput('');
+    setSendError('');
     setSaveState('idle');
     setLoading(true);
     try {
@@ -694,10 +704,7 @@ export default function ChatScreen() {
           ? { ...selectedContext, appleHealthSummary: healthSummary }
           : selectedContext;
       const response = await apiRequest<ChatApiResponse>('/api/chat', {
-        messages: nextMessages.map(({ role, content: value }) => ({
-          role,
-          content: value,
-        })),
+        messages: buildChatRequestMessages(nextMessages),
         userContext: requestContext,
       });
       if (typeof response.response !== 'string' || !response.response.trim()) {
@@ -713,19 +720,23 @@ export default function ChatScreen() {
             reportToken: response.reportToken,
           },
         ]);
+        if (response.model === 'safety') {
+          // The server recognised crisis language the on-device check missed.
+          setLocalSafetyOpen(true);
+          AccessibilityInfo.announceForAccessibility(LOCAL_SAFETY_MESSAGE);
+        }
       }
     } catch (reason) {
       if (messageGenerationRef.current === requestGeneration) {
-        setMessages([
-          ...nextMessages,
-          {
-            role: 'assistant',
-            content:
-              reason instanceof RequestTimeoutError
-                ? 'The response took too long. Check your connection and try again.'
-                : 'The AI service could not respond. Please try again shortly.',
-          },
-        ]);
+        // Keep errors out of the conversation so they are never sent to the
+        // model or saved. Restore the draft so the user can retry.
+        setMessages(previousMessages);
+        setInput(trimmed);
+        setSendError(
+          reason instanceof RequestTimeoutError
+            ? 'The response took too long. Check your connection and try again.'
+            : 'The AI service could not respond. Your message was not sent. Please try again shortly.'
+        );
       }
     } finally {
       if (releaseRequest()) setLoading(false);
@@ -1121,6 +1132,12 @@ export default function ChatScreen() {
         </Pressable>
       ) : null}
 
+      {sendError ? (
+        <Text accessibilityRole="alert" style={styles.sendError}>
+          {sendError}
+        </Text>
+      ) : null}
+
       <View style={styles.inputRow}>
         <TextInput
           accessibilityLabel="Message to MHtoolkit AI"
@@ -1128,7 +1145,7 @@ export default function ChatScreen() {
           value={input}
           onChangeText={setInput}
           multiline
-          maxLength={8_000}
+          maxLength={CHAT_USER_MESSAGE_MAX_CHARS}
           placeholder="Message MHtoolkit AI"
           placeholderTextColor={Colors.textSecondary}
         />
@@ -1217,6 +1234,14 @@ const styles = StyleSheet.create({
   },
   supportActionText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
   supportDivider: { width: StyleSheet.hairlineWidth, height: 22, backgroundColor: Colors.borderStrong },
+  sendError: {
+    color: Colors.danger,
+    fontSize: 13,
+    lineHeight: 18,
+    paddingHorizontal: Spacing.md,
+    paddingTop: 6,
+    backgroundColor: Colors.background,
+  },
   aiLimit: {
     color: Colors.textSecondary,
     fontSize: 11,

@@ -5,9 +5,11 @@ import {
   AFRICA_COUNTRIES,
   AFRICA_COUNTRY_LOOKUPS,
   AFRICA_SUPPORT,
+  CRISIS_LINES as WEB_CRISIS_LINES,
   ONLINE_COMMUNITIES,
   SUPPORT_GROUPS,
 } from '../../lib/resources';
+import { CRISIS_LINES as MOBILE_CRISIS_LINES } from '../../mobile/lib/resources';
 
 describe('global support resources', () => {
   it('covers all 54 African countries with unique country links', () => {
@@ -49,6 +51,19 @@ describe('global support resources', () => {
     for (const community of ONLINE_COMMUNITIES) {
       expect(community.caveat?.length).toBeGreaterThan(20);
       expect(community.url).toMatch(/^https:\/\//);
+    }
+  });
+
+  it('keeps the web and mobile crisis lines consistent', () => {
+    const key = ({ name, region, phone, url }: { name: string; region: string; phone?: string; url: string }) =>
+      `${name}|${region}|${phone ?? ''}|${url}`;
+    // Talk Suicide Canada is web-only until its number is reconfirmed.
+    const web = WEB_CRISIS_LINES.filter(({ name }) => name !== 'Talk Suicide Canada').map(key);
+    expect(MOBILE_CRISIS_LINES.map(key)).toEqual(web);
+    for (const lines of [WEB_CRISIS_LINES, MOBILE_CRISIS_LINES]) {
+      expect(lines.find(({ region }) => region === 'UK')?.phone).toBe('116 123');
+      expect(lines.find(({ region }) => region === 'Australia')?.phone).toBe('13 11 14');
+      expect(lines.some(({ region }) => region === 'US & Canada')).toBe(false);
     }
   });
 

@@ -80,6 +80,7 @@ export type Region =
   | AfricaCountry
   | 'Africa'
   | 'UK'
+  | 'Australia'
   | 'International';
 
 /** Used to group cards so nobody scrolls past four US numbers to find theirs. */
@@ -209,6 +210,28 @@ export const CRISIS_LINES: CrisisLine[] = [
     hours: '24/7',
     url: 'https://www.veteranscrisisline.net',
     verifiedAt: '2026-08-11',
+  },
+  // NEEDS CONFIRMATION: supplied by the product owner on 2026-11-15, not yet
+  // re-verified on samaritans.org / lifeline.org.au. Mirrored on web.
+  {
+    name: 'Samaritans',
+    region: 'UK',
+    description: 'Free, confidential listening support for anyone who is struggling. Call any time.',
+    phone: '116 123',
+    callUri: 'tel:116123',
+    hours: '24/7',
+    url: 'https://www.samaritans.org',
+    verifiedAt: 'pending',
+  },
+  {
+    name: 'Lifeline Australia',
+    region: 'Australia',
+    description: 'Free, confidential crisis support across Australia. Call any time.',
+    phone: '13 11 14',
+    callUri: 'tel:131114',
+    hours: '24/7',
+    url: 'https://www.lifeline.org.au',
+    verifiedAt: 'pending',
   },
 ];
 

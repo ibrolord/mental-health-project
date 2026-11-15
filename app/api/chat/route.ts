@@ -6,7 +6,9 @@ import { createReportTokenIfConfigured, subjectForAuth } from '@/lib/ai/report-t
 import { readBoundedJson, RequestBodyError } from '@/lib/ai/request-body';
 import { isHealthAiEnabled } from '@/lib/ai/health-ai-gate';
 
-const MAX_REQUEST_BYTES = 64 * 1024;
+// Fits CHAT_LIMITS.totalChars of non-Latin text (up to 3 UTF-8 bytes per
+// character) plus selected context. History is trimmed before the model call.
+const MAX_REQUEST_BYTES = 512 * 1024;
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });

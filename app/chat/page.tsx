@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { formatISO, subDays } from 'date-fns';
 import { VoiceChat } from '@/components/voice-chat';
+import { CrisisSupportCard } from '@/components/crisis-support-card';
 import { useAiConsent } from '@/components/ai-consent-provider';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -129,6 +130,7 @@ export default function ChatPage() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
   const [error, setError] = useState('');
+  const [crisisSupportVisible, setCrisisSupportVisible] = useState(false);
   const [selections, setSelections] = useState<AiContextSelections>(
     createEmptyAiContextSelections
   );
@@ -174,6 +176,7 @@ export default function ChatPage() {
     setSaving(false);
     setSaveStatus('');
     setError('');
+    setCrisisSupportVisible(false);
     setSelections(createEmptyAiContextSelections());
     setUserContext(null);
     setContextOwnerKey(null);
@@ -531,6 +534,8 @@ export default function ChatPage() {
         ...nextMessages,
         { role: 'assistant', content: result.response },
       ]);
+      // The server replaced the model with its fixed crisis response.
+      if (result.model === 'safety') setCrisisSupportVisible(true);
       setShowSave(true);
     } catch (sendError) {
       if (
@@ -866,6 +871,9 @@ export default function ChatPage() {
                     </div>
                   </div>
                 ))}
+                {crisisSupportVisible && (
+                  <CrisisSupportCard onDismiss={() => setCrisisSupportVisible(false)} />
+                )}
                 {loading && (
                   <div className="flex justify-start">
                     <div className="rounded-2xl border border-border bg-secondary px-4 py-3 text-sm text-muted-foreground">

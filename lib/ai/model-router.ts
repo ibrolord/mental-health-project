@@ -3,6 +3,7 @@ import * as claude from './claude';
 import type { Message } from './claude';
 import type { UserContext } from './context';
 import { containsExplicitCrisis, CRISIS_RESPONSE } from './crisis';
+import { trimConversationForModel } from './chat-history';
 
 export type ChatModel = 'gemini' | 'claude' | 'safety';
 type ModelProvider = Exclude<ChatModel, 'safety'>;
@@ -30,14 +31,48 @@ function configuredPrimaryProvider(): ModelProvider {
   throw new Error('No AI provider is configured');
 }
 
+/**
+ * Deadline for each provider attempt. Two attempts (primary + fallback) stay
+ * under the mobile client's 45s request timeout, so the fallback actually
+ * gets a chance to answer.
+ */
+export const PROVIDER_TIMEOUT_MS = 20_000;
+
+export class ProviderTimeoutError extends Error {
+  constructor(provider: ModelProvider) {
+    super(`${provider} did not respond within ${PROVIDER_TIMEOUT_MS}ms`);
+    this.name = 'ProviderTimeoutError';
+  }
+}
+
 async function callProvider(
   provider: ModelProvider,
   messages: Message[],
   userContext?: UserContext
 ): Promise<string> {
-  return provider === 'gemini'
-    ? gemini.chat(messages, userContext)
-    : claude.chat(messages, userContext);
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new ProviderTimeoutError(provider));
+    }, PROVIDER_TIMEOUT_MS);
+  });
+  const call =
+    provider === 'gemini'
+      ? gemini.chat(messages, userContext, { signal: controller.signal })
+      : claude.chat(messages, userContext, { signal: controller.signal });
+  // A provider that rejects after the deadline must not surface as unhandled.
+  call.catch(() => undefined);
+  try {
+    const response = await Promise.race([call, deadline]);
+    if (typeof response !== 'string' || !response.trim()) {
+      throw new Error(`${provider} returned an empty response`);
+    }
+    return response.trim();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -100,12 +135,15 @@ export async function chat(
   userContext?: UserContext,
   options: ChatRoutingOptions = {}
 ): Promise<{ response: string; model: ChatModel }> {
+  // Crisis detection always sees the full, untrimmed conversation.
   if (containsExplicitCrisis(messages)) {
     console.warn('[Model Router] Explicit crisis detected; returning deterministic safety response');
     return { response: CRISIS_RESPONSE, model: 'safety' };
   }
 
-  const prefersClaude = requiresClaudeModel(messages);
+  // Long conversations are trimmed to a budget rather than rejected.
+  const modelMessages = trimConversationForModel(messages);
+  const prefersClaude = requiresClaudeModel(modelMessages);
   const preferredProvider = options.preferredProvider;
   const primary: ModelProvider =
     prefersClaude && hasProviderCredential('claude')
@@ -119,7 +157,7 @@ export async function chat(
   
   try {
     console.log(`[Model Router] Using ${primary}`);
-    const response = await callProvider(primary, messages, userContext);
+    const response = await callProvider(primary, modelMessages, userContext);
     return { response, model: primary };
   } catch (error) {
     console.error(`[Model Router] ${primary} failed:`, error);
@@ -130,7 +168,7 @@ export async function chat(
 
     try {
       console.log(`[Model Router] Falling back to ${fallback}`);
-      const response = await callProvider(fallback, messages, userContext);
+      const response = await callProvider(fallback, modelMessages, userContext);
       return { response, model: fallback };
     } catch (fallbackError) {
       console.error('[Model Router] Both models failed:', fallbackError);

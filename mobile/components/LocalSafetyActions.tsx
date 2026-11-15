@@ -90,13 +90,21 @@ export function LocalSafetyActions({
           />
         </View>
       ) : region === 'elsewhere' ? (
-        <AppButton
-          label="Find local crisis support"
-          icon="map-pin"
-          onPress={() =>
-            router.push({ pathname: '/resources', params: { category: 'country' } })
-          }
-        />
+        <View style={styles.elsewhereActions}>
+          <AppButton
+            label="Find a helpline in your country"
+            icon="globe"
+            onPress={() => openAction('https://findahelpline.com')}
+          />
+          <AppButton
+            label="Find local crisis support"
+            icon="map-pin"
+            variant="secondary"
+            onPress={() =>
+              router.push({ pathname: '/resources', params: { category: 'country' } })
+            }
+          />
+        </View>
       ) : null}
 
       <View style={styles.secondaryActions}>
@@ -159,6 +167,7 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   action: { flex: 1 },
+  elsewhereActions: { gap: 8, marginTop: 12 },
   secondaryActions: { gap: 8, marginTop: 12 },
   secondaryAction: { justifyContent: 'flex-start' },
 });

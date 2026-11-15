@@ -80,6 +80,7 @@ export type Region =
   | AfricaCountry
   | 'Africa'
   | 'UK'
+  | 'Australia'
   | 'International';
 
 /** Used to group cards so nobody scrolls past four US numbers to find theirs. */
@@ -134,15 +135,28 @@ export type ResourceLink = {
  * no phone field, and let GLOBAL_DIRECTORIES carry the lookup.
  */
 export const CRISIS_LINES: CrisisLine[] = [
+  // Canada and US entries mirror mobile/lib/resources.ts (verified 2026-08-11).
+  {
+    name: '9-8-8 Suicide Crisis Helpline',
+    region: 'Canada',
+    description:
+      'Canada-wide suicide crisis support in English and French. Call or text any time.',
+    phone: '9-8-8',
+    hours: '24/7',
+    url: 'https://988.ca',
+  },
   {
     name: '988 Suicide & Crisis Lifeline',
-    region: 'US & Canada',
+    region: 'US',
     description:
-      'Free and confidential support for anyone in distress. Call or text 988 from the United States or Canada.',
+      'Free and confidential crisis support across the United States and its territories. Call or text any time.',
     phone: '988',
     hours: '24/7',
-    url: 'https://988lifeline.org',
+    url: 'https://988lifeline.org/get-help/',
   },
+  // NEEDS CONFIRMATION: 9-8-8 replaced Talk Suicide Canada as Canada's
+  // national line. Confirm on talksuicide.ca whether 1-833-456-4566 is still
+  // answered before keeping this entry. It is deliberately not on mobile.
   {
     name: 'Talk Suicide Canada',
     region: 'Canada',
@@ -186,6 +200,24 @@ export const CRISIS_LINES: CrisisLine[] = [
     phone: '988, then 1',
     hours: '24/7',
     url: 'https://www.veteranscrisisline.net',
+  },
+  // NEEDS CONFIRMATION: supplied by the product owner on 2026-11-15, not yet
+  // re-verified on samaritans.org / lifeline.org.au. Mirrored on mobile.
+  {
+    name: 'Samaritans',
+    region: 'UK',
+    description: 'Free, confidential listening support for anyone who is struggling. Call any time.',
+    phone: '116 123',
+    hours: '24/7',
+    url: 'https://www.samaritans.org',
+  },
+  {
+    name: 'Lifeline Australia',
+    region: 'Australia',
+    description: 'Free, confidential crisis support across Australia. Call any time.',
+    phone: '13 11 14',
+    hours: '24/7',
+    url: 'https://www.lifeline.org.au',
   },
 ];
 

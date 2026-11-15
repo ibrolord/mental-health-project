@@ -1,3 +1,5 @@
+import { matchesSharedCrisisPattern, normalizeCrisisText } from './crisis-patterns';
+
 export const LOCAL_SAFETY_MESSAGE =
   "Thank you for telling me. I can’t provide emergency help, but I can help you reach a person now.";
 
@@ -35,12 +37,20 @@ function clauses(text: string): string[] {
 }
 
 /**
- * Detects only explicit, first-person statements that need an immediate,
- * non-network safety path. It is not a risk score or diagnostic classifier.
+ * Detects crisis statements that need an immediate, non-network safety path.
+ * It is not a risk score or diagnostic classifier.
+ *
+ * Two checks run, and either is enough:
+ * 1. Explicit first-person statements, clause by clause, with the existing
+ *    negation handling ("I don't want to die" stays quiet here).
+ * 2. The shared indirect, shorthand, misspelled and non-English phrases also
+ *    used by the server (crisis-patterns.ts). These never pass through the
+ *    negation filter, so they can only add matches.
  */
 export function hasExplicitUrgentSafetyLanguage(text: string): boolean {
-  return clauses(text).some((clause) => {
+  const explicit = clauses(text).some((clause) => {
     if (NEGATED_INTENT.some((pattern) => pattern.test(clause))) return false;
     return URGENT_INTENT.some((pattern) => pattern.test(clause));
   });
+  return explicit || matchesSharedCrisisPattern(normalizeCrisisText(text));
 }

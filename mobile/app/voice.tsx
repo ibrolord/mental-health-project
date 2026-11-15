@@ -21,6 +21,7 @@ import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import { apiRequest } from '@/lib/api';
 import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
 import { fetchWithTimeout } from '@/lib/request';
+import { buildChatRequestMessages, windowFromUserTurn } from '@/lib/chat-history';
 import { classifyRealtimeEvent, parseRealtimeEvent } from '@/lib/realtime-events';
 import {
   hasExplicitUrgentSafetyLanguage,
@@ -69,6 +70,8 @@ const MAX_GENERATED_SPEECH_REQUEST_MS = 30_000;
 const MAX_SPEECH_PLAYBACK_MS = 90_000;
 const MAX_TRANSCRIPTION_REQUEST_MS = 30_000;
 const MAX_CHAT_REQUEST_MS = 30_000;
+/** Recent voice turns kept and sent; the window always starts on a user turn. */
+const VOICE_HISTORY_MESSAGES = 12;
 const MAX_REALTIME_CONTROL_REQUEST_MS = 10_000;
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';
 const REALTIME_VOICE_ENABLED =
@@ -217,7 +220,7 @@ export default function VoiceSupportScreen() {
   const realtimeActive = peerRef.current !== null;
 
   function addMessage(message: Message) {
-    const next = [...messagesRef.current, message].slice(-12);
+    const next = windowFromUserTurn([...messagesRef.current, message], VOICE_HISTORY_MESSAGES);
     messagesRef.current = next;
     setMessages(next);
   }
@@ -767,8 +770,11 @@ export default function VoiceSupportScreen() {
       }
 
       setStatus('processing');
-      const chatMessages = messagesRef.current.slice(-12);
-      const chat = await apiRequest<{ response?: unknown }>(
+      const chatMessages = buildChatRequestMessages(
+        messagesRef.current,
+        VOICE_HISTORY_MESSAGES
+      );
+      const chat = await apiRequest<{ response?: unknown; model?: unknown }>(
         '/api/chat',
         { messages: chatMessages },
         { signal: turnAbort.signal, timeoutMs: 20_000 }
@@ -780,6 +786,7 @@ export default function VoiceSupportScreen() {
       const response = chat.response.trim();
       addMessage({ role: 'assistant', content: response });
       setAiResponse(response);
+      if (chat.model === 'safety') setLocalSafetyOpen(true);
       await speakText(response, true);
     } catch {
       if (!turnIsCurrent()) return;
@@ -1233,10 +1240,11 @@ export default function VoiceSupportScreen() {
       }
 
       const userText = data.transcription.trim();
-      const nextMessages: Message[] = [
+      const turnMessages: Message[] = [
         ...messagesRef.current,
         { role: 'user' as const, content: userText },
-      ].slice(-12);
+      ];
+      const nextMessages = windowFromUserTurn(turnMessages, VOICE_HISTORY_MESSAGES);
       messagesRef.current = nextMessages;
       setMessages(nextMessages);
       if (hasExplicitUrgentSafetyLanguage(userText)) {
@@ -1261,12 +1269,14 @@ export default function VoiceSupportScreen() {
           ...chatHeaders,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({
+          messages: buildChatRequestMessages(nextMessages, VOICE_HISTORY_MESSAGES),
+        }),
         signal: turnAbort.signal,
       }, MAX_CHAT_REQUEST_MS);
       if (!turnIsCurrent()) return;
       if (!chatResponse.ok) throw new Error('AI response failed');
-      const chat = (await chatResponse.json()) as { response?: unknown };
+      const chat = (await chatResponse.json()) as { response?: unknown; model?: unknown };
       if (!turnIsCurrent()) return;
       if (typeof chat.response !== 'string' || !chat.response.trim()) {
         throw new Error('AI response was empty');
@@ -1274,6 +1284,7 @@ export default function VoiceSupportScreen() {
       const responseText = chat.response.trim();
       setAiResponse(responseText);
       addMessage({ role: 'assistant', content: responseText });
+      if (chat.model === 'safety') setLocalSafetyOpen(true);
       await speakText(responseText, false);
     } catch (reason) {
       if (!turnIsCurrent()) return;

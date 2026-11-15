@@ -46,4 +46,52 @@ describe('containsExplicitCrisis', () => {
     expect(CRISIS_RESPONSE).toContain('local emergency number');
     expect(CRISIS_RESPONSE).toContain('988');
   });
+
+  it('points people outside North America to real lines and a directory', () => {
+    expect(CRISIS_RESPONSE).toContain('findahelpline.com');
+    expect(CRISIS_RESPONSE).toContain('116 123');
+    expect(CRISIS_RESPONSE).toContain('13 11 14');
+    expect(CRISIS_RESPONSE).toContain('9-8-8 Suicide Crisis Helpline');
+    expect(CRISIS_RESPONSE).not.toMatch(/\*\*|__|#/);
+  });
+
+  it.each([
+    'Ｉ ＷＡＮＴ ＴＯ ＫＩＬＬ ＭＹＳＥＬＦ',
+    'I want to kíll myself',
+    'I want to ki​ll myself',
+    'I’m thinking about ending my life',
+  ])('normalises Unicode before matching: %s', (content) => {
+    expect(containsExplicitCrisis(userMessage(content))).toBe(true);
+  });
+
+  // Intentionally unchanged. A "don't want to die" negation guard was
+  // suggested in review but would stop an existing phrase from triggering, so
+  // the server keeps over-including here. The on-device check has its own
+  // clause-level negation and is unaffected.
+  it.each([
+    "I don't want to die, I just want to sleep",
+    "I don't want to kill myself",
+  ])('still intercepts negated phrasing on the server (fail-safe): %s', (content) => {
+    expect(containsExplicitCrisis(userMessage(content))).toBe(true);
+  });
+
+  // Intentionally unchanged: the last three user messages are still checked
+  // together, so the safety reply persists for two follow-up turns.
+  it('keeps the multi-message crisis window', () => {
+    const crisisTurn = { role: 'user' as const, content: "I don't see the point in living anymore" };
+    const reply = { role: 'assistant' as const, content: CRISIS_RESPONSE };
+    const conversation = [
+      crisisTurn,
+      reply,
+      { role: 'user' as const, content: "I'm safe now, thanks" },
+      reply,
+      { role: 'user' as const, content: 'How do I switch off at night?' },
+    ];
+    expect(containsExplicitCrisis(conversation)).toBe(true);
+    expect(containsExplicitCrisis([
+      ...conversation,
+      reply,
+      { role: 'user' as const, content: 'Any sleep tips?' },
+    ])).toBe(false);
+  });
 });

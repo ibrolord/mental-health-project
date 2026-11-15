@@ -785,6 +785,84 @@ describe('mobile Advisor recommendation engine', () => {
     expect(JSON.stringify(result)).not.toContain(unsafeText);
   });
 
+  it.each([
+    'everyone would be better off without me',
+    "I don't see the point in living anymore",
+    'kms',
+    'no reason to live',
+    'I have pills saved up',
+    'Quiero morir',
+    'मैं मरना चाहता हूँ',
+  ])('shows the safety card instead of a task for crisis wording in a goal: %s', (title) => {
+    const result = createAdvisorRecommendation(
+      context({ goals: [{ id: 'goal-1', title, dueAt: null }] })
+    );
+    expect(result).toMatchObject({ id: 'safety-support', kind: 'safety', route: '/resources' });
+    expect(JSON.stringify(result)).not.toContain(title);
+  });
+
+  it('shows the safety card for crisis wording in a habit tiny step', () => {
+    const result = createAdvisorRecommendation(
+      context({ habits: [{ id: 'h', name: 'Evening', tinyStep: 'wanna die', completedToday: false }] })
+    );
+    expect(result).toMatchObject({ id: 'safety-support', route: '/resources' });
+  });
+
+  it.each([
+    'Stop taking my meds',
+    'Double my dose',
+    'Come off my antidepressants',
+    'Skip my evening pills',
+    'Taper off sertraline',
+    'Take a double dose tonight',
+  ])('never turns a medication change into an action: %s', (title) => {
+    const goalOnly = createAdvisorRecommendation(
+      context({ goals: [{ id: 'goal-med', title, dueAt: '2026-08-14T09:00:00.000Z' }] })
+    );
+    expect(goalOnly.id).not.toContain('goal-med');
+    expect(JSON.stringify(goalOnly)).not.toContain(title);
+
+    const habitOnly = createAdvisorRecommendation(
+      context({ habits: [{ id: 'habit-med', name: title, tinyStep: null, completedToday: false }] })
+    );
+    expect(habitOnly.id).not.toContain('habit-med');
+    expect(JSON.stringify(habitOnly)).not.toContain(title);
+
+    const tinyStep = createAdvisorRecommendation(
+      context({ habits: [{ id: 'habit-med', name: 'Evening routine', tinyStep: title, completedToday: false }] })
+    );
+    expect(tinyStep.id).not.toContain('habit-med');
+    expect(createAdvisorContextSnapshot(context({
+      goals: [{ id: 'goal-med', title, dueAt: null }],
+    })).goals).toEqual([]);
+  });
+
+  it('keeps other goals when skipping a medication-change goal', () => {
+    const result = createAdvisorRecommendation(
+      context({
+        goals: [
+          { id: 'goal-med', title: 'Stop my medication', dueAt: '2026-08-14T09:00:00.000Z' },
+          { id: 'goal-ok', title: 'Finish essay', dueAt: '2026-08-20T09:00:00.000Z' },
+        ],
+      })
+    );
+    expect(result.id).toContain('goal-ok');
+  });
+
+  it.each([
+    'Take my meds',
+    'Take my meds at 8am',
+    'Stop forgetting to take my meds',
+    'Pick up my prescription',
+    'Remember my evening pills',
+  ])('keeps benign medication reminders working: %s', (title) => {
+    const result = createAdvisorRecommendation(
+      context({ habits: [{ id: 'habit-1', name: title, tinyStep: null, completedToday: false }] })
+    );
+    expect(result.id).toBe('habit:habit-1');
+    expect(result.kind).toBe('standard');
+  });
+
   it('avoids the most recently offered recommendation when a deterministic variant exists', () => {
     const input = context({
       habits: [{ id: 'habit-1', name: 'Walk', tinyStep: null, completedToday: false }],

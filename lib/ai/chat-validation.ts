@@ -3,10 +3,35 @@ import { z } from 'zod';
 const boundedText = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) => z.string().trim().max(max);
 
+/**
+ * Request limits are abuse caps only. Normal long conversations are accepted
+ * and trimmed to a model budget on the server (see chat-history.ts), so
+ * clients can keep sending the whole conversation.
+ * Mirrored on mobile in mobile/lib/chat-history.ts.
+ */
+export const CHAT_LIMITS = {
+  userMessageChars: 4_000,
+  // Model replies can run long; one long reply must not break the next turn.
+  assistantMessageChars: 8_000,
+  messages: 200,
+  totalChars: 120_000,
+} as const;
+
 const messageSchema = z.object({
   role: z.enum(['user', 'assistant']),
-  content: boundedText(4_000),
-}).strict();
+  content: boundedText(CHAT_LIMITS.assistantMessageChars),
+}).strict().superRefine(({ role, content }, context) => {
+  if (role === 'user' && content.length > CHAT_LIMITS.userMessageChars) {
+    context.addIssue({
+      code: z.ZodIssueCode.too_big,
+      maximum: CHAT_LIMITS.userMessageChars,
+      type: 'string',
+      inclusive: true,
+      message: `String must contain at most ${CHAT_LIMITS.userMessageChars} character(s)`,
+      path: ['content'],
+    });
+  }
+});
 
 const healthWindowSchema = (maxCoverageDays: number) => z.object({
   coverageDays: z.number().int().min(0).max(maxCoverageDays),
@@ -82,11 +107,11 @@ const userContextSchema = z.object({
 }).strict();
 
 export const chatRequestSchema = z.object({
-  messages: z.array(messageSchema).min(1).max(40),
+  messages: z.array(messageSchema).min(1).max(CHAT_LIMITS.messages),
   userContext: userContextSchema.optional(),
 }).strict().superRefine(({ messages, userContext }, context) => {
   const totalCharacters = messages.reduce((sum, message) => sum + message.content.length, 0);
-  if (totalCharacters > 24_000) {
+  if (totalCharacters > CHAT_LIMITS.totalChars) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'Conversation is too large', path: ['messages'] });
   }
   if (userContext && JSON.stringify(userContext).length > 30_000) {

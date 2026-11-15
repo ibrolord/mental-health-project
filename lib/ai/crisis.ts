@@ -1,8 +1,25 @@
 import type { Message } from './claude';
+import { matchesSharedCrisisPattern, normalizeCrisisText } from './crisis-patterns';
 
+/**
+ * Deterministic reply used instead of a model whenever crisis language is
+ * detected. Plain text: both clients render it as-is.
+ *
+ * Helplines: the US and Canada entries match the verified lists in
+ * lib/resources.ts and mobile/lib/resources.ts. Samaritans (UK) and Lifeline
+ * (Australia) were supplied by the product owner on 2026-11-15 and should be
+ * reconfirmed against samaritans.org and lifeline.org.au before release.
+ */
 export const CRISIS_RESPONSE = `I’m really sorry you’re facing this. Your immediate safety matters more than continuing this chat.
 
-If you may act on these thoughts or someone is in immediate danger, call your local emergency number now or go to the nearest emergency department. In the U.S. or Canada, call or text 988 to reach the Suicide & Crisis Lifeline. If you are elsewhere, contact your local crisis service or emergency number.
+If you may act on these thoughts or someone is in immediate danger, call your local emergency number now or go to the nearest emergency department.
+
+You can talk to a trained person right now:
+- United States: call or text 988 (988 Suicide & Crisis Lifeline)
+- Canada: call or text 9-8-8 (9-8-8 Suicide Crisis Helpline)
+- United Kingdom: call Samaritans on 116 123
+- Australia: call Lifeline on 13 11 14
+- Anywhere else: findahelpline.com lists free, confidential lines by country
 
 If you can, move away from anything you could use to hurt yourself or someone else and contact a trusted person who can stay with you. Are you in immediate danger right now?`;
 
@@ -32,15 +49,9 @@ const nonCurrentContexts = [
   /\bsuicide\s+(?:prevention|awareness|statistics|research)\b/,
 ];
 
-function normalize(value: string): string {
-  return value
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[’‘]/g, "'")
-    .replace(/[^a-z0-9'\s-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+// Unicode-safe: keeps every script and folds Latin accents and compatibility
+// forms. Shared with the mobile on-device check; see crisis-patterns.ts.
+const normalize = normalizeCrisisText;
 
 export function containsExplicitCrisis(messages: Message[]): boolean {
   const recentUserText = messages
@@ -52,6 +63,7 @@ export function containsExplicitCrisis(messages: Message[]): boolean {
 
   if (!normalized) return false;
   if (explicitIntentPatterns.some((pattern) => pattern.test(normalized))) return true;
+  if (matchesSharedCrisisPattern(normalized)) return true;
   if (!crisisTerms.test(normalized)) return false;
 
   const withoutNonCurrentContext = nonCurrentContexts.reduce(

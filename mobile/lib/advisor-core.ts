@@ -202,6 +202,30 @@ const MOOD_LABELS: Record<MoodEmoji, string> = {
 // commitment. Fail closed on explicit high-risk action fragments before doing so.
 const UNSAFE_ACTION_FRAGMENT = /\b(?:suicid(?:e|al)|self[ -]?harm|die(?:\s+(?:today|tonight|now))?|end\s+my\s+life|take\s+my\s+life|cut\s+myself|kill\s+(?:myself|someone|somebody|him|her|them)|murder\s+(?:myself|someone|somebody|him|her|them)|assassinate\s+(?:someone|somebody|him|her|them)|hurt\s+(?:myself|someone|somebody|him|her|them)|harm\s+(?:myself|someone|somebody|him|her|them)|overdose|take\s+(?:extra|too\s+many|all\s+(?:of\s+)?my)\s+(?:pills|tablets|medications?)|shoot\s+(?:myself|someone|somebody|him|her|them)|stab\s+(?:myself|someone|somebody|him|her|them)|hang\s+myself|drown\s+myself|poison\s+(?:myself|someone|somebody|him|her|them))\b/i;
 
+// Changing, stopping or doubling medication is a decision for the prescriber,
+// so a goal, habit or plan that says so is never turned into an Advisor
+// action. Reminders to take medication as prescribed ("take my meds") are not
+// matched and keep working.
+const MEDICATION_TERM =
+  '(?:meds|medication|medications|medicine|medicines|pills|tablets|dose|doses|dosage|antidepressants?|ssris?|snris?|lithium|insulin|sertraline|fluoxetine|escitalopram|citalopram|venlafaxine|bupropion|quetiapine|olanzapine|aripiprazole|lamotrigine|zoloft|prozac|lexapro|wellbutrin|seroquel|abilify|adderall|ritalin|xanax|ativan|klonopin|valium|benzos?)';
+const MEDICATION_CHANGE = [
+  new RegExp(
+    `\\b(?:stop|stopping|quit|quitting|ditch|ditching|come\\s+off|coming\\s+off|get\\s+off|getting\\s+off|go\\s+off|going\\s+off|wean\\s+(?:myself\\s+)?off|taper(?:ing)?(?:\\s+off)?|skip|skipping|cut\\s+(?:down|back)(?:\\s+on)?|reduce|reducing|lower|lowering|increase|increasing|raise|raising|double|doubling|triple|tripling|halve|halving|change|changing|switch|switching|adjust|adjusting|no\\s+more)\\s+(?:taking\\s+)?(?:my\\s+|the\\s+|all\\s+(?:of\\s+)?my\\s+|some\\s+of\\s+my\\s+)?(?:[a-z]+\\s+){0,2}?${MEDICATION_TERM}\\b`,
+    'i'
+  ),
+  new RegExp(`\\boff\\s+(?:of\\s+)?(?:all\\s+)?my\\s+(?:[a-z]+\\s+)?${MEDICATION_TERM}\\b`, 'i'),
+  /\b(?:twice|double|triple|extra)\s+(?:the\s+|my\s+)?(?:[a-z]+\s+)?(?:dose|doses|dosage)\b/i,
+] as const;
+
+export function isMedicationChangeText(value: string): boolean {
+  const normalized = value
+    .normalize('NFKC')
+    .replace(/[​-‍⁠﻿]/g, '')
+    .replace(/[’‘]/g, "'")
+    .replace(/\s+/g, ' ');
+  return MEDICATION_CHANGE.some((pattern) => pattern.test(normalized));
+}
+
 function average(values: readonly number[]): number | null {
   if (values.length === 0) return null;
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
@@ -362,7 +386,12 @@ function quotedActionTitle(value: string): string {
 
 export function createAdvisorContextSnapshot(context: AdvisorContext): AdvisorContext {
   const goals = [...context.goals]
-    .filter((goal) => goal.id && sanitizeDisplayText(goal.title))
+    .filter(
+      (goal) =>
+        goal.id &&
+        sanitizeDisplayText(goal.title) &&
+        !isMedicationChangeText(goal.title)
+    )
     .sort(
       (left, right) =>
         sortableDueAt(left.dueAt) - sortableDueAt(right.dueAt) ||
@@ -373,7 +402,11 @@ export function createAdvisorContextSnapshot(context: AdvisorContext): AdvisorCo
   const habits = [...context.habits]
     .filter(
       (habit) =>
-        habit.id && sanitizeDisplayText(habit.name) && !habit.completedToday
+        habit.id &&
+        sanitizeDisplayText(habit.name) &&
+        !habit.completedToday &&
+        !isMedicationChangeText(habit.name) &&
+        !isMedicationChangeText(habit.tinyStep ?? '')
     )
     .sort((left, right) => left.id.localeCompare(right.id))
     .slice(0, 3)
@@ -607,6 +640,13 @@ function healthCandidates(_health: AdvisorHealthFeatures): AdvisorRecommendation
 function personalPlanCandidate(profile: AdvisorProfile | null | undefined): AdvisorRecommendationCandidate | null {
   if (!profile?.completedAt || !profile.personalPlan) return null;
   const plan = normalizePersonalPlan(profile.personalPlan);
+  if (
+    [plan.action, plan.motivation, plan.cue, plan.obstacleDetail].some(
+      (text) => typeof text === 'string' && isMedicationChangeText(text)
+    )
+  ) {
+    return null;
+  }
   const action = sanitizeDisplayText(plan.action, 120);
   if (!action) return null;
   const motivation = sanitizeDisplayText(plan.motivation, 180);

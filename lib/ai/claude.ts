@@ -1,69 +1,58 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { CHAT_SYSTEM_PROMPT } from './chat-prompt';
 import { buildContextualPrompt, type UserContext } from './context';
 
 export type { UserContext } from './context';
 
+/**
+ * Per-call cutoff. Kept well under the mobile client's 45s request timeout so
+ * the router still has time to try the other provider.
+ */
+export const CLAUDE_TIMEOUT_MS = 20_000;
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
+  timeout: CLAUDE_TIMEOUT_MS,
+  // Retries would multiply the wait; the router falls back to Gemini instead.
+  maxRetries: 0,
 });
 
 export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5';
-
-const BASE_SYSTEM_PROMPT = `You are a compassionate self-help support coach. Your role is to:
-
-1. Listen empathetically and validate emotions
-2. Offer optional evidence-informed reflection exercises:
-   - Help users notice thought patterns
-   - Gently explore unhelpful thinking habits without labeling or diagnosing
-   - Offer reframing exercises
-   - Suggest small, practical next steps
-3. Ask Socratic questions that encourage self-reflection
-4. Provide grounding techniques when someone is overwhelmed
-5. Never diagnose, treat, or replace professional care
-6. Detect crisis situations and provide appropriate resources
-
-CRISIS DETECTION:
-If the user mentions:
-- Suicidal thoughts or self-harm
-- Immediate danger to self or others
-- Severe mental health crisis
-
-Respond with empathy AND provide:
-- Their local emergency number or nearest emergency department for immediate danger
-- 988 only when they say they are in the United States or Canada
-- A country-specific crisis directory when their location is elsewhere or unknown
-- Encouragement to contact a trusted person who can stay with them
-
-TONE:
-- Warm, non-judgmental, and supportive
-- Use "you" language (not "one should")
-- Keep responses conversational, not clinical
-- Acknowledge difficulty without minimizing
-- Celebrate small wins
-
-Keep responses focused and actionable. Ask one question at a time. Match the user's emotional energy.`;
 
 export interface Message {
   role: 'user' | 'assistant';
   content: string;
 }
 
-export async function chat(messages: Message[], userContext?: UserContext): Promise<string> {
+export type ProviderCallOptions = {
+  signal?: AbortSignal;
+};
+
+export async function chat(
+  messages: Message[],
+  userContext?: UserContext,
+  options: ProviderCallOptions = {}
+): Promise<string> {
   try {
-    const systemPrompt = buildContextualPrompt(BASE_SYSTEM_PROMPT, userContext);
-    
-    const response = await anthropic.messages.create({
-      model: process.env.CLAUDE_MODEL?.trim() || DEFAULT_CLAUDE_MODEL,
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: messages.map(m => ({
-        role: m.role,
-        content: m.content,
-      })),
-    });
+    const systemPrompt = buildContextualPrompt(CHAT_SYSTEM_PROMPT, userContext);
+
+    const response = await anthropic.messages.create(
+      {
+        model: process.env.CLAUDE_MODEL?.trim() || DEFAULT_CLAUDE_MODEL,
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: messages.map(m => ({
+          role: m.role,
+          content: m.content,
+        })),
+      },
+      { signal: options.signal, timeout: CLAUDE_TIMEOUT_MS, maxRetries: 0 }
+    );
 
     const textContent = response.content.find((c) => c.type === 'text');
-    return textContent && 'text' in textContent ? textContent.text : '';
+    const text = textContent && 'text' in textContent ? textContent.text.trim() : '';
+    if (!text) throw new Error('Claude returned an empty response');
+    return text;
   } catch (error) {
     console.error(
       'Claude API error:',
