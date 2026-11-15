@@ -52,7 +52,39 @@ async function generate() {
     .toFile(join(publicDir, "og-image.png"));
 }
 
-generate().catch((error) => {
+// Web app manifest icons (see app/manifest.ts). Run on its own with
+// `node scripts/generate-brand-assets.mjs --pwa-icons` to avoid regenerating
+// the other brand assets.
+async function generatePwaIcons() {
+  const iconsDir = join(publicDir, "icons");
+  const source = join(publicDir, "icon.png");
+  await mkdir(iconsDir, { recursive: true });
+
+  for (const size of [192, 512]) {
+    await sharp(source).resize(size, size).png().toFile(join(iconsDir, `icon-${size}.png`));
+  }
+
+  // Maskable icons can be cropped to a circle, so keep the artwork inside the
+  // central 80% safe zone and fill the rest with the icon's own edge colour.
+  const { data } = await sharp(source).raw().toBuffer({ resolveWithObject: true });
+  const background = { r: data[0], g: data[1], b: data[2], alpha: 1 };
+  const inner = 410;
+  const pad = (512 - inner) / 2;
+  await sharp(source)
+    .resize(inner, inner)
+    .extend({ top: Math.floor(pad), bottom: Math.ceil(pad), left: Math.floor(pad), right: Math.ceil(pad), background })
+    .png()
+    .toFile(join(iconsDir, "icon-maskable-512.png"));
+}
+
+const run = process.argv.includes("--pwa-icons")
+  ? generatePwaIcons
+  : async () => {
+      await generate();
+      await generatePwaIcons();
+    };
+
+run().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

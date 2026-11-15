@@ -27,7 +27,16 @@ const quoteMigrationSource = await readFile(
   ),
   'utf8'
 );
-const source = [resourceSource, storySource, quoteMigrationSource].join('\n');
+// Only the "Resources we trust" partner links from the landing page; the
+// rest of that file is marketing copy checked elsewhere.
+const landingSource = await readFile(join(root, 'lib', 'landing-content.ts'), 'utf8');
+const trustedResourcesSource =
+  landingSource.match(/export const TRUSTED_RESOURCES = \[[\s\S]*?\] as const;/)?.[0] ?? '';
+if (!trustedResourcesSource) {
+  console.error('FAIL TRUSTED_RESOURCES block not found in lib/landing-content.ts');
+  process.exit(1);
+}
+const source = [resourceSource, storySource, quoteMigrationSource, trustedResourcesSource].join('\n');
 
 const rawStaticUrls = source.match(/https:\/\/[^\s'"`$]+/g) ?? [];
 const countryBase =

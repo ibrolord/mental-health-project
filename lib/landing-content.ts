@@ -55,3 +55,16 @@ export const SUPPORT_AREAS = [
     image: 'today', alt: 'MHtoolkit Today screen with a link to personalized Advisor guidance', href: '/chat', linkLabel: 'Explore AI support',
   },
 ] as const;
+
+// External organisations we point people to. Add new entries here; the home
+// page renders one card per entry. Links open in a new tab.
+export const TRUSTED_RESOURCES = [
+  {
+    id: 'space-to-breathe',
+    name: 'Space to Breathe Support Hub',
+    by: 'Maggie Learoyd',
+    region: 'UK',
+    description: "A UK therapy practice's hub of wellbeing resources.",
+    url: 'https://www.spacetobreathetherapy.co.uk/welcome',
+  },
+] as const;

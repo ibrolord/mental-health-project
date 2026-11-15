@@ -168,7 +168,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [...PRIMARY_NAV, ...MORE_ITEMS];
  * signed-in app chrome.
  */
 const PUBLIC_PREFIXES = ['/onboarding', '/auth'];
-const PUBLIC_EXACT = ['/', '/privacy', '/support', '/research'];
+const PUBLIC_EXACT = ['/', '/daily-reset', '/privacy', '/support', '/research'];
 
 export function isPublicRoute(pathname: string): boolean {
   return (

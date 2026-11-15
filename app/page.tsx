@@ -1,8 +1,8 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowDown, ArrowUpRight, Check, HeartHandshake, LockKeyhole, Smartphone } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUpRight, Check, HeartHandshake, LockKeyhole, Smartphone, Sparkles } from 'lucide-react';
 import { SupportExplorer } from '@/components/launch/support-explorer';
-import { APP_STORE_URL, LANDING_EVIDENCE, SOURCE_REPOSITORY } from '@/lib/landing-content';
+import { APP_STORE_URL, LANDING_EVIDENCE, SOURCE_REPOSITORY, TRUSTED_RESOURCES } from '@/lib/landing-content';
 import styles from './landing.module.css';
 
 export default function Home() {
@@ -23,12 +23,14 @@ export default function Home() {
       <section id="main-content" className={`${styles.wrap} ${styles.hero}`}>
         <div className={styles.heroCopy}>
           <p className={styles.eyebrow}>FREE, OPEN-SOURCE MENTAL-HEALTH SUPPORT</p>
-          <h1>Make room for <em>your mental health.</em></h1>
-          <p className={styles.lead}>When life feels like a lot, finding support shouldn&apos;t. Understand your feelings, build a little structure, and find a next step that fits today.</p>
+          <h1>Burned out? <em>A 2-minute daily reset</em></h1>
+          <p className={styles.lead}>Check in, write one line, pick one small step. Free, open-source, no ads.</p>
           <div className={styles.actions}>
-            <a href={APP_STORE_URL} className={styles.primary}><Smartphone size={20} aria-hidden="true" />Get MHtoolkit for iOS<ArrowUpRight size={18} aria-hidden="true" /></a>
-            <Link href="/onboarding" className={styles.textLink}>Try it in your browser <ArrowUpRight size={16} aria-hidden="true" /></Link>
+            <Link href="/daily-reset" className={styles.primary}><Sparkles size={20} aria-hidden="true" />Start your 2-minute reset<ArrowRight size={18} aria-hidden="true" /></Link>
+            <a href={APP_STORE_URL} className={styles.textLink}><Smartphone size={16} aria-hidden="true" />Get MHtoolkit for iOS <ArrowUpRight size={16} aria-hidden="true" /></a>
+            <Link href="/onboarding" className={styles.textLink}>Try the full web app <ArrowUpRight size={16} aria-hidden="true" /></Link>
           </div>
+          <p className={styles.androidHint}>On Android? Use it in your browser. You can add it to your home screen from the browser menu.</p>
           <ul className={styles.trust} aria-label="What to expect">
             {['Free to use', 'No ads', 'Start without an email'].map(item => <li key={item}><Check size={15} aria-hidden="true" />{item}</li>)}
           </ul>
@@ -90,6 +92,20 @@ export default function Home() {
         <details><summary>Do I need to create an account?</summary><p>You can start anonymously. Create an account when you want to keep your data across devices or connect with an accountability partner.</p></details>
         <details><summary>How does AI support work?</summary><p>Advisor offers a practical next step from the context you choose to share. AI chat is also available if you want to talk things through. AI processing is optional.</p></details>
         <details><summary>Can I use this alongside professional support?</summary><p>Yes. MHtoolkit provides everyday self-help tools, not diagnosis, treatment, or emergency care. You can prepare a Visit Brief to review and share with a professional. For urgent help, <Link href="/resources">find local support</Link>.</p></details>
+      </section>
+      <section className={`${styles.wrap} ${styles.trusted}`} aria-labelledby="trusted-title">
+        <p className={styles.eyebrow}>MORE SUPPORT</p>
+        <h2 id="trusted-title">Resources we trust</h2>
+        <ul className={styles.trustedList}>
+          {TRUSTED_RESOURCES.map(resource => <li key={resource.id}>
+            <a href={resource.url} target="_blank" rel="noopener noreferrer" className={styles.trustedCard}>
+              <h3>{resource.name}</h3>
+              <p className={styles.trustedBy}>By {resource.by} ({resource.region})</p>
+              <p>{resource.description}</p>
+              <span className={styles.trustedLink}>Visit site <ArrowUpRight size={14} aria-hidden="true" /><span className="sr-only"> (opens in a new tab)</span></span>
+            </a>
+          </li>)}
+        </ul>
       </section>
       <section className={`${styles.wrap} ${styles.download}`} aria-labelledby="download-title">
         <Image src="/icon.png" alt="" width={64} height={64} />
