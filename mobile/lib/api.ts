@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { fetchWithTimeout } from './request';
+import { DEFAULT_API_TIMEOUT_MS, fetchWithTimeout } from './request';
 import { Platform } from 'react-native';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';
@@ -24,6 +24,8 @@ export async function apiRequest<T = any>(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Client-Platform': Platform.OS === 'android' ? 'android' : 'ios',
+    // Lets the server fit model primary + fallback inside this wait.
+    'X-Client-Timeout-Ms': String(options.timeoutMs ?? DEFAULT_API_TIMEOUT_MS),
   };
 
   const { data: { session } } = options.accessToken && options.expectedUserId === undefined

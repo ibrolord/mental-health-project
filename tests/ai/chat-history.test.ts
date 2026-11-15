@@ -6,10 +6,16 @@ import { CHAT_LIMITS, chatRequestSchema } from '../../lib/ai/chat-validation';
 import {
   buildChatRequestMessages,
   CHAT_ASSISTANT_MESSAGE_MAX_CHARS,
+  CHAT_MAX_MESSAGES,
+  CHAT_TOTAL_MAX_CHARS,
   CHAT_USER_MESSAGE_MAX_CHARS,
   windowFromUserTurn,
   type ChatHistoryMessage,
 } from '../../mobile/lib/chat-history';
+import { buildChatRequestMessages as webBuildChatRequestMessages } from '../../lib/chat-request-history';
+
+const total = (messages: readonly ChatHistoryMessage[]) =>
+  messages.reduce((sum, message) => sum + message.content.length, 0);
 
 function conversation(turns: number, userChars = 40, assistantChars = 80): ChatHistoryMessage[] {
   const messages: ChatHistoryMessage[] = [];
@@ -141,5 +147,68 @@ describe('mobile chat history helpers', () => {
     const voice = readFileSync(resolve(process.cwd(), 'mobile/app/voice.tsx'), 'utf8');
     expect(voice).not.toContain('.slice(-12)');
     expect(voice.match(/buildChatRequestMessages\(/g)?.length).toBe(2);
+  });
+
+  it('match the server message-count and total character limits', () => {
+    expect(CHAT_MAX_MESSAGES).toBe(CHAT_LIMITS.messages);
+    expect(CHAT_TOTAL_MAX_CHARS).toBe(CHAT_LIMITS.totalChars);
+  });
+
+  // Codex review of 26f5a58: 61 alternating 2,000-character messages are
+  // 122,000 characters, over the server's total limit, and were rejected.
+  it('trims 61 alternating 2,000-character messages to a valid request', () => {
+    const messages = conversation(31, 2_000, 2_000);
+    expect(messages).toHaveLength(61);
+    expect(chatRequestSchema.safeParse({ messages }).success).toBe(false);
+
+    const request = buildChatRequestMessages(messages);
+    expectValidShape(request);
+    expect(request.at(-1)).toEqual(messages.at(-1));
+    expect(total(request)).toBeLessThanOrEqual(CHAT_LIMITS.totalChars);
+    expect(chatRequestSchema.safeParse({ messages: request }).success).toBe(true);
+    // Retrying the same history is trimmed the same way, never kept oversized.
+    expect(buildChatRequestMessages([...messages])).toEqual(request);
+  });
+
+  it('keeps every long conversation under all server limits', () => {
+    for (const [turns, userChars, assistantChars] of [
+      [31, 2_000, 2_000],
+      [40, 4_000, 8_000],
+      [150, 4_000, 4_000],
+      [120, 100, 8_000],
+      [500, 10, 10],
+    ] as const) {
+      const request = buildChatRequestMessages(conversation(turns, userChars, assistantChars));
+      expectValidShape(request);
+      expect(request.length).toBeLessThanOrEqual(CHAT_LIMITS.messages);
+      expect(total(request)).toBeLessThanOrEqual(CHAT_LIMITS.totalChars);
+      expect(chatRequestSchema.safeParse({ messages: request }).success).toBe(true);
+    }
+  });
+
+  it('applies a character budget in windowFromUserTurn without losing the newest message', () => {
+    const messages = conversation(5, 100, 100);
+    const window = windowFromUserTurn(messages, 200, 250);
+    expectValidShape(window);
+    expect(window.at(-1)).toEqual(messages.at(-1));
+    expect(total(window)).toBeLessThanOrEqual(250);
+    expect(windowFromUserTurn(messages, 200, 1)).toEqual([messages.at(-1)]);
+  });
+});
+
+describe('web chat history helpers', () => {
+  it('is a byte-identical copy of the mobile helper', () => {
+    const mobileSource = readFileSync(resolve(process.cwd(), 'mobile/lib/chat-history.ts'), 'utf8');
+    const webSource = readFileSync(resolve(process.cwd(), 'lib/chat-request-history.ts'), 'utf8');
+    expect(webSource).toBe(mobileSource);
+    expect(webBuildChatRequestMessages(conversation(31, 2_000, 2_000))).toEqual(
+      buildChatRequestMessages(conversation(31, 2_000, 2_000))
+    );
+  });
+
+  it('builds the web chat request through the history helper', () => {
+    const page = readFileSync(resolve(process.cwd(), 'app/chat/page.tsx'), 'utf8');
+    expect(page).toContain('messages: buildChatRequestMessages(nextMessages)');
+    expect(page).not.toMatch(/messages: nextMessages,/);
   });
 });

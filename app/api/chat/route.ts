@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { chat } from '@/lib/ai/model-router';
+import { chat, ChatCancelledError, CHAT_DEADLINE_MS } from '@/lib/ai/model-router';
+import { remainingMs, serverDeadlineMs } from '@/lib/ai/request-deadline';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
 import { chatRequestSchema } from '@/lib/ai/chat-validation';
 import { createReportTokenIfConfigured, subjectForAuth } from '@/lib/ai/report-token';
@@ -15,6 +16,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: NextRequest) {
+  const deadlineAt = Date.now() + serverDeadlineMs(request.headers, CHAT_DEADLINE_MS);
   try {
     const auth = await verifyAuth(request);
     if (!auth.valid) return unauthorizedResponse();
@@ -34,7 +36,13 @@ export async function POST(request: NextRequest) {
         { status: 503, headers: corsHeaders() }
       );
     }
-    const { response, model } = await chat(messages, userContext);
+    const { response, model } = await chat(messages, userContext, {
+      // Client disconnects cancel the model call and skip fallback.
+      signal: request.signal,
+      // Voice waits 20-30s and text chat 45s; budget both attempts inside it.
+      // Measured from arrival, so auth and parsing count against it.
+      deadlineMs: remainingMs(deadlineAt),
+    });
     const report = createReportTokenIfConfigured({
       subject: subjectForAuth(auth),
       response,
@@ -46,6 +54,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ response, model, ...(report ?? {}) }, { headers: corsHeaders() });
   } catch (error) {
+    if (error instanceof ChatCancelledError) {
+      // 499: client closed the request. Nobody is waiting for the body.
+      return new NextResponse(null, { status: 499, headers: corsHeaders() });
+    }
     if (error instanceof RequestBodyError) {
       return NextResponse.json({ error: error.message }, { status: error.status, headers: corsHeaders() });
     }

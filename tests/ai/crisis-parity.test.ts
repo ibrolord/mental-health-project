@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { containsExplicitCrisis } from '../../lib/ai/crisis';
 import {
+  crisisTextVariants,
+  legacyNormalizeCrisisText,
   normalizeCrisisText,
   SHARED_CRISIS_PATTERNS as SERVER_PATTERNS,
 } from '../../lib/ai/crisis-patterns';
@@ -144,5 +146,55 @@ describe('normalizeCrisisText', () => {
 
   it('keeps apostrophes and hyphens used by patterns', () => {
     expect(normalizeCrisisText("I'm self-harming!")).toBe("i'm self-harming");
+  });
+});
+
+describe('symbols between words never hide crisis language', () => {
+  // Codex review of 26f5a58: these were caught by the pre-multilingual server
+  // check (ASCII normalisation turned symbols into spaces) and must stay caught.
+  const EMOJI_JOINED = [
+    'I want to💔die',
+    'kill🔪myself',
+    'i want to 💔die',
+    'I want to❤️die',
+    'I want to☠die',
+    'kill✂️myself',
+    'I want to end🖤my🖤life',
+    'I am going to⚡kill myself',
+    'thinking about🙃suicide',
+    'quiero💔morir',
+    'não quero💔viver',
+    'je veux🥀mourir',
+    'मरना💔चाहता',
+    '我想死😭',
+  ];
+
+  it.each(EMOJI_JOINED)('server detects: %s', (phrase) => {
+    expect(server(phrase)).toBe(true);
+  });
+
+  it.each(EMOJI_JOINED)('mobile detects: %s', (phrase) => {
+    expect(mobile(phrase)).toBe(true);
+  });
+
+  it('every shared phrase survives emoji between its words on both checks', () => {
+    for (const phrase of SHARED_CRISIS_PHRASES) {
+      const joined = phrase.replace(/ /g, '💔');
+      expect(server(joined), joined).toBe(true);
+      expect(mobile(joined), joined).toBe(true);
+    }
+  });
+
+  it('keeps the legacy ASCII form among the variants checked', () => {
+    expect(crisisTextVariants('kill🔪myself')).toContain(legacyNormalizeCrisisText('kill🔪myself'));
+    expect(legacyNormalizeCrisisText('kill🔪myself')).toBe('kill myself');
+    expect(crisisTextVariants('quiero💔morir')).toContain('quiero morir');
+  });
+
+  it('still ignores ordinary emoji-laden messages', () => {
+    for (const phrase of ['I love this 💔 song', 'feeling 🙂 today', 'kill🔥the presentation tomorrow']) {
+      expect(server(phrase), phrase).toBe(false);
+      expect(mobile(phrase), phrase).toBe(false);
+    }
   });
 });

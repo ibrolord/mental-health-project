@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
-import { createModelAdvisorRecommendation } from '@/lib/ai/advisor-model';
+import { ADVISOR_DEADLINE_MS, createModelAdvisorRecommendation } from '@/lib/ai/advisor-model';
+import { ChatCancelledError } from '@/lib/ai/model-router';
+import { remainingMs, serverDeadlineMs } from '@/lib/ai/request-deadline';
 import { advisorModelRequestSchema } from '@/lib/ai/advisor-validation';
 import { readBoundedJson, RequestBodyError } from '@/lib/ai/request-body';
 import { isHealthAiEnabled } from '@/lib/ai/health-ai-gate';
@@ -12,6 +14,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: NextRequest) {
+  const deadlineAt = Date.now() + serverDeadlineMs(request.headers, ADVISOR_DEADLINE_MS);
   try {
     const auth = await verifyAuth(request);
     if (!auth.valid) return unauthorizedResponse();
@@ -36,9 +39,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await createModelAdvisorRecommendation(parsed.data);
+    const result = await createModelAdvisorRecommendation(parsed.data, {
+      // Client disconnects cancel the model call and skip fallback.
+      signal: request.signal,
+      // Auth and parsing already used part of the client's 6s budget.
+      deadlineMs: remainingMs(deadlineAt),
+    });
     return NextResponse.json(result, { headers: corsHeaders() });
   } catch (error) {
+    if (error instanceof ChatCancelledError) {
+      // 499: client closed the request. Nobody is waiting for the body.
+      return new NextResponse(null, { status: 499, headers: corsHeaders() });
+    }
     if (error instanceof RequestBodyError) {
       return NextResponse.json(
         { error: error.message },

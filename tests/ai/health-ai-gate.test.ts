@@ -18,8 +18,9 @@ describe('Apple Health AI release gate', () => {
     );
 
     expect(route.indexOf('!isHealthAiEnabled()')).toBeGreaterThan(-1);
+    expect(route.indexOf('await chat(messages, userContext')).toBeGreaterThan(-1);
     expect(route.indexOf('!isHealthAiEnabled()')).toBeLessThan(
-      route.indexOf('await chat(messages, userContext)')
+      route.indexOf('await chat(messages, userContext')
     );
   });
 
@@ -31,8 +32,9 @@ describe('Apple Health AI release gate', () => {
 
     expect(route.indexOf('parsed.data.appleHealthSummary')).toBeGreaterThan(-1);
     expect(route.indexOf('!isHealthAiEnabled()')).toBeGreaterThan(-1);
+    expect(route.indexOf('createModelAdvisorRecommendation(parsed.data')).toBeGreaterThan(-1);
     expect(route.indexOf('!isHealthAiEnabled()')).toBeLessThan(
-      route.indexOf('createModelAdvisorRecommendation(parsed.data)')
+      route.indexOf('createModelAdvisorRecommendation(parsed.data')
     );
   });
 });

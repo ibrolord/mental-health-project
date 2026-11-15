@@ -815,6 +815,19 @@ describe('mobile Advisor recommendation engine', () => {
     'Skip my evening pills',
     'Taper off sertraline',
     'Take a double dose tonight',
+    // Codex review of 26f5a58: dose amounts and starting a medication.
+    'stop taking 50mg sertraline',
+    'Stop taking 50 mg sertraline',
+    'double my 50mg sertraline',
+    'Cut down to half my 100mg pills',
+    'Start taking sertraline',
+    'start 50mg sertraline tomorrow',
+    'Restart my lithium',
+    'Go up to 100mg',
+    'increase it to 150 mg',
+    'Take 2 extra pills tonight',
+    'Ask my doctor about sleep, then stop taking sertraline',
+    'quit my antidepressants',
   ])('never turns a medication change into an action: %s', (title) => {
     const goalOnly = createAdvisorRecommendation(
       context({ goals: [{ id: 'goal-med', title, dueAt: '2026-08-14T09:00:00.000Z' }] })
@@ -855,6 +868,17 @@ describe('mobile Advisor recommendation engine', () => {
     'Stop forgetting to take my meds',
     'Pick up my prescription',
     'Remember my evening pills',
+    // Adherence and asking a prescriber are supportive, not a change.
+    'Stop forgetting my medication',
+    'stop missing my evening meds',
+    'Stop skipping my meds',
+    "Don't skip my pills",
+    'Start taking my meds on time',
+    'Start taking my medication as prescribed',
+    'Ask my doctor whether to stop taking sertraline',
+    'Talk to my psychiatrist about lowering my dose',
+    'Discuss stopping sertraline with my doctor',
+    'Start my day with a walk',
   ])('keeps benign medication reminders working: %s', (title) => {
     const result = createAdvisorRecommendation(
       context({ habits: [{ id: 'habit-1', name: title, tinyStep: null, completedToday: false }] })

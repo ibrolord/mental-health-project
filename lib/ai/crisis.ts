@@ -1,5 +1,5 @@
 import type { Message } from './claude';
-import { matchesSharedCrisisPattern, normalizeCrisisText } from './crisis-patterns';
+import { crisisTextVariants, matchesSharedCrisisPattern } from './crisis-patterns';
 
 /**
  * Deterministic reply used instead of a model whenever crisis language is
@@ -49,18 +49,20 @@ const nonCurrentContexts = [
   /\bsuicide\s+(?:prevention|awareness|statistics|research)\b/,
 ];
 
-// Unicode-safe: keeps every script and folds Latin accents and compatibility
-// forms. Shared with the mobile on-device check; see crisis-patterns.ts.
-const normalize = normalizeCrisisText;
-
 export function containsExplicitCrisis(messages: Message[]): boolean {
   const recentUserText = messages
     .filter((message) => message.role === 'user')
     .slice(-3)
     .map((message) => message.content)
     .join(' ');
-  const normalized = normalize(recentUserText);
 
+  // Unicode-safe, symbol-stripped and legacy ASCII forms all run, and any
+  // match is a crisis. The legacy form keeps every detection the
+  // pre-multilingual check had. Shared with mobile; see crisis-patterns.ts.
+  return crisisTextVariants(recentUserText).some(matchesNormalized);
+}
+
+function matchesNormalized(normalized: string): boolean {
   if (!normalized) return false;
   if (explicitIntentPatterns.some((pattern) => pattern.test(normalized))) return true;
   if (matchesSharedCrisisPattern(normalized)) return true;

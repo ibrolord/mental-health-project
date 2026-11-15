@@ -208,22 +208,87 @@ const UNSAFE_ACTION_FRAGMENT = /\b(?:suicid(?:e|al)|self[ -]?harm|die(?:\s+(?:to
 // matched and keep working.
 const MEDICATION_TERM =
   '(?:meds|medication|medications|medicine|medicines|pills|tablets|dose|doses|dosage|antidepressants?|ssris?|snris?|lithium|insulin|sertraline|fluoxetine|escitalopram|citalopram|venlafaxine|bupropion|quetiapine|olanzapine|aripiprazole|lamotrigine|zoloft|prozac|lexapro|wellbutrin|seroquel|abilify|adderall|ritalin|xanax|ativan|klonopin|valium|benzos?)';
+// A dose amount such as "50mg", "0.5 mg" or "2 x 20mg".
+const DOSE_AMOUNT =
+  '\\d+(?:[.,]\\d+)?\\s*(?:x\\s*\\d+(?:[.,]\\d+)?\\s*)?(?:mg|mcg|µg|ug|g|ml|iu|units?|milligrams?|micrograms?)?';
+// Up to four words or dose amounts between the verb and the medication
+// ("to half my 100mg pills"). Adherence verbs are excluded so "stop
+// forgetting my medication" is not read as "stop ... medication".
+const MEDICATION_FILLER = `(?:(?!(?:forgetting|forget|missing|remembering|being\\s+late)\\b)(?:[a-z]+|${DOSE_AMOUNT})\\s+){0,4}?`;
+const MEDICATION_DETERMINER =
+  '(?:my\\s+|the\\s+|a\\s+|an\\s+|some\\s+|all\\s+(?:of\\s+)?my\\s+|some\\s+of\\s+my\\s+|half\\s+(?:of\\s+)?my\\s+)?';
+const CHANGE_VERB =
+  '(?:stop|stopping|quit|quitting|ditch|ditching|come\\s+off|coming\\s+off|get\\s+off|getting\\s+off|go\\s+off|going\\s+off|wean\\s+(?:myself\\s+)?off|taper(?:ing)?(?:\\s+off)?|skip|skipping|cut\\s+(?:down|back)(?:\\s+on)?|reduce|reducing|lower|lowering|increase|increasing|raise|raising|double|doubling|triple|tripling|halve|halving|change|changing|switch|switching|adjust|adjusting|no\\s+more)';
+// Starting or restarting a medication is also a prescriber decision.
+// "Start taking my meds on time" is adherence and stays allowed.
+const START_VERB =
+  '(?:start|starting|begin|beginning|restart|restarting|resume|resuming|put\\s+myself\\s+on)';
+// Tighter than MEDICATION_FILLER so "start my day with meds" is not matched.
+const START_FILLER = `(?:${DOSE_AMOUNT}\\s+)?(?:(?!(?:with|after|before|and)\\b)[a-z]+\\s+)?`;
+const ADHERENCE_TAIL =
+  '(?!\\s+(?:again\\s+)?(?:on\\s+time|as\\s+(?:prescribed|directed|instructed)|regularly|consistently|every\\s+(?:day|morning|evening|night)|each\\s+(?:day|morning|evening|night)|daily|with\\s+(?:food|breakfast|dinner|water)|at\\s+the\\s+same\\s+time)\\b)';
+const DOSE_UNIT = '(?:mg|mcg|µg|ug|ml|iu|units?|milligrams?|micrograms?|pills?|tablets?|capsules?)';
 const MEDICATION_CHANGE = [
   new RegExp(
-    `\\b(?:stop|stopping|quit|quitting|ditch|ditching|come\\s+off|coming\\s+off|get\\s+off|getting\\s+off|go\\s+off|going\\s+off|wean\\s+(?:myself\\s+)?off|taper(?:ing)?(?:\\s+off)?|skip|skipping|cut\\s+(?:down|back)(?:\\s+on)?|reduce|reducing|lower|lowering|increase|increasing|raise|raising|double|doubling|triple|tripling|halve|halving|change|changing|switch|switching|adjust|adjusting|no\\s+more)\\s+(?:taking\\s+)?(?:my\\s+|the\\s+|all\\s+(?:of\\s+)?my\\s+|some\\s+of\\s+my\\s+)?(?:[a-z]+\\s+){0,2}?${MEDICATION_TERM}\\b`,
+    `\\b${CHANGE_VERB}\\s+(?:taking\\s+|using\\s+)?${MEDICATION_DETERMINER}${MEDICATION_FILLER}${MEDICATION_TERM}\\b`,
+    'i'
+  ),
+  new RegExp(
+    `\\b${START_VERB}\\s+(?:taking\\s+|using\\s+|on\\s+)?${MEDICATION_DETERMINER}${START_FILLER}${MEDICATION_TERM}\\b${ADHERENCE_TAIL}`,
     'i'
   ),
   new RegExp(`\\boff\\s+(?:of\\s+)?(?:all\\s+)?my\\s+(?:[a-z]+\\s+)?${MEDICATION_TERM}\\b`, 'i'),
   /\b(?:twice|double|triple|extra)\s+(?:the\s+|my\s+)?(?:[a-z]+\s+)?(?:dose|doses|dosage)\b/i,
+  // Moving to a new amount: "go up to 100mg", "increase it by 25 mg",
+  // "take 2 extra pills".
+  new RegExp(
+    `\\b(?:go|going|move|moving|bump|bumping|step|stepping|drop|dropping|come|coming)\\s+(?:up|down)\\s+(?:to\\s+|by\\s+)?\\d+(?:[.,]\\d+)?\\s*${DOSE_UNIT}\\b`,
+    'i'
+  ),
+  new RegExp(
+    `\\b${CHANGE_VERB}\\s+(?:it|my\\s+dose|the\\s+dose|my\\s+dosage)?\\s*(?:to|by)\\s+\\d+(?:[.,]\\d+)?\\s*${DOSE_UNIT}\\b`,
+    'i'
+  ),
+  new RegExp(`\\btake\\s+(?:\\d+|an?)\\s+(?:extra|more|additional)\\s+${DOSE_UNIT}\\b`, 'i'),
 ] as const;
+
+// Asking a clinician about a change is the safe action, not the change
+// itself: "ask my doctor whether to stop taking sertraline". Only the clause
+// that names the clinician is exempt; "ask my doctor and stop my meds" is not.
+const CLINICIAN =
+  '(?:doctor|dr|gp|prescriber|psychiatrist|pharmacist|nurse|nurse\\s+practitioner|np|clinician|provider|care\\s+team|therapist|physician|specialist)';
+const CLINICIAN_CONSULTATION = new RegExp(
+  `\\b(?:(?:ask|asking|talk\\s+to|talking\\s+to|speak\\s+(?:to|with)|speaking\\s+(?:to|with)|check\\s+with|checking\\s+with|call|calling|email|message|see|book\\s+(?:an?\\s+)?(?:appointment|appt)\\s+with|consult|consulting)\\s+(?:with\\s+)?(?:my\\s+|a\\s+|the\\s+)?${CLINICIAN}\\b|\\b(?:discuss|discussing|talk\\s+about|ask\\s+about|bring\\s+up)\\b.*\\bwith\\s+(?:my\\s+|a\\s+|the\\s+)?${CLINICIAN}\\b)`,
+  'i'
+);
+// Clause breaks: punctuation and joining words that start a new instruction.
+const MEDICATION_CLAUSE_BREAK = /[.;!?,\n]+|\b(?:and|then|but|plus)\b/i;
+// "Stop forgetting / missing / skipping my meds" is about taking medication
+// as prescribed. The phrase is replaced before matching so the change verbs
+// inside it ("stop", "skip") are not read as a change.
+const ADHERENCE_PHRASE =
+  /\b(?:stop|stopping|quit|quitting|no\s+more|avoid|avoiding|don'?t|do\s+not|never)\s+(?:forgetting|forget|missing|miss|skipping|skip|being\s+late\s+(?:with|on|taking))\b/gi;
+
+function describesMedicationChange(text: string): boolean {
+  return (
+    MEDICATION_CHANGE.some((pattern) => pattern.test(text)) &&
+    !CLINICIAN_CONSULTATION.test(text)
+  );
+}
 
 export function isMedicationChangeText(value: string): boolean {
   const normalized = value
     .normalize('NFKC')
     .replace(/[​-‍⁠﻿]/g, '')
     .replace(/[’‘]/g, "'")
-    .replace(/\s+/g, ' ');
-  return MEDICATION_CHANGE.some((pattern) => pattern.test(normalized));
+    .replace(/\s+/g, ' ')
+    .replace(ADHERENCE_PHRASE, 'adhere to');
+  // The whole text and each clause are checked. A clinician named in one
+  // clause exempts only that clause, so "ask my doctor, then stop my meds"
+  // is still a change.
+  return [normalized, ...normalized.split(MEDICATION_CLAUSE_BREAK)].some(
+    (text) => text.trim() !== '' && describesMedicationChange(text)
+  );
 }
 
 function average(values: readonly number[]): number | null {

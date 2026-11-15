@@ -5,7 +5,10 @@ const { routedChat } = vi.hoisted(() => ({ routedChat: vi.fn() }));
 
 vi.mock('../../lib/ai/model-router', () => ({ chat: routedChat }));
 
-import { createModelAdvisorRecommendation } from '../../lib/ai/advisor-model';
+import {
+  ADVISOR_DEADLINE_MS,
+  createModelAdvisorRecommendation,
+} from '../../lib/ai/advisor-model';
 
 function request(): AdvisorModelRequest {
   return {
@@ -87,8 +90,38 @@ describe('model-backed Advisor selection', () => {
     expect(routedChat).toHaveBeenCalledWith(
       expect.any(Array),
       undefined,
-      { preferredProvider: 'gemini' }
+      { preferredProvider: 'gemini', signal: undefined, deadlineMs: ADVISOR_DEADLINE_MS }
     );
+  });
+
+  it('passes cancellation through and never exceeds the Advisor deadline', async () => {
+    routedChat.mockResolvedValue({
+      response: JSON.stringify({
+        candidateId: 'habit:walk',
+        observations: ['Your walk is still open today.'],
+        signalIds: [],
+        focus: 'steady',
+        followThroughId: null,
+      }),
+      model: 'gemini',
+    });
+    const controller = new AbortController();
+
+    await createModelAdvisorRecommendation(request(), {
+      signal: controller.signal,
+      deadlineMs: 60_000,
+    }).catch(() => undefined);
+    await createModelAdvisorRecommendation(request(), { deadlineMs: 3_000 }).catch(
+      () => undefined
+    );
+
+    expect(routedChat.mock.calls[0][2]).toMatchObject({
+      signal: controller.signal,
+      deadlineMs: ADVISOR_DEADLINE_MS,
+    });
+    expect(routedChat.mock.calls[1][2]).toMatchObject({ deadlineMs: 3_000 });
+    // The mobile Advisor client gives up after 6s.
+    expect(ADVISOR_DEADLINE_MS).toBeLessThan(6_000);
   });
 
   it('rejects provenance signals that do not support the selected candidate', async () => {

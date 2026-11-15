@@ -38,6 +38,7 @@ import {
   saveFullContextPreference,
 } from '@/lib/ai/full-context-preference';
 import { apiRequest } from '@/lib/api/client';
+import { buildChatRequestMessages } from '@/lib/chat-request-history';
 import { useDataContext } from '@/lib/hooks/use-data-context';
 import { supabase } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
@@ -512,7 +513,9 @@ export default function ChatPage() {
       const result = await apiRequest(
         '/api/chat',
         {
-          messages: nextMessages,
+          // Long chats are trimmed to the server's request limits (oldest
+          // turns first) so they are never rejected as too large.
+          messages: buildChatRequestMessages(nextMessages),
           userContext: effectiveContext,
         },
         { signal: controller.signal }

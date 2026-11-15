@@ -1,4 +1,4 @@
-import { matchesSharedCrisisPattern, normalizeCrisisText } from './crisis-patterns';
+import { crisisTextVariants, matchesSharedCrisisText } from './crisis-patterns';
 
 export const LOCAL_SAFETY_MESSAGE =
   "Thank you for telling me. I can’t provide emergency help, but I can help you reach a person now.";
@@ -36,6 +36,13 @@ function clauses(text: string): string[] {
     .filter(Boolean);
 }
 
+function hasExplicitIntent(text: string): boolean {
+  return clauses(text).some((clause) => {
+    if (NEGATED_INTENT.some((pattern) => pattern.test(clause))) return false;
+    return URGENT_INTENT.some((pattern) => pattern.test(clause));
+  });
+}
+
 /**
  * Detects crisis statements that need an immediate, non-network safety path.
  * It is not a risk score or diagnostic classifier.
@@ -48,9 +55,12 @@ function clauses(text: string): string[] {
  *    negation filter, so they can only add matches.
  */
 export function hasExplicitUrgentSafetyLanguage(text: string): boolean {
-  const explicit = clauses(text).some((clause) => {
-    if (NEGATED_INTENT.some((pattern) => pattern.test(clause))) return false;
-    return URGENT_INTENT.some((pattern) => pattern.test(clause));
-  });
-  return explicit || matchesSharedCrisisPattern(normalizeCrisisText(text));
+  // The raw text keeps its punctuation for clause splitting. The normalised
+  // forms also run, so emoji or symbols between words ("kill🔪myself") cannot
+  // hide a statement. Any form matching is enough.
+  return (
+    hasExplicitIntent(text) ||
+    crisisTextVariants(text).some(hasExplicitIntent) ||
+    matchesSharedCrisisText(text)
+  );
 }

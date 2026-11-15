@@ -1268,6 +1268,8 @@ export default function VoiceSupportScreen() {
         headers: {
           ...chatHeaders,
           'Content-Type': 'application/json',
+          // Lets the server fit model primary + fallback inside this wait.
+          'X-Client-Timeout-Ms': String(MAX_CHAT_REQUEST_MS),
         },
         body: JSON.stringify({
           messages: buildChatRequestMessages(nextMessages, VOICE_HISTORY_MESSAGES),

@@ -42,6 +42,43 @@ export function normalizeCrisisText(value: string): string {
     .trim();
 }
 
+// Emoji and pictographs (surrogate pairs, variation selectors, keycap marks)
+// and BMP symbol blocks (arrows, dingbats, misc symbols). Hermes-safe: no `u`
+// flag is needed because surrogate halves are matched individually.
+const SYMBOLS = /[\uD800-\uDFFF︀-️⃐-⃿←-⯿]/g;
+
+/**
+ * The pre-multilingual normaliser: anything outside ASCII letters, digits,
+ * apostrophes and hyphens becomes a space. Kept as an extra pass so wording
+ * it caught (for example "kill🔪myself") is never lost to Unicode handling.
+ */
+export function legacyNormalizeCrisisText(value: string): string {
+  return value
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/[^a-z0-9'\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Every normalised form a crisis check should test. A match in any one of
+ * them counts, so adding a form can only add detections:
+ * 1. Unicode-safe normalisation (all scripts kept).
+ * 2. The same with emoji and symbols turned into spaces, so "want to💔die"
+ *    and "quiero💔morir" are read as separate words.
+ * 3. The legacy ASCII normalisation used before multilingual support.
+ */
+export function crisisTextVariants(value: string): string[] {
+  const variants = [
+    normalizeCrisisText(value),
+    normalizeCrisisText(value.replace(SYMBOLS, ' ')),
+    legacyNormalizeCrisisText(value),
+  ].filter(Boolean);
+  return variants.filter((variant, index) => variants.indexOf(variant) === index);
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -176,8 +213,16 @@ export const SHARED_CRISIS_PATTERNS: readonly RegExp[] = [
   ...CHINESE_PATTERNS,
 ];
 
-/** `normalized` must already be the output of `normalizeCrisisText`. */
+/**
+ * `normalized` must already be one of the forms from `crisisTextVariants`
+ * (or `normalizeCrisisText`).
+ */
 export function matchesSharedCrisisPattern(normalized: string): boolean {
   if (!normalized) return false;
   return SHARED_CRISIS_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+/** Raw user text in; true when any normalised form matches a shared pattern. */
+export function matchesSharedCrisisText(value: string): boolean {
+  return crisisTextVariants(value).some(matchesSharedCrisisPattern);
 }

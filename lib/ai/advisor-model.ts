@@ -50,8 +50,15 @@ function signalSupportsCandidate(
   return false;
 }
 
+/**
+ * Overall model deadline for Advisor. The mobile Advisor client waits 6s
+ * (ADVISOR_MODEL_TIMEOUT_MS) and falls back to its on-device card after that.
+ */
+export const ADVISOR_DEADLINE_MS = 4_800;
+
 export async function createModelAdvisorRecommendation(
-  request: AdvisorModelRequest
+  request: AdvisorModelRequest,
+  options: { signal?: AbortSignal; deadlineMs?: number } = {}
 ): Promise<{
   selection: AdvisorModelOutput;
   model: ChatModel;
@@ -83,7 +90,11 @@ ${JSON.stringify(request)}`;
     request.appleHealthSummary
       ? { appleHealthSummary: request.appleHealthSummary }
       : undefined,
-    { preferredProvider: 'gemini' }
+    {
+      preferredProvider: 'gemini',
+      signal: options.signal,
+      deadlineMs: Math.min(options.deadlineMs ?? ADVISOR_DEADLINE_MS, ADVISOR_DEADLINE_MS),
+    }
   );
   const parsed = advisorModelOutputSchema.safeParse(parseJsonObject(response));
   const selected = parsed.success ? parsed.data : null;

@@ -10,6 +10,13 @@ type ModelProvider = Exclude<ChatModel, 'safety'>;
 
 export type ChatRoutingOptions = {
   preferredProvider?: ModelProvider;
+  /** Aborts both attempts and skips fallback, e.g. when the client disconnects. */
+  signal?: AbortSignal;
+  /**
+   * Total time for primary plus fallback, measured from the call. Set it below
+   * the caller's client timeout. Defaults to CHAT_DEADLINE_MS.
+   */
+  deadlineMs?: number;
 };
 
 function hasProviderCredential(provider: ModelProvider): boolean {
@@ -31,32 +38,57 @@ function configuredPrimaryProvider(): ModelProvider {
   throw new Error('No AI provider is configured');
 }
 
-/**
- * Deadline for each provider attempt. Two attempts (primary + fallback) stay
- * under the mobile client's 45s request timeout, so the fallback actually
- * gets a chance to answer.
- */
+/** Upper bound for a single provider attempt, whatever the overall deadline. */
 export const PROVIDER_TIMEOUT_MS = 20_000;
 
+/**
+ * Default overall deadline (primary + fallback) for text chat. The mobile
+ * chat client waits 45s; this leaves room for auth, parsing and network.
+ */
+export const CHAT_DEADLINE_MS = 38_000;
+
+/** Share of the overall deadline the primary may use when a fallback exists. */
+export const PRIMARY_DEADLINE_SHARE = 0.55;
+
+/** A fallback with less time than this left is skipped instead of started. */
+export const MIN_FALLBACK_MS = 1_500;
+
 export class ProviderTimeoutError extends Error {
-  constructor(provider: ModelProvider) {
-    super(`${provider} did not respond within ${PROVIDER_TIMEOUT_MS}ms`);
+  constructor(provider: ModelProvider, timeoutMs: number) {
+    super(`${provider} did not respond within ${timeoutMs}ms`);
     this.name = 'ProviderTimeoutError';
+  }
+}
+
+/** The caller cancelled (for example the client disconnected). */
+export class ChatCancelledError extends Error {
+  constructor() {
+    super('Chat request was cancelled');
+    this.name = 'ChatCancelledError';
   }
 }
 
 async function callProvider(
   provider: ModelProvider,
   messages: Message[],
-  userContext?: UserContext
+  userContext: UserContext | undefined,
+  timeoutMs: number,
+  parentSignal?: AbortSignal
 ): Promise<string> {
+  if (parentSignal?.aborted) throw new ChatCancelledError();
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let onParentAbort: (() => void) | undefined;
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       controller.abort();
-      reject(new ProviderTimeoutError(provider));
-    }, PROVIDER_TIMEOUT_MS);
+      reject(new ProviderTimeoutError(provider, timeoutMs));
+    }, timeoutMs);
+    onParentAbort = () => {
+      controller.abort();
+      reject(new ChatCancelledError());
+    };
+    parentSignal?.addEventListener('abort', onParentAbort, { once: true });
   });
   const call =
     provider === 'gemini'
@@ -72,6 +104,7 @@ async function callProvider(
     return response.trim();
   } finally {
     clearTimeout(timer);
+    if (onParentAbort) parentSignal?.removeEventListener('abort', onParentAbort);
   }
 }
 
@@ -154,23 +187,60 @@ export async function chat(
         ? 'gemini'
       : configuredPrimaryProvider();
   const fallback: ModelProvider = primary === 'claude' ? 'gemini' : 'claude';
-  
+  const hasFallback = hasProviderCredential(fallback);
+
+  const { signal } = options;
+  const deadlineMs =
+    Number.isFinite(options.deadlineMs) && (options.deadlineMs ?? 0) > 0
+      ? (options.deadlineMs as number)
+      : CHAT_DEADLINE_MS;
+  const startedAt = Date.now();
+  const remaining = () => deadlineMs - (Date.now() - startedAt);
+  // With a fallback available, the primary only gets its share so the
+  // fallback can still answer inside the caller's timeout.
+  const primaryTimeoutMs = Math.max(
+    1,
+    Math.min(
+      PROVIDER_TIMEOUT_MS,
+      hasFallback ? Math.floor(deadlineMs * PRIMARY_DEADLINE_SHARE) : deadlineMs
+    )
+  );
+
   try {
     console.log(`[Model Router] Using ${primary}`);
-    const response = await callProvider(primary, modelMessages, userContext);
+    const response = await callProvider(
+      primary,
+      modelMessages,
+      userContext,
+      primaryTimeoutMs,
+      signal
+    );
     return { response, model: primary };
   } catch (error) {
+    if (error instanceof ChatCancelledError || signal?.aborted) {
+      throw new ChatCancelledError();
+    }
     console.error(`[Model Router] ${primary} failed:`, error);
 
-    if (!hasProviderCredential(fallback)) {
+    const fallbackTimeoutMs = Math.min(PROVIDER_TIMEOUT_MS, remaining());
+    if (!hasFallback || fallbackTimeoutMs < MIN_FALLBACK_MS) {
       throw new Error('AI service temporarily unavailable');
     }
 
     try {
       console.log(`[Model Router] Falling back to ${fallback}`);
-      const response = await callProvider(fallback, modelMessages, userContext);
+      const response = await callProvider(
+        fallback,
+        modelMessages,
+        userContext,
+        fallbackTimeoutMs,
+        signal
+      );
       return { response, model: fallback };
     } catch (fallbackError) {
+      if (fallbackError instanceof ChatCancelledError || signal?.aborted) {
+        throw new ChatCancelledError();
+      }
       console.error('[Model Router] Both models failed:', fallbackError);
       throw new Error('AI service temporarily unavailable');
     }
