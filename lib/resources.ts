@@ -201,8 +201,7 @@ export const CRISIS_LINES: CrisisLine[] = [
     hours: '24/7',
     url: 'https://www.veteranscrisisline.net',
   },
-  // NEEDS CONFIRMATION: supplied by the product owner on 2026-11-15, not yet
-  // re-verified on samaritans.org / lifeline.org.au. Mirrored on mobile.
+  // Numbers checked on samaritans.org and lifeline.org.au on 2026-11-15. Mirrored on mobile.
   {
     name: 'Samaritans',
     region: 'UK',
