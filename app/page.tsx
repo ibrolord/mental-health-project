@@ -1,9 +1,26 @@
+import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowDown, ArrowRight, ArrowUpRight, Check, HeartHandshake, LockKeyhole, Smartphone, Sparkles } from 'lucide-react';
+import { ArrowDown, ArrowUpRight, Check, Code2, HeartHandshake, LockKeyhole } from 'lucide-react';
 import { SupportExplorer } from '@/components/launch/support-explorer';
-import { APP_STORE_URL, LANDING_EVIDENCE, SOURCE_REPOSITORY, TRUSTED_RESOURCES } from '@/lib/landing-content';
+import { APP_SCREENS, APP_SCREEN_SIZE, APP_STORE_BADGE, APP_STORE_URL, LANDING_EVIDENCE, SOURCE_REPOSITORY, TRUSTED_RESOURCES } from '@/lib/landing-content';
 import styles from './landing.module.css';
+
+export const metadata: Metadata = {
+  description: 'A free iPhone app for burnout and everyday mental health. Check in, write one line, pick one small step. Open source, no ads, and nobody makes money from it.',
+};
+
+function AppStoreBadge({ size = 'large' }: { size?: 'large' | 'small' }) {
+  const height = size === 'large' ? 52 : 44;
+  const width = size === 'large' ? 156 : 132;
+  return (
+    <a href={APP_STORE_URL} className={styles.badgeLink}>
+      {/* Apple's official badge artwork, shown unmodified as their marketing guidelines require. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={APP_STORE_BADGE.src} alt="Download on the App Store" width={width} height={height} className={styles.badge} />
+    </a>
+  );
+}
 
 export default function Home() {
   return (
@@ -22,23 +39,25 @@ export default function Home() {
       </header>
       <section id="main-content" className={`${styles.wrap} ${styles.hero}`}>
         <div className={styles.heroCopy}>
-          <p className={styles.eyebrow}>FREE, OPEN-SOURCE MENTAL-HEALTH SUPPORT</p>
+          <p className={styles.eyebrow}>A FREE APP FOR IPHONE</p>
           <h1>Burned out? <em>A 2-minute daily reset</em></h1>
-          <p className={styles.lead}>Check in, write one line, pick one small step. Free, open-source, no ads.</p>
-          <div className={styles.actions}>
-            <Link href="/daily-reset" className={styles.primary}><Sparkles size={20} aria-hidden="true" />Start your 2-minute reset<ArrowRight size={18} aria-hidden="true" /></Link>
-            <a href={APP_STORE_URL} className={styles.textLink}><Smartphone size={16} aria-hidden="true" />Get MHtoolkit for iOS <ArrowUpRight size={16} aria-hidden="true" /></a>
-            <Link href="/onboarding" className={styles.textLink}>Try the full web app <ArrowUpRight size={16} aria-hidden="true" /></Link>
-          </div>
-          <p className={styles.androidHint}>On Android? Use it in your browser. You can add it to your home screen from the browser menu.</p>
-          <ul className={styles.trust} aria-label="What to expect">
-            {['Free to use', 'No ads', 'Start without an email'].map(item => <li key={item}><Check size={15} aria-hidden="true" />{item}</li>)}
-          </ul>
+          <p className={styles.lead}>Check in, write one line, pick one small step.</p>
+          <AppStoreBadge />
+          <p className={styles.browserLine}>No iPhone? <Link href="/daily-reset">Use it in your browser</Link></p>
+          <p className={styles.androidHint}>On Android, you can add it to your home screen from the browser menu.</p>
+          <p className={styles.openNote}>
+            <Code2 size={18} aria-hidden="true" />
+            <span>Free and open source. No ads, no subscriptions, and nobody makes money from it. <a href={SOURCE_REPOSITORY}>See the code on GitHub</a></span>
+          </p>
         </div>
-        <figure className={styles.heroArt}>
-          <Image src="/launch-hero-2026.png" alt="Illustration of friends making time for reflection and supporting one another" width={1732} height={909} sizes="(max-width: 760px) 100vw, 52vw" priority />
-          <figcaption><HeartHandshake size={20} aria-hidden="true" /><span>For the hard days, the ordinary days,<br />and the days you&apos;re finding your way.</span></figcaption>
-        </figure>
+        <div className={styles.heroArt}>
+          <div className={`${styles.phone} ${styles.phoneBack}`} aria-hidden="true">
+            <Image src={APP_SCREENS[1].src} alt="" width={APP_SCREEN_SIZE.width} height={APP_SCREEN_SIZE.height} sizes="240px" loading="lazy" />
+          </div>
+          <div className={styles.phone}>
+            <Image src={APP_SCREENS[0].src} alt={APP_SCREENS[0].alt} width={APP_SCREEN_SIZE.width} height={APP_SCREEN_SIZE.height} sizes="(max-width: 760px) 260px, 300px" priority />
+          </div>
+        </div>
         <a href="#your-toolkit" className={styles.scrollLink}>Find what would help today <ArrowDown size={16} aria-hidden="true" /></a>
       </section>
       <section id="our-mission" className={styles.mission} aria-labelledby="mission-title">
@@ -77,18 +96,43 @@ export default function Home() {
           </ol>
         </div>
       </section>
+      <section className={`${styles.wrap} ${styles.screens}`} aria-labelledby="screens-title">
+        <p className={styles.eyebrow}>INSIDE THE IPHONE APP</p>
+        <h2 id="screens-title">Three screens you will use most.</h2>
+        <ul className={styles.screenList} tabIndex={0} aria-labelledby="screens-title">
+          {APP_SCREENS.map(screen => <li key={screen.id}>
+            <div className={`${styles.phone} ${styles.phoneSmall}`}>
+              <Image src={screen.src} alt={screen.alt} width={APP_SCREEN_SIZE.width} height={APP_SCREEN_SIZE.height} sizes="(max-width: 760px) 62vw, 240px" loading="lazy" />
+            </div>
+            <h3>{screen.title}</h3>
+            <p>{screen.caption}</p>
+          </li>)}
+        </ul>
+      </section>
       <section className={`${styles.wrap} ${styles.principles}`} aria-labelledby="principles-title">
         <div><p className={styles.eyebrow}>BUILT AROUND PEOPLE</p><h2 id="principles-title">Your wellbeing isn&apos;t<br />a performance metric.</h2></div>
         <div className={styles.principleList}>
           <article><LockKeyhole aria-hidden="true" size={22} /><div><h3>You choose what to share.</h3><p>Partner sharing and AI context are choices, not assumptions. Manage them in the app.</p></div></article>
-          <article><HeartHandshake aria-hidden="true" size={22} /><div><h3>Support has more than one shape.</h3><p>Explore country-specific support resources, including African and diaspora communities, and bring a trusted person into your journey.</p></div></article>
+          <article><HeartHandshake aria-hidden="true" size={22} /><div><h3>Support has more than one shape.</h3><p>Explore country-specific support resources, including African and diaspora communities, and invite a trusted person to back you up.</p></div></article>
           <article><Check aria-hidden="true" size={22} /><div><h3>You can see what&apos;s behind the tools.</h3><p>Explore the research behind our approaches and the source code behind the app.</p><Link href="/research" className={styles.textLink}>Read the research <ArrowUpRight size={16} aria-hidden="true" /></Link></div></article>
+        </div>
+      </section>
+      <section className={`${styles.wrap} ${styles.openSource}`} aria-labelledby="open-source-title">
+        <Code2 size={26} aria-hidden="true" />
+        <div>
+          <h2 id="open-source-title">Open source and not for profit.</h2>
+          <p>MHtoolkit is a not-for-profit project. Nobody profits from it: there are no ads, no subscriptions, and your data is never sold. The code is public under the <span className={styles.nowrap}>AGPL-3.0</span> licence, so anyone can check how the app works and what it does with your data.</p>
+          <div className={styles.openLinks}>
+            <a href={SOURCE_REPOSITORY} className={styles.textLink}>See the code on GitHub <ArrowUpRight size={16} aria-hidden="true" /></a>
+            <Link href="/privacy" className={styles.textLink}>Read our privacy notice <ArrowUpRight size={16} aria-hidden="true" /></Link>
+          </div>
         </div>
       </section>
       <section className={`${styles.wrap} ${styles.faq}`} aria-labelledby="faq-title">
         <h2 id="faq-title">A few things you might be wondering.</h2>
         <details><summary>Who is MHtoolkit for?</summary><p>Adults who want practical support with everyday mental wellbeing: understanding feelings, managing overwhelm, building routines, and staying connected. Choose the tools that fit you.</p></details>
-        <details><summary>Is it really free?</summary><p>Yes. MHtoolkit is free to use, with no advertising. Its source code is available under the AGPL-3.0 licence.</p></details>
+        <details><summary>Is it really free?</summary><p>Yes. There are no ads and no subscriptions. MHtoolkit is a not-for-profit, open-source project, and its source code is available under the AGPL-3.0 licence.</p></details>
+        <details><summary>Do I need an iPhone?</summary><p>No. The app is on the App Store for iPhone, and you can also <Link href="/daily-reset">use it in your browser</Link> on Android or a computer.</p></details>
         <details><summary>Do I need to create an account?</summary><p>You can start anonymously. Create an account when you want to keep your data across devices or connect with an accountability partner.</p></details>
         <details><summary>How does AI support work?</summary><p>Advisor offers a practical next step from the context you choose to share. AI chat is also available if you want to talk things through. AI processing is optional.</p></details>
         <details><summary>Can I use this alongside professional support?</summary><p>Yes. MHtoolkit provides everyday self-help tools, not diagnosis, treatment, or emergency care. You can prepare a Visit Brief to review and share with a professional. For urgent help, <Link href="/resources">find local support</Link>.</p></details>
@@ -108,18 +152,16 @@ export default function Home() {
         </ul>
       </section>
       <section className={`${styles.wrap} ${styles.download}`} aria-labelledby="download-title">
-        <Image src="/icon.png" alt="" width={64} height={64} />
+        <Image src="/icon.png" alt="" width={64} height={64} className={styles.downloadIcon} />
         <p className={styles.eyebrow}>START WHERE YOU ARE</p>
         <h2 id="download-title">You don&apos;t have to figure<br />everything out today.</h2>
-        <p>Make a little room for yourself. Your toolkit is here.</p>
-        <div className={styles.actions}>
-          <a href={APP_STORE_URL} className={styles.primary}><Smartphone size={20} aria-hidden="true" />Get MHtoolkit for iOS<ArrowUpRight size={18} aria-hidden="true" /></a>
-          <Link href="/onboarding" className={styles.textLink}>Try the web app <ArrowUpRight size={16} aria-hidden="true" /></Link>
-        </div>
+        <p>Make a little room for yourself. Two minutes is enough to start.</p>
+        <AppStoreBadge />
+        <p className={styles.browserLine}>No iPhone? <Link href="/daily-reset">Use it in your browser</Link></p>
       </section>
       <footer className={`${styles.wrap} ${styles.footer}`}>
-        <div><Link href="/" className={styles.brand}>MHtoolkit</Link><p>Free, open-source support for everyday mental health.</p></div>
-        <nav aria-label="Footer navigation"><Link href="/privacy">Privacy</Link><Link href="/support">Support &amp; feedback</Link><a href={SOURCE_REPOSITORY}>Source code</a><Link href="/resources">Find urgent support</Link></nav>
+        <div><Link href="/" className={styles.brand}>MHtoolkit</Link><p>Free, open-source support for everyday mental health. A not-for-profit project, licensed AGPL-3.0.</p></div>
+        <nav aria-label="Footer navigation"><Link href="/onboarding">Web app</Link><Link href="/privacy">Privacy</Link><Link href="/support">Support &amp; feedback</Link><a href={SOURCE_REPOSITORY}>Source code</a><Link href="/resources">Find urgent support</Link></nav>
       </footer>
     </main>
   );

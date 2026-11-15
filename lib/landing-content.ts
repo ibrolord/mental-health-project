@@ -1,5 +1,17 @@
-export const APP_STORE_URL = 'https://apps.apple.com/app/mhtoolkit/id6760159800';
+export const APP_STORE_URL = 'https://apps.apple.com/ca/app/mhtoolkit/id6760159800';
 export const SOURCE_REPOSITORY = 'https://github.com/ibrolord/mental-health-project';
+
+// Apple's official badge artwork, unmodified (developer.apple.com/app-store/marketing/guidelines).
+// Keep the 119.66:40 aspect ratio, at least 40px tall, with clear space of a quarter of its height.
+export const APP_STORE_BADGE = { src: '/badges/download-on-the-app-store.svg', alt: 'Download on the App Store' } as const;
+
+// Screen crops from mobile/fastlane/screenshots/en-US, resized to 600px wide WebP.
+export const APP_SCREENS = [
+  { id: 'today', src: '/images/app/today.webp', title: 'Today', caption: 'Check in and see one small next step.', alt: 'MHtoolkit Today screen on iPhone with a mood check-in from Great to Very low and a card for your next step' },
+  { id: 'mood', src: '/images/app/mood.webp', title: 'Mood', caption: 'Name how you feel and notice patterns over time.', alt: 'MHtoolkit Mood screen on iPhone asking how are you right now, with mood history below' },
+  { id: 'grounding', src: '/images/app/grounding.webp', title: 'Grounding', caption: 'Pick what is happening and follow one step at a time.', alt: 'MHtoolkit grounding screen on iPhone listing options such as my body feels panicky or my thoughts will not slow down' },
+] as const;
+export const APP_SCREEN_SIZE = { width: 600, height: 1309 } as const;
 
 // Population statistics, not product efficacy or adoption claims. Verified 2026-10-01.
 export const LANDING_EVIDENCE = [

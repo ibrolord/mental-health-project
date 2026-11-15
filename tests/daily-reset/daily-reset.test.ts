@@ -12,11 +12,11 @@ describe('daily reset entry point', () => {
     expect(isPublicRoute('/daily-reset')).toBe(true);
   });
 
-  it('is the primary hero action on the home page', () => {
+  it('is the browser option under the App Store badge on the home page', () => {
     const home = readFileSync(resolve(root, 'app/page.tsx'), 'utf8');
     expect(home).toContain('Burned out?');
-    expect(home).toContain('href="/daily-reset"');
-    expect(home).toContain('On Android? Use it in your browser.');
+    expect(home).toContain('No iPhone? <Link href="/daily-reset">Use it in your browser</Link>');
+    expect(home).toContain('On Android, you can add it to your home screen');
   });
 
   it('keeps reset data local and points to crisis resources', () => {
