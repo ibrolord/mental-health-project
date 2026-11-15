@@ -33,6 +33,11 @@ import { dashboardModuleById, dashboardModulesForToday } from '@/lib/dashboard-l
 import { useDashboardLayout } from '@/lib/use-dashboard-layout';
 import { useAdvisorProfile } from '@/lib/use-advisor-profile';
 import { useLaunchMotion } from '@/components/LaunchExperience';
+import { useIsFocused } from '@react-navigation/native';
+import {
+  invalidatePendingStoreReview,
+  maybeRequestStoreReviewAfterCheckIn,
+} from '@/lib/store-review';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -69,6 +74,9 @@ export default function DashboardScreen() {
   const ownerKeyRef = useRef(ownerKey);
   const focusedMoodOwnerRef = useRef<string | null>(null);
   ownerKeyRef.current = ownerKey;
+  const isFocused = useIsFocused();
+  const isFocusedRef = useRef(isFocused);
+  isFocusedRef.current = isFocused;
   const canSaveMood = Boolean(queryValue && user?.id);
   const { layout: dashboardLayout } = useDashboardLayout(ownerKey);
   const { profile: advisorProfile, ready: profileReady, error: profileError, save: saveProfile } = useAdvisorProfile(ownerKey);
@@ -208,6 +216,7 @@ export default function DashboardScreen() {
       return;
     }
 
+    invalidatePendingStoreReview();
     const expectedOwnerKey = ownerKey;
     const expectedUserId = user?.id;
     if (!expectedOwnerKey || !expectedUserId) return;
@@ -225,6 +234,23 @@ export default function DashboardScreen() {
       setMoodOwnerKey(expectedOwnerKey);
       setMoodStatus({ type: 'success', message: 'Saved.' });
       setAdvisorRefresh((value) => value + 1);
+      maybeRequestStoreReviewAfterCheckIn(
+        {
+          emoji: mood,
+          localDate: localFields.local_date,
+          safetySignal:
+            advisorOwnerKey === expectedOwnerKey &&
+            todayAdvisor?.recommendation.kind === 'safety',
+          isStillCurrent: () =>
+            ownerKeyRef.current === expectedOwnerKey && isFocusedRef.current,
+        },
+        {
+          ownerKey: expectedOwnerKey,
+          queryColumn,
+          queryValue: queryValue ?? null,
+          userId: expectedUserId,
+        }
+      );
     } catch (error) {
       if (ownerKeyRef.current !== expectedOwnerKey) return;
       console.warn('Unable to save check-in:', error);

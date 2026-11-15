@@ -1,4 +1,4 @@
-MHtoolkit is a free, private wellbeing companion for reflection, planning, and day-to-day mental health self-management. No subscriptions. No ads. No data sold.
+Burned out? MHtoolkit gives you a 2-minute daily reset: check in, write one line, and pick one small step. It's free and open-source, with no subscriptions, no ads and no data sold.
 
 IMPORTANT MEDICAL INFORMATION
 MHtoolkit does not diagnose, treat, or replace a doctor or licensed mental health professional. Seek a doctor's advice in addition to using this app and before making medical decisions. If you may be in immediate danger, contact local emergency services or use the crisis resources in the app.

@@ -53,6 +53,12 @@ import {
 } from '@/lib/mood-draft';
 import { moodDraftStorage } from '@/lib/mood-draft-storage';
 import { AppleHealthInsights } from '@/components/AppleHealthInsights';
+import { hasExplicitUrgentSafetyLanguage } from '@/lib/local-safety';
+import { useIsFocused } from '@react-navigation/native';
+import {
+  invalidatePendingStoreReview,
+  maybeRequestStoreReviewAfterCheckIn,
+} from '@/lib/store-review';
 
 interface MoodEntry {
   id: string;
@@ -95,6 +101,9 @@ export default function TrackerScreen() {
   const ownerKey = query ? `${query.column}:${query.value}` : null;
   const ownerKeyRef = useRef(ownerKey);
   ownerKeyRef.current = ownerKey;
+  const isFocused = useIsFocused();
+  const isFocusedRef = useRef(isFocused);
+  isFocusedRef.current = isFocused;
   const [moodsOwnerKey, setMoodsOwnerKey] = useState<string | null>(null);
   const [draftOwnerKey, setDraftOwnerKey] = useState<string | null>(null);
   const [draftHydratedOwnerKey, setDraftHydratedOwnerKey] = useState<string | null>(null);
@@ -357,6 +366,7 @@ export default function TrackerScreen() {
     ) {
       return false;
     }
+    invalidatePendingStoreReview();
     setSaving(true);
     setSaveStatus(null);
     try {
@@ -395,6 +405,23 @@ export default function TrackerScreen() {
       }
       setRefreshKey((key) => key + 1);
       setSaveStatus({ type: 'success', message });
+      if (query) {
+        maybeRequestStoreReviewAfterCheckIn(
+          {
+            emoji: mood,
+            localDate: checkIn.local_date,
+            safetySignal: hasExplicitUrgentSafetyLanguage(note),
+            isStillCurrent: () =>
+              ownerKeyRef.current === expectedOwnerKey && isFocusedRef.current,
+          },
+          {
+            ownerKey: expectedOwnerKey,
+            queryColumn: query.column,
+            queryValue: query.value,
+            userId: expectedUserId,
+          }
+        );
+      }
       return true;
     } catch (error) {
       if (ownerKeyRef.current !== expectedOwnerKey) return false;

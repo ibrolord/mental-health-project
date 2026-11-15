@@ -1,1 +1,1 @@
-mental health,mood tracker,wellness,journal,anxiety,habits,focus,grounding,self care,AI chat
+burnout,stress,anxiety,mood tracker,journal,gad7,phq9,grounding,habit,self care,reset,wellbeing
