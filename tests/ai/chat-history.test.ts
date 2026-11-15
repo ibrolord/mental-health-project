@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { MODEL_HISTORY_CHAR_BUDGET, trimConversationForModel } from '../../lib/ai/chat-history';
 import { CHAT_LIMITS, chatRequestSchema } from '../../lib/ai/chat-validation';
 import {
@@ -97,9 +98,10 @@ describe('trimConversationForModel', () => {
 });
 
 describe('mobile chat history helpers', () => {
-  it('match the server per-message limits', () => {
-    expect(CHAT_USER_MESSAGE_MAX_CHARS).toBe(CHAT_LIMITS.userMessageChars);
-    expect(CHAT_ASSISTANT_MESSAGE_MAX_CHARS).toBe(CHAT_LIMITS.assistantMessageChars);
+  it('stay within the new server per-message limits', () => {
+    expect(CHAT_USER_MESSAGE_MAX_CHARS).toBe(4_000);
+    expect(CHAT_USER_MESSAGE_MAX_CHARS).toBeLessThanOrEqual(CHAT_LIMITS.userMessageChars);
+    expect(CHAT_ASSISTANT_MESSAGE_MAX_CHARS).toBeLessThanOrEqual(CHAT_LIMITS.assistantMessageChars);
   });
 
   it('starts the 12-message voice window on a user turn from the 7th turn on', () => {
@@ -149,9 +151,9 @@ describe('mobile chat history helpers', () => {
     expect(voice.match(/buildChatRequestMessages\(/g)?.length).toBe(2);
   });
 
-  it('match the server message-count and total character limits', () => {
-    expect(CHAT_MAX_MESSAGES).toBe(CHAT_LIMITS.messages);
-    expect(CHAT_TOTAL_MAX_CHARS).toBe(CHAT_LIMITS.totalChars);
+  it('stay within the new server message-count and total character limits', () => {
+    expect(CHAT_MAX_MESSAGES).toBeLessThanOrEqual(CHAT_LIMITS.messages);
+    expect(CHAT_TOTAL_MAX_CHARS).toBeLessThanOrEqual(CHAT_LIMITS.totalChars);
   });
 
   // Codex review of 26f5a58: 61 alternating 2,000-character messages are
@@ -193,6 +195,93 @@ describe('mobile chat history helpers', () => {
     expect(window.at(-1)).toEqual(messages.at(-1));
     expect(total(window)).toBeLessThanOrEqual(250);
     expect(windowFromUserTurn(messages, 200, 1)).toEqual([messages.at(-1)]);
+  });
+});
+
+// The schema still live in production (see `git show 6890bd8:lib/ai/chat-validation.ts`).
+// Until the new server is deployed, every request must also pass this one.
+const liveServerMessagesSchema = z
+  .array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string().trim().min(1).max(4_000),
+  }).strict())
+  .min(1)
+  .max(40)
+  .superRefine((messages, context) => {
+    if (messages.reduce((sum, message) => sum + message.content.length, 0) > 24_000) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Conversation is too large' });
+    }
+    if (messages.at(-1)?.role !== 'user') {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Last message must be from the user' });
+    }
+    if (messages[0]?.role !== 'user') {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'First message must be from the user' });
+    }
+    for (let index = 1; index < messages.length; index += 1) {
+      if (messages[index].role === messages[index - 1].role) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: 'Roles must alternate' });
+      }
+    }
+  });
+
+describe('mobile chat history against the live (old) server schema', () => {
+  it('trims a 60-message chat to <= 40 messages starting and ending on user turns', () => {
+    const messages = conversation(31);
+    messages.pop();
+    messages.pop();
+    messages.push({ role: 'user', content: 'newest question' });
+    expect(messages).toHaveLength(60);
+    expect(liveServerMessagesSchema.safeParse(messages).success).toBe(false);
+
+    const request = buildChatRequestMessages(messages);
+    expect(request.length).toBeLessThanOrEqual(40);
+    expect(request[0].role).toBe('user');
+    expect(request.at(-1)).toEqual({ role: 'user', content: 'newest question' });
+    expectValidShape(request);
+    expect(liveServerMessagesSchema.safeParse(request).success).toBe(true);
+    expect(chatRequestSchema.safeParse({ messages: request }).success).toBe(true);
+  });
+
+  it('cuts a 7,000-character assistant reply to 4,000 characters', () => {
+    const request = buildChatRequestMessages([
+      { role: 'user', content: 'tell me a lot' },
+      { role: 'assistant', content: 'y'.repeat(7_000) },
+      { role: 'user', content: 'thanks' },
+    ]);
+    expect(request).toHaveLength(3);
+    expect(request[1].content).toHaveLength(4_000);
+    expect(liveServerMessagesSchema.safeParse(request).success).toBe(true);
+    expect(chatRequestSchema.safeParse({ messages: request }).success).toBe(true);
+  });
+
+  it('keeps every long conversation under the live server limits', () => {
+    for (const [turns, userChars, assistantChars] of [
+      [31, 2_000, 2_000],
+      [40, 4_000, 8_000],
+      [25, 100, 7_000],
+      [150, 4_000, 4_000],
+      [500, 10, 10],
+      [3, 6_000, 9_000],
+    ] as const) {
+      const messages = conversation(turns, userChars, assistantChars);
+      const request = buildChatRequestMessages(messages);
+      expectValidShape(request);
+      expect(request.length).toBeLessThanOrEqual(40);
+      expect(total(request)).toBeLessThanOrEqual(24_000);
+      expect(request.at(-1)?.content).toBe(messages.at(-1)?.content.slice(0, 4_000));
+      expect(liveServerMessagesSchema.safeParse(request).success).toBe(true);
+      expect(chatRequestSchema.safeParse({ messages: request }).success).toBe(true);
+    }
+  });
+
+  it('keeps the 12-message voice window valid for the live server', () => {
+    for (let turns = 1; turns <= 15; turns += 1) {
+      const window = windowFromUserTurn(conversation(turns, 3_000, 7_000), 12);
+      const request = buildChatRequestMessages(window, 12);
+      expect(request.length).toBeLessThanOrEqual(12);
+      expect(request.at(-1)?.content).toBe(window.at(-1)?.content);
+      expect(liveServerMessagesSchema.safeParse(request).success).toBe(true);
+    }
   });
 });
 

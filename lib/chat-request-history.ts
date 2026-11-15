@@ -1,6 +1,7 @@
 /**
  * Pure helpers that keep chat history sent to /api/chat valid for the
- * server's request schema (lib/ai/chat-validation.ts):
+ * server's request schema (lib/ai/chat-validation.ts and the older schema
+ * still live in production):
  * - first and last message from the user
  * - roles alternate
  * - per-message, message-count and total character limits
@@ -15,14 +16,20 @@ export type ChatHistoryMessage = {
   content: string;
 };
 
-/** Mirrors the per-message user limit in lib/ai/chat-validation.ts. */
+/*
+ * These are the limits of the LIVE production /api/chat (40 messages, 4,000
+ * chars per message for both roles, 24,000 chars total). They are at or below
+ * the newer CHAT_LIMITS in lib/ai/chat-validation.ts, so requests fit both the
+ * old and new server. Raise them only after the new server is deployed.
+ */
+/** Per-message user limit (also the chat TextInput maxLength). */
 export const CHAT_USER_MESSAGE_MAX_CHARS = 4_000;
-/** Mirrors the per-message assistant limit in lib/ai/chat-validation.ts. */
-export const CHAT_ASSISTANT_MESSAGE_MAX_CHARS = 8_000;
-/** Mirrors the message-count limit in lib/ai/chat-validation.ts. */
-export const CHAT_MAX_MESSAGES = 200;
-/** Mirrors the total character limit in lib/ai/chat-validation.ts. */
-export const CHAT_TOTAL_MAX_CHARS = 120_000;
+/** Per-message assistant limit. */
+export const CHAT_ASSISTANT_MESSAGE_MAX_CHARS = 4_000;
+/** Message-count limit. */
+export const CHAT_MAX_MESSAGES = 40;
+/** Total character limit across all messages. */
+export const CHAT_TOTAL_MAX_CHARS = 24_000;
 
 /**
  * Keeps the newest messages that fit both `maxMessages` and `maxTotalChars`,
