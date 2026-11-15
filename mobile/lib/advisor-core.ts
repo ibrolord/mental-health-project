@@ -253,16 +253,31 @@ const MEDICATION_CHANGE = [
 ] as const;
 
 // Asking a clinician about a change is the safe action, not the change
-// itself: "ask my doctor whether to stop taking sertraline". Only the clause
-// that names the clinician is exempt; "ask my doctor and stop my meds" is not.
+// itself: "ask my doctor whether to stop taking sertraline". The exemption
+// applies only when the clause *is* the consultation request: it opens with
+// asking or talking to a clinician and the change is the topic ("about",
+// "whether", "before" ...), or it reads "discuss <change> with my doctor".
+// A change that only mentions a clinician ("Stop taking sertraline before I
+// talk to my doctor") is still a change.
 const CLINICIAN =
   '(?:doctor|dr|gp|prescriber|psychiatrist|pharmacist|nurse|nurse\\s+practitioner|np|clinician|provider|care\\s+team|therapist|physician|specialist)';
+const CLINICIAN_REF = `(?:my\\s+|a\\s+|the\\s+|your\\s+)?${CLINICIAN}`;
+// Optional lead-in before the request: "I'll", "I need to", "remember to".
+const CONSULTATION_LEAD =
+  "(?:(?:i|i'll|i\\s+will|i\\s+should|i\\s+need\\s+to|i\\s+want\\s+to|i'm\\s+going\\s+to|i\\s+am\\s+going\\s+to|i\\s+must|i\\s+have\\s+to|need\\s+to|want\\s+to|going\\s+to|gonna|should|must|will|remember\\s+to|plan\\s+to|try\\s+to|please|to)\\s+)*";
+const CONSULTATION_VERB =
+  '(?:ask|asking|talk\\s+to|talking\\s+to|talk\\s+with|speak\\s+(?:to|with)|speaking\\s+(?:to|with)|check\\s+with|checking\\s+with|call|calling|email|message|see|book\\s+(?:an?\\s+)?(?:appointment|appt)\\s+with|consult|consulting)';
+// Words that make the change the subject of the consultation.
+const CONSULTATION_TOPIC =
+  '(?:about|whether|if|when|how|what|regarding|re|on|before|first\\s+before|for\\s+advice\\s+(?:on|about)|to\\s+see\\s+(?:if|whether)|should\\s+i|can\\s+i|could\\s+i)';
+// Anchored to the whole (trimmed) clause.
 const CLINICIAN_CONSULTATION = new RegExp(
-  `\\b(?:(?:ask|asking|talk\\s+to|talking\\s+to|speak\\s+(?:to|with)|speaking\\s+(?:to|with)|check\\s+with|checking\\s+with|call|calling|email|message|see|book\\s+(?:an?\\s+)?(?:appointment|appt)\\s+with|consult|consulting)\\s+(?:with\\s+)?(?:my\\s+|a\\s+|the\\s+)?${CLINICIAN}\\b|\\b(?:discuss|discussing|talk\\s+about|ask\\s+about|bring\\s+up)\\b.*\\bwith\\s+(?:my\\s+|a\\s+|the\\s+)?${CLINICIAN}\\b)`,
+  `^[^a-z0-9]*${CONSULTATION_LEAD}(?:${CONSULTATION_VERB}\\s+(?:with\\s+)?${CLINICIAN_REF}\\s+${CONSULTATION_TOPIC}\\b|(?:discuss|discussing|talk\\s+about|ask\\s+about|bring\\s+up)\\b.*\\bwith\\s+${CLINICIAN_REF}[^a-z0-9]*$)`,
   'i'
 );
-// Clause breaks: punctuation and joining words that start a new instruction.
-const MEDICATION_CLAUSE_BREAK = /[.;!?,\n]+|\b(?:and|then|but|plus)\b/i;
+// Clause breaks: line breaks, punctuation, dashes, bullets and joining words
+// that start a new instruction.
+const MEDICATION_CLAUSE_BREAK = /[.;:!?,\n/|•–—]+|\s-+\s|\b(?:and|then|but|plus|also)\b/i;
 // "Stop forgetting / missing / skipping my meds" is about taking medication
 // as prescribed. The phrase is replaced before matching so the change verbs
 // inside it ("stop", "skip") are not read as a change.
@@ -272,7 +287,7 @@ const ADHERENCE_PHRASE =
 function describesMedicationChange(text: string): boolean {
   return (
     MEDICATION_CHANGE.some((pattern) => pattern.test(text)) &&
-    !CLINICIAN_CONSULTATION.test(text)
+    !CLINICIAN_CONSULTATION.test(text.trim())
   );
 }
 
@@ -281,11 +296,13 @@ export function isMedicationChangeText(value: string): boolean {
     .normalize('NFKC')
     .replace(/[​-‍⁠﻿]/g, '')
     .replace(/[’‘]/g, "'")
-    .replace(/\s+/g, ' ')
+    // Line breaks separate instructions, so keep them for the clause split.
+    .replace(/\r\n?|[\u000B\u000C\u0085\u2028\u2029]/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
     .replace(ADHERENCE_PHRASE, 'adhere to');
-  // The whole text and each clause are checked. A clinician named in one
-  // clause exempts only that clause, so "ask my doctor, then stop my meds"
-  // is still a change.
+  // The whole text and each clause are checked. A consultation request
+  // exempts only its own clause, so "ask my doctor, then stop my meds" and
+  // "Ask my doctor about sleep\nStop taking sertraline" are still changes.
   return [normalized, ...normalized.split(MEDICATION_CLAUSE_BREAK)].some(
     (text) => text.trim() !== '' && describesMedicationChange(text)
   );

@@ -21,6 +21,7 @@ import {
 import { MODEL_HISTORY_CHAR_BUDGET } from '../../lib/ai/chat-history';
 import { ADVISOR_DEADLINE_MS } from '../../lib/ai/advisor-model';
 import {
+  DEFAULT_SERVER_DEADLINE_MS,
   MIN_SERVER_DEADLINE_MS,
   serverDeadlineMs,
 } from '../../lib/ai/request-deadline';
@@ -29,10 +30,24 @@ describe('serverDeadlineMs', () => {
   const headers = (value?: string) =>
     new Headers(value === undefined ? {} : { 'X-Client-Timeout-Ms': value });
 
-  it('uses the server maximum when the client sends nothing usable', () => {
+  // Codex review of 4201aa4: older app builds send no header, and their
+  // voice fallback gives up at 20s, so a header-less request must fit there.
+  it('uses a backward-compatible default of at most 18s when the client sends nothing usable', () => {
+    expect(DEFAULT_SERVER_DEADLINE_MS).toBeLessThanOrEqual(18_000);
     for (const value of [undefined, '', 'abc', '-5', '0', '1e5', '99999999']) {
-      expect(serverDeadlineMs(headers(value), CHAT_DEADLINE_MS), String(value)).toBe(CHAT_DEADLINE_MS);
+      const deadlineMs = serverDeadlineMs(headers(value), CHAT_DEADLINE_MS);
+      expect(deadlineMs, String(value)).toBe(DEFAULT_SERVER_DEADLINE_MS);
+      expect(deadlineMs, String(value)).toBeLessThanOrEqual(18_000);
+      expect(deadlineMs, String(value)).toBeLessThan(PROVIDER_TIMEOUT_MS);
     }
+    // A route whose own maximum is lower keeps it.
+    expect(serverDeadlineMs(headers(), ADVISOR_DEADLINE_MS)).toBe(ADVISOR_DEADLINE_MS);
+  });
+
+  it('lets a declared client timeout raise the budget up to the route maximum', () => {
+    expect(serverDeadlineMs(headers('45000'), CHAT_DEADLINE_MS)).toBe(CHAT_DEADLINE_MS);
+    expect(CHAT_DEADLINE_MS).toBeLessThanOrEqual(38_000);
+    expect(serverDeadlineMs(headers('45000'), ADVISOR_DEADLINE_MS)).toBe(ADVISOR_DEADLINE_MS);
   });
 
   it('shortens the deadline below the client timeout but never lengthens it', () => {
@@ -139,9 +154,12 @@ describe('model router deadlines and fallback', () => {
     ['voice turn (30s client)', 30_000],
     ['voice realtime fallback (20s client)', 20_000],
     ['Advisor (6s client)', 6_000],
-  ])('answers from the fallback inside the %s timeout', async (_label, clientTimeoutMs) => {
+    // Codex review of 4201aa4: older builds send no header.
+    ['header-less voice realtime fallback (20s client)', 20_000, false],
+    ['header-less Advisor (6s client)', 6_000, false],
+  ])('answers from the fallback inside the %s timeout', async (_label, clientTimeoutMs, sendHeader = true) => {
     const deadlineMs = serverDeadlineMs(
-      new Headers({ 'X-Client-Timeout-Ms': String(clientTimeoutMs) }),
+      new Headers(sendHeader ? { 'X-Client-Timeout-Ms': String(clientTimeoutMs) } : {}),
       clientTimeoutMs === 6_000 ? ADVISOR_DEADLINE_MS : CHAT_DEADLINE_MS
     );
     expect(deadlineMs).toBeLessThan(clientTimeoutMs);

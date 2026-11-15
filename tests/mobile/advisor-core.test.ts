@@ -828,6 +828,16 @@ describe('mobile Advisor recommendation engine', () => {
     'Take 2 extra pills tonight',
     'Ask my doctor about sleep, then stop taking sertraline',
     'quit my antidepressants',
+    // Codex review of 4201aa4: a clinician mention is not a consultation,
+    // and line breaks still separate instructions.
+    'Stop taking sertraline before I talk to my doctor',
+    'Stop taking sertraline and tell my doctor',
+    'Stop taking sertraline, my doctor said ok',
+    'Ask my doctor about sleep\nStop taking sertraline',
+    'Ask my doctor about sleep\r\nStop taking sertraline',
+    'Ask my doctor about sleep\u2028Stop taking sertraline',
+    'Ask my doctor - stop taking sertraline',
+    'Call my doctor then stop my meds',
   ])('never turns a medication change into an action: %s', (title) => {
     const goalOnly = createAdvisorRecommendation(
       context({ goals: [{ id: 'goal-med', title, dueAt: '2026-08-14T09:00:00.000Z' }] })
@@ -876,6 +886,9 @@ describe('mobile Advisor recommendation engine', () => {
     'Start taking my meds on time',
     'Start taking my medication as prescribed',
     'Ask my doctor whether to stop taking sertraline',
+    'ask my doctor whether to stop taking sertraline',
+    'I will ask my doctor if I should stop taking sertraline',
+    'stop forgetting my meds',
     'Talk to my psychiatrist about lowering my dose',
     'Discuss stopping sertraline with my doctor',
     'Start my day with a walk',

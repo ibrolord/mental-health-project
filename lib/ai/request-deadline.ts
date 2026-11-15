@@ -1,12 +1,19 @@
 /**
  * Clients send how long they will wait for a response, so the server can
  * budget model attempts (primary + fallback) to finish before the client
- * gives up. The header is optional and only ever shortens the deadline.
+ * gives up. The header can raise the budget up to the route's maximum.
  */
 export const CLIENT_TIMEOUT_HEADER = 'X-Client-Timeout-Ms';
 
 /** Smallest deadline the server will budget, whatever the client sends. */
 export const MIN_SERVER_DEADLINE_MS = 2_000;
+
+/**
+ * Budget for requests without a usable timeout header. Older app builds do
+ * not send one, and their shortest caller (the voice fallback) gives up after
+ * 20s, so both attempts must finish inside that.
+ */
+export const DEFAULT_SERVER_DEADLINE_MS = 18_000;
 
 /**
  * Time kept back for auth, parsing and the network round trip: 20% of the
@@ -17,14 +24,16 @@ export function clientDeadlineMarginMs(clientTimeoutMs: number): number {
 }
 
 /**
- * Overall server deadline for a request: `maxMs`, or less when the client's
- * declared timeout (minus a margin) is shorter. Invalid headers are ignored.
+ * Overall server deadline for a request. Without a valid header this is
+ * DEFAULT_SERVER_DEADLINE_MS (or `maxMs` if smaller). With one it is the
+ * client's timeout minus a margin, capped at `maxMs`.
  */
 export function serverDeadlineMs(headers: Pick<Headers, 'get'>, maxMs: number): number {
+  const fallbackMs = Math.min(maxMs, DEFAULT_SERVER_DEADLINE_MS);
   const raw = headers.get(CLIENT_TIMEOUT_HEADER)?.trim();
-  if (!raw || !/^\d{1,7}$/.test(raw)) return maxMs;
+  if (!raw || !/^\d{1,7}$/.test(raw)) return fallbackMs;
   const clientTimeoutMs = Number(raw);
-  if (clientTimeoutMs <= 0) return maxMs;
+  if (clientTimeoutMs <= 0) return fallbackMs;
   const budget = clientTimeoutMs - clientDeadlineMarginMs(clientTimeoutMs);
   return Math.min(maxMs, Math.max(MIN_SERVER_DEADLINE_MS, budget));
 }
