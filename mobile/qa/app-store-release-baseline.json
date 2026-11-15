@@ -1,6 +1,6 @@
 {
-  "lastApprovedVersion": "1.0.7",
-  "candidateVersion": "1.0.8",
-  "verifiedAt": "2026-10-03",
-  "evidence": "Apple's public lookup API (https://itunes.apple.com/lookup?id=6760159800&country=ca) reports MHtoolkit 1.0.7 released on 2026-09-28T13:34:32Z. Version 1.0.8 opens a new train for adaptive Advisor follow-through, optional local follow-ups, body practices, and reflection draft-transfer fixes."
+  "lastApprovedVersion": "1.0.8",
+  "candidateVersion": "1.0.9",
+  "verifiedAt": "2026-11-15",
+  "evidence": "Apple's public lookup API (https://itunes.apple.com/lookup?id=6760159800&country=ca) reports MHtoolkit 1.0.8 released on 2026-10-06T12:01:30Z. Version 1.0.9 opens a new train for wider on-device crisis detection, crisis actions on server safety replies, Advisor safety cards for risky goals, and chat history fixes."
 }

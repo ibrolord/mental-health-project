@@ -1,6 +1,6 @@
-What's new in 1.0.8:
+What's new in 1.0.9:
 
-- Advisor uses your progress, barriers, and feedback to help you follow through while keeping your chosen step intact.
-- Optional local follow-ups respect your notification choices, quiet hours, and pause settings.
-- New gentle body practices, a visual focus pacer, worry-time reflections, and coping cards expand your toolkit.
-- Improved reflection draft transfer when moving from an anonymous profile to an account.
+- Safer support when things feel heavy. If you write something worrying, the app now shows call and text options right away, including in more languages and with common misspellings.
+- Outside Canada or the US? There's now a quick link to find a helpline in your country.
+- The Advisor is more careful. Goals like stopping medication now get a safety card instead of a quick tip.
+- Chat fixes: long conversations keep working, and error messages no longer end up in your chat.
