@@ -13,6 +13,7 @@ import {
   utf8ByteLength,
   CHAT_TOTAL_MAX_CHARS,
   CHAT_USER_MESSAGE_MAX_CHARS,
+  replaceLoneSurrogates,
   windowFromUserTurn,
   type ChatHistoryMessage,
 } from '../../mobile/lib/chat-history';
@@ -375,6 +376,28 @@ describe('mobile chat history byte budget', () => {
     expect(window.at(-1)).toEqual(messages.at(-1));
     expect(jsonBytes(window)).toBeLessThanOrEqual(500);
     expect(windowFromUserTurn(messages, 200, Number.POSITIVE_INFINITY, 1)).toEqual([messages.at(-1)]);
+  });
+
+  it('replaces unpaired surrogates with U+FFFD and keeps valid pairs', () => {
+    const wellFormed = (text: string) => !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(text);
+    const cases: Array<[string, string]> = [
+      ['a\uD800b', 'a\uFFFDb'],
+      ['\uDC00', '\uFFFD'],
+      ['a'.repeat(3_999) + '\uD83D', 'a'.repeat(3_999) + '\uFFFD'],
+    ];
+    for (const [input, expected] of cases) {
+      for (const build of [buildChatRequestMessages, webBuildChatRequestMessages]) {
+        const request = build([{ role: 'user', content: input }]);
+        expect(request).toEqual([{ role: 'user', content: expected }]);
+        expect(wellFormed(request[0].content)).toBe(true);
+        expect(utf8ByteLength(request[0].content)).toBe(new TextEncoder().encode(expected).length);
+      }
+    }
+    expect(replaceLoneSurrogates('ok 😀 \uDE00\uD83D😀')).toBe('ok 😀 \uFFFD\uFFFD😀');
+    expect(replaceLoneSurrogates('plain')).toBe('plain');
+    const fitted = buildChatRequestMessages([{ role: 'user', content: '\uD800'.repeat(4_000) }], 40, 200);
+    expect(jsonBytes(fitted)).toBeLessThanOrEqual(200);
+    expect(fitted[0].content).toMatch(/^\uFFFD+$/);
   });
 
   it('returns [] when there is nothing valid to send', () => {

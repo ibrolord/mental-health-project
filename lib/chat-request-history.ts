@@ -7,7 +7,8 @@
  * - per-message, message-count and total character limits
  * - a UTF-8 byte budget for the serialized `messages` array (the live server
  *   rejects request bodies over 64 KiB with 413)
- * - contents are only cut on code point boundaries (no lone surrogates)
+ * - unpaired surrogates become U+FFFD and contents are only cut on code
+ *   point boundaries (no lone surrogates)
  *
  * KEEP IN SYNC: `mobile/lib/chat-history.ts` (mobile) and
  * `lib/chat-request-history.ts` (web) must stay byte-identical;
@@ -69,6 +70,30 @@ function serializedBytes(message: ChatHistoryMessage): number {
   return utf8ByteLength(
     JSON.stringify({ role: message.role, content: message.content })
   );
+}
+
+/**
+ * Replaces unpaired UTF-16 surrogates with U+FFFD (like
+ * `String.prototype.toWellFormed`, which Hermes may lack). Valid pairs are
+ * kept and the length in code units is unchanged.
+ */
+export function replaceLoneSurrogates(text: string): string {
+  let result = '';
+  let copied = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code < 0xd800 || code > 0xdfff) continue;
+    if (code <= 0xdbff) {
+      const next = text.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        index += 1;
+        continue;
+      }
+    }
+    result += text.slice(copied, index) + '\uFFFD';
+    copied = index + 1;
+  }
+  return copied === 0 ? text : result + text.slice(copied);
 }
 
 /**
@@ -146,6 +171,7 @@ export function windowFromUserTurn<T extends ChatHistoryMessage>(
 /**
  * Builds the `messages` array for a chat request.
  * - Empty messages are dropped.
+ * - Unpaired surrogates in malformed input are replaced with U+FFFD.
  * - When two user messages are adjacent (an earlier turn failed and got no
  *   reply), only the newer one is kept; adjacent assistant messages keep the
  *   newer one too.
@@ -167,7 +193,7 @@ export function buildChatRequestMessages(
 ): ChatHistoryMessage[] {
   const alternating: ChatHistoryMessage[] = [];
   for (const message of messages) {
-    const content = message.content.trim();
+    const content = replaceLoneSurrogates(message.content.trim());
     if (!content) continue;
     const limit =
       message.role === 'user'
