@@ -103,10 +103,20 @@ model-generated answer.
 ## AI Data Sharing
 
 - Chat messages are sent through the MHtoolkit backend to Anthropic Claude or
-  Google Gemini to generate a response.
-- Live voice audio is sent through the backend to OpenAI for transcription.
-  Push-to-talk audio is sent to Google Gemini; compatible recordings may use
-  OpenAI as a fallback. The transcript is then handled like a chat message.
+  Google Gemini to generate a response. OpenAI is not used for text chat.
+- Advisor sends its app-built suggestions and the context categories already
+  shown in Advisor through the backend to Anthropic Claude or Google Gemini to
+  choose and word one suggestion.
+- Personalized affirmations send recent mood emojis, assessment scores, and a
+  count of finished goals through the backend to Anthropic Claude. Mood notes
+  and goal text are not sent (from 1.0.10 the app no longer uploads them; the
+  server also drops them for older versions after a crisis-language check).
+- Live voice audio streams directly from the device to OpenAI over an
+  encrypted WebRTC connection for transcription. The MHtoolkit backend only
+  creates and ends the session (it exchanges the connection offer and answer)
+  and does not receive the audio. Push-to-talk audio is uploaded through the
+  backend to Google Gemini; compatible recordings may use OpenAI as a
+  fallback. The transcript is then handled like a chat message.
   AI response text is sent to Google Gemini for generated spoken playback, with
   OpenAI and then the operating-system speech service used as fallbacks.
 - Voice journal recordings are stored in a private, owner-scoped Supabase

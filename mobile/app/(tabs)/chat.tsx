@@ -1011,8 +1011,8 @@ export default function ChatScreen() {
             </Pressable>
             {disclosureOpen ? (
               <Text style={styles.disclosureDetail}>
-                Messages and selected context are sent through MHtoolkit to Gemini,
-                Claude, or OpenAI.
+                Messages and selected context are sent through MHtoolkit to
+                Anthropic Claude or Google Gemini.
               </Text>
             ) : null}
           </ScrollView>

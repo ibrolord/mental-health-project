@@ -1497,8 +1497,10 @@ export default function VoiceSupportScreen() {
           <View style={styles.disclosureCopy}>
             <Feather name="lock" size={15} color="#675b47" />
             <Text style={styles.disclosureText}>
-              Live voice sends audio to OpenAI. Tap-to-talk sends your recording
-              to Gemini; OpenAI is the backup.
+              Live voice streams your audio straight from your phone to OpenAI.
+              Tap-to-talk sends your recording through MHtoolkit to Google Gemini,
+              with OpenAI as the backup. Replies go to Anthropic Claude or Google
+              Gemini.
             </Text>
           </View>
           <TouchableOpacity

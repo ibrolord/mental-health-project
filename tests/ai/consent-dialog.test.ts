@@ -53,13 +53,28 @@ describe('AI data sharing consent', () => {
     const source = fs.readFileSync(
       path.join(process.cwd(), 'mobile/lib/ai-consent.ts'),
       'utf8'
+    ) + fs.readFileSync(
+      path.join(process.cwd(), 'mobile/lib/ai-consent-copy.ts'),
+      'utf8'
     );
 
     expect(source).toContain('mhtoolkit.ai_data_sharing_consent.v4');
     expect(source).toContain('derived Apple Health summary');
     expect(source).toContain('Raw Health samples are never sent');
-    expect(source).toContain('response text to Google Gemini or OpenAI for generated speech');
+    expect(source).toContain('response text sent to Google Gemini or OpenAI for generated speech');
     expect(source).toContain('device speech service may be used');
+  });
+
+  it('names the providers each mobile AI feature actually uses', async () => {
+    const { AI_DATA_SHARING_DISCLOSURE: text } = await import('../../mobile/lib/ai-consent-copy');
+    const line = (label: string) => text.split('\n').find((item) => item.startsWith(`• ${label}`)) ?? '';
+    // Text chat never goes to OpenAI (lib/ai/model-router.ts).
+    expect(line('Chat and Advisor')).toContain('Anthropic Claude or Google Gemini');
+    expect(line('Chat and Advisor')).not.toContain('OpenAI');
+    expect(line('Affirmations')).toContain('Anthropic Claude');
+    expect(line('Affirmations')).toContain('Mood notes and goal text are not sent');
+    expect(line('Voice')).toContain('straight from your phone to OpenAI');
+    expect(text).not.toMatch(/no data collection|no tracking/i);
   });
 
   it('renders one accessible, dismissible consent dialog at the app root', () => {

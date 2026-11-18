@@ -669,7 +669,7 @@ export default function SettingsScreen() {
           />
           <ListRow
             title={`AI data sharing consent: ${aiConsentGranted ? 'Granted' : 'Not granted yet'}`}
-            description="Chat, voice, and AI affirmations ask before sharing with Google Gemini, Anthropic Claude, or OpenAI."
+            description="Chat, Advisor, voice, and AI affirmations ask first. Chat and Advisor use Anthropic Claude or Google Gemini, affirmations use Claude, and voice uses Google Gemini or OpenAI."
             icon="shield"
           />
           {aiConsentGranted ? (
