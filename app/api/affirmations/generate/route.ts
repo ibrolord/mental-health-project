@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { DEFAULT_CLAUDE_MODEL } from '@/lib/ai/claude';
+import { CRISIS_RESPONSE } from '@/lib/ai/crisis';
+import {
+  AFFIRMATION_MAX_REQUEST_BYTES,
+  affirmationRequestHasCrisis,
+  affirmationRequestSchema,
+  buildAffirmationPrompt,
+} from '@/lib/ai/affirmation-request';
+import { readBoundedJson, RequestBodyError } from '@/lib/ai/request-body';
+import { AI_USAGE_RULES, enforceAiUsage } from '@/lib/ai/usage-limit';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+let anthropic: Anthropic | null = null;
+
+function anthropicClient(): Anthropic {
+  anthropic ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  return anthropic;
+}
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
@@ -16,48 +28,35 @@ export async function POST(request: NextRequest) {
     const auth = await verifyAuth(request);
     if (!auth.valid) return unauthorizedResponse();
 
-    const body = await request.json();
-    const { moods, assessments, goals } = body;
-
-    // Build context from user data
-    let context = 'Generate a personalized affirmation based on this user data:\n\n';
-
-    if (moods && moods.length > 0) {
-      context += `Recent moods (last 7 days): ${moods.map((m: any) => m.emoji).join(' ')}\n`;
-      const notes = moods.filter((m: any) => m.note).map((m: any) => m.note);
-      if (notes.length > 0) {
-        context += `Mood notes: ${notes.join('; ')}\n`;
-      }
+    const parsed = affirmationRequestSchema.safeParse(
+      await readBoundedJson(request, AFFIRMATION_MAX_REQUEST_BYTES)
+    );
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid affirmation request' },
+        { status: 400, headers: corsHeaders() }
+      );
     }
 
-    if (assessments && assessments.length > 0) {
-      context += `\nRecent assessments:\n`;
-      assessments.forEach((a: any) => {
-        const percentage = Math.round((a.score / a.max_score) * 100);
-        context += `- ${a.type}: ${percentage}% severity\n`;
-      });
+    // Safety runs before the usage limit and never calls a model. Older
+    // clients render `affirmation`, so it carries the same crisis text.
+    if (affirmationRequestHasCrisis(parsed.data)) {
+      return NextResponse.json(
+        { response: CRISIS_RESPONSE, model: 'safety', affirmation: CRISIS_RESPONSE },
+        { headers: { ...corsHeaders(), 'Cache-Control': 'no-store' } }
+      );
     }
 
-    if (goals && goals.length > 0) {
-      const completed = goals.filter((g: any) => g.status === 'completed').length;
-      context += `\nGoals: ${completed} of ${goals.length} completed recently\n`;
-    }
+    const limited = await enforceAiUsage(AI_USAGE_RULES.affirmations, auth, request);
+    if (limited) return limited;
 
-    context += `\nCreate ONE short, personalized affirmation (1-2 sentences max) that:
-- Speaks directly to where this person is right now
-- Is compassionate and validating
-- Offers a gentle reframe or encouragement
-- Feels authentic, not generic
-
-Return ONLY the affirmation text, no explanation or formatting.`;
-
-    const response = await anthropic.messages.create({
+    const response = await anthropicClient().messages.create({
       model: process.env.CLAUDE_MODEL?.trim() || DEFAULT_CLAUDE_MODEL,
       max_tokens: 150,
       messages: [
         {
           role: 'user',
-          content: context,
+          content: buildAffirmationPrompt(parsed.data),
         },
       ],
     });
@@ -68,13 +67,18 @@ Return ONLY the affirmation text, no explanation or formatting.`;
         ? textContent.text.replace(/^["']|["']$/g, '')
         : 'You are doing your best, and that is enough.';
 
-    return NextResponse.json({ affirmation });
+    return NextResponse.json({ affirmation }, { headers: corsHeaders() });
   } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status, headers: corsHeaders() }
+      );
+    }
     console.error('Affirmation generation error:', error);
     return NextResponse.json(
       { error: 'Failed to generate affirmation' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders() }
     );
   }
 }
-

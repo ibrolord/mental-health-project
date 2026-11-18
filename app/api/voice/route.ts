@@ -9,12 +9,15 @@ import {
   MAX_VOICE_AUDIO_BYTES,
 } from '@/lib/ai/voice-input';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
+import { readBoundedJson, RequestBodyError } from '@/lib/ai/request-body';
+import { AI_USAGE_RULES, enforceAiUsage } from '@/lib/ai/usage-limit';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
 
 const MAX_TTS_CHARACTERS = 1_200;
+const MAX_TTS_REQUEST_BYTES = 16 * 1024;
 const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
@@ -26,16 +29,21 @@ export async function POST(request: NextRequest) {
     const auth = await verifyAuth(request);
     if (!auth.valid) return unauthorizedResponse();
 
+    // Transcription and playback both call a provider; neither is free text
+    // the server can crisis-check (the transcript is checked by /api/chat).
+    const limited = await enforceAiUsage(AI_USAGE_RULES.voice, auth, request);
+    if (limited) return limited;
+
     const contentType = request.headers.get('content-type') || '';
     const declaredLength = Number(request.headers.get('content-length') || '0');
     
     // Handle text-to-speech
     if (contentType.includes('application/json')) {
-      if (Number.isFinite(declaredLength) && declaredLength > 16 * 1024) {
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_TTS_REQUEST_BYTES) {
         return jsonResponse({ error: 'Text is too long' }, 413);
       }
-      const body = (await request.json()) as { text?: unknown };
-      const text = typeof body.text === 'string' ? body.text.trim() : '';
+      const body = (await readBoundedJson(request, MAX_TTS_REQUEST_BYTES)) as { text?: unknown } | null;
+      const text = typeof body?.text === 'string' ? body.text.trim() : '';
 
       if (!text) {
         return jsonResponse({ error: 'Text is required' }, 400);
@@ -98,6 +106,9 @@ export async function POST(request: NextRequest) {
 
     return jsonResponse({ error: 'Invalid content type' }, 400);
   } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return jsonResponse({ error: error.status === 413 ? 'Text is too long' : error.message }, error.status);
+    }
     console.error('Voice API error:', error);
     return jsonResponse({ error: 'Failed to process voice request' }, 500);
   }

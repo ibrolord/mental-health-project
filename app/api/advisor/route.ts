@@ -6,6 +6,7 @@ import { remainingMs, serverDeadlineMs } from '@/lib/ai/request-deadline';
 import { advisorModelRequestSchema } from '@/lib/ai/advisor-validation';
 import { readBoundedJson, RequestBodyError } from '@/lib/ai/request-body';
 import { isHealthAiEnabled } from '@/lib/ai/health-ai-gate';
+import { AI_USAGE_RULES, enforceAiUsage } from '@/lib/ai/usage-limit';
 
 const MAX_REQUEST_BYTES = 24 * 1024;
 
@@ -31,6 +32,9 @@ export async function POST(request: NextRequest) {
         { status: 400, headers: corsHeaders() }
       );
     }
+
+    const limited = await enforceAiUsage(AI_USAGE_RULES.advisor, auth, request);
+    if (limited) return limited;
 
     if (parsed.data.appleHealthSummary && !isHealthAiEnabled()) {
       return NextResponse.json(
