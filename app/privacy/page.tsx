@@ -13,7 +13,7 @@ export default function PrivacyPolicyPage() {
           Privacy Policy
         </h1>
         <p className="text-sm text-muted-foreground mb-8">
-          Effective date: August 9, 2026
+          Effective date: November 18, 2026
         </p>
 
         <p className="text-foreground mb-6 leading-relaxed">
@@ -219,24 +219,33 @@ export default function PrivacyPolicyPage() {
           </p>
           <ul className="list-disc list-inside text-foreground space-y-2 ml-2">
             <li>
-              <strong>Google Gemini:</strong> Processes standard chat messages,
-              may generate personalized affirmations, and transcribes push-to-talk
-              recordings. It also generates spoken audio from AI response text.
+              <strong>Anthropic Claude:</strong> Processes AI chat and Advisor
+              requests (the server picks Claude or Gemini for each request, and
+              uses the other if one is unavailable) and generates personalized
+              affirmations.
             </li>
             <li>
-              <strong>Anthropic Claude:</strong> Handles complex or
-              crisis-related chat interactions.
+              <strong>Google Gemini:</strong> Processes AI chat and Advisor
+              requests, including an Apple Health summary you confirm, transcribes
+              push-to-talk and voice journal recordings, and generates spoken
+              audio from AI response text.
             </li>
             <li>
-              <strong>OpenAI:</strong> Powers live voice transcription and is a
-              fallback for compatible push-to-talk recordings and generated spoken
-              playback.
+              <strong>OpenAI:</strong> Powers live voice transcription. Live voice
+              audio streams directly from your device to OpenAI over an encrypted
+              connection; the MHtoolkit backend sets up and ends the session but
+              does not receive that audio. OpenAI is also a fallback for compatible
+              push-to-talk recordings and generated spoken playback. OpenAI is not
+              used for text chat.
             </li>
           </ul>
           <p className="text-foreground mt-3 leading-relaxed">
             Data sent to these providers can include the message or audio you
             submit, the generated transcript, and only the optional context
-            categories you select for that conversation. Journal entries and
+            categories you select for that conversation. Personalized
+            affirmations use only recent mood emojis, assessment scores, and a
+            count of finished goals; mood notes and goal text are not sent to an
+            AI provider for affirmations. Journal entries and
             private library notes are not sent unless you select those categories
             explicitly. On iOS, an Apple Health aggregate is never part of the
             reusable full-context choice: you must preview and confirm it for each
@@ -316,18 +325,19 @@ export default function PrivacyPolicyPage() {
               page view analytics (no cookies, no personal identifiers).
             </li>
             <li>
-              <strong>Google (Gemini API)</strong> &mdash; AI chat,
-              affirmation generation, push-to-talk transcription, and generated
-              spoken playback of AI response text.
+              <strong>Google (Gemini API)</strong> &mdash; AI chat, Advisor,
+              push-to-talk and voice journal transcription, and generated spoken
+              playback of AI response text.
             </li>
             <li>
-              <strong>Anthropic (Claude API)</strong> &mdash; AI chat for complex
-              interactions.
+              <strong>Anthropic (Claude API)</strong> &mdash; AI chat, Advisor,
+              and personalized affirmations.
             </li>
             <li>
-              <strong>OpenAI</strong> &mdash; Live voice transcription, fallback
-              transcription for compatible push-to-talk recordings, and fallback
-              generated spoken playback.
+              <strong>OpenAI</strong> &mdash; Live voice transcription (audio
+              streams directly from your device), fallback transcription for
+              compatible push-to-talk recordings, and fallback generated spoken
+              playback.
             </li>
             <li>
               <strong>Operating-system speech services</strong> &mdash; Voice
@@ -388,8 +398,13 @@ export default function PrivacyPolicyPage() {
               removed from our database.
             </li>
             <li>
-              Anonymous sessions are not automatically purged. Their data remains
-              available until you delete it from Settings.
+              Anonymous data stays until you delete it from Settings, with one
+              exception: our database has a cleanup function that removes
+              anonymous sign-ins more than 30 days old that have no saved
+              check-ins, assessments, goals, habits, journal entries, AI chats,
+              library items, or profile, together with anything else linked to
+              them. We do not promise when or how often it runs. Creating an
+              account keeps your data out of this cleanup.
             </li>
           </ul>
         </section>

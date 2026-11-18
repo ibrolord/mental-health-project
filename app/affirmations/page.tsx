@@ -202,7 +202,7 @@ export default function AffirmationsPage() {
       // Get recent goals
       const { data: goals } = await supabase
         .from('goals')
-        .select('content, status')
+        .select('status')
         .eq(requestQuery.column, requestQuery.value)
         .order('created_at', { ascending: false })
         .limit(5);
@@ -350,8 +350,9 @@ export default function AffirmationsPage() {
           title="AI data sharing"
           className="mt-5 border-amber-200 bg-amber-50"
         >
-          Personalized affirmations can use recent mood emojis, assessment scores,
-          and goals after you consent. Mood notes are not sent.
+          After you consent, personalized affirmations send recent mood emojis,
+          assessment scores, and how many goals you finished to Anthropic Claude.
+          Mood notes and goal text are not sent.
         </DismissibleNotice>
 
         <aside className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600">

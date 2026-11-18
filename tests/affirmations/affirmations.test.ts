@@ -54,7 +54,7 @@ describe('random affirmation selection', () => {
   it('does not send free-text mood notes for AI affirmations', () => {
     expect(affirmationsPage).toContain(".select('emoji')");
     expect(affirmationsPage).not.toContain(".select('emoji, note')");
-    expect(affirmationsPage).toContain('Mood notes are not sent.');
+    expect(affirmationsPage).toContain('Mood notes and goal text are not sent.');
   });
 
   it('serializes history selection across tabs and avoids the current item', () => {

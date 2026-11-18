@@ -53,7 +53,7 @@ const FAQS = [
   {
     question: 'Can I use MHtoolkit without a standard account?',
     answer:
-      'Yes. Anonymous authenticated sessions receive the same owner-scoped privacy rules and are not automatically purged.',
+      'Yes. Anonymous authenticated sessions receive the same owner-scoped privacy rules. Your anonymous data stays until you delete it in Settings, except that a database cleanup can remove anonymous sign-ins more than 30 days old that have no saved check-ins, assessments, goals, habits, journal entries, AI chats, library items, or profile. Creating an account keeps your data out of that cleanup.',
   },
   {
     question: 'How do I export or delete my data?',
