@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   chat: vi.fn(),
@@ -50,7 +50,12 @@ import { POST as affirmationPost } from '../../app/api/affirmations/generate/rou
 import { POST as voicePost } from '../../app/api/voice/route';
 import { POST as advisorPost } from '../../app/api/advisor/route';
 import { CRISIS_RESPONSE } from '../../lib/ai/crisis';
-import { AI_USAGE_RULES, MemoryUsageStore, setUsageStore } from '../../lib/ai/usage-limit';
+import {
+  AI_USAGE_BURST_MESSAGE,
+  AI_USAGE_DAILY_MESSAGE,
+  MemoryUsageStore,
+  setUsageStore,
+} from '../../lib/ai/usage-limit';
 import { CHAT_LIMITS } from '../../lib/ai/chat-validation';
 
 function jsonRequest(path: string, body: unknown, user = 'user-1', ip = '9.9.9.9'): NextRequest {
@@ -69,7 +74,39 @@ function jsonRequest(path: string, body: unknown, user = 'user-1', ip = '9.9.9.9
 
 const chatBody = { messages: [{ role: 'user', content: 'I had a long day at work.' }] };
 
+const advisorBody = {
+  nowIso: '2026-11-18T12:00:00.000Z',
+  mood: null,
+  candidates: [{
+    id: 'c1',
+    observation: 'You checked in today.',
+    observations: ['You checked in today.'],
+    action: 'Take a short walk.',
+    smallerAction: 'Stand up and stretch.',
+    sourceLabels: ['Mood'],
+  }],
+  signals: [],
+  appleHealthSummary: null,
+  recentFeedback: [],
+};
+
+// Small caps keep the tests fast; the defaults are asserted in usage-limit.test.ts.
+function stubCaps(daily: number, burstPerMinute: number) {
+  vi.stubEnv('AI_USAGE_DAILY_LIMIT', String(daily));
+  vi.stubEnv('AI_USAGE_BURST_PER_MINUTE', String(burstPerMinute));
+}
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
+  // Pin the clock so a run never straddles a minute or day window.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-18T12:00:10.000Z'));
+  vi.stubEnv('AI_USAGE_DAILY_LIMIT', '');
+  vi.stubEnv('AI_USAGE_BURST_PER_MINUTE', '');
   setUsageStore(new MemoryUsageStore());
   mocks.chat.mockReset();
   mocks.chat.mockResolvedValue({ response: 'That sounds tiring.', model: 'claude' });
@@ -79,27 +116,42 @@ beforeEach(() => {
   mocks.generateVoiceResponse.mockImplementation(async () =>
     new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'audio/mpeg' } })
   );
+  mocks.advisor.mockReset();
+  mocks.advisor.mockResolvedValue({ selection: null, model: 'claude', personalized: false });
 });
 
 describe('/api/chat usage limits', () => {
-  it('returns 429 with Retry-After after the burst limit and stops calling the model', async () => {
-    const burst = AI_USAGE_RULES.chat.subject[0].limit;
-    for (let i = 0; i < burst; i += 1) {
+  it('allows 20 a minute by default, then 429 with Retry-After and stops calling the model', async () => {
+    for (let i = 0; i < 20; i += 1) {
       expect((await chatPost(jsonRequest('/api/chat', chatBody))).status).toBe(200);
     }
     const limited = await chatPost(jsonRequest('/api/chat', chatBody));
     expect(limited.status).toBe(429);
     expect(Number(limited.headers.get('Retry-After'))).toBeGreaterThan(0);
-    expect((await limited.json()).error).toMatch(/try again/i);
-    expect(mocks.chat).toHaveBeenCalledTimes(burst);
+    expect(limited.headers.get('Cache-Control')).toBe('no-store');
+    expect((await limited.json()).error).toBe(AI_USAGE_BURST_MESSAGE);
+    expect(mocks.chat).toHaveBeenCalledTimes(20);
 
     // Another person is unaffected.
     expect((await chatPost(jsonRequest('/api/chat', chatBody, 'user-2', '8.8.8.8'))).status).toBe(200);
   });
 
+  it('returns the kind reset-tomorrow message at the daily cap', async () => {
+    stubCaps(3, 100);
+    for (let i = 0; i < 3; i += 1) await chatPost(jsonRequest('/api/chat', chatBody));
+    const limited = await chatPost(jsonRequest('/api/chat', chatBody));
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get('Retry-After'))).toBeGreaterThan(0);
+    const { error } = await limited.json();
+    expect(error).toBe(AI_USAGE_DAILY_MESSAGE);
+    expect(error).toMatch(/resets tomorrow/);
+    expect(error).toMatch(/local helpline or emergency services/);
+  });
+
   it('still answers crisis language with the safety response when over the limit', async () => {
-    const burst = AI_USAGE_RULES.chat.subject[0].limit;
-    for (let i = 0; i < burst + 1; i += 1) await chatPost(jsonRequest('/api/chat', chatBody));
+    stubCaps(2, 100);
+    for (let i = 0; i < 3; i += 1) await chatPost(jsonRequest('/api/chat', chatBody));
+    expect((await chatPost(jsonRequest('/api/chat', chatBody))).status).toBe(429);
     mocks.chat.mockImplementation(async () => ({ response: CRISIS_RESPONSE, model: 'safety' }));
     const crisis = await chatPost(jsonRequest('/api/chat', {
       messages: [{ role: 'user', content: 'I want to kill myself' }],
@@ -190,29 +242,39 @@ describe('/api/affirmations/generate', () => {
     expect(mocks.createMessage).not.toHaveBeenCalled();
   });
 
-  it('rate limits with 429 and Retry-After', async () => {
-    const burst = AI_USAGE_RULES.affirmations.subject[0].limit;
+  it('still returns the safety response when over the limit', async () => {
+    stubCaps(1, 100);
+    await chatPost(jsonRequest('/api/chat', chatBody));
+    expect((await chatPost(jsonRequest('/api/chat', chatBody))).status).toBe(429);
+    const response = await affirmationPost(jsonRequest('/api/affirmations/generate', {
+      moods: [{ emoji: '😢', note: 'I want to end my life' }],
+    }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).model).toBe('safety');
+    expect(mocks.createMessage).not.toHaveBeenCalled();
+  });
+
+  it('counts against the shared limit with 429 and Retry-After', async () => {
+    stubCaps(2, 100);
     const body = { moods: [{ emoji: '😊' }] };
-    for (let i = 0; i < burst; i += 1) {
-      expect((await affirmationPost(jsonRequest('/api/affirmations/generate', body))).status).toBe(200);
-    }
+    await chatPost(jsonRequest('/api/chat', chatBody));
+    expect((await affirmationPost(jsonRequest('/api/affirmations/generate', body))).status).toBe(200);
     const limited = await affirmationPost(jsonRequest('/api/affirmations/generate', body));
     expect(limited.status).toBe(429);
     expect(limited.headers.get('Retry-After')).toBeTruthy();
-    expect(mocks.createMessage).toHaveBeenCalledTimes(burst);
+    expect(mocks.createMessage).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('/api/voice usage limits and size', () => {
-  it('returns 429 after the voice burst limit', async () => {
-    const burst = AI_USAGE_RULES.voice.subject[0].limit;
-    for (let i = 0; i < burst; i += 1) {
-      expect((await voicePost(jsonRequest('/api/voice', { text: 'Hello there.' }))).status).toBe(200);
-    }
+  it('counts against the shared limit', async () => {
+    stubCaps(2, 100);
+    await chatPost(jsonRequest('/api/chat', chatBody));
+    expect((await voicePost(jsonRequest('/api/voice', { text: 'Hello there.' }))).status).toBe(200);
     const limited = await voicePost(jsonRequest('/api/voice', { text: 'Hello there.' }));
     expect(limited.status).toBe(429);
     expect(limited.headers.get('Retry-After')).toBeTruthy();
-    expect(mocks.generateVoiceResponse).toHaveBeenCalledTimes(burst);
+    expect(mocks.generateVoiceResponse).toHaveBeenCalledTimes(1);
   });
 
   it('bounds the text-to-speech body even without a content-length header', async () => {
@@ -227,32 +289,30 @@ describe('/api/voice usage limits and size', () => {
 });
 
 describe('/api/advisor usage limits', () => {
-  const body = {
-    nowIso: '2026-11-18T12:00:00.000Z',
-    mood: null,
-    candidates: [{
-      id: 'c1',
-      observation: 'You checked in today.',
-      observations: ['You checked in today.'],
-      action: 'Take a short walk.',
-      smallerAction: 'Stand up and stretch.',
-      sourceLabels: ['Mood'],
-    }],
-    signals: [],
-    appleHealthSummary: null,
-    recentFeedback: [],
-  };
+  it('shares one bucket with chat, in both directions', async () => {
+    stubCaps(4, 100);
+    expect((await chatPost(jsonRequest('/api/chat', chatBody))).status).toBe(200);
+    expect((await chatPost(jsonRequest('/api/chat', chatBody))).status).toBe(200);
+    expect((await advisorPost(jsonRequest('/api/advisor', advisorBody))).status).toBe(200);
+    expect((await advisorPost(jsonRequest('/api/advisor', advisorBody))).status).toBe(200);
 
-  it('returns 429 after the Advisor burst limit', async () => {
-    mocks.advisor.mockReset();
-    mocks.advisor.mockResolvedValue({ selection: null, model: 'claude', personalized: false });
-    const burst = AI_USAGE_RULES.advisor.subject[0].limit;
-    for (let i = 0; i < burst; i += 1) {
-      expect((await advisorPost(jsonRequest('/api/advisor', body))).status).toBe(200);
+    const advisorLimited = await advisorPost(jsonRequest('/api/advisor', advisorBody));
+    expect(advisorLimited.status).toBe(429);
+    expect((await advisorLimited.json()).error).toBe(AI_USAGE_DAILY_MESSAGE);
+    const chatLimited = await chatPost(jsonRequest('/api/chat', chatBody));
+    expect(chatLimited.status).toBe(429);
+    expect(mocks.chat).toHaveBeenCalledTimes(2);
+    expect(mocks.advisor).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares the per-minute burst with chat', async () => {
+    stubCaps(200, 3);
+    for (let i = 0; i < 3; i += 1) {
+      expect((await advisorPost(jsonRequest('/api/advisor', advisorBody))).status).toBe(200);
     }
-    const limited = await advisorPost(jsonRequest('/api/advisor', body));
+    const limited = await chatPost(jsonRequest('/api/chat', chatBody));
     expect(limited.status).toBe(429);
-    expect(limited.headers.get('Retry-After')).toBeTruthy();
-    expect(mocks.advisor).toHaveBeenCalledTimes(burst);
+    expect((await limited.json()).error).toBe(AI_USAGE_BURST_MESSAGE);
+    expect(Number(limited.headers.get('Retry-After'))).toBeLessThanOrEqual(60);
   });
 });

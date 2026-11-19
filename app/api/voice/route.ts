@@ -10,7 +10,7 @@ import {
 } from '@/lib/ai/voice-input';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
 import { readBoundedJson, RequestBodyError } from '@/lib/ai/request-body';
-import { AI_USAGE_RULES, enforceAiUsage } from '@/lib/ai/usage-limit';
+import { enforceAiUsage } from '@/lib/ai/usage-limit';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     // Transcription and playback both call a provider; neither is free text
     // the server can crisis-check (the transcript is checked by /api/chat).
-    const limited = await enforceAiUsage(AI_USAGE_RULES.voice, auth, request);
+    const limited = await enforceAiUsage(auth, request);
     if (limited) return limited;
 
     const contentType = request.headers.get('content-type') || '';

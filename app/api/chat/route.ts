@@ -7,7 +7,7 @@ import { createReportTokenIfConfigured, subjectForAuth } from '@/lib/ai/report-t
 import { readBoundedJson, RequestBodyError } from '@/lib/ai/request-body';
 import { isHealthAiEnabled } from '@/lib/ai/health-ai-gate';
 import { containsExplicitCrisis } from '@/lib/ai/crisis';
-import { AI_USAGE_RULES, enforceAiUsage } from '@/lib/ai/usage-limit';
+import { enforceAiUsage } from '@/lib/ai/usage-limit';
 
 // Fits CHAT_LIMITS.totalChars of non-Latin text (up to 3 UTF-8 bytes per
 // character) plus selected context. History is trimmed before the model call.
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     // A person in crisis always gets the safety response, even when over the
     // usage limit. chat() repeats this check and answers without a model.
     if (!containsExplicitCrisis(messages)) {
-      const limited = await enforceAiUsage(AI_USAGE_RULES.chat, auth, request);
+      const limited = await enforceAiUsage(auth, request);
       if (limited) return limited;
     }
     if (userContext?.appleHealthSummary && !isHealthAiEnabled()) {

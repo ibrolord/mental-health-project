@@ -4,13 +4,18 @@ import { corsHeaders } from '@/lib/api/auth';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 
 /**
- * Per-client usage limits for routes that call an AI model.
+ * One shared AI usage limit per client.
  *
- * Limits are abuse caps, set well above what one person uses so a real user
- * never sees them, while a scripted spike stops costing money within minutes.
- * Each request counts against the caller (signed-in or anonymous Supabase
- * user, else legacy session id) and, separately and more loosely, against the
- * client IP, because anonymous accounts are free to create.
+ * Every request that calls an AI model (chat, Advisor, voice, affirmations)
+ * counts against the same bucket for the caller: signed-in or anonymous
+ * Supabase user id, else legacy X-Session-Id, else client IP. Two windows:
+ *
+ *   AI_USAGE_DAILY_LIMIT       requests per UTC day     (default 200)
+ *   AI_USAGE_BURST_PER_MINUTE  requests per minute      (default 20, stops bots)
+ *
+ * Both are optional env vars; unset or invalid values use the defaults.
+ * Crisis messages are checked by the routes before this limit, so a person
+ * in crisis always gets the safety response instead of a 429.
  *
  * STORE: the default store is in memory. On Vercel every function instance
  * has its own memory, so these limits are per instance and reset on cold
@@ -21,55 +26,34 @@ import { getSupabaseAdmin } from '@/lib/supabase/server';
  * rather than failing or being let through uncounted.
  */
 
-export type UsageWindow = { limit: number; windowMs: number };
-
-export type UsageRule = {
-  /** Stable bucket name, e.g. 'chat'. Part of the counter key. */
-  name: string;
-  subject: readonly UsageWindow[];
-  ip: readonly UsageWindow[];
-  /** Shown to the person. Clients display the server's `error` text. */
-  message: string;
-};
-
 const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
+const DAY = 24 * 60 * MINUTE;
 
-// Text chat also carries every voice turn (push-to-talk and live voice both
-// send the transcript to /api/chat), so it gets more room than "30" alone.
-// IP limits are 4x the subject limits so a shared network (school, office,
-// mobile carrier NAT) is not punished for several people using the app.
-export const AI_USAGE_RULES = {
-  chat: {
-    name: 'chat',
-    subject: [{ limit: 40, windowMs: 10 * MINUTE }, { limit: 300, windowMs: DAY }],
-    ip: [{ limit: 160, windowMs: 10 * MINUTE }, { limit: 1_200, windowMs: DAY }],
-    message:
-      'You have sent a lot of messages in a short time. Please take a short break and try again in a few minutes. If you need to talk to someone now, contact a local helpline or emergency services.',
-  },
-  advisor: {
-    name: 'advisor',
-    subject: [{ limit: 30, windowMs: 10 * MINUTE }, { limit: 150, windowMs: DAY }],
-    ip: [{ limit: 120, windowMs: 10 * MINUTE }, { limit: 600, windowMs: DAY }],
-    message: 'Advisor has refreshed many times recently. Please try again in a few minutes.',
-  },
-  // Each spoken turn is one transcription plus one playback request.
-  voice: {
-    name: 'voice',
-    subject: [{ limit: 80, windowMs: 10 * MINUTE }, { limit: 500, windowMs: DAY }],
-    ip: [{ limit: 320, windowMs: 10 * MINUTE }, { limit: 2_000, windowMs: DAY }],
-    message:
-      'Voice has been used a lot in a short time. Please take a short break and try again in a few minutes.',
-  },
-  affirmations: {
-    name: 'affirmations',
-    subject: [{ limit: 10, windowMs: 10 * MINUTE }, { limit: 50, windowMs: DAY }],
-    ip: [{ limit: 40, windowMs: 10 * MINUTE }, { limit: 200, windowMs: DAY }],
-    message:
-      'You have made many personalized affirmations recently. Please try again in a few minutes.',
-  },
-} as const satisfies Record<string, UsageRule>;
+export const DEFAULT_AI_USAGE_DAILY_LIMIT = 200;
+export const DEFAULT_AI_USAGE_BURST_PER_MINUTE = 20;
+
+// Shown to the person. Clients display the server's `error` text.
+export const AI_USAGE_DAILY_MESSAGE =
+  "You have reached today's limit for AI messages. It resets tomorrow. If you need to talk to someone now, please contact a local helpline or emergency services.";
+export const AI_USAGE_BURST_MESSAGE =
+  'You are sending messages very quickly. Please wait a moment and try again. If you need to talk to someone now, please contact a local helpline or emergency services.';
+
+function positiveIntFromEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw || !/^\d+$/.test(raw)) return fallback;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value > 0 ? value : fallback;
+}
+
+export type AiUsageLimits = { daily: number; burstPerMinute: number };
+
+/** Read on every request so an env change applies without a code change. */
+export function aiUsageLimits(): AiUsageLimits {
+  return {
+    daily: positiveIntFromEnv('AI_USAGE_DAILY_LIMIT', DEFAULT_AI_USAGE_DAILY_LIMIT),
+    burstPerMinute: positiveIntFromEnv('AI_USAGE_BURST_PER_MINUTE', DEFAULT_AI_USAGE_BURST_PER_MINUTE),
+  };
+}
 
 export type UsageStoreHit = { count: number; resetAt: number };
 
@@ -175,10 +159,18 @@ export function clientIp(headers: Headers): string | null {
   return candidate && candidate.length <= 64 ? candidate.toLowerCase() : null;
 }
 
-function hashedKey(rule: string, scope: string, value: string): string {
+function clientKey(caller: UsageCaller, headers: Headers): string {
+  const ip = clientIp(headers);
+  const client = caller.userId
+    ? `user:${caller.userId}`
+    : caller.sessionId
+      ? `session:${caller.sessionId}`
+      : ip
+        ? `ip:${ip}`
+        : 'unknown';
   // Counter keys never hold a raw user id or IP address.
-  const digest = createHash('sha256').update(`ai-usage:${scope}:${value}`, 'utf8').digest('base64url');
-  return `${rule}:${scope}:${digest}`;
+  const digest = createHash('sha256').update(`ai-usage:${client}`, 'utf8').digest('base64url');
+  return `ai:${digest}`;
 }
 
 export type UsageDecision =
@@ -186,52 +178,27 @@ export type UsageDecision =
   | { allowed: false; retryAfterSeconds: number; message: string };
 
 export async function consumeAiUsage(
-  rule: UsageRule,
   caller: UsageCaller,
   headers: Headers,
   now = Date.now()
 ): Promise<UsageDecision> {
-  const subject = caller.userId
-    ? `user:${caller.userId}`
-    : caller.sessionId
-      ? `session:${caller.sessionId}`
-      : null;
-  const ip = clientIp(headers);
-  const checks: { key: string; window: UsageWindow }[] = [];
-  if (subject) {
-    for (const window of rule.subject) {
-      checks.push({ key: hashedKey(rule.name, 'subject', subject), window });
-    }
-  }
-  if (ip) {
-    // With no caller identity the IP is the only key, so hold it to the
-    // per-person limit rather than the looser shared-network one.
-    const windows = subject ? rule.ip : rule.subject;
-    for (const window of windows) {
-      checks.push({ key: hashedKey(rule.name, 'ip', ip), window });
-    }
-  }
-  if (!checks.length) {
-    for (const window of rule.subject) {
-      checks.push({ key: hashedKey(rule.name, 'unknown', 'unknown'), window });
-    }
-  }
-
+  const limits = aiUsageLimits();
+  const key = clientKey(caller, headers);
   const usageStore = activeStore();
-  const hits = await Promise.all(
-    checks.map(async ({ key, window }) => ({
-      window,
-      hit: await usageStore.hit(key, window.windowMs, now),
-    }))
-  );
-  const exceeded = hits.filter(({ window, hit }) => hit.count > window.limit);
-  if (!exceeded.length) return { allowed: true };
+  const [burst, daily] = await Promise.all([
+    usageStore.hit(key, MINUTE, now),
+    usageStore.hit(key, DAY, now),
+  ]);
+  const overDaily = daily.count > limits.daily;
+  const overBurst = burst.count > limits.burstPerMinute;
+  if (!overDaily && !overBurst) return { allowed: true };
 
-  const retryAfterMs = Math.max(...exceeded.map(({ hit }) => hit.resetAt - now));
+  // The daily cap is the one that matters to the person, so it wins when both hit.
+  const retryAfterMs = overDaily ? daily.resetAt - now : burst.resetAt - now;
   return {
     allowed: false,
     retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1_000)),
-    message: rule.message,
+    message: overDaily ? AI_USAGE_DAILY_MESSAGE : AI_USAGE_BURST_MESSAGE,
   };
 }
 
@@ -253,10 +220,9 @@ export function usageLimitResponse(
 
 /** Returns a 429 response when the caller is over a limit, otherwise null. */
 export async function enforceAiUsage(
-  rule: UsageRule,
   caller: UsageCaller,
   request: Request
 ): Promise<NextResponse | null> {
-  const decision = await consumeAiUsage(rule, caller, request.headers);
+  const decision = await consumeAiUsage(caller, request.headers);
   return decision.allowed ? null : usageLimitResponse(decision);
 }

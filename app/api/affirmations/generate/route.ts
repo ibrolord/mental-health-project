@@ -9,7 +9,7 @@ import {
   buildAffirmationPrompt,
 } from '@/lib/ai/affirmation-request';
 import { readBoundedJson, RequestBodyError } from '@/lib/ai/request-body';
-import { AI_USAGE_RULES, enforceAiUsage } from '@/lib/ai/usage-limit';
+import { enforceAiUsage } from '@/lib/ai/usage-limit';
 import { verifyAuth, unauthorizedResponse, corsHeaders } from '@/lib/api/auth';
 
 let anthropic: Anthropic | null = null;
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const limited = await enforceAiUsage(AI_USAGE_RULES.affirmations, auth, request);
+    const limited = await enforceAiUsage(auth, request);
     if (limited) return limited;
 
     const response = await anthropicClient().messages.create({
