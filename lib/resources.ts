@@ -183,6 +183,17 @@ export const CRISIS_LINES: CrisisLine[] = [
     hours: 'Mon to Fri, 9am to 5pm',
     url: 'https://befrienderske.org',
   },
+  // Checked on mha-ghana.com (the hyphenated domain) and Find A Helpline's
+  // Ghana page on 2026-11-20. Mirrored on mobile.
+  {
+    name: 'Mental Health Authority Helpline',
+    region: 'Ghana',
+    description:
+      'Toll-free, confidential support from Ghana’s Mental Health Authority. Call any time.',
+    phone: '0800 678 678',
+    hours: '24/7',
+    url: 'https://www.mha-ghana.com/',
+  },
   {
     name: 'The Trevor Project',
     region: 'US',
@@ -458,10 +469,17 @@ export const AFRICA_SUPPORT: ResourceLink[] = [
     url: 'https://csoplatform.africa/search/cso/mental-360',
     note: 'Peer-led',
   },
-  // Ghana's Mental Health Authority site (mhaghana.com) did not resolve
-  // reliably when checked on 2026-07-27, so it is intentionally omitted rather
-  // than shipped as a dead link. Ghana is still covered by the country lookup
-  // below. Re-add here if the domain becomes stable.
+  // The old mhaghana.com domain did not resolve on 2026-07-27. The Authority's
+  // live site is the hyphenated mha-ghana.com (checked 2026-11-20). Its 24/7
+  // helpline is in CRISIS_LINES, so no phone field here.
+  {
+    name: 'Mental Health Authority',
+    region: 'Ghana',
+    description:
+      'Ghana’s national mental health agency, with information on public services and its toll-free 24/7 helpline.',
+    url: 'https://www.mha-ghana.com/',
+    note: 'Government run',
+  },
   {
     name: 'Friendship Bench',
     region: 'Zimbabwe',

@@ -368,8 +368,13 @@ export default function PrivacyPolicyPage() {
               anonymous session remains active.
             </li>
             <li>
-              Voice recordings are processed after each turn for transcription and
-              are not permanently stored by MHtoolkit.
+              Voice support recordings are processed after each turn for
+              transcription and are not permanently stored by MHtoolkit.
+            </li>
+            <li>
+              If you add a voice note to a journal entry on iPhone, that audio
+              stays on your device with the entry unless you delete it. It is
+              sent for transcription only if you choose transcription.
             </li>
             <li>
               AI provider retention is governed by each provider&apos;s data

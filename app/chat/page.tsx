@@ -64,7 +64,7 @@ const QUICK_PROMPTS = [
   'I feel anxious',
   'Help me reframe a negative thought',
   'I need to make one small plan',
-  'I need to talk',
+  'I want a calm place to start',
 ];
 
 function ContextToggle({
@@ -826,7 +826,7 @@ export default function ChatPage() {
               <div className="grid min-h-[25rem] place-items-center py-8 text-center">
                 <div>
                   <h2 className="font-display text-2xl font-medium text-foreground">
-                    What would help to talk through?
+                    What would help right now?
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
                     This is supportive reflection, not therapy or medical advice.

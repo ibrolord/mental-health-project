@@ -6,7 +6,7 @@ A privacy-first self-reflection toolkit offering mood tracking, optional AI-guid
 
 - **🎭 Mood Tracking**: Daily check-ins with trend visualization and tagging
 - **📋 Self-Assessments**: GAD-7 and PHQ-9 symptom screeners plus the CBI personal burnout measure, with published scoring and limitations
-- **💬 AI Chat**: Evidence-informed self-reflection support powered by Claude
+- **💬 AI Chat**: Optional AI chat and Advisor, with consent, using Anthropic, Google Gemini, or OpenAI depending on the feature
 - **✅ Life Organizer**: Goal setting with Eisenhower Matrix, Ivy Lee, 1-3-5, ABCDE frameworks
 - **📚 Resource Library**: Direct paths to app tools plus reviewed book notes that separate author claims from clinical guidance
 - **🎯 Habits & Routines**: Build or reduce habits with cues, tiny steps, templates, streaks, and reward milestones
@@ -152,7 +152,7 @@ users, and aggregate acquisition attribution is keyed only by `user_id`.
 - **Privacy-preserving measurement**: Anonymous page analytics and allowlisted
   campaign labels support aggregate activation reporting; no advertising IDs,
   referrer URLs, or mental-health content are included
-- **Encryption**: All data encrypted at rest
+- **Encryption**: Sent over HTTPS and stored in Supabase, which encrypts data in transit and at rest. This is not end-to-end encryption.
 - **User-controlled data**: Complete export and permanent deletion controls
 
 ## 🚀 Deployment

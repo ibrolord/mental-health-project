@@ -63,6 +63,7 @@ describe('global support resources', () => {
     for (const lines of [WEB_CRISIS_LINES, MOBILE_CRISIS_LINES]) {
       expect(lines.find(({ region }) => region === 'UK')?.phone).toBe('116 123');
       expect(lines.find(({ region }) => region === 'Australia')?.phone).toBe('13 11 14');
+      expect(lines.find(({ region }) => region === 'Ghana')?.phone).toBe('0800 678 678');
       expect(lines.some(({ region }) => region === 'US & Canada')).toBe(false);
     }
   });

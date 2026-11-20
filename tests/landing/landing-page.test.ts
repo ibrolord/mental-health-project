@@ -49,7 +49,7 @@ describe('landing page: iPhone app hero', () => {
 
   it('says plainly that it is open source and not for profit, with a GitHub link', () => {
     expect(SOURCE_REPOSITORY).toBe('https://github.com/ibrolord/mental-health-project');
-    expect(home).toContain('Free and open source. No ads, no subscriptions, and nobody makes money from it.');
+    expect(home).toContain('Free, open source (AGPL-3.0) and not for profit. No ads, no subscriptions, and your data is never sold.');
     expect(home).toContain('<a href={SOURCE_REPOSITORY}>See the code on GitHub</a>');
     expect(home).toContain('AGPL-3.0');
     expect(home).not.toMatch(/registered charity|non-?profit organi[sz]ation|nonprofit company/i);

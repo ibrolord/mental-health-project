@@ -7,7 +7,7 @@ import { APP_SCREENS, APP_SCREEN_SIZE, APP_STORE_BADGE, APP_STORE_URL, LANDING_E
 import styles from './landing.module.css';
 
 export const metadata: Metadata = {
-  description: 'A free iPhone app for burnout and everyday mental health. Check in, write one line, pick one small step. Open source, no ads, and nobody makes money from it.',
+  description: 'A free iPhone app for burnout and everyday mental health. Check in, write one line, pick one small step. Open source (AGPL-3.0) and not for profit. No ads, and your data is never sold.',
 };
 
 function AppStoreBadge({ size = 'large' }: { size?: 'large' | 'small' }) {
@@ -47,7 +47,7 @@ export default function Home() {
           <p className={styles.androidHint}>On Android, you can add it to your home screen from the browser menu.</p>
           <p className={styles.openNote}>
             <Code2 size={18} aria-hidden="true" />
-            <span>Free and open source. No ads, no subscriptions, and nobody makes money from it. <a href={SOURCE_REPOSITORY}>See the code on GitHub</a></span>
+            <span>Free, open source (AGPL-3.0) and not for profit. No ads, no subscriptions, and your data is never sold. <a href={SOURCE_REPOSITORY}>See the code on GitHub</a></span>
           </p>
         </div>
         <div className={styles.heroArt}>
@@ -121,7 +121,7 @@ export default function Home() {
         <Code2 size={26} aria-hidden="true" />
         <div>
           <h2 id="open-source-title">Open source and not for profit.</h2>
-          <p>MHtoolkit is a not-for-profit project. Nobody profits from it: there are no ads, no subscriptions, and your data is never sold. The code is public under the <span className={styles.nowrap}>AGPL-3.0</span> licence, so anyone can check how the app works and what it does with your data.</p>
+          <p>MHtoolkit is a not-for-profit project. There are no ads, no subscriptions, and your data is never sold. The code is public under the <span className={styles.nowrap}>AGPL-3.0</span> licence, so anyone can check how the app works and what it does with your data.</p>
           <div className={styles.openLinks}>
             <a href={SOURCE_REPOSITORY} className={styles.textLink}>See the code on GitHub <ArrowUpRight size={16} aria-hidden="true" /></a>
             <Link href="/privacy" className={styles.textLink}>Read our privacy notice <ArrowUpRight size={16} aria-hidden="true" /></Link>
@@ -133,8 +133,8 @@ export default function Home() {
         <details><summary>Who is MHtoolkit for?</summary><p>Adults who want practical support with everyday mental wellbeing: understanding feelings, managing overwhelm, building routines, and staying connected. Choose the tools that fit you.</p></details>
         <details><summary>Is it really free?</summary><p>Yes. There are no ads and no subscriptions. MHtoolkit is a not-for-profit, open-source project, and its source code is available under the AGPL-3.0 licence.</p></details>
         <details><summary>Do I need an iPhone?</summary><p>No. The app is on the App Store for iPhone, and you can also <Link href="/daily-reset">use it in your browser</Link> on Android or a computer.</p></details>
-        <details><summary>Do I need to create an account?</summary><p>You can start anonymously. Create an account when you want to keep your data across devices or connect with an accountability partner.</p></details>
-        <details><summary>How does AI support work?</summary><p>Advisor offers a practical next step from the context you choose to share. AI chat is also available if you want to talk things through. AI processing is optional.</p></details>
+        <details><summary>Do I need to create an account?</summary><p>You can start without an email. Anything you save is still stored with a private session ID until you delete it. Create an account if you want to keep that data across devices or invite a trusted person.</p></details>
+        <details><summary>How does AI support work?</summary><p>Advisor and AI chat are optional support companions. They can listen, offer simple coping ideas, and point you to human or crisis help. They are not therapy, and they do not replace a person. Nothing is sent to an AI provider until you agree in the app. Personal details stay off unless you switch a category on.</p></details>
         <details><summary>Can I use this alongside professional support?</summary><p>Yes. MHtoolkit provides everyday self-help tools, not diagnosis, treatment, or emergency care. You can prepare a Visit Brief to review and share with a professional. For urgent help, <Link href="/resources">find local support</Link>.</p></details>
       </section>
       <section className={`${styles.wrap} ${styles.trusted}`} aria-labelledby="trusted-title">
