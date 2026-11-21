@@ -27,7 +27,7 @@ product, or crisis care.
 | Lint | Ready | Expo ESLint is installed; the error-only lint gate passes |
 | Play submission credential | Blocked | `mobile/google-play-service-account.json` is missing |
 | Play Console | Unverified / likely not set up | Available browser is not authenticated; public Play URL for the package returns 404 |
-| Support URL | Ready | `https://mhtoolkit.vercel.app/support` returns 200 and lists a monitored contact email |
+| Support URL | Re-verify | `https://mhtoolkit.vercel.app/support` returned 200 and listed a monitored contact email on July 16, 2026; the canonical URL is now `https://mhtoolkit.org/support` and must be re-checked before submission |
 | Privacy URL | Ready in current source | URL returns 200 and the Android settings screen links to it; verify in the release binary |
 | Account deletion | Implemented, deployment pending | Clear-data uses a transactional server RPC and account deletion cascades backend records |
 | AI content reporting | Implemented, deployment pending | Android chat includes signed, authenticated in-app response reporting; production smoke test still required |
@@ -91,9 +91,9 @@ still sign in, and all users can use JWT-isolated anonymous mode.
 - [ ] Complete the Health apps declaration accurately for mental wellness / stress-management functionality.
 - [ ] Complete a reviewed data-flow matrix for every datum and permission: source, destination, purpose, processor, retention period, encryption state, consent point, deletion path, and deletion SLA.
 - [ ] Complete Data Safety from that matrix, including account data, mental-health entries, microphone/audio, AI processing, and third-party providers.
-- [ ] Provide `https://mhtoolkit.vercel.app/privacy` as the privacy-policy URL.
+- [ ] Provide `https://mhtoolkit.org/privacy` as the privacy-policy URL.
 - [ ] Verify the same privacy policy is readily accessible inside the Android app.
-- [ ] Provide `https://mhtoolkit.vercel.app/support` as support and off-app deletion-request evidence.
+- [ ] Provide `https://mhtoolkit.org/support` as support and off-app deletion-request evidence.
 - [ ] Verify account deletion removes associated backend data, propagates to relevant service providers, handles failures/retries, and tells users the expected completion time.
 - [ ] Inventory the final manifest permissions and prove each sensitive permission is necessary and disclosed in context before collection.
 - [ ] Complete App access, Ads, Content rating, Target audience, News, and Government-app declarations.

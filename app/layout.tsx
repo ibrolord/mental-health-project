@@ -20,7 +20,7 @@ const display = Newsreader({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://mhtoolkit.vercel.app"),
+  metadataBase: new URL("https://mhtoolkit.org"),
   title: "MHtoolkit - Daily Mental-Health Support",
   description:
     "Check in, understand your patterns, build routines, and stay accountable with free, open-source daily mental-health support.",

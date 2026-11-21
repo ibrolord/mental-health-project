@@ -467,7 +467,7 @@ export function AuthProvider({
 
   const requestPasswordReset = async (email: string): Promise<void> => {
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: 'https://mhtoolkit.vercel.app/auth/reset-password?source=mobile',
+      redirectTo: 'https://mhtoolkit.org/auth/reset-password?source=mobile',
     });
     if (error) throw error;
   };
@@ -482,7 +482,7 @@ export function AuthProvider({
     // Link the email to the current anonymous user so its ID and saved data
     // remain unchanged. Password creation happens in the app after verification.
     const redirectUrl =
-      `https://mhtoolkit.vercel.app/auth/mobile-confirmed?source=mobile&upgrade_user_id=${encodeURIComponent(current.session.user.id)}`;
+      `https://mhtoolkit.org/auth/mobile-confirmed?source=mobile&upgrade_user_id=${encodeURIComponent(current.session.user.id)}`;
     const { data, error } = await supabase.auth.updateUser(
       {
         email: email.trim(),
@@ -504,7 +504,7 @@ export function AuthProvider({
       throw new Error('Start account setup before requesting another confirmation email.');
     }
     const redirectUrl =
-      `https://mhtoolkit.vercel.app/auth/mobile-confirmed?source=mobile&upgrade_user_id=${encodeURIComponent(current.session.user.id)}`;
+      `https://mhtoolkit.org/auth/mobile-confirmed?source=mobile&upgrade_user_id=${encodeURIComponent(current.session.user.id)}`;
     const { error } = await supabase.auth.resend({
       type: 'email_change',
       email: email.trim(),

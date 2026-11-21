@@ -15,7 +15,7 @@ describe('mobile password recovery contract', () => {
   it('uses the trusted web origin for reset completion', () => {
     expect(authContext).toContain('supabase.auth.resetPasswordForEmail');
     expect(authContext).toContain(
-      "https://mhtoolkit.vercel.app/auth/reset-password?source=mobile"
+      "https://mhtoolkit.org/auth/reset-password?source=mobile"
     );
     expect(forgotPassword).toContain('If an account exists for');
   });

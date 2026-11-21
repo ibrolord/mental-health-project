@@ -216,8 +216,8 @@ fi
 SUPPORT_HTML="$(mktemp -t mhtoolkit-support)"
 PRIVACY_HTML="$(mktemp -t mhtoolkit-privacy)"
 
-support_code="$(curl -L -s -o "$SUPPORT_HTML" -w '%{http_code}' https://mhtoolkit.vercel.app/support || true)"
-privacy_code="$(curl -L -s -o "$PRIVACY_HTML" -w '%{http_code}' https://mhtoolkit.vercel.app/privacy || true)"
+support_code="$(curl -L -s -o "$SUPPORT_HTML" -w '%{http_code}' https://mhtoolkit.org/support || true)"
+privacy_code="$(curl -L -s -o "$PRIVACY_HTML" -w '%{http_code}' https://mhtoolkit.org/privacy || true)"
 
 if [ "$support_code" = "200" ]; then
   pass "Support URL returns 200"
@@ -246,7 +246,7 @@ fi
 SUPPORT_SOURCE="$ROOT_DIR/lib/support.ts"
 SETTINGS_SOURCE="$ROOT_DIR/app/settings.tsx"
 if grep -Fq "bolajiag10@gmail.com" "$SUPPORT_SOURCE" &&
-  grep -Fq "https://mhtoolkit.vercel.app/support" "$SUPPORT_SOURCE" &&
+  grep -Fq "https://mhtoolkit.org/support" "$SUPPORT_SOURCE" &&
   grep -Fq "FEEDBACK_EMAIL_URL" "$SETTINGS_SOURCE" &&
   grep -Fq "Send feedback" "$SETTINGS_SOURCE" &&
   grep -Fq 'Send feedback to ${SUPPORT_EMAIL}' "$SETTINGS_SOURCE" &&

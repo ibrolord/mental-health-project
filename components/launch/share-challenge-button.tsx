@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Check, Share2 } from 'lucide-react';
 
 export const CHALLENGE_SHARE_URL =
-  'https://mhtoolkit.vercel.app/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share';
+  'https://mhtoolkit.org/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share';
 
 export function ShareChallengeButton() {
   const [result, setResult] = useState<'idle' | 'shared' | 'copied'>('idle');

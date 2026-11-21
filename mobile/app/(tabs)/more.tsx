@@ -17,7 +17,7 @@ import {
 } from '@/lib/dashboard-preferences';
 import { Colors, Spacing, Typography } from '@/lib/constants';
 
-const MEMBER_REFERRAL_URL = 'https://mhtoolkit.vercel.app/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share';
+const MEMBER_REFERRAL_URL = 'https://mhtoolkit.org/?utm_source=referral&utm_medium=referral&utm_campaign=seven_day_check_in&utm_content=member_share';
 
 export default function YouScreen() {
   const router = useRouter();

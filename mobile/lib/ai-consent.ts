@@ -3,7 +3,7 @@ import { Alert, Linking } from 'react-native';
 import { AI_DATA_SHARING_DISCLOSURE } from './ai-consent-copy';
 
 const AI_CONSENT_PREFIX = 'mhtoolkit.ai_data_sharing_consent.v4';
-export const PRIVACY_POLICY_URL = 'https://mhtoolkit.vercel.app/privacy';
+export const PRIVACY_POLICY_URL = 'https://mhtoolkit.org/privacy';
 
 function consentKey(subjectId: string): string | null {
   const normalized = subjectId.trim();

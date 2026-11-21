@@ -7,7 +7,7 @@ Last updated: August 27, 2026
 - Version: 1.0.7
 - iOS build: assigned by EAS at production build time
 - Bundle ID: `com.mhtoolkit.app`
-- Support URL: https://mhtoolkit.vercel.app/support
+- Support URL: https://mhtoolkit.org/support
 - Support email: bolajiag10@gmail.com
 
 No login is required for the core review path. MHtoolkit creates a private
@@ -141,7 +141,7 @@ Live voice sessions are audio-only. The bundled WebRTC framework references
 camera APIs, so the signed app includes Apple's required camera purpose string.
 MHtoolkit does not request camera permission or capture or transmit camera data.
 
-The privacy policy at https://mhtoolkit.vercel.app/privacy identifies the AI
+The privacy policy at https://mhtoolkit.org/privacy identifies the AI
 providers, data categories, purposes, and consent controls.
 
 ## Accountability Partner Privacy

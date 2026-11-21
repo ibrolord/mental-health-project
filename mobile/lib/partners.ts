@@ -91,7 +91,7 @@ async function generateToken(): Promise<string> {
 }
 
 export function inviteUrl(token: string): string {
-  return `https://mhtoolkit.vercel.app/partner/accept?token=${encodeURIComponent(token)}`;
+  return `https://mhtoolkit.org/partner/accept?token=${encodeURIComponent(token)}`;
 }
 
 export async function createInvite(
