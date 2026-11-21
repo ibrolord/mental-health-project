@@ -1,8 +1,7 @@
 import { supabase } from './supabase';
 import { DEFAULT_API_TIMEOUT_MS, fetchWithTimeout } from './request';
 import { Platform } from 'react-native';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';
+import { resolveApiUrl } from './api-base';
 
 interface ApiRequestOptions {
   timeoutMs?: number;
@@ -48,8 +47,9 @@ export async function apiRequest<T = any>(
   headers['Authorization'] = `Bearer ${accessToken}`;
 
   const requestBody = JSON.stringify(body);
+  const apiUrl = await resolveApiUrl();
   assertCurrent();
-  const res = await fetchWithTimeout(`${API_URL}${path}`, {
+  const res = await fetchWithTimeout(`${apiUrl}${path}`, {
     method: 'POST',
     headers,
     body: requestBody,

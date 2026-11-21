@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LocalSafetyActions } from '@/components/LocalSafetyActions';
 import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
 import { apiRequest } from '@/lib/api';
+import { resolveApiUrl } from '@/lib/api-base';
 import { Colors, Radius, Spacing, Typography } from '@/lib/constants';
 import { fetchWithTimeout } from '@/lib/request';
 import { buildChatRequestMessages, windowFromUserTurn } from '@/lib/chat-history';
@@ -73,7 +74,6 @@ const MAX_CHAT_REQUEST_MS = 30_000;
 /** Recent voice turns kept and sent; the window always starts on a user turn. */
 const VOICE_HISTORY_MESSAGES = 12;
 const MAX_REALTIME_CONTROL_REQUEST_MS = 10_000;
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';
 const REALTIME_VOICE_ENABLED =
   process.env.EXPO_PUBLIC_REALTIME_VOICE_ENABLED === 'true';
 const FALLBACK_RECORDING_OPTIONS: Audio.RecordingOptions = {
@@ -521,7 +521,8 @@ export default function VoiceSupportScreen() {
       );
 
       try {
-        const response = await fetch(`${API_URL}/api/voice`, {
+        const apiUrl = await resolveApiUrl();
+        const response = await fetch(`${apiUrl}/api/voice`, {
           method: 'POST',
           headers: {
             ...(await getAuthHeaders()),
@@ -986,11 +987,13 @@ export default function VoiceSupportScreen() {
         const localSdp = peer.localDescription?.sdp;
         if (!localSdp) throw new Error('Realtime offer was not created');
 
+        // One host for the whole session so confirm/release reach the grant.
+        const apiUrl = await resolveApiUrl();
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), CONNECT_TIMEOUT_MS);
         let answer: Response;
         try {
-          answer = await fetch(`${API_URL}/api/realtime/session`, {
+          answer = await fetch(`${apiUrl}/api/realtime/session`, {
             method: 'POST',
             headers: {
               ...(await getAuthHeaders()),
@@ -1018,7 +1021,7 @@ export default function VoiceSupportScreen() {
           throw new Error('Realtime service returned an invalid session');
         }
         pendingRealtimeGrantRef.current = grantId;
-        pendingRealtimeApiUrlRef.current = API_URL;
+        pendingRealtimeApiUrlRef.current = apiUrl;
         const configuredSeconds = Number(
           answer.headers.get('x-realtime-max-seconds') || '240'
         );
@@ -1037,13 +1040,13 @@ export default function VoiceSupportScreen() {
           return;
         }
 
-        await confirmRealtimeSession(API_URL, grantId);
+        await confirmRealtimeSession(apiUrl, grantId);
         if (!connectIsCurrent()) {
           if (pendingRealtimeGrantRef.current === grantId) {
             pendingRealtimeGrantRef.current = null;
             pendingRealtimeApiUrlRef.current = null;
           }
-          await releaseRealtimeGrant(API_URL, grantId);
+          await releaseRealtimeGrant(apiUrl, grantId);
           return;
         }
         pendingRealtimeGrantRef.current = null;
@@ -1224,7 +1227,9 @@ export default function VoiceSupportScreen() {
         type: upload.type,
         name: upload.name,
       } as never);
-      const transcribe = await fetchWithTimeout(`${API_URL}/api/voice`, {
+      const transcribeApiUrl = await resolveApiUrl();
+      if (!turnIsCurrent()) return;
+      const transcribe = await fetchWithTimeout(`${transcribeApiUrl}/api/voice`, {
         method: 'POST',
         headers: {
           ...(await getAuthHeaders()),
@@ -1270,8 +1275,9 @@ export default function VoiceSupportScreen() {
       // [] means nothing valid to send; the server would reject it.
       if (fallbackMessages.length === 0) throw new Error('Nothing to send');
       const chatHeaders = await getAuthHeaders();
+      const chatApiUrl = await resolveApiUrl();
       if (!turnIsCurrent()) return;
-      const chatResponse = await fetchWithTimeout(`${API_URL}/api/chat`, {
+      const chatResponse = await fetchWithTimeout(`${chatApiUrl}/api/chat`, {
         method: 'POST',
         headers: {
           ...chatHeaders,
