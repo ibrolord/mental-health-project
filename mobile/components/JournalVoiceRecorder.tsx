@@ -13,6 +13,7 @@ import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { ensureAiDataSharingConsent } from '@/lib/ai-consent';
+import { resolveApiUrl } from '@/lib/api-base';
 import { Colors } from '@/lib/constants';
 import {
   formatJournalAudioDuration,
@@ -25,7 +26,6 @@ import {
 import { fetchWithTimeout } from '@/lib/request';
 import { supabase } from '@/lib/supabase';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';
 const TRANSCRIPTION_TIMEOUT_MS = 45_000;
 const AUTO_STOP_SAFETY_MARGIN_MS = 2_000;
 
@@ -244,7 +244,8 @@ export function JournalVoiceRecorder({
         type: audio.mimeType,
         name: audio.fileName,
       } as never);
-      const response = await fetchWithTimeout(`${API_URL}/api/voice`, {
+      const apiUrl = await resolveApiUrl();
+      const response = await fetchWithTimeout(`${apiUrl}/api/voice`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session.access_token}`,

@@ -70,7 +70,7 @@ try {
       },
       {
         emailRedirectTo:
-          `https://mhtoolkit.vercel.app/auth/mobile-confirmed?source=mobile&upgrade_user_id=${ownerId}`,
+          `https://mhtoolkit.org/auth/mobile-confirmed?source=mobile&upgrade_user_id=${ownerId}`,
       }
     );
   if (upgradeStartError) throw upgradeStartError;

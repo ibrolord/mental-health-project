@@ -101,12 +101,20 @@ function sorted(values: Iterable<string>): string[] {
 
 function isCanonicalDirectLink(name: string, url: string): boolean {
   if (name === 'canonical_website') {
-    return url === 'https://mhtoolkit.vercel.app/';
+    return url === 'https://mhtoolkit.org/';
   }
   if (name === 'ios_app_store') {
     return /^https:\/\/apps\.apple\.com\/(?:[a-z]{2}\/)?app\/mhtoolkit\/id6760159800$/.test(url);
   }
   return false;
+}
+
+/**
+ * Outreach sent before the move to mhtoolkit.org used the old Vercel host. The
+ * log keeps what was actually sent; compare it on the canonical host instead.
+ */
+function onCanonicalHost(url: string): string {
+  return url.replace(/^https:\/\/mhtoolkit\.vercel\.app\//, 'https://mhtoolkit.org/');
 }
 
 describe('campaign attribution taxonomy', () => {
@@ -195,7 +203,7 @@ describe('campaign attribution taxonomy', () => {
 
   it('limits direct links to the canonical website and MHtoolkit App Store routes', () => {
     expect(
-      isCanonicalDirectLink('canonical_website', 'https://mhtoolkit.vercel.app/')
+      isCanonicalDirectLink('canonical_website', 'https://mhtoolkit.org/')
     ).toBe(true);
     for (const locale of ['', 'ca/', 'us/', 'gb/']) {
       expect(
@@ -208,9 +216,15 @@ describe('campaign attribution taxonomy', () => {
 
     for (const url of [
       'https://example.org/',
+      'https://mhtoolkit.org.evil.example/',
+      'https://mhtoolkit.org@evil.example/',
+      'http://mhtoolkit.org/',
+      'https://www.mhtoolkit.org/',
+      'https://mhtoolkit.org/redirect',
+      'https://mhtoolkit.org/?utm_source=community',
+      // The legacy host still serves the API but is no longer the website.
+      'https://mhtoolkit.vercel.app/',
       'https://mhtoolkit.vercel.app.evil.example/',
-      'https://mhtoolkit.vercel.app/redirect',
-      'https://mhtoolkit.vercel.app/?utm_source=community',
       'https://apps.apple.com.evil.example/ca/app/mhtoolkit/id6760159800',
       'https://apps.apple.com@evil.example/ca/app/mhtoolkit/id6760159800',
       'http://apps.apple.com/ca/app/mhtoolkit/id6760159800',
@@ -224,7 +238,7 @@ describe('campaign attribution taxonomy', () => {
       expect(isCanonicalDirectLink('ios_app_store', url)).toBe(false);
     }
     expect(
-      isCanonicalDirectLink('community_email', 'https://mhtoolkit.vercel.app/')
+      isCanonicalDirectLink('community_email', 'https://mhtoolkit.org/')
     ).toBe(false);
   });
 
@@ -255,7 +269,7 @@ describe('campaign attribution taxonomy', () => {
       }
 
       campaignCount += 1;
-      expect(url.origin).toBe('https://mhtoolkit.vercel.app');
+      expect(url.origin).toBe('https://mhtoolkit.org');
       expect(url.pathname).toBe('/');
       expect(url.username).toBe('');
       expect(url.password).toBe('');
@@ -423,7 +437,7 @@ describe('campaign attribution taxonomy', () => {
     );
     const prospectUrls =
       prospectsCsv.match(
-        /https:\/\/mhtoolkit\.vercel\.app\/\?utm_source=[^,\r\n]+/g
+        /https:\/\/mhtoolkit\.org\/\?utm_source=[^,\r\n]+/g
       ) ?? [];
 
     expect(prospectUrls.length).toBeGreaterThan(0);
@@ -456,7 +470,7 @@ describe('campaign attribution taxonomy', () => {
 
     for (const row of rows) {
       expect(row.length).toBe(9);
-      expect(canonicalUrls.has(row[4])).toBe(true);
+      expect(canonicalUrls.has(onCanonicalHost(row[4]))).toBe(true);
     }
 
     const july19EmailAttempts = rows.filter(
@@ -504,7 +518,7 @@ describe('campaign attribution taxonomy', () => {
     );
     const shareKitUrls = Array.from(
       shareKit.matchAll(
-        /`(https:\/\/mhtoolkit\.vercel\.app\/\?utm_source=[^`]+)`/g
+        /`(https:\/\/mhtoolkit\.org\/\?utm_source=[^`]+)`/g
       ),
       (match) => match[1]
     );
@@ -551,7 +565,7 @@ describe('campaign attribution taxonomy', () => {
     for (const source of sources) {
       const urls =
         source.match(
-          /https:\/\/mhtoolkit\.vercel\.app\/\?utm_source=[^'"\s]+/g
+          /https:\/\/mhtoolkit\.org\/\?utm_source=[^'"\s]+/g
         ) ?? [];
       expect(urls).toContain(canonicalReferralUrl);
 

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const { getSession } = vi.hoisted(() => ({ getSession: vi.fn() }));
 vi.mock('../../mobile/lib/supabase', () => ({ supabase: { auth: { getSession } } }));
 vi.mock('../../mobile/node_modules/react-native', () => ({ Platform: { OS: 'ios' } }));
+// The host probe is covered in api-base.test.ts; here every fetch is a dispatch.
+vi.mock('../../mobile/lib/api-base', () => ({ resolveApiUrl: async () => 'https://mhtoolkit.org' }));
 
 import { apiRequest } from '../../mobile/lib/api';
 import { requestModelAdvisorRecommendation } from '../../mobile/lib/advisor-ai';

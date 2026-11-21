@@ -101,7 +101,7 @@ export function inviteUrl(token: string): string {
   const origin =
     typeof window !== 'undefined'
       ? window.location.origin
-      : 'https://mhtoolkit.vercel.app';
+      : 'https://mhtoolkit.org';
   return `${origin}/partner/accept?token=${encodeURIComponent(token)}`;
 }
 

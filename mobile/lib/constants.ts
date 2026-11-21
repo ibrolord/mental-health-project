@@ -102,5 +102,3 @@ export const Typography = {
     fontWeight: '500' as const,
   },
 } as const;
-
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mhtoolkit.vercel.app';

@@ -100,7 +100,7 @@ describe('audio-only Realtime native config', () => {
     expect(voiceScreen).toContain('MAX_REALTIME_CONTROL_REQUEST_MS');
     expect(voiceScreen).toContain('const connectIsCurrent');
     expect(voiceScreen).toMatch(
-      /await confirmRealtimeSession\(API_URL, grantId\);[\s\S]*if \(!connectIsCurrent\(\)\)/
+      /await confirmRealtimeSession\(apiUrl, grantId\);[\s\S]*if \(!connectIsCurrent\(\)\)/
     );
     expect(voiceScreen).toContain("extension: '.wav'");
     expect(voiceScreen).toContain('Audio.IOSOutputFormat.LINEARPCM');

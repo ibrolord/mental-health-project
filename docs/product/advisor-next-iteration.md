@@ -200,7 +200,7 @@ AI must never:
 
 **Caching:** one phrasing call per `(recommendationId, localDate)`, cached locally. `Try something else` does not trigger a new call for the same id.
 
-**Where it runs — verified, not assumed.** The mobile app has no server output and no `mobile/app/api` directory. The Next.js API routes live at the **repo root**: `app/api/{chat,affirmations,ai-reports,…}`. Mobile reaches them over the network through `mobile/lib/api.ts`, which posts to `API_URL` (`process.env.EXPO_PUBLIC_API_URL`, default `https://mhtoolkit.vercel.app`) with the existing `fetchWithTimeout` wrapper.
+**Where it runs — verified, not assumed.** The mobile app has no server output and no `mobile/app/api` directory. The Next.js API routes live at the **repo root**: `app/api/{chat,affirmations,ai-reports,…}`. Mobile reaches them over the network through `mobile/lib/api.ts`, which posts to the host from `resolveApiUrl()` in `mobile/lib/api-base.ts` (`process.env.EXPO_PUBLIC_API_URL`, default `https://mhtoolkit.org`, falling back to `https://mhtoolkit.vercel.app` if that host is unreachable) with the existing `fetchWithTimeout` wrapper.
 
 Therefore: add `app/api/advisor-phrasing/route.ts` at the repo root, alongside `app/api/affirmations`. `mobile/lib/advisor-phrasing.ts` calls it through the same `mobile/lib/api.ts` helper — same auth headers, same timeout mechanism. Set the timeout to the §3 budget of 1200 ms rather than the default. No new provider surface, no new transport.
 

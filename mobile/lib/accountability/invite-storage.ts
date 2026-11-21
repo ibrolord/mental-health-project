@@ -30,5 +30,5 @@ export async function clearAccountabilityInvite(): Promise<void> {
 }
 
 export function accountabilityInviteUrl(token: string): string {
-  return `https://mhtoolkit.vercel.app/partner/join?token=${encodeURIComponent(token)}`;
+  return `https://mhtoolkit.org/partner/join?token=${encodeURIComponent(token)}`;
 }

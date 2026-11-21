@@ -23,5 +23,5 @@ iPAD COMPATIBILITY
 The app is iPhone-only and requires fullscreen, and runs in iPhone compatibility mode on iPad. This release uses expo-notifications 0.32.17 with Expo's iOS serializer thread-safety fix and omits expo-device. The signed IPA must be verified as iPhone-only and include the notification native module before submission.
 
 Support: bolajiag10@gmail.com
-Support URL: https://mhtoolkit.vercel.app/support
-Privacy URL: https://mhtoolkit.vercel.app/privacy
+Support URL: https://mhtoolkit.org/support
+Privacy URL: https://mhtoolkit.org/privacy

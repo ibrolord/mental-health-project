@@ -5,8 +5,8 @@ import {
 } from './lib/social-auth-evidence.mjs';
 
 const MOBILE_REDIRECT = 'mhtoolkit://auth/callback';
-const WEB_CALLBACK = 'https://mhtoolkit.vercel.app/auth/callback';
-const MOBILE_CONFIRMATION = 'https://mhtoolkit.vercel.app/auth/mobile-confirmed';
+const WEB_CALLBACK = 'https://mhtoolkit.org/auth/callback';
+const MOBILE_CONFIRMATION = 'https://mhtoolkit.org/auth/mobile-confirmed';
 const IOS_BUNDLE_ID = 'com.mhtoolkit.app';
 const REQUEST_TIMEOUT_MS = 10_000;
 const failures = [];
