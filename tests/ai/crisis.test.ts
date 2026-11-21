@@ -51,6 +51,7 @@ describe('containsExplicitCrisis', () => {
     expect(CRISIS_RESPONSE).toContain('findahelpline.com');
     expect(CRISIS_RESPONSE).toContain('116 123');
     expect(CRISIS_RESPONSE).toContain('13 11 14');
+    expect(CRISIS_RESPONSE).toContain('0800 678 678');
     expect(CRISIS_RESPONSE).toContain('9-8-8 Suicide Crisis Helpline');
     expect(CRISIS_RESPONSE).not.toMatch(/\*\*|__|#/);
   });

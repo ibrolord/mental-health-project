@@ -341,11 +341,11 @@ export default function SettingsPage() {
             <div>
               <h3 className="font-semibold mb-2">🔒 Your Privacy Matters</h3>
               <ul className="list-disc list-inside space-y-1">
-                <li>All data is encrypted at rest using industry-standard encryption</li>
+                <li>Data is sent over HTTPS and stored in Supabase in Ireland. Supabase encrypts it in transit and at rest. This is not end-to-end encryption; it does not mean only you can read it.</li>
                 <li>We never sell your data or share it for advertising</li>
                 <li>Optional AI features send selected chat, voice, and personalization data to AI providers only after consent</li>
                 <li>No advertising trackers; acquisition reporting uses allowlisted campaign labels only</li>
-                <li>Anonymous usage requires no personal information</li>
+                <li>You can start without an email. The app still creates a private session ID, and anything you save is stored with that session.</li>
               </ul>
               <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3">
                 <p className="font-medium text-orange-900">
@@ -365,7 +365,7 @@ export default function SettingsPage() {
                 <li>Mood entries and assessment results</li>
                 <li>Goals, habits, life plans, focus sessions, and reminders</li>
                 <li>Private journal entries and reflections</li>
-                <li>Chat conversations with AI (stored securely)</li>
+                <li>AI chat history is saved with your session. If you agree to AI features, the message and any context you switch on are also sent to the AI provider for that request.</li>
                 <li>Affirmation history, library state, and AI response reports</li>
                 <li>Partner links and the Together activity you created or received</li>
                 <li>Optional browser push subscription details</li>
@@ -379,7 +379,7 @@ export default function SettingsPage() {
               <ul className="list-disc list-inside space-y-1">
                 <li>Export all your data at any time</li>
                 <li>Delete your data with one click</li>
-                <li>Use the app completely anonymously</li>
+                <li>You can use the app without creating a named account. You can export or delete your data in Settings.</li>
                 <li>Create an account or sign in after MHtoolkit verifies anonymous data will not be stranded</li>
               </ul>
             </div>

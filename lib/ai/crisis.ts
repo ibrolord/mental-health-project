@@ -9,6 +9,8 @@ import { crisisTextVariants, matchesSharedCrisisPattern } from './crisis-pattern
  * lib/resources.ts and mobile/lib/resources.ts. Samaritans (UK) and Lifeline
  * (Australia) were supplied by the product owner on 2026-11-15 and should be
  * reconfirmed against samaritans.org and lifeline.org.au before release.
+ * Ghana's Mental Health Authority line matches CRISIS_LINES (mha-ghana.com,
+ * checked 2026-11-20).
  */
 export const CRISIS_RESPONSE = `I’m really sorry you’re facing this. Your immediate safety matters more than continuing this chat.
 
@@ -19,6 +21,7 @@ You can talk to a trained person right now:
 - Canada: call or text 9-8-8 (9-8-8 Suicide Crisis Helpline)
 - United Kingdom: call Samaritans on 116 123
 - Australia: call Lifeline on 13 11 14
+- Ghana: call the Mental Health Authority helpline on 0800 678 678 (free, 24/7)
 - Anywhere else: findahelpline.com lists free, confidential lines by country
 
 If you can, move away from anything you could use to hurt yourself or someone else and contact a trusted person who can stay with you. Are you in immediate danger right now?`;
